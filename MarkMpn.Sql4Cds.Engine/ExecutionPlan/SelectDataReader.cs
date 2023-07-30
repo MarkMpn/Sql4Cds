@@ -121,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string GetDataTypeName(int i)
         {
             // Return T-SQL data type name
-            var sqlType = _schema.Schema[_columnSet[i].SourceColumn];
+            var sqlType = _schema.Schema[_columnSet[i].SourceColumn].Type;
 
             if (sqlType is SqlDataTypeReference sql)
                 return sql.SqlDataTypeOption.ToString().ToLower();
@@ -159,7 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override Type GetProviderSpecificFieldType(int ordinal)
         {
-            return _schema.Schema[_columnSet[ordinal].SourceColumn].ToNetType(out _);
+            return _schema.Schema[_columnSet[ordinal].SourceColumn].Type.ToNetType(out _);
         }
 
         public override float GetFloat(int i)
@@ -245,7 +245,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             for (var i = 0; i < _columnSet.Count; i++)
             {
                 var column = _columnSet[i];
-                var sqlType = _schema.Schema[_columnSet[i].SourceColumn];
+                var sqlType = _schema.Schema[_columnSet[i].SourceColumn].Type;
                 var providerType = sqlType.ToNetType(out _);
                 var type = providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml) ? providerType : SqlTypeConverter.SqlToNetType(providerType);
                 var size = sqlType.GetSize();

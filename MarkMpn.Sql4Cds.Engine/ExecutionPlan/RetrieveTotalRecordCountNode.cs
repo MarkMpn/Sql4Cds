@@ -53,13 +53,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: null,
                 schema: new ColumnList
                 {
-                    [$"{EntityName}_count"] = DataTypeHelpers.BigInt
+                    [$"{EntityName}_count"] = new ColumnDefinition(DataTypeHelpers.BigInt, false, true)
                 },
                 aliases: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
                 {
                     [$"{EntityName}_count"] = new List<string> { $"{EntityName}_count" }
                 },
-                notNullColumns: new List<string> { $"{EntityName}_count" },
                 sortOrder: null);
         }
 

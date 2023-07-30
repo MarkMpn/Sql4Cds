@@ -62,14 +62,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var calc in Columns)
             {
                 calc.Value.GetType(expressionCompilationContext, out var calcType);
-                schema[calc.Key] = calcType;
+                schema[calc.Key] = new ColumnDefinition(calcType, true, true);
             }
 
             return new NodeSchema(
                 primaryKey: sourceSchema.PrimaryKey,
                 schema: schema,
                 aliases: sourceSchema.Aliases,
-                notNullColumns: sourceSchema.NotNullColumns,
                 sortOrder: sourceSchema.SortOrder);
         }
 
@@ -118,16 +117,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (calc.Value is ConvertCall convert)
                         {
-                            constant.Schema[calc.Key] = convert.DataType;
+                            constant.Schema[calc.Key] = new ColumnDefinition(convert.DataType, true, true);
                         }
                         else if (calc.Value is CastCall cast)
                         {
-                            constant.Schema[calc.Key] = cast.DataType;
+                            constant.Schema[calc.Key] = new ColumnDefinition(cast.DataType, true, true);
                         }
                         else
                         {
                             calc.Value.GetType(expressionContext, out var calcType);
-                            constant.Schema[calc.Key] = calcType;
+                            constant.Schema[calc.Key] = new ColumnDefinition(calcType, true, true);
                         }
                     }
                 }
@@ -138,6 +137,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var col in folded)
                     Columns.Remove(col);
             }
+
+            // If we don't have any calculations, this node is not needed
+            if (Columns.Count == 0)
+                return Source;
             
             Source.Parent = this;
             return this;

@@ -135,6 +135,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                                     {
                                         Urn = request.NodePath + "/" + logicalName,
                                         MetadataType = MetadataType.Table,
+                                        Schema = "dbo",
                                         Name = logicalName
                                     }
                                 });
@@ -226,6 +227,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                             {
                                 Urn = request.NodePath + "/" + table.LogicalName,
                                 MetadataType = MetadataType.Table,
+                                Schema = "metadata",
                                 Name = table.LogicalName
                             }
                         });
@@ -269,6 +271,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                                 {
                                     Urn = request.NodePath + "/" + msg.Name,
                                     MetadataType = MetadataType.Function,
+                                    Schema = "dbo",
                                     Name = msg.Name
                                 }
                             });
@@ -291,6 +294,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                                 {
                                     Urn = request.NodePath + "/" + msg.Name,
                                     MetadataType = MetadataType.SProc,
+                                    Schema = "dbo",
                                     Name = msg.Name
                                 }
                             });

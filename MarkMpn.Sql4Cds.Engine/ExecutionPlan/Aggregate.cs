@@ -19,7 +19,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         CountStar,
         Sum,
         Average,
-        First
+        First,
+        StringAgg
     }
 
     /// <summary>
@@ -62,6 +63,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Browsable(false)]
         public DataTypeReference ReturnType { get; set; }
+
+        /// <summary>
+        /// The separator to apply to STRING_AGG aggregates
+        /// </summary>
+        [Browsable(false)]
+        public SqlString Separator { get; internal set; }
     }
 
     /// <summary>
@@ -569,6 +576,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             s.Value = value;
+            s.Done = true;
         }
 
         protected override void UpdatePartition(object value, object state)
@@ -588,6 +596,72 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override object Reset()
         {
             return new State(SqlTypeConverter.GetNullValue(Type.ToNetType(out _)));
+        }
+    }
+
+    class StringAgg : AggregateFunction
+    {
+        class State
+        {
+            public State()
+            {
+                Value = SqlString.Null;
+            }
+
+            public SqlString Value { get; set; }
+        }
+
+        private Func<object, SqlString> _valueSelector;
+
+        /// <summary>
+        /// Creates a new <see cref="Sum"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to sum</param>
+        public StringAgg(Func<object> selector, DataTypeReference sourceType, DataTypeReference returnType) : base(selector)
+        {
+            Type = returnType;
+
+            var valueParam = Expression.Parameter(typeof(object));
+            var unboxed = Expression.Unbox(valueParam, sourceType.ToNetType(out _));
+            var conversion = SqlTypeConverter.Convert(unboxed, sourceType, returnType);
+            conversion = Expr.Convert(conversion, typeof(SqlString));
+            _valueSelector = (Func<object, SqlString>)Expression.Lambda(conversion, valueParam).Compile();
+        }
+
+        protected override void Update(object value, object state)
+        {
+            var s = (State)state;
+
+            var str = _valueSelector(value);
+
+            if (str.IsNull)
+                return;
+
+            if (s.Value.IsNull)
+                s.Value = str;
+            else
+                s.Value += Separator + str;
+        }
+
+        protected override void UpdatePartition(object value, object state)
+        {
+            throw new InvalidOperationException();
+        }
+
+        public override object GetValue(object state)
+        {
+            var s = (State)state;
+
+            return s.Value;
+        }
+
+        public override DataTypeReference Type { get; }
+
+        public SqlString Separator { get; set; }
+
+        public override object Reset()
+        {
+            return new State();
         }
     }
 

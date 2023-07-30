@@ -22,20 +22,23 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added support for XML data type and FOR XML clause
-Added support for Elastic tables
-Added support for STUFF function
-Added option to bypass plugins for SELECT statements
-Improved error reporting for duplicated table/alias names
-Improved error reporting for plugin errors
-Improved efficiency of joins that can't be translated to FetchXML
-Improved error handling during bulk DML operations
-Fixed querying audit table
-Fixed collation label for metadata and virtual columns
-Fixed hash joins on different collations
-Fixed filtering on outer-joined solution table
-Fixed multi-threading error with partitioned aggregates
-Fixed copying results with headers but no data rows</releaseNotes>
+    <releaseNotes>Fixed errors with common XML queries
+Improved performance with subqueries
+Avoid exposing internal names for computed columns
+Convert outer joins with filters to inner joins
+Fixed use of UPDATE with CASE expression with a first value of NULL
+Fixed use of joins or subqeries with multiple correlated conditions
+Improved handling of LEFT OUTER JOIN using nested loop operator
+Implemented many-to-many joins using merge join operator
+Fixed cross-instance string comparison
+Lift more filters directly to FetchXML link-entity
+Extended folding of sorts to FetchXML around nested loops
+Improved ambiguous table name detection in UPDATE/DELETE statements with subqueries
+Avoid errors with un-aliased calculated columns in subqueries
+Improved error reporting for AVG and SUM aggregates on non-numeric types
+Handle MIN and MAX aggregates for primary key and lookup columns
+Added support for STRING_AGG function
+</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>

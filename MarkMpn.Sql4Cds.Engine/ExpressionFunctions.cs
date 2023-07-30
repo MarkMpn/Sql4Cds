@@ -858,13 +858,13 @@ namespace MarkMpn.Sql4Cds.Engine
         [CollationSensitive]
         public static SqlString Stuff(SqlString value, SqlInt32 start, SqlInt32 length, SqlString replaceWith)
         {
-            if (value.IsNull || start.IsNull || length.IsNull || start.Value <= 0 || length.Value < 0)
+            if (value.IsNull || start.IsNull || length.IsNull || start.Value <= 0 || start.Value > value.Value.Length || length.Value < 0)
                 return SqlString.Null;
 
             var sb = new StringBuilder(value.Value);
 
             if (length.Value > 0)
-                sb.Remove(start.Value - 1, length.Value);
+                sb.Remove(start.Value - 1, Math.Min(length.Value, value.Value.Length - start.Value + 1));
 
             if (!replaceWith.IsNull)
                 sb.Insert(start.Value - 1, replaceWith.Value);

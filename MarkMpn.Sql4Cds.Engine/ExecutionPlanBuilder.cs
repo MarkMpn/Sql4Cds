@@ -291,7 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!_nodeContext.ParameterTypes.TryGetValue(targetVariable.Name, out var targetVariableType))
                         throw new NotSupportedQueryFragmentException("Undeclared variable", targetVariable);
 
-                    var sourceType = schema.Schema[sourceCol];
+                    var sourceType = schema.Schema[sourceCol].Type;
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetVariableType))
                         throw new NotSupportedQueryFragmentException($"Cannot convert value of type '{sourceType.ToSql()}' to '{targetVariableType.ToSql()}'", outputParam);
@@ -332,7 +332,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         Schema =
                         {
-                            [constName] = DataTypeHelpers.Int
+                            [constName] = new ExecutionPlan.ColumnDefinition(DataTypeHelpers.Int, false, true)
                         },
                         Values =
                         {
@@ -724,7 +724,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Alias = "systemuser",
                     Schema =
                     {
-                        ["systemuserid"] = typeof(SqlString).ToSqlType(PrimaryDataSource)
+                        ["systemuserid"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(PrimaryDataSource), false, true)
                     },
                     Values =
                     {
@@ -969,7 +969,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!schema.ContainsColumn(sourceColumns[i], out var sourceColumn))
                         throw new NotSupportedQueryFragmentException("Invalid source column");
 
-                    var sourceType = schema.Schema[sourceColumn];
+                    var sourceType = schema.Schema[sourceColumn].Type;
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"No implicit type conversion from {sourceType.ToSql()} to {targetType.ToSql()}", targetColumns[i]);
@@ -2053,7 +2053,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
                         // same table being used inside the IN subquery and elsewhere
-                        var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() });
+                        var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() }, context);
 
                         testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
                         join = new HashJoinNode
@@ -2070,6 +2070,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
                         var definedValue = context.GetExpressionName();
                         join.SemiJoin = true;
+                        join.OutputRightSchema = false;
                         join.DefinedValues[definedValue] = testColumn;
                         testColumn = definedValue;
                     }
@@ -2098,6 +2099,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
                         },
                         SemiJoin = true,
+                        OutputRightSchema = false,
                         DefinedValues = { [definedValue] = innerQuery.ColumnSet[0].SourceColumn }
                     };
 
@@ -2185,6 +2187,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         RightSource = innerQuery.Source,
                         JoinType = QualifiedJoinType.LeftOuter,
                         SemiJoin = true,
+                        OutputRightSchema = false,
                         OuterReferences = references,
                         DefinedValues =
                         {
@@ -2238,6 +2241,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         RightSource = innerQuery.Source,
                         OuterReferences = references,
                         SemiJoin = true,
+                        OutputRightSchema = false,
                         DefinedValues = { [definedValue] = innerSchemaPrimaryKey }
                     };
 
@@ -2463,15 +2467,40 @@ namespace MarkMpn.Sql4Cds.Engine
                             converted.AggregateType = AggregateType.Sum;
                         break;
 
+                    case "STRING_AGG":
+                        converted.AggregateType = AggregateType.StringAgg;
+
+                        if (aggregate.Expression.Parameters.Count != 2)
+                            throw new NotSupportedQueryFragmentException("STRING_AGG must have two parameters", aggregate.Expression);
+
+                        if (!aggregate.Expression.Parameters[1].IsConstantValueExpression(new ExpressionCompilationContext(context, null, null), out var separator))
+                            throw new NotSupportedQueryFragmentException("STRING_AGG separator must be a constant", aggregate.Expression);
+
+                        converted.Separator = separator.Value;
+                        break;
+
                     default:
                         throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate.Expression);
                 }
 
                 // Validate the aggregate expression
                 if (converted.AggregateType == AggregateType.CountStar)
+                {
                     converted.SqlExpression = null;
+                }
                 else
-                    converted.SqlExpression.GetType(GetExpressionContext(schema, context), out _);
+                {
+                    converted.SqlExpression.GetType(GetExpressionContext(schema, context), out var exprType);
+
+                    if (converted.AggregateType == AggregateType.StringAgg)
+                    {
+                        // Make the separator have the same collation as the expression
+                        if (exprType is SqlDataTypeReferenceWithCollation exprTypeColl)
+                            converted.Separator = exprTypeColl.Collation.ToSqlString(converted.Separator.Value);
+                        else
+                            converted.Separator = context.PrimaryDataSource.DefaultCollation.ToSqlString(converted.Separator.Value);
+                    }
+                }
 
                 // Create a name for the column that holds the aggregate value in the result set.
                 string aggregateName;
@@ -2497,6 +2526,34 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 hashMatch.Aggregates[aggregateName] = converted;
                 aggregateRewrites[aggregate.Expression] = aggregateName;
+
+                // Apply the WITHIN GROUP sort
+                if (aggregate.Expression.WithinGroupClause != null)
+                {
+                    if (converted.AggregateType != AggregateType.StringAgg)
+                        throw new NotSupportedQueryFragmentException($"The function '{aggregate.Expression.FunctionName.Value}' may not have a WITHIN GROUP clause", aggregate.Expression);
+
+                    if (hashMatch.WithinGroupSorts.Any())
+                    {
+                        // Defining a WITHIN GROUP clause more than once is not allowed - unless they are identical
+                        if (aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements.Count != hashMatch.WithinGroupSorts.Count)
+                            throw new NotSupportedQueryFragmentException("Multiple ordered aggregate functions in the same scope have mutually incompatible orderings", aggregate.Expression);
+
+                        for (var i = 0; i < aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements.Count; i++)
+                        {
+                            var newSort = aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements[i];
+                            var existingSort = hashMatch.WithinGroupSorts[i];
+
+                            if (newSort.ToSql() != existingSort.ToSql())
+                                throw new NotSupportedQueryFragmentException("Multiple ordered aggregate functions in the same scope have mutually incompatible orderings", aggregate.Expression);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var order in aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements)
+                            hashMatch.WithinGroupSorts.Add(order);
+                    }
+                }
             }
 
             // Use the calculated aggregate values in later parts of the query
@@ -2702,6 +2759,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (computeScalar.Columns.Any())
                 sort.Source = computeScalar;
+            else
+                sort.Source = computeScalar.Source;
 
             return sort;
         }
@@ -2756,7 +2815,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     var paramName = "@" + context.GetExpressionName();
                     outerReferences.Add(outerColumn, paramName);
-                    context.ParameterTypes[paramName] = outerSchema.Schema[outerColumn];
+                    context.ParameterTypes[paramName] = outerSchema.Schema[outerColumn].Type;
 
                     rewrites.Add(
                         new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = column } } } },
@@ -2805,7 +2864,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         schema.ContainsColumn(colName, out colName);
 
-                        var alias = scalar.ColumnName?.Value ?? col.MultiPartIdentifier.Identifiers.Last().Value;
+                        var alias = scalar.ColumnName?.Value;
+
+                        // If column has come from a calculation, don't expose the internal Expr{x} name
+                        if (alias == null && !schema.Schema[colName].IsCalculated)
+                            alias = col.MultiPartIdentifier.Identifiers.Last().Value;
 
                         select.ColumnSet.Add(new SelectColumn
                         {
@@ -2820,7 +2883,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var alias = ComputeScalarExpression(scalar.Expression, hints, query, computeScalar, nonAggregateSchema, context, ref scalarSource);
 
                         var scalarSchema = computeScalar.GetSchema(context);
-                        var colType = scalarSchema.Schema[alias];
+                        var colType = scalarSchema.Schema[alias].Type;
                         if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
                             throw new NotSupportedQueryFragmentException("Cannot resolve collation conflict", element);
 
@@ -2851,7 +2914,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // Can't select no-collation columns
                     foreach (var col in cols)
                     {
-                        var colType = schema.Schema[col];
+                        var colType = schema.Schema[col].Type;
                         if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
                             throw new NotSupportedQueryFragmentException("Cannot resolve collation conflict", element);
                     }
@@ -2869,13 +2932,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
+            var newSource = computeScalar.Columns.Any() ? computeScalar : computeScalar.Source;
+
+            if (distinct != null)
+                distinct.Source = newSource;
+            else
+                select.Source = newSource;
+
             if (computeScalar.Columns.Count > 0)
             {
-                if (distinct != null)
-                    distinct.Source = computeScalar;
-                else
-                    select.Source = computeScalar;
-
                 var calculationRewrites = computeScalar.Columns.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
                 query.Accept(new RewriteVisitor(calculationRewrites));
             }
@@ -2909,6 +2974,10 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check the type of this expression now so any errors can be reported
             var computeScalarSchema = computeScalar.Source.GetSchema(context);
             expression.GetType(GetExpressionContext(computeScalarSchema, context, nonAggregateSchema), out _);
+
+            // Don't need to compute the expression if it's just a column reference
+            if (expression is ColumnReferenceExpression col)
+                return col.GetColumnName();
 
             var alias = context.GetExpressionName();
             computeScalar.Columns[alias] = expression.Clone();
@@ -3017,6 +3086,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             OuterReferences = outerReferences,
                             JoinType = QualifiedJoinType.LeftOuter,
                             SemiJoin = true,
+                            OutputRightSchema = false,
                             DefinedValues = { [outputcol] = subqueryCol }
                         };
                     }
@@ -3157,6 +3227,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 merge.SemiJoin = true;
+                merge.OutputRightSchema = false;
                 var definedValue = context.GetExpressionName();
                 merge.DefinedValues[definedValue] = outputCol ?? rightAttribute.GetColumnName();
                 outputCol = definedValue;
@@ -3223,7 +3294,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // If the last correlated step has a source which we couldn't step into because it's not an ISingleSourceExecutionPlanNode
             // but it uses an outer reference we can't spool it
-            if (lastCorrelatedStep.Source.GetVariables(false).Intersect(outerReferences).Any())
+            if (lastCorrelatedStep.Source.GetVariables(true).Intersect(outerReferences).Any())
                 return;
 
             // Check the estimated counts for the outer loop and the source at the point we'd insert the spool
@@ -3589,7 +3660,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unhandled query derived table column list", queryDerivedTable);
 
                 var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, hints, outerSchema, outerReferences, context);
-                var alias = new AliasNode(select, queryDerivedTable.Alias);
+                var alias = new AliasNode(select, queryDerivedTable.Alias, context);
 
                 return alias;
             }
@@ -3706,9 +3777,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     LeftSource = source,
                     RightSource = execute,
-                    JoinType = QualifiedJoinType.RightOuter,
-                    SemiJoin = true,
-                    OuterReferences = scalarSubqueryReferences
+                    JoinType = QualifiedJoinType.Inner,
+                    OuterReferences = scalarSubqueryReferences,
+                    OutputLeftSchema = false,
                 };
 
                 return loop;
@@ -3817,7 +3888,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Make sure expected table name is used
             if (!String.IsNullOrEmpty(inlineDerivedTable.Alias?.Value))
-                source = new AliasNode(converted, inlineDerivedTable.Alias);
+                source = new AliasNode(converted, inlineDerivedTable.Alias, context);
 
             return source;
         }

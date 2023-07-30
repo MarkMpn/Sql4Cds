@@ -50,7 +50,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     primaryKey: Columns[0],
                     schema: schema.Schema,
                     aliases: schema.Aliases,
-                    notNullColumns: schema.NotNullColumns,
                     sortOrder: schema.SortOrder);
 
             return schema;

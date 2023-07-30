@@ -102,7 +102,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: trySchema.PrimaryKey,
                 schema: trySchema.Schema,
                 aliases: trySchema.Aliases,
-                notNullColumns: trySchema.NotNullColumns,
                 sortOrder: consistentSorts);
         }
 

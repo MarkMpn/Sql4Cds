@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="select">The subquery to wrap the results of</param>
         /// <param name="identifier">The alias to use for the subquery</param>
-        public AliasNode(SelectNode select, Identifier identifier)
+        public AliasNode(SelectNode select, Identifier identifier, NodeCompilationContext context)
         {
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
@@ -34,6 +34,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (duplicateColumn != null)
                 throw new NotSupportedQueryFragmentException($"The column '{duplicateColumn.Key}' was specified multiple times", identifier);
+
+            // Ensure each column has an output name
+            foreach (var col in ColumnSet)
+            {
+                if (string.IsNullOrEmpty(col.OutputColumn))
+                    col.OutputColumn = context.GetExpressionName();
+            }
         }
 
         private AliasNode()
@@ -181,20 +188,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            var notNullColumns = sourceSchema.NotNullColumns
-                .Select(col =>
-                {
-                    sourceSchema.ContainsColumn(col, out col);
-                    return col;
-                })
-                .Where(col => col != null)
-                .Select(col =>
-                {
-                    mappings.TryGetValue(col, out col);
-                    return col;
-                })
-                .Where(col => col != null)
-                .ToArray();
             var sortOrder = sourceSchema.SortOrder
                 .Select(col =>
                 {
@@ -214,7 +207,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
-                notNullColumns: notNullColumns,
                 sortOrder: sortOrder);
         }
 
@@ -224,7 +216,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             var mapped = $"{Alias}.{outputColumn}";
-            schema[mapped] = sourceSchema.Schema[normalized];
+            schema[mapped] = new ColumnDefinition(sourceSchema.Schema[normalized].Type, sourceSchema.Schema[normalized].IsNullable, false);
             mappings[normalized] = mapped;
 
             if (normalized == sourceSchema.PrimaryKey)

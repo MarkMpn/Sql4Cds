@@ -191,13 +191,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
             return new NodeSchema(
-                schema: new Dictionary<string, DataTypeReference>
+                schema: new ColumnList
                 {
-                    ["xml"] = XmlType ? (DataTypeReference) DataTypeHelpers.Xml : DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)
+                    ["xml"] = new ColumnDefinition(XmlType ? (DataTypeReference) DataTypeHelpers.Xml : DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), true, true)
                 },
                 aliases: null,
                 primaryKey: null,
-                notNullColumns: null,
                 sortOrder: null
                 );
         }
@@ -434,6 +433,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 XmlFormat = XmlFormat,
                 XmlType = XmlType
             };
+
+            clone.Source.Parent = clone;
 
             foreach (var col in ColumnSet)
                 clone.ColumnSet.Add(col);

@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The types of values to be returned
         /// </summary>
         [Browsable(false)]
-        public IDictionary<string, DataTypeReference> Schema { get; private set; } = new ColumnList();
+        public IDictionary<string, IColumnDefinition> Schema { get; private set; } = new ColumnList();
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
@@ -65,7 +65,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: null,
                 schema: schema,
                 aliases: Schema.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>) new List<string> { PrefixWithAlias(kvp.Key) }, StringComparer.OrdinalIgnoreCase),
-                notNullColumns: null,
                 sortOrder: null);
         }
 

@@ -118,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!schema.ContainsColumn(attribute.GetColumnName(), out var colName))
                 return source;
 
-            if (schema.NotNullColumns.Contains(colName))
+            if (!schema.Schema[colName].IsNullable)
                 return source;
 
             var filter = new FilterNode
@@ -252,6 +252,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool FoldFetchXmlJoin(NodeCompilationContext context, IList<OptimizerHint> hints, FetchXmlScan leftFetch, INodeSchema leftSchema, FetchXmlScan rightFetch, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
         {
             folded = null;
+
+            // Can't fold joins without key attributes
+            if (LeftAttribute == null || RightAttribute == null)
+                return false;
 
             // Can't join data from different sources
             if (!leftFetch.DataSource.Equals(rightFetch.DataSource, StringComparison.OrdinalIgnoreCase))
@@ -647,8 +651,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(col => rightSchema.ContainsColumn(col, out _))
                 .ToList();
 
-            leftColumns.Add(LeftAttribute.GetColumnName());
-            rightColumns.Add(RightAttribute.GetColumnName());
+            if (LeftAttribute != null)
+                leftColumns.Add(LeftAttribute.GetColumnName());
+
+            if (RightAttribute != null)
+                rightColumns.Add(RightAttribute.GetColumnName());
 
             LeftSource.AddRequiredColumns(context, leftColumns);
             RightSource.AddRequiredColumns(context, rightColumns);
@@ -672,7 +679,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftSchema = LeftSource.GetSchema(context);
             var rightSchema = GetRightSchema(context);
 
-            if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey || RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
+            if (LeftAttribute != null && LeftAttribute.GetColumnName() == leftSchema.PrimaryKey ||
+                RightAttribute != null && RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
             {
                 if (JoinType == QualifiedJoinType.Inner)
                     estimate = Math.Min(leftMax, rightMax);

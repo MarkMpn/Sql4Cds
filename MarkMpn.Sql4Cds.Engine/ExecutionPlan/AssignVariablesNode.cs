@@ -87,7 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(sourceColumnName, out sourceColumnName))
                     throw new QueryExecutionException($"Missing source column {mapping.SourceColumn}") { Node = this };
 
-                var sourceSqlType = schema.Schema[sourceColumnName];
+                var sourceSqlType = schema.Schema[sourceColumnName].Type;
 
                 if (!variableTypes.TryGetValue(destVariableName, out var destSqlType))
                     throw new QueryExecutionException($"Unknown variable {mapping.VariableName}") { Node = this };

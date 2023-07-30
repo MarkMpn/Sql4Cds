@@ -120,7 +120,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 .Where(kvp => kvp.Key.StartsWith(alias + "."))
                 .Select(kvp =>
                 {
-                    var attr = CreateAttribute(kvp.Value.ToNetType(out _));
+                    var attr = CreateAttribute(kvp.Value.Type.ToNetType(out _));
                     attr.LogicalName = kvp.Key.Substring(alias.Length + 1);
                     return attr;
                 })

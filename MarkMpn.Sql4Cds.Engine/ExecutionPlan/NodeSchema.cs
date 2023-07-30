@@ -17,13 +17,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Creates a new <see cref="NodeSchema"/>
         /// </summary>
-        public NodeSchema(IReadOnlyDictionary<string, DataTypeReference> schema, IReadOnlyDictionary<string, IReadOnlyList<string>> aliases, string primaryKey, IReadOnlyList<string> notNullColumns, IReadOnlyList<string> sortOrder)
+        public NodeSchema(IReadOnlyDictionary<string, IColumnDefinition> schema, IReadOnlyDictionary<string, IReadOnlyList<string>> aliases, string primaryKey, IReadOnlyList<string> sortOrder)
         {
             PrimaryKey = primaryKey;
             Schema = schema ?? new ColumnList();
             Aliases = aliases ?? new Dictionary<string, IReadOnlyList<string>>();
             SortOrder = sortOrder ?? Array.Empty<string>();
-            NotNullColumns = notNullColumns ?? Array.Empty<string>();
         }
 
         /// <summary>
@@ -56,20 +55,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             SortOrder = new List<string>(copy.SortOrder);
-            NotNullColumns = new List<string>(copy.NotNullColumns);
         }
 
         /// <inheritdoc cref="INodeSchema.PrimaryKey"/>
         public string PrimaryKey { get; }
 
         /// <inheritdoc cref="INodeSchema.Schema"/>
-        public IReadOnlyDictionary<string, DataTypeReference> Schema { get; }
+        public IReadOnlyDictionary<string, IColumnDefinition> Schema { get; }
 
         /// <inheritdoc cref="INodeSchema.Aliases"/>
         public IReadOnlyDictionary<string, IReadOnlyList<string>> Aliases { get; }
-
-        /// <inheritdoc cref="INodeSchema.NotNullColumns"/>
-        public IReadOnlyList<string> NotNullColumns { get; }
 
         /// <inheritdoc cref="INodeSchema.SortOrder"/>
         public IReadOnlyList<string> SortOrder { get; }
@@ -118,6 +113,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
     }
 
+    class ColumnDefinition : IColumnDefinition
+    {
+        public ColumnDefinition(DataTypeReference type, bool isNullable, bool isCalculated)
+        {
+            Type = type;
+            IsNullable = isNullable;
+            IsCalculated = isCalculated;
+        }
+
+        public DataTypeReference Type { get; }
+
+        public bool IsNullable { get; }
+
+        public bool IsCalculated { get; }
+
+        public override string ToString()
+        {
+            return $"{Type.ToSql()} {(IsNullable ? "NULL" : "NOT NULL")}";
+        }
+    }
+
+    static class ColumnDefinitionExtensions
+    {
+        public static IColumnDefinition NotNull(this IColumnDefinition col)
+        {
+            return new ColumnDefinition(col.Type, false, col.IsCalculated);
+        }
+
+        public static IColumnDefinition Null(this IColumnDefinition col)
+        {
+            return new ColumnDefinition(col.Type, true, col.IsCalculated);
+        }
+    }
+
     /// <summary>
     /// Describes the schema of data produced by a node in an execution plan
     /// </summary>
@@ -131,7 +160,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// A mapping of column names to the types of data stored in them
         /// </summary>
-        IReadOnlyDictionary<string, DataTypeReference> Schema { get; }
+        IReadOnlyDictionary<string, IColumnDefinition> Schema { get; }
 
         /// <summary>
         /// A mapping of names that can be used as column aliases to the list of columns the name could refer to
@@ -142,11 +171,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// A list of the columns by which the data is sorted
         /// </summary>
         IReadOnlyList<string> SortOrder { get; }
-
-        /// <summary>
-        /// A list of the columns which are known to be non-null
-        /// </summary>
-        IReadOnlyList<string> NotNullColumns { get; }
 
         /// <summary>
         /// Checks if a column exists in the schema
@@ -164,7 +188,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         bool IsSortedBy(ISet<string> requiredSorts);
     }
 
-    class ColumnList : IDictionary<string, DataTypeReference>, IReadOnlyDictionary<string, DataTypeReference>
+    /// <summary>
+    /// Describes the schema of a column in a table
+    /// </summary>
+    public interface IColumnDefinition
+    {
+        /// <summary>
+        /// The data type of the column
+        /// </summary>
+        DataTypeReference Type { get; }
+
+        /// <summary>
+        /// Indicates if the column can contain null values
+        /// </summary>
+        bool IsNullable { get; }
+
+        /// <summary>
+        /// Indicates if the column is the result of an internal calculation
+        /// </summary>
+        bool IsCalculated { get; }
+    }
+
+    class ColumnList : IDictionary<string, IColumnDefinition>, IReadOnlyDictionary<string, IColumnDefinition>
     {
         private readonly OrderedDictionary _inner;
 
@@ -173,30 +218,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _inner = new OrderedDictionary(StringComparer.OrdinalIgnoreCase);
         }
 
-        public DataTypeReference this[string key]
+        public IColumnDefinition this[string key]
         {
-            get => (DataTypeReference)_inner[key];
+            get => (IColumnDefinition)_inner[key];
             set => _inner[key] = value;
         }
 
         public ICollection<string> Keys => _inner.Keys.Cast<string>().ToList();
 
-        public ICollection<DataTypeReference> Values => _inner.Values.Cast<DataTypeReference>().ToList();
+        public ICollection<IColumnDefinition> Values => _inner.Values.Cast<IColumnDefinition>().ToList();
 
         public int Count => _inner.Count;
 
         public bool IsReadOnly => false;
 
-        IEnumerable<string> IReadOnlyDictionary<string, DataTypeReference>.Keys => _inner.Keys.Cast<string>();
+        IEnumerable<string> IReadOnlyDictionary<string, IColumnDefinition>.Keys => _inner.Keys.Cast<string>();
 
-        IEnumerable<DataTypeReference> IReadOnlyDictionary<string, DataTypeReference>.Values => _inner.Values.Cast<DataTypeReference>();
+        IEnumerable<IColumnDefinition> IReadOnlyDictionary<string, IColumnDefinition>.Values => _inner.Values.Cast<IColumnDefinition>();
 
-        public void Add(string key, DataTypeReference value)
+        public void Add(string key, IColumnDefinition value)
         {
             _inner.Add(key, value);
         }
 
-        public void Add(KeyValuePair<string, DataTypeReference> item)
+        public void Add(KeyValuePair<string, IColumnDefinition> item)
         {
             _inner.Add(item.Key, item.Value);
         }
@@ -206,7 +251,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _inner.Clear();
         }
 
-        public bool Contains(KeyValuePair<string, DataTypeReference> item)
+        public bool Contains(KeyValuePair<string, IColumnDefinition> item)
         {
             return TryGetValue(item.Key, out var value) && value == item.Value;
         }
@@ -216,17 +261,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return _inner.Contains(key);
         }
 
-        public void CopyTo(KeyValuePair<string, DataTypeReference>[] array, int arrayIndex)
+        public void CopyTo(KeyValuePair<string, IColumnDefinition>[] array, int arrayIndex)
         {
             _inner.CopyTo(array, arrayIndex);
         }
 
-        public IEnumerator<KeyValuePair<string, DataTypeReference>> GetEnumerator()
+        public IEnumerator<KeyValuePair<string, IColumnDefinition>> GetEnumerator()
         {
             var enumerator = _inner.GetEnumerator();
 
             while (enumerator.MoveNext())
-                yield return new KeyValuePair<string, DataTypeReference>((string)enumerator.Key, (DataTypeReference)enumerator.Value);
+                yield return new KeyValuePair<string, IColumnDefinition>((string)enumerator.Key, (IColumnDefinition)enumerator.Value);
         }
 
         public bool Remove(string key)
@@ -238,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        public bool Remove(KeyValuePair<string, DataTypeReference> item)
+        public bool Remove(KeyValuePair<string, IColumnDefinition> item)
         {
             if (!Contains(item))
                 return false;
@@ -247,7 +292,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        public bool TryGetValue(string key, out DataTypeReference value)
+        public bool TryGetValue(string key, out IColumnDefinition value)
         {
             if (!_inner.Contains(key))
             {
@@ -255,7 +300,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
             }
 
-            value = (DataTypeReference)_inner[key];
+            value = (IColumnDefinition)_inner[key];
             return true;
         }
 

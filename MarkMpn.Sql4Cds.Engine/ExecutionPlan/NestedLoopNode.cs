@@ -42,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     innerParameterTypes = new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in OuterReferences)
-                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
+                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
             }
 
             var rightCompilationContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
@@ -85,11 +85,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (joinCondition(joinConditionContext))
                             yield return merged;
+                        else
+                            continue;
                     }
 
                     hasRight = true;
 
-                    if (SemiJoin && JoinType != QualifiedJoinType.RightOuter)
+                    if (SemiJoin)
                         break;
                 }
 
@@ -110,7 +112,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     innerParameterTypes = new Dictionary<string, DataTypeReference>(parameterTypes, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in OuterReferences)
-                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
+                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
             }
 
             return innerParameterTypes;
@@ -118,6 +120,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            if (JoinType == QualifiedJoinType.RightOuter)
+            {
+                // Right outer join isn't supported but left outer join is, so swap the sides and change the join type
+                var right = RightSource;
+                RightSource = LeftSource;
+                LeftSource = right;
+                JoinType = QualifiedJoinType.LeftOuter;
+            }
+
+            if (JoinType == QualifiedJoinType.FullOuter)
+            {
+                // Full outer join isn't supported, so use a merge join instead. It will use its many-to-many version with
+                // an internal work table so we can also remove any table spool applied to the right side
+                if (RightSource is TableSpoolNode innerSpool)
+                    RightSource = innerSpool.Source;
+
+                return new MergeJoinNode
+                {
+                    LeftSource = LeftSource,
+                    RightSource = RightSource,
+                    JoinType = JoinType,
+                    AdditionalJoinCriteria = JoinCondition,
+                    SemiJoin = SemiJoin
+                }.FoldQuery(context, hints);
+            }
+
             var leftSchema = LeftSource.GetSchema(context);
             LeftSource = LeftSource.FoldQuery(context, hints);
             LeftSource.Parent = this;
@@ -282,7 +310,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<string> GetVariablesInternal()
         {
-            return JoinCondition.GetVariables();
+            return JoinCondition?.GetVariables() ?? Array.Empty<string>();
+        }
+
+        protected override IReadOnlyList<string> GetSortOrder(INodeSchema outerSchema, INodeSchema innerSchema)
+        {
+            if (outerSchema.SortOrder.Count == 1 && outerSchema.SortOrder[0] == outerSchema.PrimaryKey)
+                return outerSchema.SortOrder.Concat(innerSchema.SortOrder).ToList();
+            else
+                return outerSchema.SortOrder;
         }
 
         public override object Clone()
@@ -294,7 +330,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
                 OuterReferences = OuterReferences,
                 RightSource = (IDataExecutionPlanNodeInternal)RightSource.Clone(),
-                SemiJoin = SemiJoin
+                SemiJoin = SemiJoin,
+                OutputLeftSchema = OutputLeftSchema,
+                OutputRightSchema = OutputRightSchema
             };
 
             foreach (var kvp in DefinedValues)
