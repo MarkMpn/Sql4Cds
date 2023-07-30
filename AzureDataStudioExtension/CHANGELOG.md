@@ -6,9 +6,9 @@ Added support for long-term retention data
 Fixed errors with common XML queries
 Improved performance with subqueries
 Avoid exposing internal names for computed columns
-Convert outer jons with filters to inner joins
+Convert outer joins with filters to inner joins
 Fixed use of `UPDATE` with `CASE` expression with a first value of `NULL`
-Fixed use of joins or subqeries with multiple correlated conditions
+Fixed use of joins or subqueries with multiple correlated conditions
 Improved handling of `LEFT OUTER JOIN` using nested loop operator
 Implemented many-to-many joins using merge join operator
 Fixed cross-instance string comparison

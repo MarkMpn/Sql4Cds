@@ -17,7 +17,7 @@ Improved performance with subqueries
 Avoid exposing internal names for computed columns
 Convert outer joins with filters to inner joins
 Fixed use of UPDATE with CASE expression with a first value of NULL
-Fixed use of joins or subqeries with multiple correlated conditions
+Fixed use of joins or subqueries with multiple correlated conditions
 Improved handling of LEFT OUTER JOIN using nested loop operator
 Implemented many-to-many joins using merge join operator
 Fixed cross-instance string comparison
@@ -34,14 +34,15 @@ Added support for STRING_AGG function
     <tags>SQL CDS</tags>
     <dependencies>
       <group targetFramework=".NETFramework4.6.2">
-        <dependency id="Microsoft.CrmSdk.XrmTooling.CoreAssembly" version="9.1.1.1" />
-        <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="150.4897.1" />
+        <dependency id="Microsoft.CrmSdk.CoreAssemblies" version="9.0.2.49" />
+        <dependency id="Microsoft.CrmSdk.XrmTooling.CoreAssembly" version="9.1.1.32" />
+        <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="161.8834.0" />
         <dependency id="Microsoft.ApplicationInsights" version="2.21.0" />
         <dependency id="XPath2.Extensions" version="1.1.3" />
       </group>
       <group targetFramework=".NETCoreApp3.1">
-        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="0.6.6" />
-        <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="150.4897.1" />
+        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="1.1.9" />
+        <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="161.8834.0" />
         <dependency id="System.Data.SqlClient" version="4.8.3" />
         <dependency id="Microsoft.ApplicationInsights" version="2.20.0" />
         <dependency id="XPath2.Extensions" version="1.1.3" />
