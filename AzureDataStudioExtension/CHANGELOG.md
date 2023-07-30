@@ -1,5 +1,25 @@
 # Change Log
 
+## [v7.4.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.4.0) - 2023-08-05
+
+Fixed errors with common XML queries
+Improved performance with subqueries
+Avoid exposing internal names for computed columns
+Convert outer jons with filters to inner joins
+Fixed use of `UPDATE` with `CASE` expression with a first value of `NULL`
+Fixed use of joins or subqeries with multiple correlated conditions
+Improved handling of `LEFT OUTER JOIN` using nested loop operator
+Implemented many-to-many joins using merge join operator
+Fixed cross-instance string comparison
+Lift more filters directly to FetchXML link-entity
+Extended folding of sorts to FetchXML around nested loops
+Improved ambiguous table name detection in `UPDATE`/`DELETE` statements with subqueries
+Avoid errors with un-aliased calculated columns in subqueries
+Improved error reporting for `AVG` and `SUM` aggregates on non-numeric types
+Handle `MIN` and `MAX` aggregates for primary key and lookup columns
+Added support for `STRING_AGG` function
+Implemented "Select Top 1000" menu option in Object Explorer
+
 ## [v7.3.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.3.0) - 2023-06-12
 
 Added support for `XML` data type and `FOR XML` clause

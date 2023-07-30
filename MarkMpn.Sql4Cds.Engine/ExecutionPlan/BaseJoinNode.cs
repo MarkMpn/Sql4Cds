@@ -56,6 +56,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IDictionary<string, string> DefinedValues { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
+        /// Indicates if columns from the <see cref="LeftSource"/> should be included in the output
+        /// </summary>
+        [Browsable(false)]
+        public bool OutputLeftSchema { get; set; } = true;
+
+        /// <summary>
+        /// Indicates if columns from the <see cref="RightSource"/> should be included in the output
+        /// </summary>
+        [Browsable(false)]
+        public bool OutputRightSchema { get; set; } = true;
+
+        /// <summary>
         /// Creates the output record by merging the records that have been matched from the left and right sources
         /// </summary>
         /// <param name="leftEntity">The data from the left source</param>
@@ -125,8 +137,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var subSchema in new[] { outerSchema, innerSchema })
             {
-                // Semi-join does not include data from the outer source
-                if (SemiJoin && (JoinType == QualifiedJoinType.RightOuter && subSchema == outerSchema || JoinType != QualifiedJoinType.RightOuter && subSchema == innerSchema) && !includeSemiJoin)
+                if (subSchema == outerSchema && !OutputLeftSchema && !includeSemiJoin)
+                    continue;
+
+                if (subSchema == innerSchema && !OutputRightSchema && !includeSemiJoin)
                     continue;
 
                 foreach (var column in subSchema.Schema)

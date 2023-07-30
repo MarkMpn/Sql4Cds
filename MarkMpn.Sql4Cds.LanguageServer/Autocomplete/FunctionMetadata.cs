@@ -42,6 +42,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             [Description("Finds the number of non-null values")]
             public abstract int count(object value);
 
+            [Aggregate]
+            [Description("Concatenates the values of string expressions and places separator values between them")]
+            public abstract string string_agg(string value, string separator);
+
             [Description("Creates a lookup value to reference a record")]
             public abstract EntityReference createlookup(string logicalName, Guid id);
 

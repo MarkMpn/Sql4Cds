@@ -1224,5 +1224,85 @@ FOR XML PATH";
                 Assert.AreEqual("<row>4</row>", actual);
             }
         }
+
+        [TestMethod]
+        public void UpdateCase()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/314
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = "INSERT INTO account (employees) VALUES (1)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "UPDATE a SET a.employees = (CASE WHEN a.employees IS NULL THEN NULL ELSE a.employees + 1 END) FROM account AS a WHERE a.accountid IS NOT NULL";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT employees FROM account";
+                var actual = cmd.ExecuteScalar();
+                Assert.AreEqual(2, actual);
+            }
+        }
+
+        [TestMethod]
+        public void FullOuterJoinNoEqijoinPredicate()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = "INSERT INTO account (employees) VALUES (1)";
+                cmd.ExecuteNonQuery();
+                cmd.CommandText = "INSERT INTO account (employees) VALUES (1)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT a1.employees, a2.employees FROM account a1 FULL OUTER JOIN account a2 ON a1.employees <> a2.employees";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.AreEqual(DBNull.Value, reader.GetValue(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.AreEqual(DBNull.Value, reader.GetValue(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(DBNull.Value, reader.GetValue(0));
+                    Assert.AreEqual(1, reader.GetInt32(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(DBNull.Value, reader.GetValue(0));
+                    Assert.AreEqual(1, reader.GetInt32(1));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void StringAgg()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('A')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('B')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('C')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT STRING_AGG(name, ', ') WITHIN GROUP (ORDER BY name DESC) FROM account";
+                var actual = cmd.ExecuteScalar();
+                Assert.AreEqual("C, B, A", actual);
+            }
+        }
     }
 }

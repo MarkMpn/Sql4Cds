@@ -1288,9 +1288,70 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var innerLinkEntities = Entity.GetLinkEntities(innerOnly: true).ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
 
             Entity.Items = MoveFiltersToLinkEntities(innerLinkEntities, Entity.Items);
+            Entity.Items = MoveConditionsToLinkEntities(innerLinkEntities, Entity.Items);
         }
 
         private object[] MoveFiltersToLinkEntities(Dictionary<string, FetchLinkEntityType> innerLinkEntities, object[] items)
+        {
+            // Entire filters can be moved directly to the link entity if all the conditions (including in sub-filters) refer
+            // to the link entity
+            if (items == null)
+                return items;
+
+            var toRemove = new List<object>();
+
+            foreach (var filter in items.OfType<filter>().ToList())
+            {
+                var entityName = GetConsistentEntityName(filter);
+
+                if (entityName != null && innerLinkEntities.TryGetValue(entityName, out var linkEntity))
+                {
+                    linkEntity.AddItem(filter);
+
+                    if (linkEntity.Items == null)
+                        linkEntity.Items = new object[] { filter };
+                    else
+                        linkEntity.Items = linkEntity.Items.Concat(new[] { filter }).ToArray();
+
+                    Entity.Items = Entity.Items.Except(new[] { filter }).ToArray();
+                    RemoveEntityName(filter);
+                    toRemove.Add(filter);
+                }
+            }
+
+            return items.Except(toRemove).ToArray();
+        }
+
+        private void RemoveEntityName(filter filter)
+        {
+            foreach (var condition in filter.Items.OfType<condition>())
+                condition.entityname = null;
+
+            foreach (var childFilter in filter.Items.OfType<filter>())
+                RemoveEntityName(childFilter);
+        }
+
+        private string GetConsistentEntityName(filter filter)
+        {
+            var entityNames = filter.Items
+                .OfType<condition>()
+                .Select(c => c.entityname)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (entityNames.Count != 1)
+                return null;
+
+            foreach (var childFilter in filter.Items.OfType<filter>())
+            {
+                if (GetConsistentEntityName(childFilter) != entityNames[0])
+                    return null;
+            }
+
+            return entityNames[0];
+        }
+
+        private object[] MoveConditionsToLinkEntities(Dictionary<string, FetchLinkEntityType> innerLinkEntities, object[] items)
         {
             if (items == null)
                 return items;
@@ -1322,7 +1383,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             foreach (var subFilter in items.OfType<filter>().Where(f => f.type == filterType.and))
-                subFilter.Items = MoveFiltersToLinkEntities(innerLinkEntities, subFilter.Items);
+                subFilter.Items = MoveConditionsToLinkEntities(innerLinkEntities, subFilter.Items);
 
             return items.Except(toRemove).ToArray();
         }

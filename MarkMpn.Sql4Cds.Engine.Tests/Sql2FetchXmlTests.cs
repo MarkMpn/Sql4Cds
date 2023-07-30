@@ -554,7 +554,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleAggregate()
         {
-            var query = "SELECT count(*), count(name), count(DISTINCT name), max(name), min(name), avg(name) FROM account";
+            var query = "SELECT count(*), count(name), count(DISTINCT name), max(name), min(name), avg(employees) FROM account";
 
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
             var queries = planBuilder.Build(query, null, out _);
@@ -567,7 +567,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' aggregate='countcolumn' distinct='true' alias='name_count_distinct' />
                         <attribute name='name' aggregate='max' alias='name_max' />
                         <attribute name='name' aggregate='min' alias='name_min' />
-                        <attribute name='name' aggregate='avg' alias='name_avg' />
+                        <attribute name='employees' aggregate='avg' alias='employees_avg' />
                     </entity>
                 </fetch>
             ");

@@ -253,6 +253,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             folded = null;
 
+            // Can't fold joins without key attributes
+            if (LeftAttribute == null || RightAttribute == null)
+                return false;
+
             // Can't join data from different sources
             if (!leftFetch.DataSource.Equals(rightFetch.DataSource, StringComparison.OrdinalIgnoreCase))
                 return false;
@@ -651,8 +655,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(col => rightSchema.ContainsColumn(col, out _))
                 .ToList();
 
-            leftColumns.Add(LeftAttribute.GetColumnName());
-            rightColumns.Add(RightAttribute.GetColumnName());
+            if (LeftAttribute != null)
+                leftColumns.Add(LeftAttribute.GetColumnName());
+
+            if (RightAttribute != null)
+                rightColumns.Add(RightAttribute.GetColumnName());
 
             LeftSource.AddRequiredColumns(context, leftColumns);
             RightSource.AddRequiredColumns(context, rightColumns);
@@ -676,7 +683,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftSchema = LeftSource.GetSchema(context);
             var rightSchema = GetRightSchema(context);
 
-            if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey || RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
+            if (LeftAttribute != null && LeftAttribute.GetColumnName() == leftSchema.PrimaryKey ||
+                RightAttribute != null && RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
             {
                 if (JoinType == QualifiedJoinType.Inner)
                     estimate = Math.Min(leftMax, rightMax);

@@ -6,9 +6,11 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Remoting.Contexts;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Services.Description;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using FakeXrmEasy.Extensions;
@@ -4992,8 +4994,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             var execute = AssertNode<ExecuteMessageNode>(loop1.RightSource);
 
             CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, select.ColumnSet.Select(c => c.SourceColumn).ToArray());
-            Assert.AreEqual(QualifiedJoinType.RightOuter, loop1.JoinType);
-            Assert.IsTrue(loop1.SemiJoin);
+            Assert.AreEqual(QualifiedJoinType.Inner, loop1.JoinType);
             Assert.IsNull(loop1.JoinCondition);
             Assert.AreEqual(1, loop1.OuterReferences.Count);
             Assert.AreEqual("@Expr2", loop1.OuterReferences["Expr1"]);
@@ -5410,6 +5411,394 @@ UPDATE account SET employees = @employees WHERE name = @name";
             var innerJoinFetch = AssertNode<FetchXmlScan>(innerJoinSelect.Source);
 
             AssertFetchXml(outerJoinFetch, innerJoinFetch.FetchXmlString);
+        }
+
+        [TestMethod]
+        public void CorrelatedSubqueryWithMultipleConditions()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/316
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = @"
+SELECT r.accountid,
+       r.employees,
+       r.ownerid,
+       (SELECT count(*)
+        FROM   account AS sub
+        WHERE  
+        sub.employees <= r.employees AND
+        sub.ownerid = r.ownerid) AS cnt
+FROM   account AS r;";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("r.accountid", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("accountid", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("r.employees", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("employees", select.ColumnSet[1].OutputColumn);
+            Assert.AreEqual("r.ownerid", select.ColumnSet[2].SourceColumn);
+            Assert.AreEqual("ownerid", select.ColumnSet[2].OutputColumn);
+            Assert.AreEqual("Expr3", select.ColumnSet[3].SourceColumn);
+            Assert.AreEqual("cnt", select.ColumnSet[3].OutputColumn);
+
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["r.employees"]);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["r.ownerid"]);
+            Assert.AreEqual("count", loop.DefinedValues["Expr3"]);
+
+            var outerFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(outerFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='employees' />
+                        <attribute name='ownerid' />
+                    </entity>
+                </fetch>");
+
+            var aggregate = AssertNode<StreamAggregateNode>(loop.RightSource);
+            Assert.AreEqual(AggregateType.CountStar, aggregate.Aggregates["count"].AggregateType);
+
+            var filter = AssertNode<FilterNode>(aggregate.Source);
+            Assert.AreEqual("sub.employees <= @Expr1", filter.Filter.ToSql());
+
+            var indexSpool = AssertNode<IndexSpoolNode>(filter.Source);
+            Assert.AreEqual("@Expr2", indexSpool.SeekValue);
+            Assert.AreEqual("sub.ownerid", indexSpool.KeyColumn);
+
+            var innerFetch = AssertNode<FetchXmlScan>(indexSpool.Source);
+            AssertFetchXml(innerFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <attribute name='ownerid' />
+                        <filter>
+                            <condition attribute=""ownerid"" operator=""not-null"" />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossInstanceJoinOnStringColumn()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/325
+            var metadata1 = new AttributeMetadataCache(_service);
+            var metadata2 = new AttributeMetadataCache(_service2);
+            var datasources = new[]
+            {
+                new DataSource
+                {
+                    Name = "uat",
+                    Connection = _context.GetOrganizationService(),
+                    Metadata = metadata1,
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache(),
+                    DefaultCollation = new Collation(1033, false, false)
+                },
+                new DataSource
+                {
+                    Name = "prod",
+                    Connection = _context2.GetOrganizationService(),
+                    Metadata = metadata2,
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache(),
+                    DefaultCollation = new Collation(1033, false, false)
+                },
+                new DataSource
+                {
+                    Name = "local", // Hack so that ((IQueryExecutionOptions)this).PrimaryDataSource = "local" doesn't cause test to fail
+                    DefaultCollation = Collation.USEnglish
+                }
+            };
+            var planBuilder = new ExecutionPlanBuilder(datasources, this);
+
+            var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.name = prod.name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var join = AssertNode<HashJoinNode>(select.Source);
+            Assert.AreEqual("uat.name", join.LeftAttribute.ToSql());
+            Assert.AreEqual("prod.name", join.RightAttribute.ToSql());
+
+            var uatFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            Assert.AreEqual("uat", uatFetch.DataSource);
+            AssertFetchXml(uatFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            var prodFetch = AssertNode<FetchXmlScan>(join.RightSource);
+            Assert.AreEqual("prod", prodFetch.DataSource);
+            AssertFetchXml(prodFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void LiftOrFilterToLinkEntityWithInnerJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR account.name = 'Data 8'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <all-attributes />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <all-attributes />
+                            <filter type='or'>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                                <condition attribute='name' operator='eq' value='Data 8' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotLiftOrFilterToLinkEntityWithOuterJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM contact LEFT OUTER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR account.name = 'Data 8'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <all-attributes />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='outer' alias='account'>
+                            <all-attributes />
+                        </link-entity>
+                        <filter type='or'>
+                            <condition entityname='account' attribute='name' operator='eq' value='Data8' />
+                            <condition entityname='account' attribute='name' operator='eq' value='Data 8' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotLiftOrFilterToLinkEntityWithDifferentEntities()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM contact LEFT OUTER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR contact.fullname = 'Mark Carrington'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <all-attributes />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='outer' alias='account'>
+                            <all-attributes />
+                        </link-entity>
+                        <filter type='or'>
+                            <condition entityname='account' attribute='name' operator='eq' value='Data8' />
+                            <condition attribute='fullname' operator='eq' value='Mark Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldSortOrderToInnerJoinLeftInput()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT TOP 10 audit.* FROM contact CROSS APPLY SampleMessage(firstname) AS audit WHERE firstname = 'Mark' ORDER BY contact.createdon;";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(top.Source);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                           <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                        <order attribute='createdon' />
+                    </entity>
+                </fetch>");
+            var execute = AssertNode<ExecuteMessageNode>(loop.RightSource);
+        }
+
+        [TestMethod]
+        public void UpdateFromSubquery()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "UPDATE account SET name = 'foo' FROM account INNER JOIN (SELECT name, MIN(createdon) FROM account GROUP BY name HAVING COUNT(*) > 1) AS dupes ON account.name = dupes.name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual("account", update.LogicalName);
+            Assert.AreEqual("account.accountid", update.PrimaryIdSource);
+            Assert.AreEqual("Expr2", update.ColumnMappings["name"].NewValueColumn);
+            var distinct = AssertNode<DistinctNode>(update.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
+            Assert.AreEqual("'foo'", computeScalar.Columns["Expr2"].ToSql());
+            var merge = AssertNode<MergeJoinNode>(computeScalar.Source);
+            var sort = AssertNode<SortNode>(merge.LeftSource);
+            var subquery = AssertNode<AliasNode>(sort.Source);
+            var fetch = AssertNode<FetchXmlScan>(merge.RightSource);
+        }
+
+        [TestMethod]
+        public void MinPrimaryKey()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT MIN(accountid) FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MinPicklist()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT MIN(new_optionsetvalue) FROM new_customentity";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='new_customentity'>
+                        <attribute name='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void AvgGuidIsNotSupported()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var query = "SELECT AVG(accountid) FROM account";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void StringAggWithOrderAndNoGroups()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' descending='true' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void StringAggWithOrderAndScalarGroups()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account GROUP BY employees";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <attribute name='name' />
+                        <order attribute='employees' />
+                        <order attribute='name' descending='true' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void StringAggWithOrderAndNonScalarGroups()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account GROUP BY name + 'x'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<HashMatchAggregateNode>(select.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(aggregate.Source);
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' descending='true' />
+                    </entity>
+                </fetch>");
         }
     }
 }
