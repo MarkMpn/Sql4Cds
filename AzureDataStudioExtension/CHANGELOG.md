@@ -2,6 +2,7 @@
 
 ## [v7.4.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.4.0) - 2023-08-05
 
+Added support for long-term retention data
 Fixed errors with common XML queries
 Improved performance with subqueries
 Avoid exposing internal names for computed columns

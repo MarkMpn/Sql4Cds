@@ -11,7 +11,8 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed errors with common XML queries
+    <releaseNotes>Added support for long-term retention data
+Fixed errors with common XML queries
 Improved performance with subqueries
 Avoid exposing internal names for computed columns
 Convert outer joins with filters to inner joins
