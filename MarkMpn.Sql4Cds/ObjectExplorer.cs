@@ -96,6 +96,7 @@ namespace MarkMpn.Sql4Cds
                         AddVirtualChildNodes(relsNode, LoadRelationships);
                     }
 
+                    parent.Tag = archival ? "archive" : "dbo";
                     return node;
                 })
                 .ToArray();
@@ -481,6 +482,11 @@ INNER JOIN {manyToMany.Entity2LogicalName}
     ON {manyToMany.Entity2LogicalName}.{entity2.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity2IntersectAttribute}";
 
                 query.InsertText(join);
+            }
+            else if (e.Node.Tag is EntityMetadata)
+            {
+                // Use schema name when adding table to ensure we use live or retained data as appropriate
+                query.InsertText((string)e.Node.Parent.Tag + "." + e.Node.Text);
             }
             else
             {
