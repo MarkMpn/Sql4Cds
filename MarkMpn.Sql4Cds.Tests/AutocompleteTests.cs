@@ -44,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Tests
         public void FromClause()
         {
             var sql = "SELECT * FROM a";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Where(s => s.ImageIndex == 4).Select(s => s.Text).ToList();
 
             CollectionAssert.AreEqual(new[] { "account" }, suggestions);
         }
