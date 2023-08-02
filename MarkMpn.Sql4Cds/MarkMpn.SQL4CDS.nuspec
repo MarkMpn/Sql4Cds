@@ -48,6 +48,12 @@ Added support for STRING_AGG function
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\ILMerge\MarkMpn.Sql4Cds.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds.dll" />
+    <file src="bin\Release\MarkMpn.Sql4Cds.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds.dll" />
+    <file src="bin\Release\MarkMpn.Sql4Cds.Controls.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.Controls.dll" />
+    <file src="bin\Release\MarkMpn.Sql4Cds.Engine.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src="bin\Release\Microsoft.ApplicationInsights.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.ApplicationInsights.dll" />
+    <file src="bin\Release\Microsoft.SqlServer.TransactSql.ScriptDom.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.SqlServer.TransactSql.ScriptDom.dll" />
+    <file src="bin\Release\XPath2.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\XPath2.dll" />
+    <file src="bin\Release\XPath2.Extensions.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\XPath2.Extensions.dll" />
   </files>
 </package>
