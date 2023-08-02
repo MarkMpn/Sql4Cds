@@ -1,4 +1,5 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Xrm.Sdk;
 using System;
 using System.ComponentModel;
 using System.Data;
@@ -73,10 +74,6 @@ namespace xrmtb.XrmToolBox.Controls.Controls
         }
 
         [DefaultValue(false)]
-        [Description("Controls whether multiple records can be selected in the dialog.")]
-        public bool Multiselect { get; set; } = false;
-
-        [DefaultValue(false)]
         [Description("Include personal views for record selection.")]
         public bool IncludePersonalViews { get; set; } = false;
 
@@ -89,6 +86,9 @@ namespace xrmtb.XrmToolBox.Controls.Controls
         /// </summary>
         [Browsable(false)]
         public IOrganizationService Service { get; set; }
+
+        [Browsable(false)]
+        public IAttributeMetadataCache Metadata { get; set; }
 
         [Description("The string to display in the title bar of the dialog box.")]
         public string Title { get; set; }
@@ -127,8 +127,7 @@ namespace xrmtb.XrmToolBox.Controls.Controls
             {
                 throw new Exception("LogicalNames property must contain at least one entity before calling ShowDialog.");
             }
-            var title = string.IsNullOrEmpty(Title) ? Multiselect ? "Select Records" : "Select Record" : Title;
-            using (var form = new CDSLookupDialogForm(Service, LogicalNames, Multiselect, ShowFriendlyNames, IncludePersonalViews, title))
+            using (var form = new CDSLookupDialogForm(Service, Metadata, LogicalNames, ShowFriendlyNames, IncludePersonalViews))
             {
                 var result = form.ShowDialog(owner);
                 Entities = form.GetSelectedRecords();

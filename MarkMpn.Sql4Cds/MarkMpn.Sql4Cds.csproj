@@ -115,10 +115,7 @@
     <Compile Include="CDSLookupDialog\EntityMetadataProxy.cs" />
     <Compile Include="CDSLookupDialog\EntitySerializer.cs" />
     <Compile Include="CDSLookupDialog\EntityWrapper.cs" />
-    <Compile Include="CDSLookupDialog\JsonFormat.cs" />
     <Compile Include="CDSLookupDialog\LookupHelper.cs" />
-    <Compile Include="CDSLookupDialog\MetadataHelper.cs" />
-    <Compile Include="CDSLookupDialog\SerializationStyle.cs" />
     <Compile Include="CDSLookupDialog\ViewConsts.cs" />
     <Compile Include="ConfirmCloseForm.cs">
       <SubType>Form</SubType>

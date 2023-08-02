@@ -1,4 +1,5 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using System;
 using System.Collections.Generic;
@@ -13,7 +14,7 @@ namespace xrmtb.XrmToolBox.Controls
     public partial class CRMGridView : DataGridView
     {
         #region Private properties
-        private IOrganizationService organizationService;
+        private IAttributeMetadataCache metadata;
         private IEnumerable<Entity> entities;
         private bool autoRefresh = true;
         private bool showFriendlyNames = false;
@@ -334,12 +335,12 @@ namespace xrmtb.XrmToolBox.Controls
         #region Public properties
 
         [Browsable(false)]
-        public IOrganizationService OrganizationService
+        public IAttributeMetadataCache Metadata
         {
-            get { return organizationService; }
+            get { return metadata; }
             set
             {
-                organizationService = value;
+                metadata = value;
                 if (autoRefresh)
                 {
                     Refresh();
@@ -631,7 +632,9 @@ namespace xrmtb.XrmToolBox.Controls
             }
             var type = GetValueType(value);
             var dataColumn = new DataColumn(attribute, type);
-            var meta = organizationService.GetAttribute(EntityName, attribute, value);
+            AttributeMetadata meta = null;
+            if (metadata.TryGetValue(EntityName, out var entityMetadata))
+                meta = entityMetadata.Attributes.SingleOrDefault(a => a.LogicalName == attribute);
             dataColumn.ExtendedProperties.Add("Metadata", meta);
             dataColumn.ExtendedProperties.Add("OriginalType", GetInnerValueType(value));
             if (meta is DateTimeAttributeMetadata && entities.Any(e => e.Contains(attribute) && e[attribute] is DateTime dtvalue && dtvalue.Millisecond > 0))

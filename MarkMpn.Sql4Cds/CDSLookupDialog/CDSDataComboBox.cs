@@ -1,4 +1,5 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using System;
@@ -19,6 +20,7 @@ namespace xrmtb.XrmToolBox.Controls.Controls
         private string displayFormat = string.Empty;
         private IEnumerable<Entity> entities;
         private IOrganizationService organizationService;
+        private IAttributeMetadataCache metadata;
         #endregion
 
         #region Public Constructors
@@ -91,6 +93,17 @@ namespace xrmtb.XrmToolBox.Controls.Controls
         }
 
         [Browsable(false)]
+        public IAttributeMetadataCache Metadata
+        {
+            get { return metadata; }
+            set
+            {
+                metadata = value;
+                Refresh();
+            }
+        }
+
+        [Browsable(false)]
         public Entity SelectedEntity => (SelectedItem is EntityWrapper item) ? item.Entity : null;
 
         #endregion Public Properties
@@ -101,7 +114,7 @@ namespace xrmtb.XrmToolBox.Controls.Controls
         {
             SuspendLayout();
             var selected = SelectedEntity;
-            var ds = entities?.Select(e => new EntityWrapper(e, displayFormat, organizationService)).ToArray();
+            var ds = entities?.Select(e => new EntityWrapper(e, displayFormat, metadata)).ToArray();
             base.DataSource = ds;
             base.Refresh();
             if (selected != null && ds.FirstOrDefault(e => e.Entity.Id.Equals(selected.Id)) is EntityWrapper newselected)

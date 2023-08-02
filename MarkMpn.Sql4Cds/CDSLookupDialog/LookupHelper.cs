@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.ServiceModel;
 using System.Xml;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -26,7 +27,7 @@ namespace xrmtb.XrmToolBox.Controls.Helper
         /// <param name="view">The definition of the Quick Find view to use</param>
         /// <param name="search">The value to search for</param>
         /// <returns>A list of matching record</returns>
-        internal static EntityCollection ExecuteQuickFind(this IOrganizationService service, string logicalName, Entity view, string search)
+        internal static EntityCollection ExecuteQuickFind(this IOrganizationService service, IAttributeMetadataCache metadata, string logicalName, Entity view, string search)
         {
             if (service == null)
             {
@@ -35,10 +36,10 @@ namespace xrmtb.XrmToolBox.Controls.Helper
             var fetchDoc = new XmlDocument();
             fetchDoc.LoadXml(view.GetAttributeValue<string>(Savedquery.Fetchxml));
             var filterNodes = fetchDoc.SelectNodes("fetch/entity/filter");
-            var metadata = MetadataHelper.GetEntity(service, logicalName);
+            metadata.TryGetValue(logicalName, out var entityMetadata);
             foreach (XmlNode filterNode in filterNodes)
             {
-                ProcessFilter(metadata, filterNode, search);
+                ProcessFilter(entityMetadata, filterNode, search);
             }
             return service.RetrieveMultiple(new FetchExpression(fetchDoc.OuterXml));
         }

@@ -1310,8 +1310,8 @@ namespace MarkMpn.Sql4Cds
                 var service = (CrmServiceClient)DataSources[Connection.ConnectionName].Connection;
 
                 dlg.Service = service;
+                dlg.Metadata = DataSources[Connection.ConnectionName].Metadata;
                 dlg.LogicalName = "systemuser";
-                dlg.Multiselect = false;
 
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {

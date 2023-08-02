@@ -1,4 +1,5 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Xrm.Sdk;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -17,20 +18,21 @@ namespace xrmtb.XrmToolBox.Controls.Controls
         private const int Error_QuickFindQueryRecordLimit = -2147164124;
         private Dictionary<string, List<Entity>> entityviews;
         private IOrganizationService service;
+        private IAttributeMetadataCache metadata;
         private bool includePersonalViews;
 
         #endregion Private Fields
 
         #region Public Constructors
 
-        public CDSLookupDialogForm(IOrganizationService service, string[] logicalNames, bool multiSelect, bool friendlyNames, bool includePersonalViews, string title)
+        public CDSLookupDialogForm(IOrganizationService service, IAttributeMetadataCache metadata, string[] logicalNames, bool friendlyNames, bool includePersonalViews)
         {
             InitializeComponent();
-            SetMulti(multiSelect);
             this.includePersonalViews = includePersonalViews;
+            this.metadata = metadata;
             gridResults.ShowFriendlyNames = friendlyNames;
-            gridSelection.ShowFriendlyNames = friendlyNames;
-            Text = title;
+            gridResults.Metadata = metadata;
+            cmbView.Metadata = metadata;
             SetService(service);
             SetLogicalNames(logicalNames);
         }
@@ -46,8 +48,6 @@ namespace xrmtb.XrmToolBox.Controls.Controls
             {
                 service = value;
                 cmbView.OrganizationService = value;
-                gridResults.OrganizationService = value;
-                gridSelection.OrganizationService = value;
             }
         }
 
@@ -57,18 +57,7 @@ namespace xrmtb.XrmToolBox.Controls.Controls
 
         internal Entity[] GetSelectedRecords()
         {
-            if (gridResults.MultiSelect)
-            {
-                if (gridSelection.GetDataSource<IEnumerable<Entity>>() is IEnumerable<Entity> current)
-                {
-                    return current.ToArray();
-                }
-                return new Entity[] { };
-            }
-            else
-            {
-                return gridResults.SelectedCellRecords?.Take(1).ToArray();
-            }
+            return gridResults.SelectedCellRecords?.Take(1).ToArray();
         }
 
         #endregion Internal Methods
@@ -94,10 +83,17 @@ namespace xrmtb.XrmToolBox.Controls.Controls
             {
                 txtFilter.Text = string.Empty;
             }
+
+            var layout = new XmlDocument();
+            layout.LoadXml(view["layoutxml"].ToString());
+            gridResults.ColumnOrder = String.Join(",", layout.SelectNodes("//cell/@name").OfType<XmlAttribute>().Select(a => a.Value));
+            gridResults.ShowAllColumnsInColumnOrder = true;
+            gridResults.ShowColumnsNotInColumnOrder = false;
+
             try
             {
                 Cursor = Cursors.WaitCursor;
-                gridResults.DataSource = service.ExecuteQuickFind(entity.Metadata.LogicalName, view, txtFilter.Text);
+                gridResults.DataSource = service.ExecuteQuickFind(metadata, entity.Metadata.LogicalName, view, txtFilter.Text);
             }
             catch (FaultException<OrganizationServiceFault> ex)
             {
@@ -119,14 +115,6 @@ namespace xrmtb.XrmToolBox.Controls.Controls
             {
                 Cursor = Cursors.Arrow;
             }
-            var layout = new XmlDocument();
-            layout.LoadXml(view["layoutxml"].ToString());
-            gridResults.ColumnOrder = String.Join(",", layout.SelectNodes("//cell/@name").OfType<XmlAttribute>().Select(a => a.Value));
-            gridResults.ShowAllColumnsInColumnOrder = true;
-            gridResults.ShowColumnsNotInColumnOrder = false;
-            gridSelection.ColumnOrder = gridResults.ColumnOrder;
-            gridSelection.ShowAllColumnsInColumnOrder = true;
-            gridSelection.ShowColumnsNotInColumnOrder = false;
         }
 
         private void SetLogicalNames(string[] logicalNames)
@@ -136,19 +124,13 @@ namespace xrmtb.XrmToolBox.Controls.Controls
             {
                 cmbEntity.Items.AddRange(logicalNames
                     .Where(l => !string.IsNullOrWhiteSpace(l))
-                    .Select(l => service.GetEntity(l))
+                    .Select(l => { metadata.TryGetValue(l, out var entityMetadata); return entityMetadata; })
                     .Where(m => m != null)
                     .Select(m => new EntityMetadataProxy(m))
                     .ToArray());
             }
             cmbEntity.SelectedIndex = cmbEntity.Items.Count > 0 ? 0 : -1;
             cmbEntity.Enabled = cmbEntity.Items.Count > 1;
-        }
-
-        private void SetMulti(bool multiSelect)
-        {
-            splitGrids.Panel2Collapsed = !multiSelect;
-            gridResults.MultiSelect = multiSelect;
         }
 
         private void SetService(IOrganizationService service)
@@ -170,18 +152,18 @@ namespace xrmtb.XrmToolBox.Controls.Controls
                 var views = new List<Entity>();
                 if (service.RetrieveSystemViews(logicalname, true) is EntityCollection qfviews)
                 {
-                    views.AddRange(qfviews.Entities);
+                    views.AddRange(qfviews.Entities.OrderBy(e => e.GetAttributeValue<string>(Savedquery.PrimaryName)));
                 }
                 if (service.RetrieveSystemViews(logicalname, false) is EntityCollection otherviews)
                 {
-                    views.AddRange(otherviews.Entities);
+                    views.AddRange(otherviews.Entities.OrderBy(e => e.GetAttributeValue<string>(Savedquery.PrimaryName)));
                 }
                 if (includePersonalViews && service.RetrievePersonalViews(logicalname) is EntityCollection userviews && userviews.Entities.Count > 0)
                 {
                     var separator = new Entity(UserQuery.EntityName);
                     separator.Attributes[UserQuery.PrimaryName] = "-- Personal Views --";
                     views.Add(separator);
-                    views.AddRange(userviews.Entities);
+                    views.AddRange(userviews.Entities.OrderBy(e => e.GetAttributeValue<string>(UserQuery.PrimaryName)));
                 }
                 entityviews.Add(logicalname, views);
             }
@@ -201,28 +183,12 @@ namespace xrmtb.XrmToolBox.Controls.Controls
             {
                 var current = GetSelectedRecords().ToList();
                 current.AddRange(selected);
-                gridSelection.DataSource = current.Distinct();
             }
-        }
-
-        private void btnClearSelection_Click(object sender, EventArgs e)
-        {
-            gridSelection.DataSource = null;
         }
 
         private void btnFilter_Click(object sender, EventArgs e)
         {
             LoadData();
-        }
-
-        private void btnRemoveSelection_Click(object sender, EventArgs e)
-        {
-            if (gridSelection.SelectedRowRecords is IEnumerable<Entity> selected)
-            {
-                var current = GetSelectedRecords().ToList();
-                selected.ToList().ForEach(s => current.Remove(s));
-                gridSelection.DataSource = current;
-            }
         }
 
         private void cmbEntity_SelectedIndexChanged(object sender, EventArgs e)
@@ -235,31 +201,9 @@ namespace xrmtb.XrmToolBox.Controls.Controls
             timerLoadData.Start();
         }
 
-        private void gridResults_SelectionChanged(object sender, EventArgs e)
-        {
-            btnAddSelection.Enabled = gridResults.SelectedRowRecords?.Count() > 0;
-        }
-
-        private void gridSelection_DataSourceChanged(object sender, EventArgs e)
-        {
-            btnClearSelection.Enabled = gridSelection.Rows.Count > 0;
-        }
-
         private void gridResults_RecordDoubleClick(object sender, CRMRecordEventArgs e)
         {
-            if (gridResults.MultiSelect)
-            {
-                btnAddSelection_Click(sender, e);
-            }
-            else
-            {
-                DialogResult = DialogResult.OK;
-            }
-        }
-
-        private void gridSelection_SelectionChanged(object sender, EventArgs e)
-        {
-            btnRemoveSelection.Enabled = gridSelection.SelectedRowRecords?.Count() > 0;
+            DialogResult = DialogResult.OK;
         }
 
         private void timerLoadData_Tick(object sender, EventArgs e)
