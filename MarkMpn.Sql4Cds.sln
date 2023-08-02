@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds", "MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj", "{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutocompleteMenu-ScintillaNET", "AutocompleteMenu\AutocompleteMenu-ScintillaNET.csproj", "{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Tests", "MarkMpn.Sql4Cds.Tests\MarkMpn.Sql4Cds.Tests.csproj", "{081AA0FB-A019-430A-B05A-F55CAC7C50FD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.FetchXml.Tests", "MarkMpn.Sql4Cds.Engine.FetchXml.Tests\MarkMpn.Sql4Cds.Engine.FetchXml.Tests.csproj", "{69F7D111-3542-4E31-A0F8-E544F9FFA587}"
@@ -75,18 +73,6 @@ Global
 		{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}.Release|arm64.Build.0 = Release|Any CPU
 		{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}.Release|x86.ActiveCfg = Release|Any CPU
 		{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}.Release|x86.Build.0 = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|arm64.ActiveCfg = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|arm64.Build.0 = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|x86.Build.0 = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|arm64.ActiveCfg = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|arm64.Build.0 = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|x86.ActiveCfg = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|x86.Build.0 = Release|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Debug|arm64.ActiveCfg = Debug|Any CPU

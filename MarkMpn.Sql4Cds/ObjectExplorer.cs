@@ -594,7 +594,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             switch (con.MetadataCacheLoader.Status)
             {
                 case TaskStatus.RanToCompletion:
-                    refreshToolStripMenuItem.Enabled = con.MetadataCache != null;
+                    refreshToolStripMenuItem.Enabled = con.MetadataCacheLoader.Result != null;
                     break;
 
                 case TaskStatus.Faulted:

@@ -72,6 +72,54 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Autocomplete.cs" />
+    <Compile Include="Autocomplete\AutocompleteItem.cs" />
+    <Compile Include="Autocomplete\AutocompleteItems.cs" />
+    <Compile Include="Autocomplete\AutocompleteListView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Autocomplete\AutocompleteMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Autocomplete\AutocompleteMenuHost.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Autocomplete\Colors.cs" />
+    <Compile Include="Autocomplete\EventArgs.cs" />
+    <Compile Include="Autocomplete\IAutocompleteListView.cs" />
+    <Compile Include="Autocomplete\ITextBoxWrapper.cs" />
+    <Compile Include="Autocomplete\Range.cs" />
+    <Compile Include="Autocomplete\ScintillaWrapper.cs" />
+    <Compile Include="Autocomplete\TextBoxWrapper.cs" />
+    <Compile Include="CDSLookupDialog\CDSDataComboBox.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSDataComboBox.Designer.cs">
+      <DependentUpon>CDSDataComboBox.cs</DependentUpon>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSLookupDialog.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSLookupDialogForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSLookupDialogForm.Designer.cs">
+      <DependentUpon>CDSLookupDialogForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CRMGridView.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CRMGridView.designer.cs">
+      <DependentUpon>CRMGridView.cs</DependentUpon>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CRMRecordEventArgs.cs" />
+    <Compile Include="CDSLookupDialog\EntityMetadataProxy.cs" />
+    <Compile Include="CDSLookupDialog\EntitySerializer.cs" />
+    <Compile Include="CDSLookupDialog\EntityWrapper.cs" />
+    <Compile Include="CDSLookupDialog\JsonFormat.cs" />
+    <Compile Include="CDSLookupDialog\LookupHelper.cs" />
+    <Compile Include="CDSLookupDialog\MetadataHelper.cs" />
+    <Compile Include="CDSLookupDialog\SerializationStyle.cs" />
+    <Compile Include="CDSLookupDialog\ViewConsts.cs" />
     <Compile Include="ConfirmCloseForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -154,9 +202,17 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
-    <None Include="ILMergeConfig.json" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Autocomplete\AutocompleteMenu.resx">
+      <DependentUpon>AutocompleteMenu.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="CDSLookupDialog\CDSLookupDialogForm.resx">
+      <DependentUpon>CDSLookupDialogForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="CDSLookupDialog\CRMGridView.resx">
+      <DependentUpon>CRMGridView.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="ConfirmCloseForm.resx">
       <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -193,10 +249,6 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AutocompleteMenu\AutocompleteMenu-ScintillaNET.csproj">
-      <Project>{43cbc9aa-6a8e-463f-83a9-aff3124afdb6}</Project>
-      <Name>AutocompleteMenu-ScintillaNET</Name>
-    </ProjectReference>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj">
       <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
       <Name>MarkMpn.Sql4Cds.Controls</Name>
@@ -249,12 +301,6 @@
     <None Include="Resources\StatusHelp_16x.png" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="ILMerge">
-      <Version>3.0.40</Version>
-    </PackageReference>
-    <PackageReference Include="ILMerge.MSBuild.Task">
-      <Version>1.0.7</Version>
-    </PackageReference>
     <PackageReference Include="Microsoft.ApplicationInsights">
       <Version>2.21.0</Version>
     </PackageReference>
@@ -263,9 +309,6 @@
     </PackageReference>
     <PackageReference Include="System.Runtime">
       <Version>4.3.1</Version>
-    </PackageReference>
-    <PackageReference Include="xrmtb.XrmToolBox.Controls">
-      <Version>2.2.10</Version>
     </PackageReference>
     <PackageReference Include="XrmToolBoxPackage">
       <Version>1.2023.6.65</Version>
