@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using MarkMpn.Sql4Cds.Engine;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     public partial class PropertiesWindow : WeifenLuo.WinFormsUI.Docking.DockContent
     {

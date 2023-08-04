@@ -27,8 +27,8 @@ namespace MarkMpn.Sql4Cds
 
         public override IXrmToolBoxPluginControl GetControl()
         {
-            var controlType = Type.GetType("MarkMpn.Sql4Cds.PluginControl, MarkMpn.Sql4Cds.XTB");
-            return (IXrmToolBoxPluginControl) Activator.CreateInstance(controlType);
+            var controlType = Type.GetType("MarkMpn.Sql4Cds.XTB.PluginControl, MarkMpn.Sql4Cds.XTB");
+            return (IXrmToolBoxPluginControl) Activator.CreateInstance(controlType, this);
         }
 
         /// <summary>

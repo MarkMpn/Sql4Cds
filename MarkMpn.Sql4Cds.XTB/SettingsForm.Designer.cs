@@ -1,4 +1,4 @@
-﻿namespace MarkMpn.Sql4Cds
+﻿namespace MarkMpn.Sql4Cds.XTB
 {
     partial class SettingsForm
     {
@@ -542,7 +542,7 @@
             // pictureBox6
             // 
             this.pictureBox6.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox6.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox6.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
             this.pictureBox6.Location = new System.Drawing.Point(310, 52);
             this.pictureBox6.Name = "pictureBox6";
             this.pictureBox6.Size = new System.Drawing.Size(16, 16);
@@ -555,7 +555,7 @@
             // pictureBox4
             // 
             this.pictureBox4.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox4.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox4.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
             this.pictureBox4.Location = new System.Drawing.Point(124, 6);
             this.pictureBox4.Name = "pictureBox4";
             this.pictureBox4.Size = new System.Drawing.Size(16, 16);
@@ -568,7 +568,7 @@
             // pictureBox2
             // 
             this.pictureBox2.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox2.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox2.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
             this.pictureBox2.Location = new System.Drawing.Point(250, 122);
             this.pictureBox2.Name = "pictureBox2";
             this.pictureBox2.Size = new System.Drawing.Size(16, 16);
@@ -580,7 +580,7 @@
             // pictureBox1
             // 
             this.pictureBox1.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox1.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox1.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
             this.pictureBox1.Location = new System.Drawing.Point(148, 99);
             this.pictureBox1.Name = "pictureBox1";
             this.pictureBox1.Size = new System.Drawing.Size(16, 16);
@@ -593,7 +593,7 @@
             // bulkDeleteHelp
             // 
             this.bulkDeleteHelp.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.bulkDeleteHelp.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.bulkDeleteHelp.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
             this.bulkDeleteHelp.Location = new System.Drawing.Point(167, 77);
             this.bulkDeleteHelp.Name = "bulkDeleteHelp";
             this.bulkDeleteHelp.Size = new System.Drawing.Size(16, 16);
@@ -663,7 +663,7 @@
             // pictureBox3
             // 
             this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
             this.pictureBox3.Location = new System.Drawing.Point(378, 34);
             this.pictureBox3.Name = "pictureBox3";
             this.pictureBox3.Size = new System.Drawing.Size(16, 16);

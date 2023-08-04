@@ -13,7 +13,7 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
 using ScintillaNET;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     public partial class MQueryControl : DocumentWindowBase, IDocumentWindow
     {

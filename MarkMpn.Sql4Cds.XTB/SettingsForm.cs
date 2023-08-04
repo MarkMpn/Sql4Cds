@@ -10,7 +10,7 @@ using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
 using ScintillaNET;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     public partial class SettingsForm : Form
     {

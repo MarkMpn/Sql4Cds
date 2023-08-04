@@ -7,7 +7,7 @@
     <ProjectGuid>{8050B824-A28B-4631-8A95-D127859A9216}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MarkMpn.Sql4Cds</RootNamespace>
+    <RootNamespace>MarkMpn.Sql4Cds.XTB</RootNamespace>
     <AssemblyName>MarkMpn.Sql4Cds.XTB</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <RuntimeIdentifiers>win</RuntimeIdentifiers>
@@ -221,6 +221,10 @@
     </EmbeddedResource>
     <EmbeddedResource Include="PluginControl.resx">
       <DependentUpon>PluginControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
     <EmbeddedResource Include="PropertiesWindow.resx">
       <DependentUpon>PropertiesWindow.cs</DependentUpon>

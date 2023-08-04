@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     class FunctionMetadata
     {

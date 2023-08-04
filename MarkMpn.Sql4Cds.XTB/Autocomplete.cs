@@ -11,9 +11,9 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
-using static MarkMpn.Sql4Cds.FunctionMetadata;
+using static MarkMpn.Sql4Cds.XTB.FunctionMetadata;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     /// <summary>
     /// Produces Intellisense suggestions

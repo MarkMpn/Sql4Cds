@@ -13,7 +13,7 @@ using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using System.Threading.Tasks;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {

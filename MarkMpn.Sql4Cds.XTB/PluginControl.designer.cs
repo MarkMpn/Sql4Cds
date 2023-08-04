@@ -1,4 +1,4 @@
-﻿namespace MarkMpn.Sql4Cds
+﻿namespace MarkMpn.Sql4Cds.XTB
 {
     partial class PluginControl
     {
@@ -104,7 +104,7 @@
             // 
             this.tsbConnect.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
             this.tsbConnect.Enabled = false;
-            this.tsbConnect.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ConnectFilled_grey_16x;
+            this.tsbConnect.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.ConnectFilled_grey_16x;
             this.tsbConnect.ImageTransparentColor = System.Drawing.Color.White;
             this.tsbConnect.Name = "tsbConnect";
             this.tsbConnect.Size = new System.Drawing.Size(23, 22);
@@ -207,7 +207,7 @@
             // 
             this.tsbFetchXMLBuilder.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
             this.tsbFetchXMLBuilder.Enabled = false;
-            this.tsbFetchXMLBuilder.Image = global::MarkMpn.Sql4Cds.Properties.Resources.FXB;
+            this.tsbFetchXMLBuilder.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.FXB;
             this.tsbFetchXMLBuilder.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbFetchXMLBuilder.Name = "tsbFetchXMLBuilder";
             this.tsbFetchXMLBuilder.Size = new System.Drawing.Size(23, 22);
@@ -253,7 +253,7 @@
             // 
             this.tsbIncludeFetchXml.CheckOnClick = true;
             this.tsbIncludeFetchXml.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
-            this.tsbIncludeFetchXml.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ExecutionPlan_16x;
+            this.tsbIncludeFetchXml.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.ExecutionPlan_16x;
             this.tsbIncludeFetchXml.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbIncludeFetchXml.Name = "tsbIncludeFetchXml";
             this.tsbIncludeFetchXml.Size = new System.Drawing.Size(23, 22);
@@ -279,7 +279,7 @@
             // 
             // tsbSettings
             // 
-            this.tsbSettings.Image = global::MarkMpn.Sql4Cds.Properties.Resources.Settings_16x;
+            this.tsbSettings.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.Settings_16x;
             this.tsbSettings.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbSettings.Name = "tsbSettings";
             this.tsbSettings.Size = new System.Drawing.Size(69, 22);
@@ -289,7 +289,7 @@
             // tslAboutLink
             // 
             this.tslAboutLink.Alignment = System.Windows.Forms.ToolStripItemAlignment.Right;
-            this.tslAboutLink.Image = global::MarkMpn.Sql4Cds.Properties.Resources.SQL4CDS_Icon_16;
+            this.tslAboutLink.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.SQL4CDS_Icon_16;
             this.tslAboutLink.IsLink = true;
             this.tslAboutLink.Name = "tslAboutLink";
             this.tslAboutLink.Size = new System.Drawing.Size(184, 16);

@@ -16,18 +16,20 @@ using WeifenLuo.WinFormsUI.Docking;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     public partial class PluginControl : PluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin, INoHighlightingPlugin
     {
+        private readonly object _plugin;
         private readonly IDictionary<string, DataSource> _dataSources;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
         private readonly PropertiesWindow _properties;
 
-        public PluginControl()
+        public PluginControl(object plugin)
         {
             InitializeComponent();
+            _plugin = plugin;
             dockPanel.Theme = new VS2015LightTheme();
             _dataSources = new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase);
             _objectExplorer = new ObjectExplorer(_dataSources, WorkAsync, con => CreateQuery(con, ""), ConnectObjectExplorer);
@@ -144,7 +146,7 @@ namespace MarkMpn.Sql4Cds
         private void PluginControl_Load(object sender, EventArgs e)
         {
             // Loads or creates the settings for the plugin
-            if (!SettingsManager.Instance.TryLoad(GetType(), out Settings settings))
+            if (!SettingsManager.Instance.TryLoad(_plugin.GetType(), out Settings settings))
                 settings = new Settings();
 
             Settings.Instance = settings;
@@ -562,7 +564,7 @@ namespace MarkMpn.Sql4Cds
         private void tsbIncludeFetchXml_Click(object sender, EventArgs e)
         {
             Settings.Instance.IncludeFetchXml = tsbIncludeFetchXml.Checked;
-            SettingsManager.Instance.Save(GetType(), Settings.Instance);
+            SettingsManager.Instance.Save(_plugin.GetType(), Settings.Instance);
         }
 
         public void ShowSettings()
@@ -581,7 +583,7 @@ namespace MarkMpn.Sql4Cds
             else
                 Settings.Instance.Session = null;
 
-            SettingsManager.Instance.Save(GetType(), Settings.Instance);
+            SettingsManager.Instance.Save(_plugin.GetType(), Settings.Instance);
         }
 
         public override void ClosingPlugin(PluginCloseInfo info)

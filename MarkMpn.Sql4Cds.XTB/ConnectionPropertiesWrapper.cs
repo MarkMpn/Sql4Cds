@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using McTools.Xrm.Connection;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     class ConnectionPropertiesWrapper
     {

@@ -1,4 +1,4 @@
-﻿namespace MarkMpn.Sql4Cds
+﻿namespace MarkMpn.Sql4Cds.XTB
 {
     partial class ObjectExplorer
     {
@@ -180,7 +180,7 @@
             // tsbConnect
             // 
             this.tsbConnect.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
-            this.tsbConnect.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ConnectFilled_grey_16x;
+            this.tsbConnect.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.ConnectFilled_grey_16x;
             this.tsbConnect.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbConnect.Name = "tsbConnect";
             this.tsbConnect.Size = new System.Drawing.Size(23, 22);

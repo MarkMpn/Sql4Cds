@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     /// <summary>
     /// This class can help you to store settings for your plugin

@@ -1,5 +1,6 @@
 ﻿using FakeXrmEasy;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk.Metadata;
 using System;

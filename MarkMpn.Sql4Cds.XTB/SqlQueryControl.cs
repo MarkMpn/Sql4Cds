@@ -24,7 +24,7 @@ using Microsoft.Xrm.Tooling.Connector;
 using ScintillaNET;
 using xrmtb.XrmToolBox.Controls.Controls;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     partial class SqlQueryControl : DocumentWindowBase, ISaveableDocumentWindow, IFormatableDocumentWindow
     {

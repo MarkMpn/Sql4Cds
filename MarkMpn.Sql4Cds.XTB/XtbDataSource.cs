@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using McTools.Xrm.Connection;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     class XtbDataSource : DataSource
     {

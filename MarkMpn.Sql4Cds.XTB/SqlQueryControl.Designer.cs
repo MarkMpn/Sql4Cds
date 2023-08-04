@@ -1,4 +1,4 @@
-﻿namespace MarkMpn.Sql4Cds
+﻿namespace MarkMpn.Sql4Cds.XTB
 {
     partial class SqlQueryControl
     {
@@ -236,7 +236,7 @@
             // 
             // toolStripStatusLabel
             // 
-            this.toolStripStatusLabel.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ConnectFilled_grey_16x;
+            this.toolStripStatusLabel.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.ConnectFilled_grey_16x;
             this.toolStripStatusLabel.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.toolStripStatusLabel.Name = "toolStripStatusLabel";
             this.toolStripStatusLabel.Size = new System.Drawing.Size(130, 17);
@@ -247,7 +247,7 @@
             // 
             // hostLabel
             // 
-            this.hostLabel.Image = global::MarkMpn.Sql4Cds.Properties.Resources.timeline_lock_on_16x;
+            this.hostLabel.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.timeline_lock_on_16x;
             this.hostLabel.Name = "hostLabel";
             this.hostLabel.Size = new System.Drawing.Size(164, 17);
             this.hostLabel.Text = "orgxxx.crm.dynamics.com";

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     /// <summary>
     /// Thanks @rappen

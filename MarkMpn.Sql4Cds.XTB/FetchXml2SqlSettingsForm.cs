@@ -11,7 +11,7 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
 using ScintillaNET;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     public partial class FetchXml2SqlSettingsForm : Form
     {

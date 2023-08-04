@@ -1,5 +1,5 @@
 ﻿
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.XTB
 {
     partial class ConfirmCloseForm
     {
