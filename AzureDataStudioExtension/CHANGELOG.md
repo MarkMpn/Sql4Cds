@@ -20,6 +20,7 @@ Improved error reporting for `AVG` and `SUM` aggregates on non-numeric types
 Handle `MIN` and `MAX` aggregates for primary key and lookup columns
 Added support for `STRING_AGG` function
 Implemented "Select Top 1000" menu option in Object Explorer
+Handle executing queries in workbooks
 
 ## [v7.3.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.3.0) - 2023-06-12
 

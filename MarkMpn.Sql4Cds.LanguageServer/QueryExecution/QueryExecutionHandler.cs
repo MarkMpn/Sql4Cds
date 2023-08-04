@@ -22,6 +22,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
+using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 {
@@ -49,6 +50,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         public void Initialize(JsonRpc lsp)
         {
             lsp.AddHandler(ExecuteDocumentSelectionRequest.Type, HandleExecuteDocumentSelection);
+            lsp.AddHandler(ExecuteStringRequest.Type, HandleExecuteString);
             lsp.AddHandler(SubsetRequest.Type, HandleSubset);
             lsp.AddHandler(QueryCancelRequest.Type, HandleQueryCancel);
             lsp.AddHandler(QueryExecutionPlanRequest.Type, HandleQueryExecutionPlan);
@@ -83,397 +85,426 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 if (request.QuerySelection == null)
                     request.QuerySelection = new SelectionData { StartLine = 0, StartColumn = 0, EndLine = doc.Length - 1, EndColumn = doc[doc.Length - 1].Length };
 
-                // query/batchStart (BatchEventParams)
-                // query/message (MessagePArams)
-                // query/resultSetAvailable (ResultSetAvailableEventPArams)
-                // query/resultSetUpdated (ResultSetUpdatedEventParams)
-                // query/resultSetComplete (ResultSetCompleteEventParams)
-                // query/batchComplete (BatchEventParams)
-                var startTime = DateTime.UtcNow;
-                ResultSetSummary resultSetInProgress = null;
+                var qry = "";
 
-                var batchSummary = new BatchSummary
+                for (var i = request.QuerySelection.StartLine; i <= request.QuerySelection.EndLine; i++)
                 {
-                    Id = 0,
-                    ExecutionStart = startTime.ToLocalTime().ToString("o"),
-                    Selection = request.QuerySelection
-                };
+                    if (i == request.QuerySelection.StartLine && i == request.QuerySelection.EndLine)
+                        qry += doc[i].Substring(request.QuerySelection.StartColumn, request.QuerySelection.EndColumn - request.QuerySelection.StartColumn);
+                    else if (i == request.QuerySelection.StartLine)
+                        qry += doc[i].Substring(request.QuerySelection.StartColumn);
+                    else if (i == request.QuerySelection.EndLine)
+                        qry += doc[i].Substring(0, request.QuerySelection.EndColumn);
+                    else
+                        qry += doc[i];
 
-                await _lsp.NotifyAsync(BatchStartEvent.Type, new BatchEventParams
-                {
-                    OwnerUri = request.OwnerUri,
-                    BatchSummary = batchSummary
-                });
-
-                var infoMessageHandler = (EventHandler<InfoMessageEventArgs>)((object sender, InfoMessageEventArgs msg) =>
-                {
-                    _ = _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
-                    {
-                        OwnerUri = request.OwnerUri,
-                        Message = new ResultMessage
-                        {
-                            BatchId = batchSummary.Id,
-                            Time = DateTime.UtcNow.ToString("o"),
-                            Message = msg.Message
-                        }
-                    });
-                });
-                var progressHandler = (EventHandler<ProgressEventArgs>)((object sender, ProgressEventArgs progress) =>
-                {
-                    var progressParam = new Dictionary<string, object>
-                    {
-                        ["msg"] = progress.Message,
-                    };
-
-                    if (progress.Progress != null)
-                        progressParam["progress"] = progress.Progress.Value * 100;
-
-                    _ = _lsp.NotifyAsync("sql4cds/progress", progress.Message);
-
-                    if (resultSetInProgress != null)
-                    {
-                        _ = _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
-                        {
-                            OwnerUri = request.OwnerUri,
-                            ResultSetSummary = resultSetInProgress,
-                        });
-                    }
-                });
-                var confirm = (ConfirmDmlStatementEventArgs e, int threshold, string operation) =>
-                {
-                    e.Cancel = false;
-
-                    if (e.Count > threshold || e.BypassCustomPluginExecution)
-                    {
-                        var msg = $"{operation} will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
-                        if (e.BypassCustomPluginExecution)
-                            msg += " This operation will bypass any custom plugins.";
-                        msg += " Do you want to proceed?";
-
-                        var evt = new ManualResetEventSlim();
-                        _confirmationEvents[request.OwnerUri] = evt;
-                        _ = _lsp.NotifyAsync(ConfirmationRequest.Type, new ConfirmationParams { OwnerUri = request.OwnerUri, Msg = msg });
-                        evt.Wait();
-                        e.Cancel = !_confirmationResults[request.OwnerUri];
-                        _confirmationEvents.Remove(request.OwnerUri, out _);
-                        _confirmationResults.Remove(request.OwnerUri, out _);
-                    };
-                };
-                var confirmInsert = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
-                {
-                    confirm(e, Sql4CdsSettings.Instance.InsertWarnThreshold, "Insert");
-                });
-                var confirmUpdate = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
-                {
-                    confirm(e, Sql4CdsSettings.Instance.UpdateWarnThreshold, "Update");
-                });
-                var confirmDelete = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
-                {
-                    confirm(e, Sql4CdsSettings.Instance.DeleteWarnThreshold, "Delete");
-                });
-                var pages = 0;
-                var confirmRetrieve = (EventHandler<ConfirmRetrieveEventArgs>)((object sender, ConfirmRetrieveEventArgs e) =>
-                {
-                    e.Cancel = Sql4CdsSettings.Instance.SelectLimit > 0 && e.Count >= Sql4CdsSettings.Instance.SelectLimit;
-
-                    if (!e.Cancel)
-                    {
-                        pages++;
-
-                        if (Sql4CdsSettings.Instance.MaxRetrievesPerQuery != 0 && pages > Sql4CdsSettings.Instance.MaxRetrievesPerQuery)
-                            throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Sql4CdsSettings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
-                    }
-                });
-
-                session.Connection.InfoMessage += infoMessageHandler;
-                session.Connection.Progress += progressHandler;
-                session.Connection.PreInsert += confirmInsert;
-                session.Connection.PreUpdate += confirmUpdate;
-                session.Connection.PreDelete += confirmDelete;
-                session.Connection.PreRetrieve += confirmRetrieve;
-
-                var resultSets = new List<ResultSetSummary>();
-                _resultSets[request.OwnerUri] = resultSets;
-
-                try
-                {
-                    session.Connection.UseTDSEndpoint = Sql4CdsSettings.Instance.UseTdsEndpoint;
-                    session.Connection.BlockDeleteWithoutWhere = Sql4CdsSettings.Instance.BlockDeleteWithoutWhere;
-                    session.Connection.BlockUpdateWithoutWhere = Sql4CdsSettings.Instance.BlockUpdateWithoutWhere;
-                    session.Connection.UseBulkDelete = Sql4CdsSettings.Instance.UseBulkDelete;
-                    session.Connection.BatchSize = Sql4CdsSettings.Instance.BatchSize;
-                    session.Connection.MaxDegreeOfParallelism = Sql4CdsSettings.Instance.MaxDegreeOfParallelism;
-                    session.Connection.UseLocalTimeZone = Sql4CdsSettings.Instance.UseLocalTimeZone;
-                    session.Connection.BypassCustomPlugins = Sql4CdsSettings.Instance.BypassCustomPlugins;
-                    session.Connection.QuotedIdentifiers = Sql4CdsSettings.Instance.QuotedIdentifiers;
-                    
-                    using (var cmd = session.Connection.CreateCommand())
-                    {
-                        cmd.CommandTimeout = 0;
-
-                        _commands[request.OwnerUri] = cmd;
-
-                        var qry = "";
-
-                        for (var i = request.QuerySelection.StartLine; i <= request.QuerySelection.EndLine; i++)
-                        {
-                            if (i == request.QuerySelection.StartLine && i == request.QuerySelection.EndLine)
-                                qry += doc[i].Substring(request.QuerySelection.StartColumn, request.QuerySelection.EndColumn - request.QuerySelection.StartColumn);
-                            else if (i == request.QuerySelection.StartLine)
-                                qry += doc[i].Substring(request.QuerySelection.StartColumn);
-                            else if (i == request.QuerySelection.EndLine)
-                                qry += doc[i].Substring(0, request.QuerySelection.EndColumn);
-                            else
-                                qry += doc[i];
-
-                            qry += '\n';
-                        }
-
-                        cmd.CommandText = qry;
-
-                        if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
-                        {
-                            if (request.ExecutionPlanOptions.IncludeActualExecutionPlanXml)
-                            {
-                                cmd.StatementCompleted += (_, stmt) =>
-                                {
-                                    var resultSet = new ResultSetSummary
-                                    {
-                                        Id = resultSets.Count,
-                                        BatchId = batchSummary.Id,
-                                        Complete = true,
-                                        ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
-                                        RowCount = 0,
-                                        SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
-                                    };
-                                    resultSets.Add(resultSet);
-
-                                    _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
-                                    {
-                                        OwnerUri = request.OwnerUri,
-                                        ResultSetSummary = resultSet,
-                                    }).ConfigureAwait(false).GetAwaiter().GetResult();
-                                    _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
-                                    {
-                                        OwnerUri = request.OwnerUri,
-                                        ResultSetSummary = resultSet,
-                                        ExecutionPlans = new List<ExecutionPlanGraph> { ConvertExecutionPlan(stmt.Statement, true) }
-                                    }).ConfigureAwait(false).GetAwaiter().GetResult();
-                                    _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
-                                    {
-                                        OwnerUri = request.OwnerUri,
-                                        ResultSetSummary = resultSet,
-                                    }).ConfigureAwait(false).GetAwaiter().GetResult();
-                                };
-                            }
-
-                            using (var reader = await cmd.ExecuteReaderAsync())
-                            {
-                                while (!reader.IsClosed)
-                                {
-                                    var resultSet = new ResultSetSummary
-                                    {
-                                        Id = resultSets.Count,
-                                        BatchId = batchSummary.Id,
-                                        Complete = false,
-                                        ColumnInfo = new DbColumnWrapper[reader.FieldCount],
-                                        RowCount = 0,
-                                        SpecialAction = new SpecialAction(),
-                                    };
-
-                                    var schemaTable = reader.GetSchemaTable();
-
-                                    for (var i = 0; i < reader.FieldCount; i++)
-                                        resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(
-                                            String.IsNullOrEmpty(reader.GetName(i)) ? $"(No column name)" : reader.GetName(i),
-                                            reader.GetDataTypeName(i),
-                                            (short)schemaTable.Rows[i]["NumericScale"]));
-
-                                    resultSetInProgress = resultSet;
-                                    resultSets.Add(resultSet);
-
-                                    await _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
-                                    {
-                                        OwnerUri = request.OwnerUri,
-                                        ResultSetSummary = resultSet,
-                                    });
-
-                                    while (await reader.ReadAsync())
-                                    {
-                                        var row = new object[reader.FieldCount];
-                                        reader.GetValues(row);
-                                        resultSet.Values.Add(row);
-                                        resultSet.RowCount++;
-                                    }
-
-                                    resultSet.Complete = true;
-                                    resultSetInProgress = null;
-
-                                    await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
-                                    {
-                                        OwnerUri = request.OwnerUri,
-                                        ResultSetSummary = resultSet,
-                                    });
-
-                                    await _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
-                                    {
-                                        OwnerUri = request.OwnerUri,
-                                        ResultSetSummary = resultSet
-                                    });
-
-                                    if (!await reader.NextResultAsync())
-                                        break;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            var resultSet = new ResultSetSummary
-                            {
-                                Id = resultSets.Count,
-                                BatchId = batchSummary.Id,
-                                Complete = true,
-                                ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
-                                RowCount = 0,
-                                SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
-                            };
-                            resultSets.Add(resultSet);
-
-                            await _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
-                            {
-                                OwnerUri = request.OwnerUri,
-                                ResultSetSummary = resultSet,
-                            });
-                            await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
-                            {
-                                OwnerUri = request.OwnerUri,
-                                ResultSetSummary = resultSet,
-                                ExecutionPlans = cmd.GeneratePlan(false).Select(plan => ConvertExecutionPlan(plan, false)).ToList()
-                            });
-                            await _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
-                            {
-                                OwnerUri = request.OwnerUri,
-                                ResultSetSummary = resultSet,
-                            });
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
-                    {
-                        OwnerUri = request.OwnerUri,
-                        Message = new ResultMessage
-                        {
-                            BatchId = batchSummary.Id,
-                            Time = DateTime.UtcNow.ToString("o"),
-                            Message = ex.Message,
-                            IsError = true
-                        }
-                    });
-
-                    var error = ex;
-
-                    while (error.InnerException != null)
-                        error = error.InnerException;
-
-                    if (error is QueryParseException parseException)
-                    {
-                        var length = Regex.Match(String.Join("\n", doc).Substring(parseException.Error.Offset), "\\b").Index;
-
-                        await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
-                        {
-                            Uri = new Uri(request.OwnerUri),
-                            Diagnostics = new[]
-                            {
-                                new Diagnostic
-                                {
-                                    Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
-                                    {
-                                        Start = new Position
-                                        {
-                                            Line = parseException.Error.Line - 1 + request.QuerySelection.StartLine,
-                                            Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? request.QuerySelection.StartColumn : 0)
-                                        },
-                                        End = new Position
-                                        {
-                                            Line = parseException.Error.Line - 1 + request.QuerySelection.StartLine,
-                                            Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? request.QuerySelection.StartColumn : 0) + length
-                                        }
-                                    },
-                                    Message = parseException.Message
-                                }
-                            }
-                        });
-                    }
-                    else if (error is NotSupportedQueryFragmentException queryException)
-                    {
-                        var lines = queryException.Fragment.ToSql().Split('\n');
-
-                        await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
-                        {
-                            Uri = new Uri(request.OwnerUri),
-                            Diagnostics = new[]
-                            {
-                                new Diagnostic
-                                {
-                                    Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
-                                    {
-                                        Start = new Position
-                                        {
-                                            Line = queryException.Fragment.StartLine - 1 + request.QuerySelection.StartLine,
-                                            Character = queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? request.QuerySelection.StartColumn : 0)
-                                        },
-                                        End = new Position
-                                        {
-                                            Line = queryException.Fragment.StartLine - 1 + request.QuerySelection.StartLine + lines.Length - 1,
-                                            Character = lines.Length > 1 ? lines.Last().Length - 1 : queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? request.QuerySelection.StartColumn : 0) + queryException.Fragment.FragmentLength
-                                        }
-                                    },
-                                    Message = queryException.Message
-                                }
-                            }
-                        });
-                    }
-                }
-                finally
-                {
-                    _commands.TryRemove(request.OwnerUri, out _);
-
-                    session.Connection.InfoMessage -= infoMessageHandler;
-                    session.Connection.Progress -= progressHandler;
-                    session.Connection.PreInsert -= confirmInsert;
-                    session.Connection.PreUpdate -= confirmUpdate;
-                    session.Connection.PreDelete -= confirmDelete;
-                    session.Connection.PreRetrieve -= confirmRetrieve;
+                    qry += '\n';
                 }
 
-                var endTime = DateTime.UtcNow;
+                await Execute(session, request, qry, request.QuerySelection);
+            });
 
-                batchSummary.ExecutionEnd = endTime.ToLocalTime().ToString("o");
-                batchSummary.ExecutionElapsed = (endTime - startTime).ToString();
-                batchSummary.ResultSetSummaries = resultSets.ToArray();
-                batchSummary.SpecialAction = new SpecialAction();
+            return new ExecuteRequestResult();
+        }
 
-                if (request.ExecutionPlanOptions.IncludeActualExecutionPlanXml || request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
-                    batchSummary.SpecialAction.ExpectYukonXMLShowPlan = true;
+        private ExecuteRequestResult HandleExecuteString(ExecuteStringParams request)
+        {
+            var session = _connectionManager.GetConnection(request.OwnerUri);
 
-                await _lsp.NotifyAsync(BatchCompleteEvent.Type, new BatchEventParams
+            if (session == null)
+            {
+                _ = _lsp.NotifyAsync(Methods.WindowLogMessage, new LogMessageParams
                 {
-                    OwnerUri = request.OwnerUri,
-                    BatchSummary = batchSummary
+                    Message = "No connection available for " + request.OwnerUri,
+                    MessageType = MessageType.Error
                 });
+                return new ExecuteRequestResult();
+            }
 
-                await _lsp.NotifyAsync(QueryCompleteEvent.Type, new QueryCompleteParams
+            _ = Task.Run(async () =>
+            {
+                var lines = request.Query.Split('\n');
+                await Execute(session, request, request.Query, new SelectionData { StartLine =0, StartColumn = 0, EndLine = lines.Length - 1, EndColumn = lines[lines.Length - 1].Length  });
+            });
+
+            return new ExecuteRequestResult();
+        }
+
+        private async Task Execute(Connection.Session session, ExecuteRequestParamsBase request, string qry, SelectionData selection)
+        {
+            // query/batchStart (BatchEventParams)
+            // query/message (MessagePArams)
+            // query/resultSetAvailable (ResultSetAvailableEventPArams)
+            // query/resultSetUpdated (ResultSetUpdatedEventParams)
+            // query/resultSetComplete (ResultSetCompleteEventParams)
+            // query/batchComplete (BatchEventParams)
+            var startTime = DateTime.UtcNow;
+            ResultSetSummary resultSetInProgress = null;
+
+            var batchSummary = new BatchSummary
+            {
+                Id = 0,
+                ExecutionStart = startTime.ToLocalTime().ToString("o"),
+                Selection = selection
+            };
+
+            await _lsp.NotifyAsync(BatchStartEvent.Type, new BatchEventParams
+            {
+                OwnerUri = request.OwnerUri,
+                BatchSummary = batchSummary
+            });
+
+            var infoMessageHandler = (EventHandler<InfoMessageEventArgs>)((object sender, InfoMessageEventArgs msg) =>
+            {
+                _ = _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
                 {
                     OwnerUri = request.OwnerUri,
-                    BatchSummaries = new[]
+                    Message = new ResultMessage
                     {
-                        batchSummary
+                        BatchId = batchSummary.Id,
+                        Time = DateTime.UtcNow.ToString("o"),
+                        Message = msg.Message
                     }
                 });
             });
-            return new ExecuteRequestResult();
+            var progressHandler = (EventHandler<ProgressEventArgs>)((object sender, ProgressEventArgs progress) =>
+            {
+                var progressParam = new Dictionary<string, object>
+                {
+                    ["msg"] = progress.Message,
+                };
+
+                if (progress.Progress != null)
+                    progressParam["progress"] = progress.Progress.Value * 100;
+
+                _ = _lsp.NotifyAsync("sql4cds/progress", progress.Message);
+
+                if (resultSetInProgress != null)
+                {
+                    _ = _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                    {
+                        OwnerUri = request.OwnerUri,
+                        ResultSetSummary = resultSetInProgress,
+                    });
+                }
+            });
+            var confirm = (ConfirmDmlStatementEventArgs e, int threshold, string operation) =>
+            {
+                e.Cancel = false;
+
+                if (e.Count > threshold || e.BypassCustomPluginExecution)
+                {
+                    var msg = $"{operation} will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                    if (e.BypassCustomPluginExecution)
+                        msg += " This operation will bypass any custom plugins.";
+                    msg += " Do you want to proceed?";
+
+                    var evt = new ManualResetEventSlim();
+                    _confirmationEvents[request.OwnerUri] = evt;
+                    _ = _lsp.NotifyAsync(ConfirmationRequest.Type, new ConfirmationParams { OwnerUri = request.OwnerUri, Msg = msg });
+                    evt.Wait();
+                    e.Cancel = !_confirmationResults[request.OwnerUri];
+                    _confirmationEvents.Remove(request.OwnerUri, out _);
+                    _confirmationResults.Remove(request.OwnerUri, out _);
+                };
+            };
+            var confirmInsert = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
+            {
+                confirm(e, Sql4CdsSettings.Instance.InsertWarnThreshold, "Insert");
+            });
+            var confirmUpdate = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
+            {
+                confirm(e, Sql4CdsSettings.Instance.UpdateWarnThreshold, "Update");
+            });
+            var confirmDelete = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
+            {
+                confirm(e, Sql4CdsSettings.Instance.DeleteWarnThreshold, "Delete");
+            });
+            var pages = 0;
+            var confirmRetrieve = (EventHandler<ConfirmRetrieveEventArgs>)((object sender, ConfirmRetrieveEventArgs e) =>
+            {
+                e.Cancel = Sql4CdsSettings.Instance.SelectLimit > 0 && e.Count >= Sql4CdsSettings.Instance.SelectLimit;
+
+                if (!e.Cancel)
+                {
+                    pages++;
+
+                    if (Sql4CdsSettings.Instance.MaxRetrievesPerQuery != 0 && pages > Sql4CdsSettings.Instance.MaxRetrievesPerQuery)
+                        throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Sql4CdsSettings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
+                }
+            });
+
+            session.Connection.InfoMessage += infoMessageHandler;
+            session.Connection.Progress += progressHandler;
+            session.Connection.PreInsert += confirmInsert;
+            session.Connection.PreUpdate += confirmUpdate;
+            session.Connection.PreDelete += confirmDelete;
+            session.Connection.PreRetrieve += confirmRetrieve;
+
+            var resultSets = new List<ResultSetSummary>();
+            _resultSets[request.OwnerUri] = resultSets;
+
+            try
+            {
+                session.Connection.UseTDSEndpoint = Sql4CdsSettings.Instance.UseTdsEndpoint;
+                session.Connection.BlockDeleteWithoutWhere = Sql4CdsSettings.Instance.BlockDeleteWithoutWhere;
+                session.Connection.BlockUpdateWithoutWhere = Sql4CdsSettings.Instance.BlockUpdateWithoutWhere;
+                session.Connection.UseBulkDelete = Sql4CdsSettings.Instance.UseBulkDelete;
+                session.Connection.BatchSize = Sql4CdsSettings.Instance.BatchSize;
+                session.Connection.MaxDegreeOfParallelism = Sql4CdsSettings.Instance.MaxDegreeOfParallelism;
+                session.Connection.UseLocalTimeZone = Sql4CdsSettings.Instance.UseLocalTimeZone;
+                session.Connection.BypassCustomPlugins = Sql4CdsSettings.Instance.BypassCustomPlugins;
+                session.Connection.QuotedIdentifiers = Sql4CdsSettings.Instance.QuotedIdentifiers;
+
+                using (var cmd = session.Connection.CreateCommand())
+                {
+                    cmd.CommandTimeout = 0;
+
+                    _commands[request.OwnerUri] = cmd;
+
+                    cmd.CommandText = qry;
+
+                    if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
+                    {
+                        if (request.ExecutionPlanOptions.IncludeActualExecutionPlanXml)
+                        {
+                            cmd.StatementCompleted += (_, stmt) =>
+                            {
+                                var resultSet = new ResultSetSummary
+                                {
+                                    Id = resultSets.Count,
+                                    BatchId = batchSummary.Id,
+                                    Complete = true,
+                                    ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
+                                    RowCount = 0,
+                                    SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
+                                };
+                                resultSets.Add(resultSet);
+
+                                _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                }).ConfigureAwait(false).GetAwaiter().GetResult();
+                                _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                    ExecutionPlans = new List<ExecutionPlanGraph> { ConvertExecutionPlan(stmt.Statement, true) }
+                                }).ConfigureAwait(false).GetAwaiter().GetResult();
+                                _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                }).ConfigureAwait(false).GetAwaiter().GetResult();
+                            };
+                        }
+
+                        using (var reader = await cmd.ExecuteReaderAsync())
+                        {
+                            while (!reader.IsClosed)
+                            {
+                                var resultSet = new ResultSetSummary
+                                {
+                                    Id = resultSets.Count,
+                                    BatchId = batchSummary.Id,
+                                    Complete = false,
+                                    ColumnInfo = new DbColumnWrapper[reader.FieldCount],
+                                    RowCount = 0,
+                                    SpecialAction = new SpecialAction(),
+                                };
+
+                                var schemaTable = reader.GetSchemaTable();
+
+                                for (var i = 0; i < reader.FieldCount; i++)
+                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(
+                                        String.IsNullOrEmpty(reader.GetName(i)) ? $"(No column name)" : reader.GetName(i),
+                                        reader.GetDataTypeName(i),
+                                        (short)schemaTable.Rows[i]["NumericScale"]));
+
+                                resultSetInProgress = resultSet;
+                                resultSets.Add(resultSet);
+
+                                await _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                });
+
+                                while (await reader.ReadAsync())
+                                {
+                                    var row = new object[reader.FieldCount];
+                                    reader.GetValues(row);
+                                    resultSet.Values.Add(row);
+                                    resultSet.RowCount++;
+                                }
+
+                                resultSet.Complete = true;
+                                resultSetInProgress = null;
+
+                                await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                });
+
+                                await _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet
+                                });
+
+                                if (!await reader.NextResultAsync())
+                                    break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var resultSet = new ResultSetSummary
+                        {
+                            Id = resultSets.Count,
+                            BatchId = batchSummary.Id,
+                            Complete = true,
+                            ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
+                            RowCount = 0,
+                            SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
+                        };
+                        resultSets.Add(resultSet);
+
+                        await _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
+                        {
+                            OwnerUri = request.OwnerUri,
+                            ResultSetSummary = resultSet,
+                        });
+                        await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                        {
+                            OwnerUri = request.OwnerUri,
+                            ResultSetSummary = resultSet,
+                            ExecutionPlans = cmd.GeneratePlan(false).Select(plan => ConvertExecutionPlan(plan, false)).ToList()
+                        });
+                        await _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
+                        {
+                            OwnerUri = request.OwnerUri,
+                            ResultSetSummary = resultSet,
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
+                {
+                    OwnerUri = request.OwnerUri,
+                    Message = new ResultMessage
+                    {
+                        BatchId = batchSummary.Id,
+                        Time = DateTime.UtcNow.ToString("o"),
+                        Message = ex.Message,
+                        IsError = true
+                    }
+                });
+
+                var error = ex;
+
+                while (error.InnerException != null)
+                    error = error.InnerException;
+
+                if (error is QueryParseException parseException)
+                {
+                    var length = Regex.Match(qry.Substring(parseException.Error.Offset), "\\b").Index;
+
+                    await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
+                    {
+                        Uri = new Uri(request.OwnerUri),
+                        Diagnostics = new[]
+                        {
+                            new Diagnostic
+                            {
+                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                {
+                                    Start = new Position
+                                    {
+                                        Line = parseException.Error.Line - 1 + selection.StartLine,
+                                        Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? selection.StartColumn : 0)
+                                    },
+                                    End = new Position
+                                    {
+                                        Line = parseException.Error.Line - 1 + selection.StartLine,
+                                        Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? selection.StartColumn : 0) + length
+                                    }
+                                },
+                                Message = parseException.Message
+                            }
+                        }
+                    });
+                }
+                else if (error is NotSupportedQueryFragmentException queryException)
+                {
+                    var lines = queryException.Fragment.ToSql().Split('\n');
+
+                    await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
+                    {
+                        Uri = new Uri(request.OwnerUri),
+                        Diagnostics = new[]
+                        {
+                            new Diagnostic
+                            {
+                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                {
+                                    Start = new Position
+                                    {
+                                        Line = queryException.Fragment.StartLine - 1 + selection.StartLine,
+                                        Character = queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? selection.StartColumn : 0)
+                                    },
+                                    End = new Position
+                                    {
+                                        Line = queryException.Fragment.StartLine - 1 + selection.StartLine + lines.Length - 1,
+                                        Character = lines.Length > 1 ? lines.Last().Length - 1 : queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? selection.StartColumn : 0) + queryException.Fragment.FragmentLength
+                                    }
+                                },
+                                Message = queryException.Message
+                            }
+                        }
+                    });
+                }
+            }
+            finally
+            {
+                _commands.TryRemove(request.OwnerUri, out _);
+
+                session.Connection.InfoMessage -= infoMessageHandler;
+                session.Connection.Progress -= progressHandler;
+                session.Connection.PreInsert -= confirmInsert;
+                session.Connection.PreUpdate -= confirmUpdate;
+                session.Connection.PreDelete -= confirmDelete;
+                session.Connection.PreRetrieve -= confirmRetrieve;
+            }
+
+            var endTime = DateTime.UtcNow;
+
+            batchSummary.ExecutionEnd = endTime.ToLocalTime().ToString("o");
+            batchSummary.ExecutionElapsed = (endTime - startTime).ToString();
+            batchSummary.ResultSetSummaries = resultSets.ToArray();
+            batchSummary.SpecialAction = new SpecialAction();
+
+            if (request.ExecutionPlanOptions.IncludeActualExecutionPlanXml || request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
+                batchSummary.SpecialAction.ExpectYukonXMLShowPlan = true;
+
+            await _lsp.NotifyAsync(BatchCompleteEvent.Type, new BatchEventParams
+            {
+                OwnerUri = request.OwnerUri,
+                BatchSummary = batchSummary
+            });
+
+            await _lsp.NotifyAsync(QueryCompleteEvent.Type, new QueryCompleteParams
+            {
+                OwnerUri = request.OwnerUri,
+                BatchSummaries = new[]
+                {
+                        batchSummary
+                    }
+            });
         }
 
         private string GetDisplayName(int count, EntityMetadata meta)
