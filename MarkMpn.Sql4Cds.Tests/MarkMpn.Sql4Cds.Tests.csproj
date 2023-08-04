@@ -85,9 +85,9 @@
       <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
       <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj">
-      <Project>{a7af5d13-a44e-426d-b3fc-ae390832c7df}</Project>
-      <Name>MarkMpn.Sql4Cds</Name>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.XTB\MarkMpn.Sql4Cds.XTB.csproj">
+      <Project>{8050b824-a28b-4631-8a95-d127859a9216}</Project>
+      <Name>MarkMpn.Sql4Cds.XTB</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

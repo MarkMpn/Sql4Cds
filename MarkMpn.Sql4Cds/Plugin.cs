@@ -23,9 +23,12 @@ namespace MarkMpn.Sql4Cds
         ExportMetadata("SecondaryFontColor", "Gray")]
     public class Plugin : PluginBase, IPayPalPlugin
     {
+        private Assembly _primaryAssembly;
+
         public override IXrmToolBoxPluginControl GetControl()
         {
-            return new PluginControl();
+            var controlType = Type.GetType("MarkMpn.Sql4Cds.PluginControl, MarkMpn.Sql4Cds.XTB");
+            return (IXrmToolBoxPluginControl) Activator.CreateInstance(controlType);
         }
 
         /// <summary>
@@ -53,11 +56,8 @@ namespace MarkMpn.Sql4Cds
             var argName = args.Name.Split(',')[0];
 
             // check to see if the failing assembly is one that we reference.
-            List<AssemblyName> refAssemblies = currAssembly.GetReferencedAssemblies().ToList();
-            var refAssembly = refAssemblies.Where(a => a.Name == argName).FirstOrDefault();
-
-            // if the current unresolved assembly is referenced by our plugin, attempt to load
-            if (refAssembly != null)
+            if (argName == "MarkMpn.Sql4Cds.XTB" ||
+                _primaryAssembly != null && _primaryAssembly.GetReferencedAssemblies().Any(a => a.Name == argName))
             {
                 // load from the path to this plugin assembly, not host executable
                 string dir = Path.GetDirectoryName(currAssembly.Location).ToLower();
@@ -74,6 +74,9 @@ namespace MarkMpn.Sql4Cds
                 {
                     throw new FileNotFoundException($"Unable to locate dependency: {assmbPath}");
                 }
+
+                if (_primaryAssembly == null && argName == "MarkMpn.Sql4Cds.XTB")
+                    _primaryAssembly = loadAssembly;
             }
 
             return loadAssembly;

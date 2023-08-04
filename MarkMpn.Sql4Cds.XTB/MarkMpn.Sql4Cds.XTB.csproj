@@ -1,0 +1,294 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{8050B824-A28B-4631-8A95-D127859A9216}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>MarkMpn.Sql4Cds</RootNamespace>
+    <AssemblyName>MarkMpn.Sql4Cds.XTB</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <RuntimeIdentifiers>win</RuntimeIdentifiers>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="PresentationFramework" />
+    <Reference Include="System" />
+    <Reference Include="System.Activities" />
+    <Reference Include="System.Activities.Presentation" />
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.DirectoryServices" />
+    <Reference Include="System.DirectoryServices.AccountManagement" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.IdentityModel" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Net" />
+    <Reference Include="System.Net.Http.WebRequest" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Runtime" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Security" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.ServiceModel.Web" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Web.Services" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Workflow.Activities" />
+    <Reference Include="System.Workflow.ComponentModel" />
+    <Reference Include="System.Workflow.Runtime" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Autocomplete.cs" />
+    <Compile Include="Autocomplete\AutocompleteItem.cs" />
+    <Compile Include="Autocomplete\AutocompleteItems.cs" />
+    <Compile Include="Autocomplete\AutocompleteListView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Autocomplete\AutocompleteMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Autocomplete\AutocompleteMenuHost.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Autocomplete\Colors.cs" />
+    <Compile Include="Autocomplete\EventArgs.cs" />
+    <Compile Include="Autocomplete\IAutocompleteListView.cs" />
+    <Compile Include="Autocomplete\ITextBoxWrapper.cs" />
+    <Compile Include="Autocomplete\Range.cs" />
+    <Compile Include="Autocomplete\ScintillaWrapper.cs" />
+    <Compile Include="Autocomplete\TextBoxWrapper.cs" />
+    <Compile Include="CDSLookupDialog\CDSDataComboBox.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSDataComboBox.Designer.cs">
+      <DependentUpon>CDSDataComboBox.cs</DependentUpon>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSLookupDialog.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSLookupDialogForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CDSLookupDialogForm.Designer.cs">
+      <DependentUpon>CDSLookupDialogForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CRMGridView.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CRMGridView.designer.cs">
+      <DependentUpon>CRMGridView.cs</DependentUpon>
+    </Compile>
+    <Compile Include="CDSLookupDialog\CRMRecordEventArgs.cs" />
+    <Compile Include="CDSLookupDialog\EntityMetadataProxy.cs" />
+    <Compile Include="CDSLookupDialog\EntitySerializer.cs" />
+    <Compile Include="CDSLookupDialog\EntityWrapper.cs" />
+    <Compile Include="CDSLookupDialog\LookupHelper.cs" />
+    <Compile Include="CDSLookupDialog\ViewConsts.cs" />
+    <Compile Include="ConfirmCloseForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ConfirmCloseForm.Designer.cs">
+      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ConnectionExtensions.cs" />
+    <Compile Include="ConnectionPropertiesWrapper.cs" />
+    <Compile Include="DocumentWindowBase.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="EntityCache.cs" />
+    <Compile Include="FetchXml2SqlSettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FetchXml2SqlSettingsForm.Designer.cs">
+      <DependentUpon>FetchXml2SqlSettingsForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="FetchXmlControl.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FetchXmlControl.Designer.cs">
+      <DependentUpon>FetchXmlControl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="FindReplace.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="FindReplace.Designer.cs">
+      <DependentUpon>FindReplace.cs</DependentUpon>
+    </Compile>
+    <Compile Include="FunctionMetadata.cs" />
+    <Compile Include="IDocumentWindow.cs" />
+    <Compile Include="MQueryControl.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="MQueryControl.Designer.cs">
+      <DependentUpon>MQueryControl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ObjectExplorer.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ObjectExplorer.Designer.cs">
+      <DependentUpon>ObjectExplorer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="PluginControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="PluginControl.designer.cs">
+      <DependentUpon>PluginControl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="PropertiesWindow.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="PropertiesWindow.Designer.cs">
+      <DependentUpon>PropertiesWindow.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="QueryExecutionOptions.cs" />
+    <Compile Include="Settings.cs" />
+    <Compile Include="SettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SettingsForm.Designer.cs">
+      <DependentUpon>SettingsForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="SharedMetadataCache.cs" />
+    <Compile Include="SqlQueryControl.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SqlQueryControl.Designer.cs">
+      <DependentUpon>SqlQueryControl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="XtbDataSource.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Autocomplete\AutocompleteMenu.resx">
+      <DependentUpon>AutocompleteMenu.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="CDSLookupDialog\CDSLookupDialogForm.resx">
+      <DependentUpon>CDSLookupDialogForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="CDSLookupDialog\CRMGridView.resx">
+      <DependentUpon>CRMGridView.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ConfirmCloseForm.resx">
+      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FetchXml2SqlSettingsForm.resx">
+      <DependentUpon>FetchXml2SqlSettingsForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FetchXmlControl.resx">
+      <DependentUpon>FetchXmlControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FindReplace.resx">
+      <DependentUpon>FindReplace.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="MQueryControl.resx">
+      <DependentUpon>MQueryControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ObjectExplorer.resx">
+      <DependentUpon>ObjectExplorer.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="PluginControl.resx">
+      <DependentUpon>PluginControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="PropertiesWindow.resx">
+      <DependentUpon>PropertiesWindow.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="SettingsForm.resx">
+      <DependentUpon>SettingsForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="SqlQueryControl.resx">
+      <DependentUpon>SqlQueryControl.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <None Include="Images\SQL4CDS Icon 16.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Images\SQLFile_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ConnectFilled_grey_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ConnectToDatabase_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Disconnect_Filled_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ExecutionPlan_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\progress.gif" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Settings_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusCriticalError_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusHelp_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusOK_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusStop_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusWarning_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\timeline_lock_on_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="XrmToolBoxPackage">
+      <Version>1.2023.7.65</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj">
+      <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
+      <Name>MarkMpn.Sql4Cds.Controls</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
+      <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
+      <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
