@@ -39,6 +39,7 @@ Avoid errors with un-aliased calculated columns in subqueries
 Improved error reporting for AVG and SUM aggregates on non-numeric types
 Handle MIN and MAX aggregates for primary key and lookup columns
 Added support for STRING_AGG function
+Fixed filtering metadata by attribute.sourcetype
 </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
