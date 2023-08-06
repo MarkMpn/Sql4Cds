@@ -850,9 +850,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Source = source
             };
 
-            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
-                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+            ValidateDMLSchema(target);
 
             // Validate the entity name
             EntityMetadata metadata;
@@ -1022,6 +1020,23 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
+        private void ValidateDMLSchema(NamedTableReference target)
+        {
+            if (String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value))
+                return;
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "Archive tables are read-only" };
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("metadata", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "Metadata tables are read-only" };
+
+            throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+        }
+
         private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
         {
             if (delete.WithCtesAndXmlNamespaces != null)
@@ -1049,9 +1064,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
-                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+            ValidateDMLSchema(target);
 
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
@@ -1206,9 +1219,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
-                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+            ValidateDMLSchema(target);
 
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
@@ -3480,7 +3491,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unknown table name", table);
                 }
 
-                if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) && !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) &&
+                    !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
+                    !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
                     throw new NotSupportedQueryFragmentException("Unknown table name", table);
 
                 // Validate the entity name
@@ -3506,7 +3519,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unsupported temporal clause", table.TemporalClause);
 
                 // Convert to a simple FetchXML source
-                return new FetchXmlScan
+                var fetchXmlScan = new FetchXmlScan
                 {
                     DataSource = dataSource.Name,
                     FetchXml = new FetchXml.FetchType
@@ -3523,6 +3536,21 @@ namespace MarkMpn.Sql4Cds.Engine
                     Alias = table.Alias?.Value ?? entityName,
                     ReturnFullSchema = true
                 };
+
+                // Check if this should be using the long-term retention table
+                if (table.SchemaObject.SchemaIdentifier?.Value.Equals("archive", StringComparison.OrdinalIgnoreCase) == true)
+                {
+#if NETCOREAPP
+                    if (meta.IsRetentionEnabled != true && meta.IsArchivalEnabled != true)
+#else
+                    if (meta.IsArchivalEnabled != true)
+#endif
+                        throw new NotSupportedQueryFragmentException("Unknown table name", table) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
+
+                    fetchXmlScan.FetchXml.DataSource = "archive";
+                }
+
+                return fetchXmlScan;
             }
 
             if (reference is QualifiedJoin join)

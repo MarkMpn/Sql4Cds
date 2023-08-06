@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXml.Extensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ScriptDom.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />

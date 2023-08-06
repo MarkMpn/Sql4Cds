@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds", "MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj", "{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutocompleteMenu-ScintillaNET", "AutocompleteMenu\AutocompleteMenu-ScintillaNET.csproj", "{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Tests", "MarkMpn.Sql4Cds.Tests\MarkMpn.Sql4Cds.Tests.csproj", "{081AA0FB-A019-430A-B05A-F55CAC7C50FD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.FetchXml.Tests", "MarkMpn.Sql4Cds.Engine.FetchXml.Tests\MarkMpn.Sql4Cds.Engine.FetchXml.Tests.csproj", "{69F7D111-3542-4E31-A0F8-E544F9FFA587}"
@@ -40,6 +38,8 @@ Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "MarkMpn.Sql4Cds.SSMS.19.Set
 	ProjectSection(ProjectDependencies) = postProject
 		{8C71690C-4EF8-4EBF-88C0-33952FED3ACF} = {8C71690C-4EF8-4EBF-88C0-33952FED3ACF}
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.XTB", "MarkMpn.Sql4Cds.XTB\MarkMpn.Sql4Cds.XTB.csproj", "{8050B824-A28B-4631-8A95-D127859A9216}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -75,18 +75,6 @@ Global
 		{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}.Release|arm64.Build.0 = Release|Any CPU
 		{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}.Release|x86.ActiveCfg = Release|Any CPU
 		{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}.Release|x86.Build.0 = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|arm64.ActiveCfg = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|arm64.Build.0 = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Debug|x86.Build.0 = Debug|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|arm64.ActiveCfg = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|arm64.Build.0 = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|x86.ActiveCfg = Release|Any CPU
-		{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}.Release|x86.Build.0 = Release|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Debug|arm64.ActiveCfg = Debug|Any CPU
@@ -203,6 +191,18 @@ Global
 		{51D4ED99-980D-4347-BE9C-AAE834855919}.Release|arm64.Build.0 = Release|x86
 		{51D4ED99-980D-4347-BE9C-AAE834855919}.Release|x86.ActiveCfg = Release|x86
 		{51D4ED99-980D-4347-BE9C-AAE834855919}.Release|x86.Build.0 = Release|x86
+		{8050B824-A28B-4631-8A95-D127859A9216}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Debug|arm64.Build.0 = Debug|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Debug|x86.Build.0 = Debug|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Release|arm64.ActiveCfg = Release|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Release|arm64.Build.0 = Release|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Release|x86.ActiveCfg = Release|Any CPU
+		{8050B824-A28B-4631-8A95-D127859A9216}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

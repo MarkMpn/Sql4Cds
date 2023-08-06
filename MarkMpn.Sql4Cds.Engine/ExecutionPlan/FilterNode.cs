@@ -1426,6 +1426,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            // Filtering on IsArchivalEnabled is not supported
+            if (prop.DeclaringType == typeof(EntityMetadata) &&
+                (
+#if NETCOREAPP
+                    prop.Name == nameof(EntityMetadata.IsRetentionEnabled) ||
+#endif
+                    prop.Name == nameof(EntityMetadata.IsArchivalEnabled)
+                ))
+                return false;
+
+            // Filtering on SourceType is not supported
+            // https://github.com/MicrosoftDocs/powerapps-docs/issues/4608
+            if (prop.DeclaringType == typeof(AttributeMetadata) &&
+                prop.Name == nameof(AttributeMetadata.SourceType))
+                return false;
+
             // Convert the property name to the correct case
             filter.Conditions[0].PropertyName = prop.Name;
 

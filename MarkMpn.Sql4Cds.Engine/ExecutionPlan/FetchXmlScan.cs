@@ -281,7 +281,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (BypassCustomPluginExecution)
                 req.Parameters["BypassCustomPluginExecution"] = true;
 
-            var res = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+            EntityCollection res;
+
+            try
+            {
+                res = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+            }
+            catch (FaultException<OrganizationServiceFault> ex)
+            {
+                // Archive queries can fail with this error code if the Synapse database isn't provisioned yet or
+                // no retention policy has yet been applied to this table. In either case there are no records to return
+                // so we can just return an empty result set rather than erroring
+                if (FetchXml.DataSource == "archive" && (ex.Detail.ErrorCode == -2146863832 || ex.Detail.ErrorCode == -2146863829))
+                    yield break;
+
+                throw;
+            }
+
             PagesRetrieved++;
 
             var count = res.Entities.Count;
@@ -1214,7 +1230,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(hint => hint != null));
 
             if (!String.IsNullOrEmpty(options))
-                FetchXml.options = options;
+                FetchXml.Options = options;
         }
 
         private void ApplyPageSizeHint(IList<OptimizerHint> hints)

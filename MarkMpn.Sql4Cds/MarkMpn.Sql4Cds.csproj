@@ -71,132 +71,10 @@
     <Reference Include="System.Workflow.Runtime" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Autocomplete.cs" />
-    <Compile Include="ConfirmCloseForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="ConfirmCloseForm.Designer.cs">
-      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
-    </Compile>
-    <Compile Include="ConnectionExtensions.cs" />
-    <Compile Include="ConnectionPropertiesWrapper.cs" />
-    <Compile Include="DocumentWindowBase.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="FetchXml2SqlSettingsForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="FetchXml2SqlSettingsForm.Designer.cs">
-      <DependentUpon>FetchXml2SqlSettingsForm.cs</DependentUpon>
-    </Compile>
-    <Compile Include="FindReplace.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
-    <Compile Include="FindReplace.Designer.cs">
-      <DependentUpon>FindReplace.cs</DependentUpon>
-    </Compile>
-    <Compile Include="XtbDataSource.cs" />
-    <Compile Include="EntityCache.cs" />
-    <Compile Include="MQueryControl.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="MQueryControl.Designer.cs">
-      <DependentUpon>MQueryControl.cs</DependentUpon>
-    </Compile>
-    <Compile Include="FetchXmlControl.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="FetchXmlControl.Designer.cs">
-      <DependentUpon>FetchXmlControl.cs</DependentUpon>
-    </Compile>
-    <Compile Include="FunctionMetadata.cs" />
-    <Compile Include="IDocumentWindow.cs" />
-    <Compile Include="PropertiesWindow.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="PropertiesWindow.Designer.cs">
-      <DependentUpon>PropertiesWindow.cs</DependentUpon>
-    </Compile>
-    <Compile Include="ObjectExplorer.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="ObjectExplorer.Designer.cs">
-      <DependentUpon>ObjectExplorer.cs</DependentUpon>
-    </Compile>
     <Compile Include="Plugin.cs" />
-    <Compile Include="PluginControl.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
-    <Compile Include="PluginControl.designer.cs">
-      <DependentUpon>PluginControl.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="QueryExecutionOptions.cs" />
-    <Compile Include="Settings.cs" />
-    <Compile Include="SettingsForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="SettingsForm.Designer.cs">
-      <DependentUpon>SettingsForm.cs</DependentUpon>
-    </Compile>
-    <Compile Include="SharedMetadataCache.cs" />
-    <Compile Include="SqlQueryControl.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="SqlQueryControl.Designer.cs">
-      <DependentUpon>SqlQueryControl.cs</DependentUpon>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="app.config" />
-    <None Include="ILMergeConfig.json" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="ConfirmCloseForm.resx">
-      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="FetchXml2SqlSettingsForm.resx">
-      <DependentUpon>FetchXml2SqlSettingsForm.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="FindReplace.resx">
-      <DependentUpon>FindReplace.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="MQueryControl.resx">
-      <DependentUpon>MQueryControl.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="FetchXmlControl.resx">
-      <DependentUpon>FetchXmlControl.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="PropertiesWindow.resx">
-      <DependentUpon>PropertiesWindow.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="ObjectExplorer.resx">
-      <DependentUpon>ObjectExplorer.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="PluginControl.resx">
-      <DependentUpon>PluginControl.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-    <EmbeddedResource Include="SettingsForm.resx">
-      <DependentUpon>SettingsForm.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="SqlQueryControl.resx">
-      <DependentUpon>SqlQueryControl.cs</DependentUpon>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\AutocompleteMenu\AutocompleteMenu-ScintillaNET.csproj">
-      <Project>{43cbc9aa-6a8e-463f-83a9-aff3124afdb6}</Project>
-      <Name>AutocompleteMenu-ScintillaNET</Name>
-    </ProjectReference>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj">
       <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
       <Name>MarkMpn.Sql4Cds.Controls</Name>
@@ -207,68 +85,17 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Images\SQL4CDS Icon 16.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Images\SQLFile_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\StatusOK_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\StatusCriticalError_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\StatusStop_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\StatusWarning_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\timeline_lock_on_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\ConnectFilled_grey_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\ExecutionPlan_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\ConnectToDatabase_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\Settings_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\progress.gif" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\Disconnect_Filled_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\StatusHelp_16x.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="ILMerge">
-      <Version>3.0.40</Version>
-    </PackageReference>
-    <PackageReference Include="ILMerge.MSBuild.Task">
-      <Version>1.0.7</Version>
-    </PackageReference>
     <PackageReference Include="Microsoft.ApplicationInsights">
       <Version>2.21.0</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom">
-      <Version>150.4897.1</Version>
+      <Version>161.8834.0</Version>
     </PackageReference>
     <PackageReference Include="System.Runtime">
       <Version>4.3.1</Version>
     </PackageReference>
-    <PackageReference Include="xrmtb.XrmToolBox.Controls">
-      <Version>2.2.10</Version>
-    </PackageReference>
     <PackageReference Include="XrmToolBoxPackage">
-      <Version>1.2022.10.58</Version>
+      <Version>1.2023.6.65</Version>
     </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

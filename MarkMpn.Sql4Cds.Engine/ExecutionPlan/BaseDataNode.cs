@@ -495,7 +495,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
                         attribute = RemoveAttributeAlias(attrName.ToLowerInvariant(), entityAlias, targetEntityAlias, items),
                         @operator = op,
-                        valueof = RemoveAttributeAlias(attrName2.ToLowerInvariant(), entityAlias, targetEntityAlias, items)
+                        ValueOf = RemoveAttributeAlias(attrName2.ToLowerInvariant(), entityAlias, targetEntityAlias, items)
                     };
                     return true;
                 }

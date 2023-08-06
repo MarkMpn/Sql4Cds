@@ -31,6 +31,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SystemFunctionNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XmlWriterNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XPath2ExpressionContext.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXml.Extensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NodeContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />

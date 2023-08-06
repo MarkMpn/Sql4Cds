@@ -90,11 +90,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
+                if (fetch.DataSource == "archive")
+                    ((NamedTableReference)query.FromClause.TableReferences[0]).SchemaObject.Identifiers.Insert(0, new Identifier { Value = "archive" });
+
                 if (fetch.nolock)
                     ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
 
                 // Recurse into link-entities to build joins
-                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
+                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.DataSource == "archive", fetch.nolock, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
             }
 
             // OFFSET
@@ -396,7 +399,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="aliasToLogicalName">A mapping of table aliases to the logical name</param>
         /// <param name="nolock">Indicates if the NOLOCK table hint should be applied</param>
         /// <returns>The data source including any required joins</returns>
-        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
+        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool archive, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
         {
             if (items == null)
                 return dataSource;
@@ -423,6 +426,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     },
                     Alias = String.IsNullOrEmpty(link.alias) ? null : new Identifier { Value = link.alias }
                 };
+
+                if (archive)
+                    table.SchemaObject.Identifiers.Insert(0, new Identifier { Value = "archive" });
 
                 if (nolock)
                     table.TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
@@ -490,7 +496,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Recurse into any other links
-                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
+                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, archive, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
             }
 
             return dataSource;
@@ -652,7 +658,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Get the literal value to compare to
             object parameterValue = null;
-            if (!String.IsNullOrEmpty(condition.valueof))
+            if (!String.IsNullOrEmpty(condition.ValueOf))
             {
                 value = new ColumnReferenceExpression
                 {

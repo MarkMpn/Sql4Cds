@@ -22,12 +22,13 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed errors with common XML queries
+    <releaseNotes>Added support for long-term retention data
+Fixed errors with common XML queries
 Improved performance with subqueries
 Avoid exposing internal names for computed columns
 Convert outer joins with filters to inner joins
 Fixed use of UPDATE with CASE expression with a first value of NULL
-Fixed use of joins or subqeries with multiple correlated conditions
+Fixed use of joins or subqueries with multiple correlated conditions
 Improved handling of LEFT OUTER JOIN using nested loop operator
 Implemented many-to-many joins using merge join operator
 Fixed cross-instance string comparison
@@ -38,6 +39,7 @@ Avoid errors with un-aliased calculated columns in subqueries
 Improved error reporting for AVG and SUM aggregates on non-numeric types
 Handle MIN and MAX aggregates for primary key and lookup columns
 Added support for STRING_AGG function
+Fixed filtering metadata by attribute.sourcetype
 </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
@@ -47,6 +49,13 @@ Added support for STRING_AGG function
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\ILMerge\MarkMpn.Sql4Cds.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds.dll" />
+    <file src="bin\Release\MarkMpn.Sql4Cds.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\MarkMpn.Sql4Cds.XTB.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.XTB.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\MarkMpn.Sql4Cds.Controls.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.Controls.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\MarkMpn.Sql4Cds.Engine.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.ApplicationInsights.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.ApplicationInsights.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.SqlServer.TransactSql.ScriptDom.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.SqlServer.TransactSql.ScriptDom.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\XPath2.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\XPath2.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\XPath2.Extensions.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\XPath2.Extensions.dll" />
   </files>
 </package>

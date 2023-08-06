@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -27,6 +28,38 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         protected readonly DataSource _dataSource3;
         protected readonly IDictionary<string, DataSource> _dataSources;
         protected readonly IDictionary<string, DataSource> _localDataSource;
+
+        static FakeXrmEasyTestsBase()
+        {
+            // Microsoft.Xrm.Sdk has a reference to System.Text.Json 6.0.0.2 but the NuGet package pulls in 6.0.0.7,
+            // which causes a runtime error. Redirect the assembly to the newer version.
+            RedirectAssembly("System.Text.Json", new Version("6.0.0.7"), "cc7b13ffcd2ddd51");
+        }
+
+        // https://stackoverflow.com/questions/5646306/is-it-possible-to-create-a-binding-redirect-at-runtime
+        private static void RedirectAssembly(string shortName, Version targetVersion, string publicKeyToken)
+        {
+            ResolveEventHandler handler = null;
+
+            handler = (sender, args) => {
+                // Use latest strong name & version when trying to load SDK assemblies
+                var requestedAssembly = new AssemblyName(args.Name);
+                if (requestedAssembly.Name != shortName)
+                    return null;
+
+                Debug.WriteLine("Redirecting assembly load of " + args.Name
+                              + ",\tloaded by " + (args.RequestingAssembly == null ? "(unknown)" : args.RequestingAssembly.FullName));
+
+                requestedAssembly.Version = targetVersion;
+                requestedAssembly.SetPublicKeyToken(new AssemblyName("x, PublicKeyToken=" + publicKeyToken).GetPublicKeyToken());
+                requestedAssembly.CultureInfo = CultureInfo.InvariantCulture;
+
+                AppDomain.CurrentDomain.AssemblyResolve -= handler;
+
+                return Assembly.Load(requestedAssembly);
+            };
+            AppDomain.CurrentDomain.AssemblyResolve += handler;
+        }
 
         public FakeXrmEasyTestsBase()
         {

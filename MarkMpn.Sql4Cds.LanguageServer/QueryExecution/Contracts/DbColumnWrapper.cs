@@ -124,6 +124,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
                 ColumnSize = int.MaxValue;
             }
             AddNameAndDataFields(columnInfo.Name);
+            NumericScale = columnInfo.NumericScale;
         }
 
 

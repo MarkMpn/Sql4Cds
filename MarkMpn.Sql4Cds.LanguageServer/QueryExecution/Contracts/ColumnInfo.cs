@@ -9,14 +9,17 @@
 
         public string DataTypeName { get; set; }
 
+        public int NumericScale { get; set; }
+
         public ColumnInfo()
         {
         }
 
-        public ColumnInfo(string name, string dataTypeName)
+        public ColumnInfo(string name, string dataTypeName, int numericScale)
         {
             Name = name;
             DataTypeName = dataTypeName;
+            NumericScale = numericScale;
         }
     }
 }

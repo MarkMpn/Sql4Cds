@@ -233,6 +233,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     ["Targets"] = entities
                 };
 
+                if (BypassCustomPluginExecution)
+                    createMultiple["BypassCustomPluginExecution"] = true;
+
                 try
                 {
                     var resp = dataSource.Execute(org, createMultiple);

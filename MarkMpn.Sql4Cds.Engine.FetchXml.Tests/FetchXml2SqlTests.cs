@@ -391,6 +391,46 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             Assert.AreEqual("SELECT * FROM account WHERE ownerid = CURRENT_USER", NormalizeWhitespace(converted));
         }
 
+        [TestMethod]
+        public void Archive()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch datasource='archive'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='ownerid' operator='eq-userid' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual("SELECT name FROM archive.account WHERE ownerid = CURRENT_USER", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void ArchiveJoins()
+        {
+            // Not actually supported by Dataverse, but test it anyway in case it becomes supported in the future
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch datasource='archive'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid'>
+                            <attribute name='name' />
+                        </link-entity>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM archive.contact INNER JOIN archive.account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
+        }
+
         private static string NormalizeWhitespace(string s)
         {
             return Regex.Replace(s, "\\s+", " ");

@@ -81,17 +81,13 @@
     <None Include="app.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AutocompleteMenu\AutocompleteMenu-ScintillaNET.csproj">
-      <Project>{43CBC9AA-6A8E-463F-83A9-AFF3124AFDB6}</Project>
-      <Name>AutocompleteMenu-ScintillaNET</Name>
-    </ProjectReference>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
       <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
       <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj">
-      <Project>{a7af5d13-a44e-426d-b3fc-ae390832c7df}</Project>
-      <Name>MarkMpn.Sql4Cds</Name>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.XTB\MarkMpn.Sql4Cds.XTB.csproj">
+      <Project>{8050b824-a28b-4631-8a95-d127859a9216}</Project>
+      <Name>MarkMpn.Sql4Cds.XTB</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
@@ -99,7 +95,7 @@
       <Version>1.58.1</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.CrmSdk.XrmTooling.CoreAssembly">
-      <Version>9.1.1.1</Version>
+      <Version>9.1.1.32</Version>
     </PackageReference>
     <PackageReference Include="MSTest.TestAdapter">
       <Version>3.0.2</Version>
