@@ -3540,11 +3540,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Check if this should be using the long-term retention table
                 if (table.SchemaObject.SchemaIdentifier?.Value.Equals("archive", StringComparison.OrdinalIgnoreCase) == true)
                 {
-#if NETCOREAPP
                     if (meta.IsRetentionEnabled != true && meta.IsArchivalEnabled != true)
-#else
-                    if (meta.IsArchivalEnabled != true)
-#endif
                         throw new NotSupportedQueryFragmentException("Unknown table name", table) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
 
                     fetchXmlScan.FetchXml.DataSource = "archive";

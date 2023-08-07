@@ -779,7 +779,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                         if (schemaName.Equals("archive", StringComparison.OrdinalIgnoreCase))
                         {
                             // Filter tables
-                            entities = entities.Where(e => e.IsArchivalEnabled == true);
+                            entities = entities.Where(e => e.IsRetentionEnabled == true || e.IsArchivalEnabled == true);
                         }
                         else
                         {
