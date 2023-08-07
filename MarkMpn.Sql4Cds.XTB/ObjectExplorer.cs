@@ -78,7 +78,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var metadata = EntityCache.GetEntities(connection.MetadataCacheLoader, connection.ServiceClient);
 
             return metadata
-                .Where(e => !archival || e.IsArchivalEnabled == true)
+                .Where(e => !archival || e.IsArchivalEnabled == true || e.IsRetentionEnabled == true)
                 .OrderBy(e => e.LogicalName)
                 .Select(e =>
                 {
