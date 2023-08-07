@@ -160,7 +160,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                 {
                     using (var cmd = session.Connection.CreateCommand())
                     {
-                        cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE isarchivalenabled = 1 ORDER BY 1";
+                        cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE isarchivalenabled = 1 OR isretentionenabled = 1 ORDER BY 1";
 
                         using (var reader = await cmd.ExecuteReaderAsync())
                         {

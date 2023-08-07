@@ -1429,9 +1429,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Filtering on IsArchivalEnabled is not supported
             if (prop.DeclaringType == typeof(EntityMetadata) &&
                 (
-#if NETCOREAPP
                     prop.Name == nameof(EntityMetadata.IsRetentionEnabled) ||
-#endif
                     prop.Name == nameof(EntityMetadata.IsArchivalEnabled)
                 ))
                 return false;
