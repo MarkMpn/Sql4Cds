@@ -66,7 +66,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
-                var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = ShowMessageBox(msg);
 
                 if (result == DialogResult.No)
                     return false;
@@ -88,7 +88,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
-                var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = ShowMessageBox(msg);
 
                 if (result == DialogResult.No)
                     return false;
@@ -110,7 +110,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
-                var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = ShowMessageBox(msg);
 
                 if (result == DialogResult.No)
                     return false;
@@ -163,6 +163,14 @@ namespace MarkMpn.Sql4Cds.XTB
         private void Progress(double? progress, string message)
         {
             _worker.ReportProgress(progress == null ? -1 : (int)(progress * 100), message);
+        }
+
+        private DialogResult ShowMessageBox(string msg)
+        {
+            if (_host.InvokeRequired)
+                return (DialogResult)_host.Invoke(new Func<string, DialogResult>(ShowMessageBox), msg);
+
+            return MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         }
 
         public void Dispose()
