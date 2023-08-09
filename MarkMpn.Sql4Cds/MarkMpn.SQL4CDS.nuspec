@@ -45,7 +45,7 @@ Fixed filtering metadata by attribute.sourcetype
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
     <dependencies>
-      <dependency id="XrmToolBox" version="1.2022.10.58" />
+      <dependency id="XrmToolBox" version="1.2023.6.65" />
     </dependencies>
   </metadata>
   <files>
