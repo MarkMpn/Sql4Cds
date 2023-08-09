@@ -441,10 +441,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Prefix all attributes of the main entity with the expected alias
-            foreach (var attribute in entity.Attributes.ToList())
-                entity[PrefixWithAlias(attribute.Key)] = attribute.Value;
-
             // Expose the type of lookup values
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
             {
@@ -470,6 +466,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 entity[col.Key] = sqlValue;
             }
+
+            // Prefix all attributes of the main entity with the expected alias
+            foreach (var attribute in entity.Attributes.ToList())
+                entity[PrefixWithAlias(attribute.Key)] = attribute.Value;
         }
 
         public override object Clone()

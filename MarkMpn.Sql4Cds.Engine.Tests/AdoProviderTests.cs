@@ -835,6 +835,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void AliasedTVF()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT msg.* FROM SampleMessage('1') AS msg";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual(1, reader.GetInt32(1));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
         public void CorrelatedNotExistsTypeConversion()
         {
             using (var con = new Sql4CdsConnection(_localDataSource))
