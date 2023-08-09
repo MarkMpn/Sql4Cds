@@ -82,6 +82,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var value = jtoken.Value<string>();
 
+                if (value == null)
+                    return SqlString.Null;
+
                 if (value.Length > 4000)
                 {
                     if (lax)
