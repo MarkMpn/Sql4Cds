@@ -3118,7 +3118,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IDataExecutionPlanNodeInternal node, IDataExecutionPlanNode subqueryPlan, NodeCompilationContext context, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IDataExecutionPlanNodeInternal node, IDataExecutionPlanNodeInternal subqueryPlan, NodeCompilationContext context, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
@@ -3198,7 +3198,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Give the inner fetch a unique alias and update the name of the inner key
             if (alias != null)
-                fetch.Alias = alias.Alias;
+                alias.FoldToFetchXML(fetch);
             else
                 fetch.Alias = context.GetExpressionName();
 

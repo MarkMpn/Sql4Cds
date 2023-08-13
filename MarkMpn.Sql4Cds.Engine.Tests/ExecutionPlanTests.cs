@@ -2114,6 +2114,134 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void CrossApplyAllColumns()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT *
+                        FROM   contact
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a.contactid", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("a.createdon", select.ColumnSet[2].SourceColumn);
+            Assert.AreEqual("a.firstname", select.ColumnSet[3].SourceColumn);
+            Assert.AreEqual("a.fullname", select.ColumnSet[4].SourceColumn);
+            Assert.AreEqual("a.lastname", select.ColumnSet[5].SourceColumn);
+            Assert.AreEqual("a.parentcustomerid", select.ColumnSet[6].SourceColumn);
+            Assert.AreEqual("a.parentcustomeridname", select.ColumnSet[7].SourceColumn);
+            Assert.AreEqual("a.parentcustomeridtype", select.ColumnSet[8].SourceColumn);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.IsNull(fetch.ColumnMappings[0].SourceColumn);
+            Assert.IsTrue(fetch.ColumnMappings[0].AllColumns);
+            Assert.AreEqual("a", fetch.ColumnMappings[0].OutputColumn);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <all-attributes />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossApplyRestrictedColumns()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT firstname,
+                               lastname
+                        FROM   contact
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='firstname' />
+                            <attribute name='lastname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossApplyRestrictedColumnsWithAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT firstname AS fname,
+                               lastname AS lname
+                        FROM   contact
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='firstname' alias='fname' />
+                            <attribute name='lastname' alias='lname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void OuterApply()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);

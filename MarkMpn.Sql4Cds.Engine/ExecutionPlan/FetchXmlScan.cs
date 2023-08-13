@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlClient;
 using System.Data.SqlTypes;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -103,6 +105,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private string _lastSchemaAlias;
         private NodeSchema _lastSchema;
         private bool _lastFullSchema;
+        private string _lastHiddenAliases;
+        private string _lastColumnMappings;
+        private bool _lastBuildingSelectClause;
         private bool _resetPage;
         private string _startingPage;
         private List<string> _pagingFields;
@@ -191,6 +196,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Bypass Plugin Execution")]
         [Description("Indicates if custom plugins should be skipped")]
         public bool BypassCustomPluginExecution { get; set; }
+
+        /// <summary>
+        /// A list of table aliases that should be excluded from the schema
+        /// </summary>
+        public List<string> HiddenAliases { get; } = new List<string>();
+
+        /// <summary>
+        /// A list of additional columns that should be included in the schema
+        /// </summary>
+        public List<SelectColumn> ColumnMappings { get; } = new List<SelectColumn>();
 
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
@@ -546,6 +561,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 entity[col.Key] = sqlValue;
             }
 
+            // Apply renamings
+            foreach (var mapping in ColumnMappings)
+            {
+                if (mapping.AllColumns)
+                {
+                    foreach (var col in entity.Attributes.Where(c => mapping.SourceColumn == null || c.Key.StartsWith(mapping.SourceColumn.Replace(".*", "") + ".")).ToList())
+                        entity[mapping.OutputColumn.Replace(".*", "") + "." + col.Key.Split('.').Last()] = col.Value;
+                }
+                else
+                {
+                    entity[mapping.OutputColumn] = entity[mapping.SourceColumn];
+                }
+            }
+
             if (_pagingFields != null)
             {
                 _lastPageValues.Clear();
@@ -707,7 +736,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var fetchXmlString = FetchXmlString;
-            if (_lastSchema != null && Alias == _lastSchemaAlias && fetchXmlString == _lastSchemaFetchXml && ReturnFullSchema == _lastFullSchema)
+            var hiddenAliases = String.Join(",", HiddenAliases);
+            var columnMappings = String.Join(",", ColumnMappings.Select(map => map.OutputColumn + "=" + map.SourceColumn));
+
+            if (_lastSchema != null &&
+                Alias == _lastSchemaAlias &&
+                fetchXmlString == _lastSchemaFetchXml &&
+                ReturnFullSchema == _lastFullSchema &&
+                hiddenAliases == _lastHiddenAliases &&
+                columnMappings == _lastColumnMappings)
                 return _lastSchema;
 
             _primaryKeyColumns = new Dictionary<string, string>();
@@ -723,17 +760,55 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, entity.name, Alias, entity.Items, true, false);
 
+            foreach (var mapping in ColumnMappings)
+            {
+                if (mapping.AllColumns)
+                {
+                    foreach (var col in schema.Where(c => mapping.SourceColumn == null || c.Key.StartsWith(mapping.SourceColumn.Replace(".*", "") + ".")).ToList())
+                        MapColumn(col.Key, mapping.OutputColumn.Replace(".*", "") + "." + col.Key.Split('.').Last(), schema, aliases, sortOrder);
+                }
+                else
+                {
+                    MapColumn(mapping.SourceColumn, mapping.OutputColumn, schema, aliases, sortOrder);
+                }
+            }
+
             _lastSchema = new NodeSchema(
                 primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
                 sortOrder: sortOrder
-                ); ;
+                );
             _lastSchemaFetchXml = fetchXmlString;
             _lastSchemaAlias = Alias;
             _lastFullSchema = ReturnFullSchema;
+            _lastHiddenAliases = hiddenAliases;
+            _lastColumnMappings = columnMappings;
 
             return _lastSchema;
+        }
+
+        private void MapColumn(string sourceColumn, string outputColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, List<string> sortOrder)
+        {
+            var src = schema[sourceColumn];
+            schema[outputColumn] = new ColumnDefinition(src.Type, src.IsNullable, src.IsCalculated);
+
+            var simpleName = outputColumn.Split('.').Last();
+
+            if (!aliases.TryGetValue(simpleName, out var aliasList))
+            {
+                aliasList = new List<string>();
+                aliases[simpleName] = aliasList;
+            }
+
+            if (!aliasList.Contains(outputColumn))
+                ((List<string>)aliasList).Add(outputColumn);
+
+            for (var i = 0; i < sortOrder.Count; i++)
+            {
+                if (sortOrder[i] == sourceColumn)
+                    sortOrder[i] = outputColumn;
+            }
         }
 
         internal void ResetSchemaCache()
@@ -1058,7 +1133,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, bool notNull)
         {
-            schema[fullName] = new ColumnDefinition(type, !notNull, false);
+            var parts = fullName.Split('.');
+            var visible = true;
+            if (parts.Length == 2 && HiddenAliases.Contains(parts[0]))
+                visible = false;
+
+            schema[fullName] = new ColumnDefinition(type, !notNull, false, visible);
 
             if (simpleName == null)
                 return;
@@ -1537,7 +1617,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     continue;
 
-                AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out _);
+                var mapping = ColumnMappings.SingleOrDefault(map => map.OutputColumn == normalizedCol);
+
+                if (mapping != null)
+                    normalizedCol = mapping.SourceColumn;
+
+                var attr = AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out var linkEntity);
+
+                if (mapping != null)
+                {
+                    if (attr.name != parts[1])
+                        attr.alias = parts[1];
+
+                    mapping.SourceColumn = (linkEntity?.alias ?? Alias) + "." + (attr.alias ?? attr.name);
+                }
             }
 
             // If there is no attribute requested the server will return everything instead of nothing, so
@@ -1910,6 +2003,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 cloneLink.SemiJoin = link.SemiJoin;
                 cloneLink.RequireTablePrefix = link.RequireTablePrefix;
             }
+
+            foreach (var alias in HiddenAliases)
+                clone.HiddenAliases.Add(alias);
+
+            foreach (var mapping in ColumnMappings)
+                clone.ColumnMappings.Add(mapping);
 
             return clone;
         }
