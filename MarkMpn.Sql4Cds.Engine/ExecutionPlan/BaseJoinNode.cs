@@ -81,8 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (leftEntity != null)
             {
-                foreach (var attr in leftEntity.Attributes)
-                    merged[attr.Key] = attr.Value;
+                foreach (var attr in leftSchema.Schema)
+                    merged[attr.Key] = leftEntity[attr.Key];
             }
             else
             {
@@ -92,8 +92,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (rightEntity != null)
             {
-                foreach (var attr in rightEntity.Attributes)
-                    merged[attr.Key] = attr.Value;
+                foreach (var attr in rightSchema.Schema)
+                    merged[attr.Key] = rightEntity[attr.Key];
             }
             else
             {

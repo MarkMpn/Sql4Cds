@@ -29,10 +29,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // TODO: Handle union & concatenate
 
             // Left & Right: GetNext, mark as unmatched
-            var leftSchema = LeftSource.GetSchema(context);
-            var rightSchema = RightSource.GetSchema(context);
             var left = LeftSource.Execute(context).GetEnumerator().WithPeekAhead();
             var right = RightSource.Execute(context).GetEnumerator().WithPeekAhead();
+            var leftSchema = LeftSource.GetSchema(context);
+            var rightSchema = RightSource.GetSchema(context);
             var mergedSchema = GetSchema(context, true);
             var expressionCompilationContext = new ExpressionCompilationContext(context, mergedSchema, null);
             var expressionExecutionContext = new ExpressionExecutionContext(context);

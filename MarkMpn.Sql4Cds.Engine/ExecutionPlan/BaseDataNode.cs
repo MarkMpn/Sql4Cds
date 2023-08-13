@@ -56,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="context">The context in which the node is being executed</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        public IEnumerable<Entity> Execute(NodeExecutionContext context)
+        public virtual IEnumerable<Entity> Execute(NodeExecutionContext context)
         {
             if (context.Options.CancellationToken.IsCancellationRequested)
                 yield break;

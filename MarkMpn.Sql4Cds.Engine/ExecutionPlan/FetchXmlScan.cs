@@ -230,6 +230,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        public override IEnumerable<Entity> Execute(NodeExecutionContext context)
+        {
+            ReturnFullSchema = false;
+            return base.Execute(context);
+        }
+
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             PagesRetrieved = 0;
@@ -237,7 +243,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
-            ReturnFullSchema = false;
             var schema = GetSchema(context);
 
             ApplyParameterValues(context);

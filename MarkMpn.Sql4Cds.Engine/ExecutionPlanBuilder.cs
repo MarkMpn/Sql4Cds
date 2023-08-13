@@ -3140,9 +3140,6 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (inPredicateCol == null)
                 return false;
 
-            if (!(subNode is FetchXmlScan fetch))
-                return false;
-
             var outerKey = (string)null;
             var innerKey = (string)null;
 
@@ -3150,6 +3147,12 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 outerKey = inPredicateCol;
                 innerKey = subqueryCol;
+
+                if (filter != null)
+                {
+                    subNode = filter;
+                    filter = null;
+                }
             }
             else
             {
@@ -3187,7 +3190,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return false;
 
             var outerSchema = node.GetSchema(new NodeCompilationContext(DataSources, Options, null));
-            var innerSchema = fetch.GetSchema(new NodeCompilationContext(DataSources, Options, null));
+            var innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null));
 
             if (!outerSchema.ContainsColumn(outerKey, out outerKey) ||
                 !innerSchema.ContainsColumn(innerKey, out innerKey))
@@ -3196,29 +3199,63 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!semiJoin && innerSchema.PrimaryKey != innerKey)
                 return false;
 
-            // Give the inner fetch a unique alias and update the name of the inner key
-            if (alias != null)
-                alias.FoldToFetchXML(fetch);
-            else
-                fetch.Alias = context.GetExpressionName();
+            // Sort order could be changed by merge join, which would change results if combined with a TOP node
+            if (subNode is TopNode && innerSchema.SortOrder.Any())
+                return false;
 
             var rightAttribute = innerKey.ToColumnReference();
+
+            // Give the inner fetch a unique alias and update the name of the inner key
+            var subAlias = alias?.Alias;
+
+            if (subNode is FetchXmlScan fetch)
+            {
+                if (alias != null)
+                    alias.FoldToFetchXML(fetch);
+                else
+                    fetch.Alias = context.GetExpressionName();
+
+                subAlias = fetch.Alias;
+            }
+            else if (semiJoin && alias == null)
+            {
+                var select = new SelectNode { Source = subNode };
+                select.ColumnSet.Add(new SelectColumn { SourceColumn = subqueryCol, OutputColumn = subqueryCol.Split('.').Last() });
+                alias = new AliasNode(select, new Identifier { Value = context.GetExpressionName() }, context);
+                subAlias = alias.Alias;
+            }
+
             if (rightAttribute.MultiPartIdentifier.Identifiers.Count == 2)
-                rightAttribute.MultiPartIdentifier.Identifiers[0].Value = fetch.Alias;
+                rightAttribute.MultiPartIdentifier.Identifiers[0].Value = subAlias;
 
             // Add the required column with the expected alias (used for scalar subqueries and IN predicates, not for CROSS/OUTER APPLY
             if (subqueryCol != null)
             {
-                var attr = new FetchXml.FetchAttributeType { name = subqueryCol.Split('.').Last() };
-                fetch.Entity.AddItem(attr);
-                outputCol = fetch.Alias + "." + attr.name;
+                if (subAlias != null)
+                {
+                    var subqueryAttribute = subqueryCol.ToColumnReference();
+
+                    if (subqueryAttribute.MultiPartIdentifier.Identifiers.Count == 2)
+                        subqueryAttribute.MultiPartIdentifier.Identifiers[0].Value = subAlias;
+
+                    subqueryCol = subqueryAttribute.GetColumnName();
+                }
+
+                outputCol = subqueryCol;
+                subNode.AddRequiredColumns(context, new List<string> { subqueryCol });
+            }
+
+            if (alias != null && !(subNode is FetchXmlScan))
+            {
+                alias.Source = subNode;
+                subNode = alias;
             }
 
             merge = new MergeJoinNode
             {
                 LeftSource = node,
                 LeftAttribute = outerKey.ToColumnReference(),
-                RightSource = inPredicateCol != null ? (IDataExecutionPlanNodeInternal) filter ?? fetch : fetch,
+                RightSource = subNode,
                 RightAttribute = rightAttribute.Clone(),
                 JoinType = QualifiedJoinType.LeftOuter
             };
@@ -3226,7 +3263,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (semiJoin)
             {
                 // Regenerate the schema after changing the alias
-                innerSchema = fetch.GetSchema(new NodeCompilationContext(DataSources, Options, null));
+                innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null));
 
                 if (innerSchema.PrimaryKey != rightAttribute.GetColumnName() && !(merge.RightSource is DistinctNode))
                 {

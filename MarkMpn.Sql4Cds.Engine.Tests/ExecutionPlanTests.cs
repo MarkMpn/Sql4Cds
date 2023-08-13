@@ -2242,6 +2242,57 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void CrossApplyJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT contact.firstname AS fname,
+                               contact.lastname AS lname,
+                               systemuser.domainname AS uname
+                        FROM   contact
+                               INNER JOIN systemuser ON systemuser.systemuserid = contact.parentcustomerid
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
+            Assert.AreEqual("systemuser.uname", fetch.ColumnMappings[2].SourceColumn);
+            Assert.AreEqual("a.uname", fetch.ColumnMappings[2].OutputColumn);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='firstname' alias='fname' />
+                            <attribute name='lastname' alias='lname' />
+                            <link-entity name='systemuser' alias='systemuser' from='systemuserid' to='parentcustomerid' link-type='inner'>
+                                <attribute name='domainname' alias='uname' />
+                            </link-entity>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void OuterApply()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
@@ -3117,7 +3168,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("contact.firstname", select.ColumnSet[0].SourceColumn);
             var filter = AssertNode<FilterNode>(select.Source);
             Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
-            var join = AssertNode<HashJoinNode>(filter.Source);
+            var join = AssertNode<MergeJoinNode>(filter.Source);
             Assert.AreEqual("contact.firstname", join.LeftAttribute.GetColumnName());
             Assert.AreEqual("Expr1.firstname", join.RightAttribute.GetColumnName());
             Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
@@ -3128,10 +3179,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
 
-            var innerAlias = AssertNode<AliasNode>(join.RightSource);
+            var innerSort = AssertNode<SortNode>(join.RightSource);
+            Assert.AreEqual("Expr1.firstname", innerSort.Sorts.Single().Expression.ToSql());
+            var innerAlias = AssertNode<AliasNode>(innerSort.Source);
             Assert.AreEqual("Expr1", innerAlias.Alias);
             var innerFilter = AssertNode<FilterNode>(innerAlias.Source);
             Assert.AreEqual("count > 1", innerFilter.Filter.ToSql());
