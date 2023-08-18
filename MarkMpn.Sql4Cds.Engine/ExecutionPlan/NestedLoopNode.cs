@@ -195,7 +195,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 assert.Source is StreamAggregateNode aggregate &&
                 aggregate.Aggregates.Count == 2 &&
                 aggregate.Aggregates[DefinedValues.Single().Value].AggregateType == AggregateType.First &&
-                aggregate.Source is IndexSpoolNode indexSpool &&
+                aggregate.Source is TopNode top &&
+                top.Source is IndexSpoolNode indexSpool &&
                 indexSpool.Source is FetchXmlScan fetch &&
                 LeftSource.EstimateRowsOut(context).Value < 100 &&
                 fetch.EstimateRowsOut(innerContext).Value > 5000)
@@ -214,7 +215,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     },
                     Parent = aggregate
                 };
-                aggregate.Source = filter.FoldQuery(innerContext, hints);
+                top.Source = filter;
+                aggregate.Source = top.FoldQuery(innerContext, hints);
             }
 
             return this;

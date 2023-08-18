@@ -1060,7 +1060,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
@@ -1154,7 +1155,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
             AssertFetchXml(subAggregateFetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='2'>
                     <entity name='account'>
                         <attribute name='name' />
                         <filter>
@@ -1240,7 +1241,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
             var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
@@ -1290,7 +1292,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
             var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
@@ -1342,7 +1345,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subCompute = AssertNode<ComputeScalarNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subCompute = AssertNode<ComputeScalarNode>(subTop.Source);
             var subIndexSpool = AssertNode<IndexSpoolNode>(subCompute.Source);
             Assert.AreEqual("account.accountid", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);

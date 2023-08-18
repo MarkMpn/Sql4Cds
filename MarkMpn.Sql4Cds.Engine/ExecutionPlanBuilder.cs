@@ -3039,6 +3039,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     // to check for one row
                     if (!(subqueryPlan.Source.EstimateRowsOut(context) is RowCountEstimateDefiniteRange range) || range.Maximum > 1)
                     {
+                        // No point getting more than 2 rows as we only need to know if there is more than 1
+                        var top = new TopNode
+                        {
+                            Source = loopRightSource,
+                            Top = new IntegerLiteral { Value = "2" }
+                        };
+                        loopRightSource = top;
+                        
                         subqueryCol = context.GetExpressionName();
                         var rowCountCol = context.GetExpressionName();
                         var aggregate = new HashMatchAggregateNode
