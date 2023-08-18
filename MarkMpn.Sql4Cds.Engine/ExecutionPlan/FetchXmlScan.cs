@@ -1210,30 +1210,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // If we have a top-level filter on a variable and we're in the right-hand side of a nested loop join with a
             // non-trivial expected row count on the left hand side, remove the filter and add an index spool to replace it.
-            var variableCondition = Entity.Items
+            var variableConditions = Entity.Items
                 .OfType<filter>()
                 .Where(f => f.type == filterType.and)
                 .SelectMany(f => f.Items.OfType<condition>())
                 .Where(c => c.IsVariable && c.@operator == @operator.eq && c.value != null)
-                .FirstOrDefault();
+                .ToList();
 
-            if (variableCondition == null)
+            if (variableConditions.Count != 1)
             {
                 indexSpool = null;
                 return false;
             }
 
+            var variableCondition = variableConditions[0];
+
+            var prev = (IExecutionPlanNode)this;
             var parent = Parent;
 
             while (parent != null)
             {
                 var loop = parent as NestedLoopNode;
 
-                if (loop != null)
+                if (loop != null && prev == loop.RightSource)
                 {
                     var rowCount = loop.LeftSource.EstimateRowsOut(context);
 
-                    if (rowCount.Value >= 100)
+                    if (rowCount.Value >= 100 && loop.OuterReferences.Any(kvp => kvp.Value.Equals(variableCondition.value, StringComparison.OrdinalIgnoreCase)))
                     {
                         indexSpool = new IndexSpoolNode
                         {
@@ -1249,6 +1252,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
+                prev = parent;
                 parent = parent.Parent;
             }
 

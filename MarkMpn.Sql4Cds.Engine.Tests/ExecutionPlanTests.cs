@@ -5982,5 +5982,31 @@ FROM   account AS r;";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+
+        [TestMethod]
+        public void DoNotFoldFilterOnParameterToIndexSpool()
+        {
+            // Subquery on right side of nested loop will use an index spool to reduce number of FetchXML requests. Do not use this logic if the
+            // filter variable is an external parameter or the FetchXML is on the left side of the loop
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT * FROM account WHERE name = @name and primarycontactid = (SELECT contactid FROM contact WHERE firstname = 'Mark')";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@name"] = DataTypeHelpers.NVarChar(100, Collation.USEnglish, CollationLabel.CoercibleDefault)
+            };
+            var plans = planBuilder.Build(query, parameters, out _);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(filter.Source);
+            var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var tableSpool = AssertNode<TableSpoolNode>(loop.RightSource);
+            var assert = AssertNode<AssertNode>(tableSpool.Source);
+            var aggregate = AssertNode<StreamAggregateNode>(assert.Source);
+            var contactFetch = AssertNode<FetchXmlScan>(aggregate.Source);
+        }
     }
 }
