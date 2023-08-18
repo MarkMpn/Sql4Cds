@@ -403,6 +403,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
+            if (!req.Requests.All(r => r is UpdateRequest))
+                return base.ExecuteMultiple(dataSource, org, meta, req);
+
             if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "UpdateMultiple"))
             {
                 // Elastic tables can use UpdateMultiple for better performance than ExecuteMultiple

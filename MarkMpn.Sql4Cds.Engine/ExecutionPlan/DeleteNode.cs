@@ -263,6 +263,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
+            if (!req.Requests.All(r => r is DeleteRequest))
+                return base.ExecuteMultiple(dataSource, org, meta, req);
+
             if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple"))
             {
                 // Elastic tables can use DeleteMultiple for better performance than ExecuteMultiple
