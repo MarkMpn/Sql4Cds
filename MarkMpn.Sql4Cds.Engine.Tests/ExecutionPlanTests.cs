@@ -5998,6 +5998,34 @@ FROM   account AS r;";
 
         }
 
+        [TestMethod]
+        public void HashJoinUsedForDifferentDataTypes()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT * FROM account WHERE NOT EXISTS(SELECT * FROM contact WHERE account.name = contact.createdon)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var hashJoin = AssertNode<HashJoinNode>(filter.Source);
+            var accountFetch = AssertNode<FetchXmlScan>(hashJoin.LeftSource);
+            AssertFetchXml(accountFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(hashJoin.RightSource);
+            AssertFetchXml(contactFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                        <order attribute='createdon' />
+                    </entity>
+                </fetch>");
+        }
 
         [TestMethod]
         public void DoNotFoldFilterOnParameterToIndexSpool()
