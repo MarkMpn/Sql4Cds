@@ -5988,6 +5988,16 @@ FROM   account AS r;";
         }
 
         [TestMethod]
+        public void NestedExistsAndIn()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "IF NOT EXISTS(SELECT * FROM account WHERE primarycontactid IN (SELECT contactid FROM contact WHERE firstname = 'Mark')) SELECT 1";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+        }
+
 
         [TestMethod]
         public void DoNotFoldFilterOnParameterToIndexSpool()

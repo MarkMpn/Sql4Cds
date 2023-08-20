@@ -16,5 +16,10 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             if (node.Subquery != null)
                 InSubqueries.Add(node);
         }
+
+        public override void ExplicitVisit(ScalarSubquery node)
+        {
+            // Do not recurse into subqueries
+        }
     }
 }
