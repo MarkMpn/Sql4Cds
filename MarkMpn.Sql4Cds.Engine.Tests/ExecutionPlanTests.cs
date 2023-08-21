@@ -1744,22 +1744,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            var loop = AssertNode<NestedLoopNode>(filter.Source);
-            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            var subFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(subFetch, @"
+                <fetch top='1'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                    </entity>
+                </fetch>");
+            var filter = AssertNode<FilterNode>(loop.RightSource);
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
-                    </entity>
-                </fetch>");
-            var subSpool = AssertNode<TableSpoolNode>(loop.RightSource);
-            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
-            AssertFetchXml(subFetch, @"
-                <fetch top='1'>
-                    <entity name='contact'>
-                        <attribute name='contactid' />
                     </entity>
                 </fetch>");
         }
@@ -6040,15 +6039,44 @@ FROM   account AS r;";
             {
                 ["@name"] = DataTypeHelpers.NVarChar(100, Collation.USEnglish, CollationLabel.CoercibleDefault)
             };
+
             var plans = planBuilder.Build(query, parameters, out _);
+
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            var loop = AssertNode<NestedLoopNode>(filter.Source);
-            var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
-            var tableSpool = AssertNode<TableSpoolNode>(loop.RightSource);
-            var assert = AssertNode<AssertNode>(tableSpool.Source);
+
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.Inner, loop.JoinType);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["Expr2"]);
+
+            var assert = AssertNode<AssertNode>(loop.LeftSource);
+
             var aggregate = AssertNode<StreamAggregateNode>(assert.Source);
+            Assert.AreEqual("contact.contactid", aggregate.Aggregates["Expr2"].SqlExpression.ToSql());
+            Assert.AreEqual(AggregateType.First, aggregate.Aggregates["Expr2"].AggregateType);
+
             var contactFetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(contactFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='2'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            var accountFetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            AssertFetchXml(accountFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition generator:IsVariable='true' attribute='name' operator='eq' value='@name' />
+                            <condition generator:IsVariable='true' attribute='primarycontactid' operator='eq' value='@Expr1' />
+                        </filter>
+                    </entity>
+                </fetch>");
         }
     }
 }

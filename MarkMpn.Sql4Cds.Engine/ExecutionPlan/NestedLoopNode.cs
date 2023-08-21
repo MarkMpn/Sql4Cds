@@ -32,27 +32,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var leftSchema = LeftSource.GetSchema(context);
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
-            if (OuterReferences != null)
-            {
-                if (context.ParameterTypes == null)
-                    innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
-                else
-                    innerParameterTypes = new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-
-                foreach (var kvp in OuterReferences)
-                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
-            }
-
-            var rightCompilationContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
-            var rightSchema = RightSource.GetSchema(rightCompilationContext);
-            var mergedSchema = GetSchema(context, true);
-            var joinCondition = JoinCondition?.Compile(new ExpressionCompilationContext(context, mergedSchema, null));
-            var joinConditionContext = joinCondition == null ? null : new ExpressionExecutionContext(context);
+            INodeSchema leftSchema = null;
+            IDictionary<string, DataTypeReference> innerParameterTypes = null;
+            NodeCompilationContext rightCompilationContext = null;
+            INodeSchema rightSchema = null;
+            INodeSchema mergedSchema = null;
+            Func<ExpressionExecutionContext, bool> joinCondition = null;
+            ExpressionExecutionContext joinConditionContext = null;
 
             foreach (var left in LeftSource.Execute(context))
             {
+                if (leftSchema == null)
+                {
+                    // Do setup work after getting the first result from the left source:
+                    // 1. Avoid the overhead if the left source is empty
+                    // 2. Schema returned from FetchXmlScan changes on first execution
+                    leftSchema = LeftSource.GetSchema(context);
+                    innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
+                    if (OuterReferences != null)
+                    {
+                        if (context.ParameterTypes == null)
+                            innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+                        else
+                            innerParameterTypes = new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
+
+                        foreach (var kvp in OuterReferences)
+                            innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
+                    }
+
+                    rightCompilationContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
+                }
+
                 var innerParameters = context.ParameterValues;
 
                 if (OuterReferences != null)
@@ -73,6 +83,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var right in RightSource.Execute(new NodeExecutionContext(context.DataSources, context.Options, innerParameterTypes, innerParameters)))
                 {
+                    if (rightSchema == null)
+                    {
+                        rightSchema = RightSource.GetSchema(rightCompilationContext);
+                        mergedSchema = GetSchema(context, true);
+                        joinCondition = JoinCondition?.Compile(new ExpressionCompilationContext(context, mergedSchema, null));
+                        joinConditionContext = joinCondition == null ? null : new ExpressionExecutionContext(context);
+                    }
+
                     var merged = Merge(left, leftSchema, right, rightSchema);
 
                     if (joinCondition == null)
