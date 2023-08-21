@@ -493,9 +493,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     condition = new condition
                     {
                         entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                        attribute = RemoveAttributeAlias(attrName.ToLowerInvariant(), entityAlias, targetEntityAlias, items),
+                        attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
                         @operator = op,
-                        ValueOf = RemoveAttributeAlias(attrName2.ToLowerInvariant(), entityAlias, targetEntityAlias, items)
+                        ValueOf = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items)
                     };
                     return true;
                 }
@@ -917,7 +917,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             condition = new condition
             {
                 entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                attribute = attrName.ToLowerInvariant(),
+                attribute = attrName,
                 @operator = op,
                 value = usesItems ? null : value,
                 Items = usesItems ? values : null,
