@@ -88,6 +88,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 case "execute":
                     return FilterList(AutocompleteSprocName(currentWord), currentWord);
 
+                case "collate":
+                    return FilterList(Collation.GetAllCollations().OrderBy(c => c.Name).Select(c => new CollationAutocompleteItem(c, currentLength)), currentWord);
+
                 default:
                     // Find the FROM clause
                     var words = new List<string>();
@@ -1766,6 +1769,28 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             {
                 get => _option.Label?.UserLocalizedLabel?.Label ?? Text;
                 set => base.ToolTipText = value;
+            }
+        }
+
+        class CollationAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly Collation _collation;
+
+            public CollationAutocompleteItem(Collation collation, int replaceLength) : base(collation.Name, replaceLength, CompletionItemKind.Field)
+            {
+                _collation = collation;
+            }
+
+            public override string ToolTipTitle
+            {
+                get => _collation.Name;
+                set { }
+            }
+
+            public override string ToolTipText
+            {
+                get => _collation.Description;
+                set { }
             }
         }
     }

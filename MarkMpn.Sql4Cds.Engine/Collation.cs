@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// <summary>
     /// Describes a collation to be used to compare strings
     /// </summary>
-    class Collation
+    public class Collation
     {
         private static Dictionary<string, int> _collationNameToLcid;
 
@@ -41,7 +41,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="lcid">The locale ID to use</param>
         /// <param name="compareOptions">Additional comparison options</param>
         /// <param name="description">A description of the collation for display purposes</param>
-        public Collation(string name, int lcid, SqlCompareOptions compareOptions, string description)
+        internal Collation(string name, int lcid, SqlCompareOptions compareOptions, string description)
         {
             Name = name;
             LCID = lcid;
@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="lcid">The locale ID to use</param>
         /// <param name="caseSensitive">Indicates if comparisons are case sensitive</param>
         /// <param name="accentSensitive">Indicates if comparisons are accent sensitive</param>
-        public Collation(int lcid, bool caseSensitive, bool accentSensitive)
+        internal Collation(int lcid, bool caseSensitive, bool accentSensitive)
         {
             var compareOptions = SqlCompareOptions.IgnoreKanaType | SqlCompareOptions.IgnoreWidth;
 
@@ -120,12 +120,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the locale ID to use when comparing strings
         /// </summary>
-        public int LCID { get; }
+        internal int LCID { get; }
 
         /// <summary>
         /// Returns the additional options to use when comparing strings
         /// </summary>
-        public SqlCompareOptions CompareOptions { get; }
+        internal SqlCompareOptions CompareOptions { get; }
 
         /// <summary>
         /// Returns the name of the collation
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the default collation to be used for system data
         /// </summary>
-        public static Collation USEnglish { get; }
+        internal static Collation USEnglish { get; }
 
         /// <summary>
         /// Attempts to parse the name of a collation to the corresponding details
@@ -151,7 +151,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="name">The name of the collation to parse</param>
         /// <param name="coll">The details of the collation parsed from the <paramref name="name"/></param>
         /// <returns><c>true</c> if the <paramref name="name"/> could be parsed, or <c>false</c> otherwise</returns>
-        public static bool TryParse(string name, out Collation coll)
+        internal static bool TryParse(string name, out Collation coll)
         {
             var compareOptions = SqlCompareOptions.IgnoreKanaType | SqlCompareOptions.IgnoreWidth;
             var parts = name.Split('_');
@@ -328,7 +328,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">The string value to apply the collation to</param>
         /// <returns>A new <see cref="SqlString"/> value with the given string <paramref name="value"/> and the current collation</returns>
-        public SqlString ToSqlString(string value)
+        internal SqlString ToSqlString(string value)
         {
             return new SqlString(value, LCID, CompareOptions);
         }
