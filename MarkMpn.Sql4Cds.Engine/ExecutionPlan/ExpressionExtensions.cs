@@ -15,6 +15,7 @@ using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Newtonsoft.Json.Linq;
 using Wmhelp.XPath2;
 using Wmhelp.XPath2.Extensions;
 
@@ -130,6 +131,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = ToExpression(global, context, contextParam, out sqlType);
             else if (expr is ExpressionCallTarget callTarget)
                 expression = ToExpression(callTarget, context, contextParam, out sqlType);
+            else if (expr is DistinctPredicate distinct)
+                expression = ToExpression(distinct, context, contextParam, out sqlType);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
 
@@ -353,6 +356,76 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 default:
                     throw new NotSupportedQueryFragmentException("Unknown comparison type", cmp);
             }
+        }
+
+        private static Expression ToExpression(DistinctPredicate distinct, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
+        {
+            sqlType = DataTypeHelpers.Bit;
+
+            var lhs = distinct.FirstExpression.ToExpression(context, contextParam, out var lhsType);
+            var rhs = distinct.SecondExpression.ToExpression(context, contextParam, out var rhsType);
+
+            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsType, rhsType, context.PrimaryDataSource, out var type))
+            {
+                // Special case - we can filter on entity reference types by string
+                if (lhs.Type == typeof(SqlEntityReference) && rhs.Type == typeof(SqlString) ||
+                    lhs.Type == typeof(SqlString) && rhs.Type == typeof(SqlEntityReference))
+                {
+                    type = DataTypeHelpers.UniqueIdentifier;
+                }
+                else
+                {
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhsType.ToSql()} and {rhsType.ToSql()}", distinct);
+                }
+            }
+
+            if (!lhsType.IsSameAs(type))
+                lhs = SqlTypeConverter.Convert(lhs, lhsType, type);
+
+            if (!rhsType.IsSameAs(type))
+            {
+                // Special case to give more helpful & earlier error reporting for common problems
+                if (distinct.FirstExpression is ColumnReferenceExpression col &&
+                    distinct.SecondExpression is StringLiteral str &&
+                    (
+                        type.IsType(SqlDataTypeOption.Int) && !Int32.TryParse(str.Value, out _)
+                        ||
+                        type.IsType(SqlDataTypeOption.UniqueIdentifier) && !Guid.TryParse(str.Value, out _)
+                    ) &&
+                    context.Schema.ContainsColumn(col.GetColumnName() + "name", out var nameCol))
+                {
+                    throw new NotSupportedQueryFragmentException($"Cannot convert text value to {type.ToSql()}", str)
+                    {
+                        Suggestion = $"Did you mean to filter on the {nameCol} column instead?\r\n" + new string(' ', 26 + nameCol.Length) + "^^^^"
+                    };
+                }
+
+                rhs = SqlTypeConverter.Convert(rhs, rhsType, type);
+            }
+
+            AssertCollationSensitive(type, "IS DISTINCT FROM operation", distinct);
+
+            // Using linked server decoding pseudocode from https://learn.microsoft.com/en-us/sql/t-sql/queries/is-distinct-from-transact-sql?view=sql-server-ver16#remarks
+            var expr = (Expression) Expression.AndAlso(
+                Expression.OrElse(
+                    Expression.OrElse(
+                        SqlTypeConverter.NullCheck(rhs),
+                        SqlTypeConverter.NullCheck(lhs)
+                        ),
+                    Expression.IsTrue(Expression.NotEqual(lhs, rhs))
+                    ),
+                Expression.Not(
+                    Expression.AndAlso(
+                        SqlTypeConverter.NullCheck(lhs),
+                        SqlTypeConverter.NullCheck(rhs)
+                        )
+                    )
+                );
+
+            if (distinct.IsNot)
+                expr = Expression.Not(expr);
+
+            return expr;
         }
 
         private static Expression ToExpression(BooleanBinaryExpression bin, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)

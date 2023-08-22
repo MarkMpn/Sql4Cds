@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var queries = new List<IRootExecutionPlanNodeInternal>();
 
             // Parse the SQL DOM
-            var dom = new TSql150Parser(Options.QuotedIdentifiers);
+            var dom = new TSql160Parser(Options.QuotedIdentifiers);
             var fragment = dom.Parse(new StringReader(sql), out var errors);
 
             // Check if there were any parse errors

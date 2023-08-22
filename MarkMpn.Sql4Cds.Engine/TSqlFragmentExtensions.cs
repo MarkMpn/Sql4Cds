@@ -445,6 +445,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (fragment is DistinctPredicate distinct)
+            {
+                return (T)(object)new DistinctPredicate
+                {
+                    IsNot = distinct.IsNot,
+                    FirstExpression = distinct.FirstExpression.Clone(),
+                    SecondExpression = distinct.SecondExpression.Clone(),
+                };
+            }
+
             throw new NotSupportedQueryFragmentException("Unhandled expression type", fragment);
         }
     }
