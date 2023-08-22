@@ -161,13 +161,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Filter == null)
                 return Source;
 
-            if (FoldScalarSubqueries(out var nestedLoop))
+            if (FoldScalarSubqueries(context, out var nestedLoop))
                 return nestedLoop.FoldQuery(context, hints);
 
             return this;
         }
 
-        private bool FoldScalarSubqueries(out NestedLoopNode nestedLoop)
+        private bool FoldScalarSubqueries(NodeCompilationContext context, out NestedLoopNode nestedLoop)
         {
             // If we have a filter condition that uses a non-correlated scalar subquery, e.g.
             //
@@ -194,7 +194,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sourceLoop.JoinCondition == null &&
                 sourceLoop.OuterReferences.Count == 0 &&
                 sourceLoop.DefinedValues.Count == 1 &&
-                Filter.GetColumns().Contains(sourceLoop.DefinedValues.Single().Key))
+                Filter.GetColumns().Contains(sourceLoop.DefinedValues.Single().Key) &&
+                sourceLoop.RightSource.EstimateRowsOut(context) is RowCountEstimateDefiniteRange subqueryEstimate &&
+                subqueryEstimate.Maximum == 1)
             {
                 var scalarSubqueryCol = sourceLoop.DefinedValues.Single().Key;
                 var scalarSubquerySource = sourceLoop.DefinedValues.Single().Value;
