@@ -240,8 +240,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (UseTDSEndpointDirectly)
                 {
 #if NETCOREAPP
-                var svc = (ServiceClient)_connection.DataSources[_connection.Database].Connection;
-                var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
+                    var svc = (ServiceClient)_connection.DataSources[_connection.Database].Connection;
+                    var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
 #else
                     var svc = (CrmServiceClient)_connection.DataSources[_connection.Database].Connection;
                     var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);

@@ -511,52 +511,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         ValueOf = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items)
                     };
 
-                    if (op == @operator.ne && type == BooleanComparisonType.IsDistinctFrom)
+                    if (op == @operator.ne && (type == BooleanComparisonType.NotEqualToBrackets || type == BooleanComparisonType.NotEqualToExclamation))
                     {
-                        // Need to also allow null values
+                        // FetchXML ne operator matches records where one field is null and the other is not null
+                        // This matches the logic for IS DISTINCT FROM, but <> and != require non-null values
                         filter = new filter
                         {
-                            type = filterType.or,
+                            type = filterType.and,
                             Items = new object[]
                             {
                                 condition,
-                                new filter
+                                new condition
                                 {
-                                    type = filterType.and,
-                                    Items = new object[]
-                                    {
-                                        new condition
-                                        {
-                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
-                                            @operator = @operator.notnull
-                                        },
-                                        new condition
-                                        {
-                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                                            attribute = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items),
-                                            @operator = @operator.@null
-                                        }
-                                    }
+                                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                    attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                    @operator = @operator.notnull
                                 },
-                                new filter
+                                new condition
                                 {
-                                    type = filterType.and,
-                                    Items = new object[]
-                                    {
-                                        new condition
-                                        {
-                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
-                                            @operator = @operator.@null
-                                        },
-                                        new condition
-                                        {
-                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                                            attribute = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items),
-                                            @operator = @operator.notnull
-                                        }
-                                    }
+                                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                    attribute = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items),
+                                    @operator = @operator.notnull
                                 }
                             }
                         };
@@ -564,7 +539,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else if (op == @operator.eq && type == BooleanComparisonType.IsNotDistinctFrom)
                     {
-                        // Need to also allow null values
+                        // FetchXML eq operator does not match records where both fields are null.
+                        // This matches the logic for =, but IS DISTINCT FROM also allows nulls to match
                         filter = new filter
                         {
                             type = filterType.or,
