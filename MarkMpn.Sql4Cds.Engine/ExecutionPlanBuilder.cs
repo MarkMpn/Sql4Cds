@@ -73,6 +73,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add in standard global variables
             parameterTypes["@@IDENTITY"] = DataTypeHelpers.EntityReference;
             parameterTypes["@@ROWCOUNT"] = DataTypeHelpers.Int;
+            parameterTypes["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
+            parameterTypes["@@VERSION"] = DataTypeHelpers.NVarChar(100, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
 
             var queries = new List<IRootExecutionPlanNodeInternal>();
 

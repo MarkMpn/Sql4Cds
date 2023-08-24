@@ -11,6 +11,7 @@ using System.Threading;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.Data.SqlTypes;
 using Microsoft.ApplicationInsights;
+using System.Reflection;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -68,12 +69,16 @@ namespace MarkMpn.Sql4Cds.Engine
             _globalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
             {
                 ["@@IDENTITY"] = DataTypeHelpers.EntityReference,
-                ["@@ROWCOUNT"] = DataTypeHelpers.Int
+                ["@@ROWCOUNT"] = DataTypeHelpers.Int,
+                ["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
+                ["@@VERSION"] = DataTypeHelpers.NVarChar(100, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
             };
             _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {
                 ["@@IDENTITY"] = SqlEntityReference.Null,
-                ["@@ROWCOUNT"] = (SqlInt32)0
+                ["@@ROWCOUNT"] = (SqlInt32)0,
+                ["@@SERVERNAME"] = GetServerName(_dataSources[_options.PrimaryDataSource]),
+                ["@@VERSION"] = GetVersion(_dataSources[_options.PrimaryDataSource])
             };
 
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
@@ -84,6 +89,39 @@ namespace MarkMpn.Sql4Cds.Engine
                 ApplicationName = System.IO.Path.GetFileNameWithoutExtension(app.Location);
             else
                 ApplicationName = "SQL 4 CDS ADO.NET Provider";
+        }
+
+        private SqlString GetVersion(DataSource dataSource)
+        {
+            string orgVersion = null;
+
+#if NETCOREAPP
+            if (dataSource.Connection is ServiceClient svc)
+                orgVersion = svc.ConnectedOrgVersion.ToString();
+#else
+            if (dataSource.Connection is CrmServiceClient svc)
+                orgVersion = svc.ConnectedOrgVersion.ToString();
+#endif
+
+            if (orgVersion == null)
+                orgVersion = ((RetrieveVersionResponse)dataSource.Execute(new RetrieveVersionRequest())).Version;
+
+            var assembly = typeof(Sql4CdsConnection).Assembly;
+            var assemblyVersion = assembly.GetName().Version;
+            var assemblyCopyright = assembly
+                .GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false)
+                .OfType<AssemblyCopyrightAttribute>()
+                .FirstOrDefault()?
+                .Copyright;
+            var assemblyFilename = assembly.Location;
+            var assemblyDate = System.IO.File.GetLastWriteTime(assemblyFilename);
+
+            return $"SQL 4 CDS - {assemblyVersion}   {assemblyDate}   {assemblyCopyright} (connected org version {orgVersion})";
+        }
+
+        private SqlString GetServerName(DataSource dataSource)
+        {
+            return dataSource.Name;
         }
 
         private static IOrganizationService Connect(string connectionString)

@@ -77,6 +77,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             if (prevWord == null)
                 return Array.Empty<SqlAutocompleteItem>();
 
+            // Autocomplete variable names
+            if (currentWord.StartsWith("@") && !prevWord.Equals("declare", StringComparison.OrdinalIgnoreCase))
+                return FilterList(AutocompleteVariableName(currentWord, text.Substring(0, pos)), currentWord);
+
             switch (prevWord.ToLower())
             {
                 case "from":
@@ -850,6 +854,30 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 // Could be a sproc name
                 if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Messages != null)
                     list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, lastPartLength)));
+            }
+
+            list.Sort();
+            return list;
+        }
+
+        private IEnumerable<SqlAutocompleteItem> AutocompleteVariableName(string currentWord, string text)
+        {
+            var list = new List<SqlAutocompleteItem>();
+
+            // Add the known global variables
+            list.Add(new VariableAutocompleteItem("@@IDENTITY", currentWord.Length));
+            list.Add(new VariableAutocompleteItem("@@ROWCOUNT", currentWord.Length));
+            list.Add(new VariableAutocompleteItem("@@SERVERNAME", currentWord.Length));
+            list.Add(new VariableAutocompleteItem("@@VERSION", currentWord.Length));
+
+            // Find any other variable declarations in the preceding SQL
+            var regex = new System.Text.RegularExpressions.Regex(@"\bdeclare\s+(@[a-z0-9_]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var matches = regex.Matches(text);
+
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                var variableName = match.Groups[1].Value;
+                list.Add(new VariableAutocompleteItem(variableName, currentWord.Length));
             }
 
             list.Sort();
@@ -1790,6 +1818,25 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipText
             {
                 get => _collation.Description;
+                set { }
+            }
+        }
+
+        class VariableAutocompleteItem : SqlAutocompleteItem
+        {
+            public VariableAutocompleteItem(string name, int replaceLength) : base(name, replaceLength, CompletionItemKind.Variable)
+            {
+            }
+
+            public override string ToolTipTitle
+            {
+                get => Text;
+                set { }
+            }
+
+            public override string ToolTipText
+            {
+                get => Text.StartsWith("@@") ? "Global variable" : "User-defined variable";
                 set { }
             }
         }
