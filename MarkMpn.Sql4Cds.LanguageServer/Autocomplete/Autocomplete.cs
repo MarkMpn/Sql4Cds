@@ -77,10 +77,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             if (prevWord == null)
                 return Array.Empty<SqlAutocompleteItem>();
 
-            // Autocomplete variable names
-            if (currentWord.StartsWith("@") && !prevWord.Equals("declare", StringComparison.OrdinalIgnoreCase))
-                return FilterList(AutocompleteVariableName(currentWord, text.Substring(0, pos)), currentWord);
-
             switch (prevWord.ToLower())
             {
                 case "from":
@@ -505,6 +501,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                             // * table/alias names
                             // * attribute names unique across tables
                             // * functions
+                            // * variables
                             var items = new List<SqlAutocompleteItem>();
                             var attributes = new List<AttributeMetadata>();
 
@@ -564,6 +561,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                             items.AddRange(attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).SelectMany(g => AttributeAutocompleteItem.CreateList(g.Single(), currentLength, false)));
 
                             items.AddRange(typeof(SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
+
+                            items.AddRange(AutocompleteVariableName(currentWord, text.Substring(0, pos)));
 
                             if ((clause == "where" || clause == "set") && prevWord == "=")
                             {
