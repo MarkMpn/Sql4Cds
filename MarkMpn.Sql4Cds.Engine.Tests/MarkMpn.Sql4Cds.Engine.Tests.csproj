@@ -93,6 +93,7 @@
     <Compile Include="SampleMessageExecutor.cs" />
     <Compile Include="Sql2FetchXmlTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SqlVariantTests.cs" />
     <Compile Include="StubOptions.cs" />
     <Compile Include="StubMessageCache.cs" />
     <Compile Include="StubTableSizeCache.cs" />

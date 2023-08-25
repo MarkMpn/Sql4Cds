@@ -151,7 +151,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var providerType = GetProviderSpecificFieldType(i);
 
-            if (providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml))
+            if (providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml) || providerType == typeof(object))
                 return providerType;
 
             return SqlTypeConverter.SqlToNetType(providerType);
@@ -159,7 +159,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override Type GetProviderSpecificFieldType(int ordinal)
         {
-            return _schema.Schema[_columnSet[ordinal].SourceColumn].Type.ToNetType(out _);
+            var type = _schema.Schema[_columnSet[ordinal].SourceColumn].Type.ToNetType(out _);
+
+            if (type == typeof(SqlVariant))
+                type = typeof(object);
+
+            return type;
         }
 
         public override float GetFloat(int i)
@@ -303,7 +308,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object GetProviderSpecificValue(int ordinal)
         {
-            return _row[_columnSet[ordinal].SourceColumn];
+            var value = _row[_columnSet[ordinal].SourceColumn];
+
+            if (value is SqlVariant variant)
+                value = (object)variant.Value ?? DBNull.Value;
+
+            return value;
         }
 
         public override int GetProviderSpecificValues(object[] values)
@@ -329,7 +339,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private INullable GetRawValue(int i)
         {
-            return (INullable)_row[_columnSet[i].SourceColumn];
+            var value = (INullable) _row[_columnSet[i].SourceColumn];
+
+            if (value is SqlVariant variant)
+                value = variant.Value ?? SqlVariant.Null;
+
+            return value;
         }
 
         public override bool NextResult()

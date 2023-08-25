@@ -166,6 +166,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Deletes a specified length of characters in the first string at the start position and then inserts the second string into the first string at the start position")]
             public abstract string stuff(string character_expression, int start, int length, string replace_with_expression);
+
+            [Description("Returns property information about the server instance")]
+            public abstract object serverproperty(string propertyname);
+
+            [Description("Returns the base data type and other information about a sql_variant value")]
+            public abstract object sql_variant_property(object expression, string property);
         }
     }
 }

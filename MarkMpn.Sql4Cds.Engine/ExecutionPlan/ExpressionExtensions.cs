@@ -1511,7 +1511,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [SqlDataTypeOption.UniqueIdentifier] = typeof(SqlGuid),
             [SqlDataTypeOption.VarBinary] = typeof(SqlBinary),
             [SqlDataTypeOption.VarChar] = typeof(SqlString),
-            [SqlDataTypeOption.Sql_Variant] = typeof(object),
+            [SqlDataTypeOption.Sql_Variant] = typeof(SqlVariant),
         };
 
         /// <summary>
@@ -1581,6 +1581,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [typeof(SqlDate)] = DataTypeHelpers.Date,
             [typeof(SqlTime)] = DataTypeHelpers.Time(7),
             [typeof(SqlXml)] = DataTypeHelpers.Xml,
+            [typeof(SqlVariant)] = DataTypeHelpers.Variant,
         };
 
         /// <summary>

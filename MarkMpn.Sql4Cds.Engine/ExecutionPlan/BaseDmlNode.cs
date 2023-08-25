@@ -419,8 +419,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         if (sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference))
                         {
+                            convertedExpr = expr;
                             expr = originalExpr;
-                            convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, sourceSqlType);
                             convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(EntityReference));
                         }
                         else if (sourceSqlType == DataTypeHelpers.ImplicitIntForNullLiteral)
