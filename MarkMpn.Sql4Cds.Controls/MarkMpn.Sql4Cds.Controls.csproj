@@ -171,4 +171,7 @@
     <EmbeddedResource Include="Images\XmlWriterNode.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.Controls.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
+  </PropertyGroup>
 </Project>
