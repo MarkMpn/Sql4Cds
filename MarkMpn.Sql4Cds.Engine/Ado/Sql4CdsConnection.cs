@@ -125,7 +125,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var svc = dataSource.Connection as ServiceClient;
 
             if (svc != null)
-                return new Uri(svc.ConnectedOrgUriActual).Host;
+                return svc.ConnectedOrgUriActual.Host;
 #else
             var svc = dataSource.Connection as CrmServiceClient;
 

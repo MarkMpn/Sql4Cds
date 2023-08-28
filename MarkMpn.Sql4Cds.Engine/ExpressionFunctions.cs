@@ -923,7 +923,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
 #if NETCOREAPP
                     if (svc != null)
-                        machineName = new Uri(svc.ConnectedOrgUriActual).Host;
+                        machineName = svc.ConnectedOrgUriActual.Host;
 #else
                     if (svc != null)
                         machineName = svc.CrmConnectOrgUriActual.Host;
