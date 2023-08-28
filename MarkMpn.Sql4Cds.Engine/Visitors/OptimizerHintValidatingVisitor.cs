@@ -54,6 +54,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // Custom hint to keep trying all records in a DML batch even if one fails
             "CONTINUE_ON_ERROR",
+
+            // Custom hint to use legacy specialized update messages - https://learn.microsoft.com/en-us/power-apps/developer/data-platform/org-service/entity-operations-update-delete?tabs=late#legacy-update-messages
+            "USE_LEGACY_UPDATE_MESSAGES",
         };
 
         private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

@@ -5,6 +5,7 @@ using System.Linq;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -36,16 +37,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The column that contains the primary ID of the records to update
         /// </summary>
         [Category("Update")]
-        [Description("The column that contains the primary ID of the records to update")]
         [DisplayName("PrimaryId Source")]
+        [Description("The column that contains the primary ID of the records to update")]
         public string PrimaryIdSource { get; set; }
 
         /// <summary>
         /// The columns to update and the associated column to take the new value from
         /// </summary>
         [Category("Update")]
-        [Description("The columns to update and the associated column to take the new value from")]
         [DisplayName("Column Mappings")]
+        [Description("The columns to update and the associated column to take the new value from")]
         public IDictionary<string, UpdateMapping> ColumnMappings { get; } = new Dictionary<string, UpdateMapping>(StringComparer.OrdinalIgnoreCase);
 
         [Category("Update")]
@@ -68,6 +69,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("State Transitions")]
         public IDictionary<string, Transitions> StateTransitionsDisplay => StateTransitions == null ? null : StateTransitions.Values.ToDictionary(s => $"{s.Name} ({s.StatusCode})", s => new Transitions(s.Transitions.Keys.Select(t => $"{t.Name} ({t.StatusCode})").OrderBy(n => n)));
 
+        [Category("Update")]
+        [DisplayName("Use Legacy Update Messages")]
+        [Description("Use the legacy update messages for specialized attributes")]
+        public bool UseLegacyUpdateMessages { get; set; }
+
         protected override bool IgnoresSomeErrors => true;
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
@@ -85,6 +91,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             Source.AddRequiredColumns(context, requiredColumns);
+        }
+
+        public override IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            UseLegacyUpdateMessages = GetUseLegacyUpdateMessages(context, hints);
+
+            return base.FoldQuery(context, hints);
+        }
+
+        private bool GetUseLegacyUpdateMessages(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            if (queryHints == null)
+                return false;
+
+            var continueOnError = queryHints
+                .OfType<UseHintList>()
+                .Where(hint => hint.Hints.Any(s => s.Value.Equals("USE_LEGACY_UPDATE_MESSAGES", StringComparison.OrdinalIgnoreCase)))
+                .Any();
+
+            return continueOnError;
         }
 
         public override string Execute(NodeExecutionContext context, out int recordsAffected)
@@ -234,6 +260,71 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (requestedStatus != null && StateTransitions != null)
                                 AddStateTransitions(update, currentStatus, requestedStatus, requests);
+
+                            if (UseLegacyUpdateMessages)
+                            {
+                                // Replace updates for special attributes with dedicated messages
+                                for (var i = 0; i < requests.Count; i++)
+                                {
+                                    if (!(requests[i] is UpdateRequest updateReq))
+                                        continue;
+
+                                    if (updateReq.Target.Contains("ownerid"))
+                                    {
+                                        requests.Insert(i, new AssignRequest
+                                        {
+                                            Target = updateReq.Target.ToEntityReference(),
+                                            Assignee = updateReq.Target.GetAttributeValue<EntityReference>("ownerid")
+                                        });
+                                        updateReq.Target.Attributes.Remove("ownerid");
+                                        i++;
+                                    }
+
+                                    if (updateReq.Target.Contains("statecode") || updateReq.Target.Contains("statuscode"))
+                                    {
+                                        requests.Insert(i, new SetStateRequest
+                                        {
+                                            EntityMoniker = updateReq.Target.ToEntityReference(),
+                                            State = requestedState ?? currentState,
+                                            Status = requestedStatus ?? new OptionSetValue(-1)
+                                        });
+                                        updateReq.Target.Attributes.Remove("statecode");
+                                        updateReq.Target.Attributes.Remove("statuscode");
+                                        i++;
+                                    }
+
+                                    // SetParentSystemUserRequest SetParentTeamRequest, and SetBusinessSystemUserRequest have important extra parameters,
+                                    // so don't automatically convert to them. They should be called using the stored procedure syntax instead.
+
+                                    if (updateReq.Target.Contains("parentbusinessunitid") && updateReq.Target.LogicalName == "businessunitid")
+                                    {
+                                        requests.Insert(i, new SetParentBusinessUnitRequest
+                                        {
+                                            BusinessUnitId = updateReq.Target.Id,
+                                            ParentId = updateReq.Target.GetAttributeValue<EntityReference>("parentbusinessunitid").Id
+                                        });
+                                        updateReq.Target.Attributes.Remove("parentbusinessunitid");
+                                        i++;
+                                    }
+
+                                    if (updateReq.Target.Contains("businessunitid") && updateReq.Target.LogicalName == "equipment")
+                                    {
+                                        requests.Insert(i, new SetBusinessEquipmentRequest
+                                        {
+                                            BusinessUnitId = updateReq.Target.GetAttributeValue<EntityReference>("businessunitid").Id,
+                                            EquipmentId = updateReq.Target.Id
+                                        });
+                                        updateReq.Target.Attributes.Remove("businessunitid");
+                                        i++;
+                                    }
+
+                                    if (updateReq.Target.Attributes.Count == 0)
+                                    {
+                                        requests.RemoveAt(i);
+                                        i--;
+                                    }
+                                }
+                            }
 
                             if (requests.Count == 1)
                                 return requests[0];
@@ -501,6 +592,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 MaxDOP = MaxDOP,
                 PrimaryIdSource = PrimaryIdSource,
                 StateTransitions = StateTransitions,
+                UseLegacyUpdateMessages = UseLegacyUpdateMessages,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
