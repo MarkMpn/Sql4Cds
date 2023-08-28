@@ -64,6 +64,8 @@ namespace MarkMpn.Sql4Cds.XTB
         public FetchXml2SqlOptions FetchXml2SqlOptions { get; set; } = new FetchXml2SqlOptions();
 
         public ColumnOrdering ColumnOrdering { get; set; } = ColumnOrdering.Alphabetical;
+
+        public string DockLayout { get; set; }
     }
 
     public class TabContent
