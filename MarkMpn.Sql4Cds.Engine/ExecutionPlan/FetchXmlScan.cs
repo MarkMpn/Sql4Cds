@@ -200,11 +200,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// A list of table aliases that should be excluded from the schema
         /// </summary>
+        [Category("FetchXML Scan")]
+        [DisplayName("Hidden Aliases")]
+        [Description("A list of table aliases that should be excluded from the schema")]
         public List<string> HiddenAliases { get; } = new List<string>();
 
         /// <summary>
         /// A list of additional columns that should be included in the schema
         /// </summary>
+        [Category("FetchXML Scan")]
+        [DisplayName("Column Mappings")]
+        [Description("A list of additional columns that should be included in the schema")]
         public List<SelectColumn> ColumnMappings { get; } = new List<SelectColumn>();
 
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
