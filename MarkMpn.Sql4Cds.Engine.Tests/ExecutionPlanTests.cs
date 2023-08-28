@@ -6072,13 +6072,13 @@ FROM   account AS r;";
             var loop = AssertNode<NestedLoopNode>(select.Source);
             Assert.AreEqual(QualifiedJoinType.Inner, loop.JoinType);
             Assert.IsNull(loop.JoinCondition);
-            Assert.AreEqual("@Expr1", loop.OuterReferences["Expr2"]);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["Expr1"]);
 
             var assert = AssertNode<AssertNode>(loop.LeftSource);
 
             var aggregate = AssertNode<StreamAggregateNode>(assert.Source);
-            Assert.AreEqual("contact.contactid", aggregate.Aggregates["Expr2"].SqlExpression.ToSql());
-            Assert.AreEqual(AggregateType.First, aggregate.Aggregates["Expr2"].AggregateType);
+            Assert.AreEqual("contact.contactid", aggregate.Aggregates["Expr1"].SqlExpression.ToSql());
+            Assert.AreEqual(AggregateType.First, aggregate.Aggregates["Expr1"].AggregateType);
 
             var contactFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(contactFetch, @"

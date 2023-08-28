@@ -3079,6 +3079,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             ErrorMessage = "Subquery produced more than 1 row"
                         };
                         loopRightSource = assert;
+
+                        subqueryCol = outputcol;
                     }
 
                     // If the subquery is uncorrelated, add a table spool to cache the results
@@ -3107,7 +3109,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             JoinType = QualifiedJoinType.LeftOuter,
                             SemiJoin = true,
                             OutputRightSchema = false,
-                            DefinedValues = { [outputcol] = outputcol }
+                            DefinedValues = { [outputcol] = subqueryCol }
                         };
                     }
                 }
