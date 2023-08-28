@@ -1464,5 +1464,34 @@ SELECT   @n";
                 }
             }
         }
+
+        [TestMethod]
+        public void ExecSetState()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES ('Test', 'User'); SELECT @@IDENTITY";
+                var id = cmd.ExecuteScalar();
+
+                cmd.CommandText = @"
+DECLARE @id EntityReference
+SELECT TOP 1 @id = contactid FROM contact
+EXEC SetState @id, 1, 2";
+
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT statecode, statuscode FROM contact WHERE contactid = @id";
+                cmd.Parameters.Add(new Sql4CdsParameter("@id", id));
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.AreEqual(2, reader.GetInt32(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

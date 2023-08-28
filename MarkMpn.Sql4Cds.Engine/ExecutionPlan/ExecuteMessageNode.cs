@@ -121,11 +121,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _inputParameters = Values
                 .ToDictionary(value => value.Key, value =>
                 {
-                    var exprType = value.Value.GetType(expressionContext, out _);
-                    var expectedType = ValueTypes[value.Key];
+                    var sourceSqlType = value.Value.GetType(expressionContext, out _);
+                    var destNetType = ValueTypes[value.Key];
+                    var destSqlType = SqlTypeConverter.NetToSqlType(destNetType);
                     var expr = value.Value.Compile(expressionContext);
-                    var conversion = SqlTypeConverter.GetConversion(exprType, expectedType);
-                    return (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => conversion(expr(ctx)));
+                    var sqlConversion = SqlTypeConverter.GetConversion(sourceSqlType, destSqlType);
+                    var netConversion = SqlTypeConverter.GetConversion(destSqlType, destNetType);
+                    return (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => netConversion(sqlConversion(expr(ctx))));
                 });
 
             BypassCustomPluginExecution = GetBypassPluginExecution(hints, context.Options);

@@ -214,7 +214,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.Object:
-                        _dataType = DataTypeHelpers.Object(GetValue().GetType());
+                        if (Value is EntityReference || Value is SqlEntityReference)
+                            _dataType = DataTypeHelpers.EntityReference;
+                        else
+                            _dataType = DataTypeHelpers.Object(GetValue().GetType());
                         break;
 
                     case DbType.SByte:

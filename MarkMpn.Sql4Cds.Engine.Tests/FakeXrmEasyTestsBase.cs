@@ -68,6 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.CallerId = new EntityReference("systemuser", Guid.NewGuid());
             _context.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
             _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
+            _context.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service = _context.GetOrganizationService();
             _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
@@ -77,6 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context2.CallerId = _context.CallerId;
             _context2.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
             _context2.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
+            _context2.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service2 = _context2.GetOrganizationService();
             _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
@@ -86,6 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context3.CallerId = _context.CallerId;
             _context3.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
             _context3.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
+            _context3.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service3 = _context3.GetOrganizationService();
             Collation.TryParse("French_CI_AI", out var frenchCIAI);

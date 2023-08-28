@@ -35,5 +35,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("createdon")]
         public DateTime? CreatedOn { get; set; }
+
+        [AttributeLogicalName("statecode")]
+        public OptionSetValue StateCode { get; set; }
+
+        [AttributeLogicalName("statuscode")]
+        public OptionSetValue StatusCode { get; set; }
     }
 }

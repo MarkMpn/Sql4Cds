@@ -231,13 +231,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
-            if (lhsUser != null && (lhsUser.Name.Identifiers.Count != 1 || lhsUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+            if (lhsUser != null && !lhsUser.IsSameAs(DataTypeHelpers.EntityReference))
             {
                 consistent = null;
                 return false;
             }
 
-            if (rhsUser != null && (rhsUser.Name.Identifiers.Count != 1 || rhsUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+            if (rhsUser != null && !rhsUser.IsSameAs(DataTypeHelpers.EntityReference))
             {
                 consistent = null;
                 return false;
@@ -360,7 +360,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return String.Join(".", fromUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", toUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
 
             // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
-            if (fromUser != null && (fromUser.Name.Identifiers.Count != 1 || fromUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+            if (fromUser != null && !fromUser.IsSameAs(DataTypeHelpers.EntityReference))
                 return false;
 
             // Nothing can be converted to SqlEntityReference
@@ -1285,6 +1285,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = (Expression)Expression.Convert(expression, typeof(string));
                 expression = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(destType), expression, Expression.Constant(true));
                 expression = Expression.Convert(expression, destType);
+            }
+            else if (expression.Type == typeof(SqlInt32) && destType == typeof(OptionSetValue))
+            {
+                var nullCheck = NullCheck(expression);
+                var nullValue = (Expression)Expression.Constant(null, destType);
+                var parsedValue = (Expression)Expression.Convert(expression, typeof(int));
+                parsedValue = Expression.New(typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }), parsedValue);
+                expression = Expression.Condition(nullCheck, nullValue, parsedValue);
             }
             else
             {

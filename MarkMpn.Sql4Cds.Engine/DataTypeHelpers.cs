@@ -72,7 +72,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static UserDataTypeReference Object(Type type)
         {
-            return new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = type.FullName } } } };
+            return Object(type.FullName);
+        }
+
+        private static UserDataTypeReference Object(string name)
+        {
+            return new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = name } } } };
         }
 
         public static SqlDataTypeReference Float { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
@@ -92,7 +97,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Time, Parameters = { new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
         }
 
-        public static UserDataTypeReference EntityReference { get; } = Object(typeof(SqlEntityReference));
+        public static UserDataTypeReference EntityReference { get; } = Object(nameof(EntityReference));
 
         public static XmlDataTypeReference Xml { get; } = new XmlDataTypeReference();
 
@@ -241,7 +246,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (!(type is SqlDataTypeReference dataType))
             {
-                if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                if (type.IsSameAs(EntityReference))
                     dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
                 else if (type is XmlDataTypeReference)
                     return Int32.MaxValue;
