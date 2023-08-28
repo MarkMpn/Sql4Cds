@@ -3049,21 +3049,20 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                         loopRightSource = top;
                         
-                        subqueryCol = context.GetExpressionName();
                         var rowCountCol = context.GetExpressionName();
                         var aggregate = new HashMatchAggregateNode
                         {
                             Source = loopRightSource,
                             Aggregates =
                             {
-                                [subqueryCol] = new Aggregate
+                                [outputcol] = new Aggregate
                                 {
                                     AggregateType = AggregateType.First,
                                     SqlExpression = new ColumnReferenceExpression
                                     {
                                         MultiPartIdentifier = new MultiPartIdentifier
                                         {
-                                            Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
+                                            Identifiers = { new Identifier { Value = subqueryCol } }
                                         }
                                     }
                                 },
@@ -3108,7 +3107,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             JoinType = QualifiedJoinType.LeftOuter,
                             SemiJoin = true,
                             OutputRightSchema = false,
-                            DefinedValues = { [outputcol] = subqueryCol }
+                            DefinedValues = { [outputcol] = outputcol }
                         };
                     }
                 }

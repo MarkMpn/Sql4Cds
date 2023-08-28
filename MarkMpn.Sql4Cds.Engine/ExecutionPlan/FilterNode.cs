@@ -189,7 +189,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             nestedLoop = null;
 
             if (Source is NestedLoopNode sourceLoop &&
-                sourceLoop.JoinType == QualifiedJoinType.LeftOuter &&
+                (sourceLoop.JoinType == QualifiedJoinType.LeftOuter || sourceLoop.JoinType == QualifiedJoinType.Inner) &&
                 sourceLoop.SemiJoin &&
                 sourceLoop.JoinCondition == null &&
                 sourceLoop.OuterReferences.Count == 0 &&
