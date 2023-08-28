@@ -182,13 +182,13 @@ namespace MarkMpn.Sql4Cds.XTB
                         try
                         {
                             query.RestoreSessionDetails(Settings.Instance.Session[contentIndex++]);
+                            return (IDockContent)query;
                         }
                         catch
                         {
                             ((Form)query).Close();
+                            return null;
                         }
-
-                        return (IDockContent)query;
                     });
                 }
             }
@@ -233,7 +233,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 }
             }
 
-            if (dockPanel.DocumentsCount == 0)
+            if (!dockPanel.Contents.OfType<IDocumentWindow>().Any())
                 CreateQuery(_objectExplorer.SelectedConnection, null);
         }
 
@@ -459,7 +459,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private void saveAllToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var unsavedDocuments = dockPanel.Documents
+            var unsavedDocuments = dockPanel.Contents
                 .OfType<ISaveableDocumentWindow>()
                 .Where(query => query.Modified)
                 .ToArray();
@@ -625,7 +625,7 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             if (Settings.Instance.RememberSession)
             {
-                Settings.Instance.Session = dockPanel.Documents.OfType<IDocumentWindow>().Select(query => query.GetSessionDetails()).ToArray();
+                Settings.Instance.Session = dockPanel.Contents.OfType<IDocumentWindow>().Select(query => query.GetSessionDetails()).ToArray();
 
                 using (var memoryStream = new MemoryStream())
                 {
@@ -643,7 +643,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         public override void ClosingPlugin(PluginCloseInfo info)
         {
-            if (!ConfirmBulkClose(dockPanel.DocumentsToArray(), info.Silent))
+            if (!ConfirmBulkClose(dockPanel.Contents.OfType<IDocumentWindow>().Cast<IDockContent>().ToArray(), info.Silent))
             {
                 info.Cancel = true;
                 return;
@@ -872,7 +872,7 @@ in
                 }
             }
 
-            var unsavedDocuments = dockPanel.Documents
+            var unsavedDocuments = dockPanel.Contents
                 .OfType<ISaveableDocumentWindow>()
                 .Where(query => query.Modified)
                 .ToArray();

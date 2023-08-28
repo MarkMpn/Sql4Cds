@@ -148,7 +148,7 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             base.OnClosing(e);
 
-            if (Modified && this is ISaveableDocumentWindow saveable)
+            if (Modified && !Settings.Instance.RememberSession && this is ISaveableDocumentWindow saveable)
             {
                 using (var form = new ConfirmCloseForm(new[] { DisplayName }, true))
                 {
