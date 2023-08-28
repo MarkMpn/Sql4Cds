@@ -1445,6 +1445,10 @@ SELECT   @n";
                     Assert.AreEqual(typeof(object), reader.GetFieldType(0));
                     Assert.AreEqual("sql_variant", reader.GetDataTypeName(0));
 
+                    var schema = reader.GetSchemaTable();
+                    Assert.AreEqual(typeof(object), schema.Rows[0]["DataType"]);
+                    Assert.AreEqual(typeof(object), schema.Rows[0]["ProviderSpecificDataType"]);
+
                     Assert.IsTrue(reader.Read());
 
                     Assert.AreEqual(1, reader.GetInt32(0));

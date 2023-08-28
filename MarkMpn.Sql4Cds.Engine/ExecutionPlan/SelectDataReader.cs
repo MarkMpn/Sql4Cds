@@ -252,10 +252,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var column = _columnSet[i];
                 var sqlType = _schema.Schema[_columnSet[i].SourceColumn].Type;
                 var providerType = sqlType.ToNetType(out _);
-                var type = providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml) ? providerType : SqlTypeConverter.SqlToNetType(providerType);
+                var type = providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml) ? providerType : providerType == typeof(SqlVariant) ? typeof(object) : SqlTypeConverter.SqlToNetType(providerType);
                 var size = sqlType.GetSize();
                 var precision = sqlType.GetPrecision(255);
                 var scale = sqlType.GetScale(255);
+
+                if (providerType == typeof(SqlVariant))
+                    providerType = typeof(object);
 
                 schemaTable.Rows.Add(new object[]
                 {
