@@ -121,6 +121,18 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SqlString GetServerName(DataSource dataSource)
         {
+#if NETCOREAPP
+            var svc = dataSource.Connection as ServiceClient;
+
+            if (svc != null)
+                return new Uri(svc.ConnectedOrgUriActual).Host;
+#else
+            var svc = dataSource.Connection as CrmServiceClient;
+
+            if (svc != null)
+                return svc.CrmConnectOrgUriActual.Host;
+#endif
+
             return dataSource.Name;
         }
 

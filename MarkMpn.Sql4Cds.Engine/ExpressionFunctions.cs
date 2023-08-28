@@ -886,19 +886,27 @@ namespace MarkMpn.Sql4Cds.Engine
             if (propertyName.IsNull)
                 return SqlVariant.Null;
 
+            var dataSource = context.PrimaryDataSource;
+
+#if NETCOREAPP
+            var svc = dataSource.Connection as ServiceClient;
+#else
+            var svc = dataSource.Connection as CrmServiceClient;
+#endif
+
             switch (propertyName.Value.ToLowerInvariant())
             {
                 case "collation":
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), context.PrimaryDataSource.DefaultCollation.ToSqlString(context.PrimaryDataSource.DefaultCollation.Name));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(dataSource.DefaultCollation.Name));
 
                 case "collationid":
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(context.PrimaryDataSource.DefaultCollation.LCID));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(dataSource.DefaultCollation.LCID));
 
                 case "comparisonstyle":
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32((int)context.PrimaryDataSource.DefaultCollation.CompareOptions));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32((int)dataSource.DefaultCollation.CompareOptions));
 
                 case "edition":
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), context.PrimaryDataSource.DefaultCollation.ToSqlString("Enterprise Edition"));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString("Enterprise Edition"));
 
                 case "editionid":
                     return new SqlVariant(DataTypeHelpers.BigInt, new SqlInt64(1804890536));
@@ -911,30 +919,38 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 case "machinename":
                 case "servername":
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), context.PrimaryDataSource.DefaultCollation.ToSqlString(context.PrimaryDataSource.Name));
+                    string machineName = dataSource.Name;
+
+#if NETCOREAPP
+                    if (svc != null)
+                        machineName = new Uri(svc.ConnectedOrgUriActual).Host;
+#else
+                    if (svc != null)
+                        machineName = svc.CrmConnectOrgUriActual.Host;
+#endif
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(machineName));
 
                 case "pathseparator":
-                    return new SqlVariant(DataTypeHelpers.NVarChar(1, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), context.PrimaryDataSource.DefaultCollation.ToSqlString(Path.DirectorySeparatorChar.ToString()));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(1, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(Path.DirectorySeparatorChar.ToString()));
 
                 case "processid":
                     return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(System.Diagnostics.Process.GetCurrentProcess().Id));
 
                 case "productversion":
-
                     string orgVersion = null;
 
 #if NETCOREAPP
-                    if (context.PrimaryDataSource.Connection is ServiceClient svc)
+                    if (svc != null)
                         orgVersion = svc.ConnectedOrgVersion.ToString();
 #else
-                    if (context.PrimaryDataSource.Connection is CrmServiceClient svc)
+                    if (svc != null)
                         orgVersion = svc.ConnectedOrgVersion.ToString();
 #endif
 
                     if (orgVersion == null)
-                        orgVersion = ((RetrieveVersionResponse)context.PrimaryDataSource.Execute(new RetrieveVersionRequest())).Version;
+                        orgVersion = ((RetrieveVersionResponse)dataSource.Execute(new RetrieveVersionRequest())).Version;
 
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), context.PrimaryDataSource.DefaultCollation.ToSqlString(orgVersion));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(orgVersion));
             }
 
             return SqlVariant.Null;
