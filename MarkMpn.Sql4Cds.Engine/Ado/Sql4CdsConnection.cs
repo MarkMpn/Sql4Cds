@@ -71,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 ["@@IDENTITY"] = DataTypeHelpers.EntityReference,
                 ["@@ROWCOUNT"] = DataTypeHelpers.Int,
                 ["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
-                ["@@VERSION"] = DataTypeHelpers.NVarChar(100, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
+                ["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
             };
             _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {
@@ -116,7 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var assemblyFilename = assembly.Location;
             var assemblyDate = System.IO.File.GetLastWriteTime(assemblyFilename);
 
-            return $"SQL 4 CDS - {assemblyVersion}   {assemblyDate}   {assemblyCopyright} (connected org version {orgVersion})";
+            return $"Microsoft Dataverse - {orgVersion}\r\n\tSQL 4 CDS - {assemblyVersion}\r\n\t{assemblyDate:MMM dd yyyy HH:mm:ss}\r\n\t{assemblyCopyright}";
         }
 
         private SqlString GetServerName(DataSource dataSource)

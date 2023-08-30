@@ -74,7 +74,7 @@ namespace MarkMpn.Sql4Cds.Engine
             parameterTypes["@@IDENTITY"] = DataTypeHelpers.EntityReference;
             parameterTypes["@@ROWCOUNT"] = DataTypeHelpers.Int;
             parameterTypes["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
-            parameterTypes["@@VERSION"] = DataTypeHelpers.NVarChar(100, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
+            parameterTypes["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
 
             var queries = new List<IRootExecutionPlanNodeInternal>();
 
