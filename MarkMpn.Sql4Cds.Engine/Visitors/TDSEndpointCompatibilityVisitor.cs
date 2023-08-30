@@ -203,7 +203,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void Visit(GlobalVariableExpression node)
         {
-            if (node.Name.Equals("@@IDENTITY", StringComparison.OrdinalIgnoreCase))
+            if (node.Name.Equals("@@IDENTITY", StringComparison.OrdinalIgnoreCase) ||
+                node.Name.Equals("@@SERVERNAME", StringComparison.OrdinalIgnoreCase))
             {
                 IsCompatible = false;
                 return;
