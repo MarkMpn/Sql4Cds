@@ -728,7 +728,10 @@ namespace MarkMpn.Sql4Cds.XTB
                 var messageSuffix = "";
                 IRootExecutionPlanNode plan = null;
 
-                if (e.Error is QueryException queryException)
+                if (error is Sql4CdsException sql4CdsException)
+                    error = sql4CdsException.InnerException;
+
+                if (error is QueryException queryException)
                 {
                     plan = queryException.Query;
                     index = _params.Offset + queryException.Query.Index;
@@ -743,6 +746,8 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
                     ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan?.Sql }, null, null, queryExecution);
+                    index = _params.Offset + plan.Index;
+                    length = plan.Length;
 
                     if (queryExecution.InnerException != null)
                         error = queryExecution.InnerException;
