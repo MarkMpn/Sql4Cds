@@ -1039,6 +1039,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     else if (e.Value is bool b)
                     {
                         e.Value = b ? "1" : "0";
+                        e.FormattingApplied = true;
                     }
                     else if (e.Value is DateTime dt)
                     {
@@ -1051,6 +1052,8 @@ namespace MarkMpn.Sql4Cds.XTB
                                 e.Value = dt.ToShortDateString();
                             else
                                 e.Value = dt.ToString("yyyy-MM-dd");
+
+                            e.FormattingApplied = true;
                         }
                         else if (type == "smalldatetime")
                         {
@@ -1058,11 +1061,14 @@ namespace MarkMpn.Sql4Cds.XTB
                                 e.Value = dt.ToShortDateString() + " " + dt.ToString("HH:mm");
                             else
                                 e.Value = dt.ToString("yyyy-MM-dd HH:mm");
+
+                            e.FormattingApplied = true;
                         }
                         else if (!Settings.Instance.LocalFormatDates)
                         {
                             var scale = (short)schema["NumericScale"];
                             e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', scale))));
+                            e.FormattingApplied = true;
                         }
                     }
                     else if (e.Value is TimeSpan ts && !Settings.Instance.LocalFormatDates)
@@ -1070,12 +1076,14 @@ namespace MarkMpn.Sql4Cds.XTB
                         var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
                         var scale = (short)schema["NumericScale"];
                         e.Value = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
+                        e.FormattingApplied = true;
                     }
                     else if (e.Value is decimal dec)
                     {
                         var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
                         var scale = (short)schema["NumericScale"];
                         e.Value = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
+                        e.FormattingApplied = true;
                     }
                     else if (e.Value is SqlEntityReference)
                     {
@@ -1087,6 +1095,32 @@ namespace MarkMpn.Sql4Cds.XTB
                         e.CellStyle.ForeColor = SystemColors.HotTrack;
                         e.CellStyle.Font = linkFont;
                         e.Value = xml.Value;
+                        e.FormattingApplied = true;
+                    }
+                };
+
+                var specialPaintingChars = new[] { '\r', '\n', '\t' };
+                grid.CellPainting += (s, e) =>
+                {
+                    if (e.Value is string str && str.IndexOfAny(specialPaintingChars) != -1)
+                    {
+                        e.PaintBackground(e.ClipBounds, true);
+
+                        var gv = (DataGridView)s;
+                        var text = str.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
+                        var rect = e.CellBounds;
+                        rect.X += BorderThickness(e.AdvancedBorderStyle.Left);
+                        rect.Y += BorderThickness(e.AdvancedBorderStyle.Top);
+                        rect.Width -= BorderThickness(e.AdvancedBorderStyle.Right) + BorderThickness(e.AdvancedBorderStyle.Left) + gv.Columns[e.ColumnIndex].DividerWidth;
+                        rect.Height -= BorderThickness(e.AdvancedBorderStyle.Bottom) + BorderThickness(e.AdvancedBorderStyle.Top) + gv.Rows[e.RowIndex].DividerHeight;
+                        rect.X += e.CellStyle.Padding.Left;
+                        rect.Y += e.CellStyle.Padding.Top;
+                        rect.Width -= e.CellStyle.Padding.Horizontal + e.CellStyle.Padding.Left;
+                        rect.Height -= e.CellStyle.Padding.Vertical + e.CellStyle.Padding.Top;
+                        var selected = (e.State & DataGridViewElementStates.Selected) != 0;
+                        var textFormatFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.EndEllipsis;
+                        TextRenderer.DrawText(e.Graphics, text, e.CellStyle.Font, rect, selected ? e.CellStyle.SelectionForeColor : e.CellStyle.ForeColor, textFormatFlags);
+                        e.Handled = true;
                     }
                 };
 
@@ -1197,6 +1231,20 @@ namespace MarkMpn.Sql4Cds.XTB
                 plan.Controls.Add(fetchLabel);
 
                 AddExecutionPlan(plan);
+            }
+        }
+
+        private int BorderThickness(DataGridViewAdvancedCellBorderStyle style)
+        {
+            switch (style)
+            {
+                case DataGridViewAdvancedCellBorderStyle.None:
+                    return 0;
+                case DataGridViewAdvancedCellBorderStyle.InsetDouble:
+                case DataGridViewAdvancedCellBorderStyle.OutsetDouble:
+                    return 2;
+                default:
+                    return 1;
             }
         }
 
