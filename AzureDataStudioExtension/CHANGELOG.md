@@ -1,5 +1,29 @@
 # Change Log
 
+## [v7.5.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.0) - 2023-09-03
+
+Added `sql_variant` type support, including `SQL_VARIANT_PROPERTY` function
+Added `IS [NOT] DISTINCT FROM` predicate support
+Added `@@SERVERNAME` and `@@VERSION` global variables
+Added `SERVERPROPERTY` function support
+Added `USE_LEGACY_UPDATE_MESSAGES` query hint to use legacy update messages `Assign`, `SetState`, `SetParentBusinessUnit` and `SetBusinessEquipment`
+
+Subquery fixes:
+- Only include requested columns from `CROSS APPLY` and query-defined tables
+- Performance improvements for uncorrelated scalar subqueries
+- Only retrieve minimal rows for scalar subqueries
+- Fixed use of nested `IN` and `EXISTS` subqueries
+
+Fixed use of table-valued function with alias
+Fixed `JSON_VALUE` function with embedded null literals
+Fixed bulk DML operations that require non-standard requests
+Do not use merge joins for data types with different sort ordering
+Fixed filtering and sorting on non-lowercase attributes
+Fixed executing messages with OptionSetValue parameters
+Improved error reporting on batch DML statements
+
+Added autocomplete for collation names and variable names
+
 ## [v7.4.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.4.0) - 2023-08-05
 
 Added support for long-term retention data
