@@ -635,9 +635,10 @@ namespace MarkMpn.Sql4Cds.XTB
                     }
                     else if (clause == "select")
                     {
-                        // In the SELECT clause with no tables, just offer known functions
+                        // In the SELECT clause with no tables, just offer known functions and variables
                         var items = new List<SqlAutocompleteItem>();
                         items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
+                        items.AddRange(AutocompleteVariableName(currentWord, text.Substring(0, pos)));
                         return FilterList(items, currentWord).OrderBy(x => x);
                     }
                     else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
