@@ -165,7 +165,7 @@ namespace MarkMpn.Sql4Cds.XTB
                         if (name == _properties.GetType().FullName)
                             return _properties;
 
-                        if (!Settings.Instance.RememberSession)
+                        if (!Settings.Instance.RememberSession || Settings.Instance.Session == null)
                             return null;
 
                         IDocumentWindow query = null;
@@ -197,7 +197,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _objectExplorer.Show(dockPanel, DockState.DockLeft);
                 _properties.Show(dockPanel, DockState.DockRightAutoHide);
 
-                if (Settings.Instance.RememberSession)
+                if (Settings.Instance.RememberSession && Settings.Instance.Session != null)
                 {
                     foreach (var tab in Settings.Instance.Session)
                     {
