@@ -87,7 +87,7 @@
   </ItemGroup>
   <Import Project="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems" Label="Shared" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.Engine.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)Microsoft.ApplicationInsights.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)Microsoft.SqlServer.TransactSql.ScriptDom.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds

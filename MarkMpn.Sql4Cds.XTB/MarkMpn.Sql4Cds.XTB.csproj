@@ -295,7 +295,7 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
   </PropertyGroup>
 </Project>

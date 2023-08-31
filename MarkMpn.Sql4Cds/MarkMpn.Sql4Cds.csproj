@@ -101,18 +101,6 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins
-
-copy $(SolutionDir)MarkMpn.Sql4Cds.XTB\$(OutDir)MarkMpn.Sql4Cds.XTB.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(SolutionDir)MarkMpn.Sql4Cds.XTB\$(OutDir)MarkMpn.Sql4Cds.Controls.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(SolutionDir)MarkMpn.Sql4Cds.XTB\$(OutDir)MarkMpn.Sql4Cds.Engine.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(SolutionDir)MarkMpn.Sql4Cds.XTB\$(OutDir)Microsoft.ApplicationInsights.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(SolutionDir)MarkMpn.Sql4Cds.XTB\$(OutDir)Microsoft.SqlServer.TransactSql.ScriptDom.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(SolutionDir)MarkMpn.Sql4Cds.XTB\$(OutDir)XPath2.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(SolutionDir)MarkMpn.Sql4Cds.XTB\$(OutDir)XPath2.Extensions.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-</PostBuildEvent>
-  </PropertyGroup>
-  <PropertyGroup>
-    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins
 </PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
