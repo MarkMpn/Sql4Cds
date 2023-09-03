@@ -301,7 +301,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         entityName = FindEntityWithAttributeAlias(fetchXml, attrName);
                     }
 
-                    var fetchSort = new FetchOrderType { attribute = attrName.ToLowerInvariant(), descending = sortOrder.SortOrder == SortOrder.Descending };
+                    var fetchSort = new FetchOrderType { attribute = attrName, descending = sortOrder.SortOrder == SortOrder.Descending };
 
                     if (fetchXml.FetchXml.aggregate)
                     {

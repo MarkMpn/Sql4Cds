@@ -21,6 +21,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Merge Join")]
         public bool ManyToMany { get; private set; }
 
+        public MergeJoinNode() { }
+
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             // https://sqlserverfast.com/epr/merge-join/
@@ -29,10 +31,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // TODO: Handle union & concatenate
 
             // Left & Right: GetNext, mark as unmatched
-            var leftSchema = LeftSource.GetSchema(context);
-            var rightSchema = RightSource.GetSchema(context);
             var left = LeftSource.Execute(context).GetEnumerator().WithPeekAhead();
             var right = RightSource.Execute(context).GetEnumerator().WithPeekAhead();
+            var leftSchema = LeftSource.GetSchema(context);
+            var rightSchema = RightSource.GetSchema(context);
             var mergedSchema = GetSchema(context, true);
             var expressionCompilationContext = new ExpressionCompilationContext(context, mergedSchema, null);
             var expressionExecutionContext = new ExpressionExecutionContext(context);
@@ -215,6 +217,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (folded != this)
                 return folded;
 
+            // Can't use a merge join if the join key types have different sort orders
+            if (LeftAttribute != null && RightAttribute != null)
+            {
+                var leftSchema = LeftSource.GetSchema(context);
+                leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftColumn);
+                var leftType = leftSchema.Schema[leftColumn].Type;
+                
+                var rightSchema = RightSource.GetSchema(context);
+                rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightColumn);
+                var rightType = rightSchema.Schema[rightColumn].Type;
+
+                if (!IsConsistentSortTypes(leftType, rightType))
+                {
+                    var hashJoin = new HashJoinNode
+                    {
+                        LeftSource = LeftSource,
+                        RightSource = RightSource,
+                        LeftAttribute = LeftAttribute,
+                        RightAttribute = RightAttribute,
+                        JoinType = JoinType,
+                        AdditionalJoinCriteria = AdditionalJoinCriteria,
+                        SemiJoin = SemiJoin
+                    };
+
+                    foreach (var kvp in DefinedValues)
+                        hashJoin.DefinedValues.Add(kvp);
+
+                    hashJoin.LeftSource.Parent = hashJoin;
+                    hashJoin.RightSource.Parent = hashJoin;
+
+                    return hashJoin;
+                }
+            }
+
             // This is a many-to-many join if the left attribute is not unique
             if (LeftAttribute == null)
             {
@@ -288,6 +324,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        private bool IsConsistentSortTypes(DataTypeReference leftType, DataTypeReference rightType)
+        {
+            if (leftType.IsSameAs(rightType))
+                return true;
+
+            // Types can be different but have the same logical sort order, e.g. all numeric types
+            if (leftType.IsSameAs(DataTypeHelpers.UniqueIdentifier) && rightType.IsSameAs(DataTypeHelpers.EntityReference) ||
+                leftType.IsSameAs(DataTypeHelpers.EntityReference) && rightType.IsSameAs(DataTypeHelpers.UniqueIdentifier))
+                return true;
+
+            if (leftType is SqlDataTypeReference leftSqlType && rightType is SqlDataTypeReference rightSqlType)
+            {
+                if (leftSqlType.SqlDataTypeOption.IsNumeric() && rightSqlType.SqlDataTypeOption.IsNumeric())
+                    return true;
+
+                if (leftSqlType.SqlDataTypeOption.IsDateTimeType() && rightSqlType.SqlDataTypeOption.IsDateTimeType())
+                    return true;
+
+                // Collations need to be the same for string types, but can be different lengths
+                if (leftSqlType.SqlDataTypeOption.IsStringType() && rightSqlType.SqlDataTypeOption.IsStringType() &&
+                    leftType is SqlDataTypeReferenceWithCollation leftCollation && rightType is SqlDataTypeReferenceWithCollation rightCollation &&
+                    leftCollation.Collation.Equals(rightCollation.Collation))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         protected override IReadOnlyList<string> GetSortOrder(INodeSchema outerSchema, INodeSchema innerSchema)

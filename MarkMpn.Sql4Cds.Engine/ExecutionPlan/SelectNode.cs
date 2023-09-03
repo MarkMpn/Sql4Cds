@@ -107,8 +107,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // Check if there are any aliases we can apply to the source FetchXml
                 var schema = fetchXml.GetSchema(context);
-                var hasStar = columnSet.Any(col => col.AllColumns && col.SourceColumn == null);
-                var aliasStars = new HashSet<string>(columnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+                var hasStar = columnSet.Any(col => col.AllColumns && col.SourceColumn == null) && fetchXml.HiddenAliases.Count == 0;
+                var aliasStars = new HashSet<string>(columnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase).Except(fetchXml.HiddenAliases), StringComparer.OrdinalIgnoreCase);
 
                 foreach (var col in columnSet)
                 {
@@ -127,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 link.AddItem(new allattributes());
                             }
                         }
-                        else if (!hasStar)
+                        else if (!hasStar && !fetchXml.HiddenAliases.Contains(col.SourceColumn.Replace(".*", "")))
                         {
                             // Only add an all-attributes to the appropriate entity/link-entity
                             if (col.SourceColumn.Replace(".*", "").Equals(fetchXml.Alias, StringComparison.OrdinalIgnoreCase))
@@ -189,6 +189,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (!FetchXmlScan.IsValidAlias(c.Alias))
                                 return false; // Don't fold aliases if they contain invalid characters
+
+                            if (fetchXml.ColumnMappings.Any(m => m.OutputColumn == c.SourceColumn))
+                                return false; // Don't fold aliases if they're already aliased in the FetchXmlScan node
 
                             return true;
                         })
@@ -287,7 +290,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    foreach (var src in sourceSchema.Schema.Keys.Where(k => col.SourceColumn == null || k.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase)))
+                    foreach (var src in sourceSchema.Schema.Where(k => k.Value.IsVisible && (col.SourceColumn == null || k.Key.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase))).Select(k => k.Key))
                     {
                         // Columns might be available in the logical source schema but not in
                         // the real one, e.g. due to aggregation

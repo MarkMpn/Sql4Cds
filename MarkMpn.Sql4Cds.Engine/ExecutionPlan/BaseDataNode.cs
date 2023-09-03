@@ -56,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="context">The context in which the node is being executed</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        public IEnumerable<Entity> Execute(NodeExecutionContext context)
+        public virtual IEnumerable<Entity> Execute(NodeExecutionContext context)
         {
             if (context.Options.CancellationToken.IsCancellationRequested)
                 yield break;
@@ -249,6 +249,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return TranslateFetchXMLCriteria(context, metadata, paren.Expression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out condition, out filter);
             }
 
+            if (criteria is DistinctPredicate distinct)
+            {
+                // Same logic as = or <> but without the null check
+                criteria = new BooleanComparisonExpression
+                {
+                    FirstExpression = distinct.FirstExpression,
+                    SecondExpression = distinct.SecondExpression,
+                    ComparisonType = distinct.IsNot ? BooleanComparisonType.IsNotDistinctFrom : BooleanComparisonType.IsDistinctFrom
+                };
+            }
+
             if (criteria is BooleanComparisonExpression comparison)
             {
                 // Handle most comparison operators (=, <> etc.)
@@ -318,6 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 switch (type)
                 {
                     case BooleanComparisonType.Equals:
+                    case BooleanComparisonType.IsNotDistinctFrom:
                         op = @operator.eq;
                         break;
 
@@ -339,6 +351,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     case BooleanComparisonType.NotEqualToBrackets:
                     case BooleanComparisonType.NotEqualToExclamation:
+                    case BooleanComparisonType.IsDistinctFrom:
                         op = @operator.ne;
                         break;
 
@@ -362,7 +375,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (func != null && Enum.TryParse<@operator>(func.FunctionName.Value.ToLower(), out var customOperator))
                 {
-                    if (op == @operator.eq)
+                    if (type == BooleanComparisonType.Equals)
                     {
                         // If we've got the pattern `column = func()`, select the FetchXML operator from the function name
                         op = customOperator;
@@ -465,7 +478,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (field2 == null)
                 {
-                    return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, op, values, metadata, targetEntityAlias, items, out condition, out filter);
+                    return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, type, op, values, metadata, targetEntityAlias, items, out condition, out filter);
                 }
                 else
                 {
@@ -493,10 +506,71 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     condition = new condition
                     {
                         entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                        attribute = RemoveAttributeAlias(attrName.ToLowerInvariant(), entityAlias, targetEntityAlias, items),
+                        attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
                         @operator = op,
-                        ValueOf = RemoveAttributeAlias(attrName2.ToLowerInvariant(), entityAlias, targetEntityAlias, items)
+                        ValueOf = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items)
                     };
+
+                    if (op == @operator.ne && (type == BooleanComparisonType.NotEqualToBrackets || type == BooleanComparisonType.NotEqualToExclamation))
+                    {
+                        // FetchXML ne operator matches records where one field is null and the other is not null
+                        // This matches the logic for IS DISTINCT FROM, but <> and != require non-null values
+                        filter = new filter
+                        {
+                            type = filterType.and,
+                            Items = new object[]
+                            {
+                                condition,
+                                new condition
+                                {
+                                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                    attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                    @operator = @operator.notnull
+                                },
+                                new condition
+                                {
+                                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                    attribute = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items),
+                                    @operator = @operator.notnull
+                                }
+                            }
+                        };
+                        condition = null;
+                    }
+                    else if (op == @operator.eq && type == BooleanComparisonType.IsNotDistinctFrom)
+                    {
+                        // FetchXML eq operator does not match records where both fields are null.
+                        // This matches the logic for =, but IS DISTINCT FROM also allows nulls to match
+                        filter = new filter
+                        {
+                            type = filterType.or,
+                            Items = new object[]
+                            {
+                                condition,
+                                new filter
+                                {
+                                    type = filterType.and,
+                                    Items = new object[]
+                                    {
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.@null
+                                        },
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.@null
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                        condition = null;
+                    }
+
                     return true;
                 }
             }
@@ -532,7 +606,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var meta = metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, inPred.NotDefined ? @operator.notin : @operator.@in, inPred.Values.Cast<Literal>().ToArray(), metadata, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, inPred.NotDefined ? @operator.notin : @operator.@in, inPred.Values.Cast<Literal>().ToArray(), metadata, targetEntityAlias, items, out condition, out filter);
             }
 
             if (criteria is BooleanIsNullExpression isNull)
@@ -559,7 +633,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var meta = metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, isNull.IsNot ? @operator.notnull : @operator.@null, null, metadata, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, isNull.IsNot ? @operator.notnull : @operator.@null, null, metadata, targetEntityAlias, items, out condition, out filter);
             }
 
             if (criteria is LikePredicate like)
@@ -592,7 +666,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var meta = metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, metadata, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, metadata, targetEntityAlias, items, out condition, out filter);
             }
 
             if (criteria is FullTextPredicate ||
@@ -643,7 +717,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!(attr is MultiSelectPicklistAttributeMetadata))
                     return false;
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, not == null ? @operator.containvalues : @operator.notcontainvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), metadata, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, not == null ? @operator.containvalues : @operator.notcontainvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), metadata, targetEntityAlias, items, out condition, out filter);
             }
 
             return false;
@@ -683,6 +757,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="meta">The metadata for the target entity the condition is for</param>
         /// <param name="entityAlias">The alias of the entity in the query the condition is for</param>
         /// <param name="attrName">The logical name of the attribute the condition is for</param>
+        /// <param name="type">The original SQL comparison type</param>
         /// <param name="op">The condition operator to apply</param>
         /// <param name="literals">The values to compare the attribute value to</param>
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
@@ -691,7 +766,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="filter">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it covers multiple conditions</param>
         /// <param name="condition">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it is for a single condition only</param>
         /// <returns><c>true</c> if the condition can be translated to FetchXML, or <c>false</c> otherwise</returns>
-        private bool TranslateFetchXMLCriteriaWithVirtualAttributes(NodeCompilationContext context, EntityMetadata meta, string entityAlias, string attrName, @operator op, ValueExpression[] literals, IAttributeMetadataCache metadata, string targetEntityAlias, object[] items, out condition condition, out filter filter)
+        private bool TranslateFetchXMLCriteriaWithVirtualAttributes(NodeCompilationContext context, EntityMetadata meta, string entityAlias, string attrName, BooleanComparisonType? type, @operator op, ValueExpression[] literals, IAttributeMetadataCache metadata, string targetEntityAlias, object[] items, out condition condition, out filter filter)
         {
             condition = null;
             filter = null;
@@ -721,17 +796,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Can't fold queries on PartyList attributes
             if (attribute != null && attribute.AttributeType == AttributeTypeCode.PartyList)
                 return false;
-
+            
             var values = literals == null ? null : literals
                 .Select(lit => new conditionValue
                 {
-                    Value = lit is Literal lit1
-                    ? lit1.Value
-                    : lit is VariableReference var1
-                        ? var1.Name
-                        : lit is GlobalVariableExpression glob
-                            ? glob.Name
-                            : null,
+                    Value = lit is NullLiteral nullLit ? null
+                        : lit is Literal lit1 ? lit1.Value
+                        : lit is VariableReference var1 ? var1.Name
+                        : lit is GlobalVariableExpression glob ? glob.Name
+                        : null,
                     IsVariable = lit is VariableReference || lit is GlobalVariableExpression
                 })
                 .ToArray();
@@ -740,6 +813,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var isVariable = values == null || values.Length != 1 ? false : values[0].IsVariable;
 
             var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin || op == @operator.containvalues || op == @operator.notcontainvalues;
+
+            // col = null etc. is always false. Can't be translated to FetchXML. But col IS [NOT] DISTINCT FROM null can be translated.
+            if (!usesItems && values != null && values.Length == 1 && value == null)
+            {
+                if (op == @operator.ne && type == BooleanComparisonType.IsDistinctFrom)
+                    op = @operator.notnull;
+                else if (op == @operator.eq && type == BooleanComparisonType.IsNotDistinctFrom)
+                    op = @operator.@null;
+                else
+                    return false;
+            }
 
             if (attribute is DateTimeAttributeMetadata && literals != null &&
                 (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le || op == @operator.@in || op == @operator.notin))
@@ -917,7 +1001,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             condition = new condition
             {
                 entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                attribute = attrName.ToLowerInvariant(),
+                attribute = attrName,
                 @operator = op,
                 value = usesItems ? null : value,
                 Items = usesItems ? values : null,
@@ -930,7 +1014,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (meta.LogicalName == "solution" && linkName != null && !new FetchEntityType { Items = items }.GetLinkEntities(true).Any(link => link.alias == linkName))
                 return false;
 
-            if (op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid)
+            if ((op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid) && type != BooleanComparisonType.IsDistinctFrom)
             {
                 // FetchXML not-equal type operators treat NULL as not-equal to values, but T-SQL treats them as not-not-equal. Add
                 // an extra not-null condition to keep it compatible with T-SQL

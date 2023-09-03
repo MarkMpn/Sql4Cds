@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
@@ -41,6 +42,32 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         Type = typeof(int)
                     }
                 }.AsReadOnly()
+            };
+            _cache["SetState"] = new Message
+            {
+                Name = "SetState",
+                InputParameters = new List<MessageParameter>
+                {
+                    new MessageParameter
+                    {
+                        Name = "EntityMoniker",
+                        Position = 0,
+                        Type = typeof(EntityReference)
+                    },
+                    new MessageParameter
+                    {
+                        Name = "State",
+                        Position = 1,
+                        Type = typeof(OptionSetValue)
+                    },
+                    new MessageParameter
+                    {
+                        Name = "Status",
+                        Position = 2,
+                        Type = typeof(OptionSetValue)
+                    }
+                }.AsReadOnly(),
+                OutputParameters = new List<MessageParameter>().AsReadOnly()
             };
         }
 

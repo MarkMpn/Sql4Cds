@@ -36,7 +36,7 @@ namespace MarkMpn.Sql4Cds.Engine
         bool BlockUpdateWithoutWhere { get; }
 
         /// <summary>
-        /// Indicates if a DELETE statement cannot be execyted unless it has a WHERE clause
+        /// Indicates if a DELETE statement cannot be executed unless it has a WHERE clause
         /// </summary>
         bool BlockDeleteWithoutWhere { get; }
 

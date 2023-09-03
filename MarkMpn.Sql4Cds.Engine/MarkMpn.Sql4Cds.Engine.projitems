@@ -117,6 +117,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)IQueryExecutionOptions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MessageCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlDateTypes.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)SqlVariant.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)StateTransitionLoader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ExplicitCollationVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\JoinConditionVisitor.cs" />

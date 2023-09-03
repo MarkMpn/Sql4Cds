@@ -419,8 +419,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         if (sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference))
                         {
+                            convertedExpr = expr;
                             expr = originalExpr;
-                            convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, sourceSqlType);
                             convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(EntityReference));
                         }
                         else if (sourceSqlType == DataTypeHelpers.ImplicitIntForNullLiteral)
@@ -720,10 +720,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (error != null)
             {
-                if (ContinueOnError)
-                    fault = fault ?? error.Fault;
-                else
-                    throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
+                fault = fault ?? error.Fault;
+
+                if (!ContinueOnError)
+                    throw new FaultException<OrganizationServiceFault>(fault, new FaultReason(fault.Message));
             }
         }
 

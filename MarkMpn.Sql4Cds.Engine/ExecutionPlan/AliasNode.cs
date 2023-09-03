@@ -112,12 +112,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is FetchXmlScan fetchXml)
             {
-                // Check if all the source and output column names match. If so, just change the alias of the source FetchXML
-                if (ColumnSet.All(col => col.SourceColumn == $"{fetchXml.Alias}.{col.OutputColumn}"))
-                {
-                    fetchXml.Alias = Alias;
-                    return fetchXml;
-                }
+                FoldToFetchXML(fetchXml);
+                return fetchXml;
             }
 
             if (Source is ConstantScanNode constant)
@@ -156,6 +152,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        internal void FoldToFetchXML(FetchXmlScan fetchXml)
+        {
+            // Add the mappings to the FetchXML to produce the columns with the expected names, and hide all other possible columns
+            var originalAlias = fetchXml.Alias;
+            fetchXml.Alias = Alias;
+
+            foreach (var col in ColumnSet)
+            {
+                if (col.SourceColumn != null && col.SourceColumn.StartsWith(originalAlias + "."))
+                    col.SourceColumn = Alias + col.SourceColumn.Substring(originalAlias.Length);
+
+                if (col.AllColumns)
+                    col.OutputColumn = Alias;
+                else if (col.OutputColumn != null)
+                    col.OutputColumn = Alias + "." + col.OutputColumn;
+
+                fetchXml.ColumnMappings.Add(col);
+            }
+
+            fetchXml.HiddenAliases.Add(Alias);
+
+            foreach (var link in fetchXml.Entity.GetLinkEntities())
+                fetchXml.HiddenAliases.Add(link.alias);
         }
 
         public override INodeSchema GetSchema(NodeCompilationContext context)

@@ -203,7 +203,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void Visit(GlobalVariableExpression node)
         {
-            if (node.Name.Equals("@@IDENTITY", StringComparison.OrdinalIgnoreCase))
+            if (node.Name.Equals("@@IDENTITY", StringComparison.OrdinalIgnoreCase) ||
+                node.Name.Equals("@@SERVERNAME", StringComparison.OrdinalIgnoreCase))
             {
                 IsCompatible = false;
                 return;
@@ -298,6 +299,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             {
                 case "JSON_VALUE":
                 case "JSON_PATH_EXISTS":
+                case "SQL_VARIANT_PROPERTY":
                     IsCompatible = false;
                     break;
             }
@@ -308,6 +310,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public override void Visit(ForClause node)
         {
             // Can't use FOR XML clause
+            IsCompatible = false;
+        }
+
+        public override void Visit(DistinctPredicate node)
+        {
+            // Can't use IS [NOT] DISTINCT FROM
             IsCompatible = false;
         }
     }

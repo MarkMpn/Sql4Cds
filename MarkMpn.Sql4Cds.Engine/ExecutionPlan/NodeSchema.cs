@@ -115,11 +115,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
     class ColumnDefinition : IColumnDefinition
     {
-        public ColumnDefinition(DataTypeReference type, bool isNullable, bool isCalculated)
+        public ColumnDefinition(DataTypeReference type, bool isNullable, bool isCalculated, bool isVisible = true)
         {
             Type = type;
             IsNullable = isNullable;
             IsCalculated = isCalculated;
+            IsVisible = isVisible;
         }
 
         public DataTypeReference Type { get; }
@@ -127,6 +128,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public bool IsNullable { get; }
 
         public bool IsCalculated { get; }
+
+        public bool IsVisible { get; }
 
         public override string ToString()
         {
@@ -138,12 +141,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         public static IColumnDefinition NotNull(this IColumnDefinition col)
         {
-            return new ColumnDefinition(col.Type, false, col.IsCalculated);
+            return new ColumnDefinition(col.Type, false, col.IsCalculated, col.IsVisible);
         }
 
         public static IColumnDefinition Null(this IColumnDefinition col)
         {
-            return new ColumnDefinition(col.Type, true, col.IsCalculated);
+            return new ColumnDefinition(col.Type, true, col.IsCalculated, col.IsVisible);
         }
     }
 
@@ -207,6 +210,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Indicates if the column is the result of an internal calculation
         /// </summary>
         bool IsCalculated { get; }
+
+        /// <summary>
+        /// Indicates if the column is visible to the user for use in the SELECT clause
+        /// </summary>
+        bool IsVisible { get; }
     }
 
     class ColumnList : IDictionary<string, IColumnDefinition>, IReadOnlyDictionary<string, IColumnDefinition>

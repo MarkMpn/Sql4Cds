@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -160,7 +161,78 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Filter == null)
                 return Source;
 
+            if (FoldScalarSubqueries(context, out var nestedLoop))
+                return nestedLoop.FoldQuery(context, hints);
+
             return this;
+        }
+
+        private bool FoldScalarSubqueries(NodeCompilationContext context, out NestedLoopNode nestedLoop)
+        {
+            // If we have a filter condition that uses a non-correlated scalar subquery, e.g.
+            //
+            // SELECT * FROM account WHERE primarycontactid = (SELECT contactid FROM contact WHERE firstname = 'Mark')
+            //
+            // this will produce a query plan that looks like:
+            //
+            // SELECT ━━ FILTER ━━ NESTED LOOP ━━ FETCHXML (account)
+            //                          ┕━━ TABLE SPOOL ━━ ASSERT ━━ STREAM AGGREGATE ━━ FETCHXML (contact)
+            //
+            // Because the subquery is uncorrelated, we can move the subquery to the outer query and use the result to
+            // fold the filter down to the source. This will produce a query plan that looks like:
+            //
+            // SELECT ━━ NESTED LOOP ━━ ASSERT ━━ STREAM AGGREGATE ━━ FETCHXML (contact)
+            //                ┕━━ FILTER ━━ FETCHXML (account)
+            //
+            // The filter may then be able to be folded into the source FetchXML
+
+            nestedLoop = null;
+
+            if (Source is NestedLoopNode sourceLoop &&
+                (sourceLoop.JoinType == QualifiedJoinType.LeftOuter || sourceLoop.JoinType == QualifiedJoinType.Inner) &&
+                sourceLoop.SemiJoin &&
+                sourceLoop.JoinCondition == null &&
+                sourceLoop.OuterReferences.Count == 0 &&
+                sourceLoop.DefinedValues.Count == 1 &&
+                Filter.GetColumns().Contains(sourceLoop.DefinedValues.Single().Key) &&
+                sourceLoop.RightSource.EstimateRowsOut(context) is RowCountEstimateDefiniteRange subqueryEstimate &&
+                subqueryEstimate.Maximum == 1)
+            {
+                var scalarSubqueryCol = sourceLoop.DefinedValues.Single().Key;
+                var scalarSubquerySource = sourceLoop.DefinedValues.Single().Value;
+
+                // The filter would previously have been e.g. "primarycontactid = Expr1"
+                // Expr1 will now be provided to the inner loop as a parameter, so we need to rewrite the filter to use it as
+                // "primarycontactid = @Expr2"
+                var rewrite = new RewriteVisitor(new Dictionary<ScalarExpression, ScalarExpression>
+                {
+                    { new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = scalarSubqueryCol } } } }, new VariableReference { Name = "@" + scalarSubqueryCol } }
+                });
+                var filter = Filter.Clone();
+                filter.Accept(rewrite);
+
+                nestedLoop = new NestedLoopNode
+                {
+                    JoinType = QualifiedJoinType.Inner,
+                    OuterReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        { scalarSubquerySource, "@" + scalarSubqueryCol }
+                    },
+                    LeftSource = sourceLoop.RightSource,
+                    RightSource = filter == null ? sourceLoop.LeftSource : new FilterNode
+                    {
+                        Filter = filter,
+                        Source = sourceLoop.LeftSource
+                    }
+                };
+
+                if (nestedLoop.LeftSource is TableSpoolNode subquerySpool)
+                    nestedLoop.LeftSource = subquerySpool.Source;
+
+                return true;
+            }
+
+            return false;
         }
 
         private void ConvertOuterJoinsWithNonNullFiltersToInnerJoins(NodeCompilationContext context)

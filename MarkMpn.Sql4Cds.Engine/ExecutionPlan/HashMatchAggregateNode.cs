@@ -73,6 +73,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_folded)
                 return this;
 
+            // FoldQuery can be called again in some circumstances. Don't repeat the folding operation and create another try/catch
+            _folded = true;
+
             Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
@@ -485,9 +488,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                // FoldQuery can be called again in some circumstances. Don't repeat the folding operation and create another try/catch
-                _folded = true;
-
                 // Check how we should execute this aggregate if the FetchXML aggregate fails or is not available. Use stream aggregate
                 // for scalar aggregates or where all the grouping fields can be folded into sorts.
                 var nonFetchXmlAggregate = FoldToStreamAggregate(context, hints);
@@ -694,6 +694,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
+            if (!_folded)
+                return;
+
             // Columns required by previous nodes must be derived from this node, so no need to pass them through.
             // Just calculate the columns that are required to calculate the groups & aggregates
             var scalarRequiredColumns = new List<string>();
@@ -709,7 +712,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new HashMatchAggregateNode
             {
-                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                _folded = _folded
             };
 
             foreach (var kvp in Aggregates)

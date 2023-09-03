@@ -738,13 +738,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Return null literal if final value is null
             if (!value.Type.IsValueType)
-                value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), Expression.Constant(SqlTypeConverter.GetNullValue(targetType)), converted);
+                value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), Expression.Constant(SqlTypeConverter.GetNullValue(targetType), targetType), converted);
             else
                 value = converted;
 
             // Return null literal if original value is null
             if (!prop.PropertyType.IsValueType || prop.PropertyType.IsGenericType && prop.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
-                value = Expression.Condition(Expression.Equal(Expression.Property(param, prop), Expression.Constant(null)), Expression.Constant(SqlTypeConverter.GetNullValue(targetType)), value);
+                value = Expression.Condition(Expression.Equal(Expression.Property(param, prop), Expression.Constant(null)), Expression.Constant(SqlTypeConverter.GetNullValue(targetType), targetType), value);
 
             // Compile the function
             value = Expr.Box(value);

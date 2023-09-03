@@ -90,9 +90,11 @@
     <Compile Include="OptionsWrapper.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />
     <Compile Include="AdoProviderTests.cs" />
+    <Compile Include="SetStateMessageExecutor.cs" />
     <Compile Include="SampleMessageExecutor.cs" />
     <Compile Include="Sql2FetchXmlTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SqlVariantTests.cs" />
     <Compile Include="StubOptions.cs" />
     <Compile Include="StubMessageCache.cs" />
     <Compile Include="StubTableSizeCache.cs" />
@@ -102,10 +104,6 @@
     <None Include="Key.snk" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AutocompleteMenu\AutocompleteMenu-ScintillaNET.csproj">
-      <Project>{43cbc9aa-6a8e-463f-83a9-aff3124afdb6}</Project>
-      <Name>AutocompleteMenu-ScintillaNET</Name>
-    </ProjectReference>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
       <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
       <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>

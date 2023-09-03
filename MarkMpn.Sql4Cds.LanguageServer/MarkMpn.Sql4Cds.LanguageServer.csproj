@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
+    <Copyright>Copyright © 2022 - 2023 Mark Carrington</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

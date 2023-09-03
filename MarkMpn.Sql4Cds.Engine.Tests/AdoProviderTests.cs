@@ -835,6 +835,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void AliasedTVF()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT msg.* FROM SampleMessage('1') AS msg";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual(1, reader.GetInt32(1));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
         public void CorrelatedNotExistsTypeConversion()
         {
             using (var con = new Sql4CdsConnection(_localDataSource))
@@ -1302,6 +1321,176 @@ FOR XML PATH";
                 cmd.CommandText = "SELECT STRING_AGG(name, ', ') WITHIN GROUP (ORDER BY name DESC) FROM account";
                 var actual = cmd.ExecuteScalar();
                 Assert.AreEqual("C, B, A", actual);
+            }
+        }
+
+        [TestMethod]
+        public void JsonValueNull()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT JSON_VALUE('{ \"changedAttributes\": [ { \"logicalName\": \"column1\", \"oldValue\": null, \"newValue\": \"\" } ] }', '$.changedAttributes[0].oldValue')";
+                Assert.AreEqual(DBNull.Value, cmd.ExecuteScalar());
+            }
+        }
+
+        [TestMethod]
+        public void VariantType()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                // Can select two variant values of different types in the same column
+                cmd.CommandText = "SELECT SERVERPROPERTY('edition') UNION ALL SELECT SERVERPROPERTY('editionid')";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Enterprise Edition", reader.GetString(0));
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1804890536, reader.GetInt64(0));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void VariantComparisons()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                // Variant values are compared according to the type family hierarchy
+                // https://dba.stackexchange.com/questions/56722/why-does-implicit-conversion-from-sql-variant-basetype-decimal-not-work-well-w
+                cmd.CommandText = @"
+declare
+    @v sql_variant = convert(decimal(28,8), 20.0);
+
+select sql_variant_property(@v, 'BaseType') as BaseType,         -- 'decimal',
+       iif(convert(int, 10.0)     < @v, 1, 0) as ResultInt,      -- 1
+       iif(convert(decimal, 10.0) < @v, 1, 0) as  ResultDecimal, -- 1
+       iif(convert(float, 10.0)   < @v, 1, 0) as  ResultFloat,   -- 0 !
+       iif(convert(float, 10.0)   < convert(float, @v), 1, 0) as  ResultFloatFloat,  -- 1              
+       iif(convert(float, 10.0)   < convert(decimal(28,8), @v), 1, 0) as  ResultFloatDecimal;   -- 1";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    var i = 0;
+                    Assert.AreEqual("decimal", reader.GetString(i++));
+                    Assert.AreEqual(1, reader.GetInt32(i++));
+                    Assert.AreEqual(1, reader.GetInt32(i++));
+                    Assert.AreEqual(0, reader.GetInt32(i++));
+                    Assert.AreEqual(1, reader.GetInt32(i++));
+                    Assert.AreEqual(1, reader.GetInt32(i++));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void SqlVariantProperty()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                // Variant values are compared according to the type family hierarchy
+                // https://dba.stackexchange.com/questions/56722/why-does-implicit-conversion-from-sql-variant-basetype-decimal-not-work-well-w
+                cmd.CommandText = @"
+declare
+    @v sql_variant = cast (46279.1 as decimal(8,2));
+
+SELECT   SQL_VARIANT_PROPERTY(@v,'BaseType') AS 'Base Type',  
+         SQL_VARIANT_PROPERTY(@v,'Precision') AS 'Precision',  
+         SQL_VARIANT_PROPERTY(@v,'Scale') AS 'Scale' ";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    var i = 0;
+                    Assert.AreEqual("decimal", reader.GetString(i++));
+                    Assert.AreEqual(8, reader.GetInt32(i++));
+                    Assert.AreEqual(2, reader.GetInt32(i++));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void VariantTypes()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                // Variant values are compared according to the type family hierarchy
+                // https://dba.stackexchange.com/questions/56722/why-does-implicit-conversion-from-sql-variant-basetype-decimal-not-work-well-w
+                cmd.CommandText = @"
+declare
+    @v sql_variant = 1;
+declare
+    @n sql_variant;
+
+SELECT   @v
+UNION ALL
+SELECT   @n";
+
+                using (var reader = (Sql4CdsDataReader) cmd.ExecuteReader())
+                {
+                    Assert.AreEqual(typeof(object), reader.GetProviderSpecificFieldType(0));
+                    Assert.AreEqual(typeof(object), reader.GetFieldType(0));
+                    Assert.AreEqual("sql_variant", reader.GetDataTypeName(0));
+
+                    var schema = reader.GetSchemaTable();
+                    Assert.AreEqual(typeof(object), schema.Rows[0]["DataType"]);
+                    Assert.AreEqual(typeof(object), schema.Rows[0]["ProviderSpecificDataType"]);
+
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.AreEqual(1, reader.GetValue(0));
+                    Assert.AreEqual(new SqlInt32(1), reader.GetProviderSpecificValue(0));
+
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(DBNull.Value, reader.GetValue(0));
+                    Assert.AreEqual(DBNull.Value, reader.GetProviderSpecificValue(0));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExecSetState()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES ('Test', 'User'); SELECT @@IDENTITY";
+                var id = cmd.ExecuteScalar();
+
+                cmd.CommandText = @"
+DECLARE @id EntityReference
+SELECT TOP 1 @id = contactid FROM contact
+EXEC SetState @id, 1, 2";
+
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT statecode, statuscode FROM contact WHERE contactid = @id";
+                cmd.Parameters.Add(new Sql4CdsParameter("@id", id));
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.AreEqual(2, reader.GetInt32(1));
+                    Assert.IsFalse(reader.Read());
+                }
             }
         }
     }

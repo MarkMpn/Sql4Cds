@@ -88,6 +88,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 case "execute":
                     return FilterList(AutocompleteSprocName(currentWord), currentWord);
 
+                case "collate":
+                    return FilterList(Collation.GetAllCollations().OrderBy(c => c.Name).Select(c => new CollationAutocompleteItem(c, currentLength)), currentWord);
+
                 default:
                     // Find the FROM clause
                     var words = new List<string>();
@@ -498,6 +501,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             // * table/alias names
                             // * attribute names unique across tables
                             // * functions
+                            // * variables
                             var items = new List<SqlAutocompleteItem>();
                             var attributes = new List<AttributeMetadata>();
 
@@ -557,6 +561,8 @@ namespace MarkMpn.Sql4Cds.XTB
                             items.AddRange(attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).SelectMany(g => AttributeAutocompleteItem.CreateList(g.Single(), currentLength, false)));
 
                             items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
+
+                            items.AddRange(AutocompleteVariableName(currentWord, text.Substring(0, pos)));
 
                             if ((clause == "where" || clause == "set") && prevWord == "=")
                             {
@@ -847,6 +853,30 @@ namespace MarkMpn.Sql4Cds.XTB
                 // Could be a sproc name
                 if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Messages != null)
                     list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, lastPartLength)));
+            }
+
+            list.Sort();
+            return list;
+        }
+
+        private IEnumerable<SqlAutocompleteItem> AutocompleteVariableName(string currentWord, string text)
+        {
+            var list = new List<SqlAutocompleteItem>();
+
+            // Add the known global variables
+            list.Add(new VariableAutocompleteItem("@@IDENTITY", currentWord.Length));
+            list.Add(new VariableAutocompleteItem("@@ROWCOUNT", currentWord.Length));
+            list.Add(new VariableAutocompleteItem("@@SERVERNAME", currentWord.Length));
+            list.Add(new VariableAutocompleteItem("@@VERSION", currentWord.Length));
+
+            // Find any other variable declarations in the preceding SQL
+            var regex = new System.Text.RegularExpressions.Regex(@"\bdeclare\s+(@[a-z0-9_]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var matches = regex.Matches(text);
+
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                var variableName = match.Groups[1].Value;
+                list.Add(new VariableAutocompleteItem(variableName, currentWord.Length));
             }
 
             list.Sort();
@@ -1748,6 +1778,47 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 get => _option.Label?.UserLocalizedLabel?.Label ?? Text;
                 set => base.ToolTipText = value;
+            }
+        }
+
+        class CollationAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly Collation _collation;
+
+            public CollationAutocompleteItem(Collation collation, int replaceLength) : base(collation.Name, replaceLength, 13)
+            {
+                _collation = collation;
+            }
+
+            public override string ToolTipTitle
+            {
+                get => _collation.Name;
+                set { }
+            }
+
+            public override string ToolTipText
+            {
+                get => _collation.Description;
+                set { }
+            }
+        }
+
+        class VariableAutocompleteItem : SqlAutocompleteItem
+        {
+            public VariableAutocompleteItem(string name, int replaceLength) : base(name, replaceLength, 13)
+            {
+            }
+
+            public override string ToolTipTitle
+            {
+                get => Text;
+                set { }
+            }
+
+            public override string ToolTipText
+            {
+                get => Text.StartsWith("@@") ? "Global variable" : "User-defined variable";
+                set { }
             }
         }
     }

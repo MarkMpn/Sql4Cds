@@ -390,7 +390,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
             }
 
+            foreach (var alias in rightFetch.HiddenAliases)
+                leftFetch.HiddenAliases.Add(alias);
+
+            foreach (var mapping in rightFetch.ColumnMappings)
+                leftFetch.ColumnMappings.Add(mapping);
+
             folded = leftFetch;
+
             return true;
         }
 

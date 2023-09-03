@@ -15,6 +15,7 @@ using Microsoft.Xrm.Sdk;
 using WeifenLuo.WinFormsUI.Docking;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -31,12 +32,17 @@ namespace MarkMpn.Sql4Cds.XTB
             InitializeComponent();
             _plugin = plugin;
             dockPanel.Theme = new VS2015LightTheme();
+
+            // Loads or creates the settings for the plugin
+            if (!SettingsManager.Instance.TryLoad(_plugin.GetType(), out Settings settings))
+                settings = new Settings();
+
+            Settings.Instance = settings;
+
             _dataSources = new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase);
             _objectExplorer = new ObjectExplorer(_dataSources, WorkAsync, con => CreateQuery(con, ""), ConnectObjectExplorer);
-            _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
-            _properties.Show(dockPanel, DockState.DockRightAutoHide);
             _properties.SelectedObjectChanged += OnSelectedObjectChanged;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
             tscbConnection.Items.Add("Add Connection...");
@@ -93,8 +99,6 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 if (!tscbConnection.Items.Contains(detail))
                     tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
-
-                CreateQuery(detail, "");
             }
             else
             {
@@ -145,51 +149,92 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private void PluginControl_Load(object sender, EventArgs e)
         {
-            // Loads or creates the settings for the plugin
-            if (!SettingsManager.Instance.TryLoad(_plugin.GetType(), out Settings settings))
-                settings = new Settings();
+            tsbIncludeFetchXml.Checked = Settings.Instance.IncludeFetchXml;
 
-            Settings.Instance = settings;
-
-            tsbIncludeFetchXml.Checked = settings.IncludeFetchXml;
-
-            if (settings.RememberSession && settings.Session != null)
+            if (Settings.Instance.DockLayout != null)
             {
-                foreach (var doc in dockPanel.Documents.OfType<Form>().ToArray())
-                    doc.Close();
-
-                foreach (var tab in settings.Session)
+                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(Settings.Instance.DockLayout)))
                 {
-                    IDocumentWindow query = null;
+                    var contentIndex = 0;
 
-                    switch (tab.Type)
+                    dockPanel.LoadFromXml(stream, (name) =>
                     {
-                        case "SQL":
+                        if (name == _objectExplorer.GetType().FullName)
+                            return _objectExplorer;
+
+                        if (name == _properties.GetType().FullName)
+                            return _properties;
+
+                        if (!Settings.Instance.RememberSession || Settings.Instance.Session == null)
+                            return null;
+
+                        IDocumentWindow query = null;
+
+                        if (name == typeof(SqlQueryControl).FullName)
                             query = CreateQuery(_objectExplorer.SelectedConnection, null);
-                            break;
-
-                        case "FetchXML":
+                        else if (name == typeof(FetchXmlControl).FullName)
                             query = CreateFetchXML(null);
-                            break;
-
-                        case "M":
+                        else if (name == typeof(MQueryControl).FullName)
                             query = CreateM(null);
-                            break;
+                        else
+                            return null;
 
-                        default:
-                            continue;
-                    }
+                        try
+                        {
+                            query.RestoreSessionDetails(Settings.Instance.Session[contentIndex++]);
+                            return (IDockContent)query;
+                        }
+                        catch
+                        {
+                            ((Form)query).Close();
+                            return null;
+                        }
+                    });
+                }
+            }
+            else
+            {
+                _objectExplorer.Show(dockPanel, DockState.DockLeft);
+                _properties.Show(dockPanel, DockState.DockRightAutoHide);
 
-                    try
+                if (Settings.Instance.RememberSession && Settings.Instance.Session != null)
+                {
+                    foreach (var tab in Settings.Instance.Session)
                     {
-                        query.RestoreSessionDetails(tab);
-                    }
-                    catch
-                    {
-                        ((Form)query).Close();
+                        IDocumentWindow query = null;
+
+                        switch (tab.Type)
+                        {
+                            case "SQL":
+                                query = CreateQuery(_objectExplorer.SelectedConnection, null);
+                                break;
+
+                            case "FetchXML":
+                                query = CreateFetchXML(null);
+                                break;
+
+                            case "M":
+                                query = CreateM(null);
+                                break;
+
+                            default:
+                                continue;
+                        }
+
+                        try
+                        {
+                            query.RestoreSessionDetails(tab);
+                        }
+                        catch
+                        {
+                            ((Form)query).Close();
+                        }
                     }
                 }
             }
+
+            if (!dockPanel.Contents.OfType<IDocumentWindow>().Any())
+                CreateQuery(_objectExplorer.SelectedConnection, null);
         }
 
         private void tsbExecute_Click(object sender, EventArgs e)
@@ -414,7 +459,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private void saveAllToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var unsavedDocuments = dockPanel.Documents
+            var unsavedDocuments = dockPanel.Contents
                 .OfType<ISaveableDocumentWindow>()
                 .Where(query => query.Modified)
                 .ToArray();
@@ -579,16 +624,26 @@ namespace MarkMpn.Sql4Cds.XTB
         private void SaveSettings()
         {
             if (Settings.Instance.RememberSession)
-                Settings.Instance.Session = dockPanel.Documents.OfType<IDocumentWindow>().Select(query => query.GetSessionDetails()).ToArray();
+            {
+                Settings.Instance.Session = dockPanel.Contents.OfType<IDocumentWindow>().Select(query => query.GetSessionDetails()).ToArray();
+
+                using (var memoryStream = new MemoryStream())
+                {
+                    dockPanel.SaveAsXml(memoryStream, Encoding.UTF8);
+                    Settings.Instance.DockLayout = Encoding.UTF8.GetString(memoryStream.ToArray());
+                }
+            }
             else
+            {
                 Settings.Instance.Session = null;
+            }
 
             SettingsManager.Instance.Save(_plugin.GetType(), Settings.Instance);
         }
 
         public override void ClosingPlugin(PluginCloseInfo info)
         {
-            if (!ConfirmBulkClose(dockPanel.DocumentsToArray(), info.Silent))
+            if (!ConfirmBulkClose(dockPanel.Contents.OfType<IDocumentWindow>().Cast<IDockContent>().ToArray(), info.Silent))
             {
                 info.Cancel = true;
                 return;
@@ -817,7 +872,7 @@ in
                 }
             }
 
-            var unsavedDocuments = dockPanel.Documents
+            var unsavedDocuments = dockPanel.Contents
                 .OfType<ISaveableDocumentWindow>()
                 .Where(query => query.Modified)
                 .ToArray();

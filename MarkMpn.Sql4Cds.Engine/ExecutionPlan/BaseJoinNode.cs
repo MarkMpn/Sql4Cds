@@ -81,8 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (leftEntity != null)
             {
-                foreach (var attr in leftEntity.Attributes)
-                    merged[attr.Key] = attr.Value;
+                foreach (var attr in leftSchema.Schema)
+                    merged[attr.Key] = leftEntity[attr.Key];
             }
             else
             {
@@ -92,8 +92,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (rightEntity != null)
             {
-                foreach (var attr in rightEntity.Attributes)
-                    merged[attr.Key] = attr.Value;
+                foreach (var attr in rightSchema.Schema)
+                    merged[attr.Key] = rightEntity[attr.Key];
             }
             else
             {
@@ -156,7 +156,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         nullable = false;
                     }
 
-                    schema[column.Key] = new ColumnDefinition(column.Value.Type, nullable, column.Value.IsCalculated);
+                    schema[column.Key] = new ColumnDefinition(column.Value.Type, nullable, column.Value.IsCalculated, column.Value.IsVisible);
                 }
 
                 foreach (var alias in subSchema.Aliases)

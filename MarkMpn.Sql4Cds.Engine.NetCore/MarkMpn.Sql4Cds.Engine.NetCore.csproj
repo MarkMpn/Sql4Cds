@@ -4,6 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>MarkMpn.Sql4Cds.Engine</AssemblyName>
     <RootNamespace>MarkMpn.Sql4Cds.Engine</RootNamespace>
+    <Copyright>Copyright © 2020 - 2023 Mark Carrington</Copyright>
   </PropertyGroup>
 
   <Import Project="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems" Label="Shared" />

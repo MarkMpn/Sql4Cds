@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.Tests", "MarkMpn.Sql4Cds.Engine.Tests\MarkMpn.Sql4Cds.Engine.Tests.csproj", "{4448712A-17B8-4D1B-8CEE-6F8CB558FCC1}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds", "MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj", "{A7AF5D13-A44E-426D-B3FC-AE390832C7DF}"
+	ProjectSection(ProjectDependencies) = postProject
+		{8050B824-A28B-4631-8A95-D127859A9216} = {8050B824-A28B-4631-8A95-D127859A9216}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Tests", "MarkMpn.Sql4Cds.Tests\MarkMpn.Sql4Cds.Tests.csproj", "{081AA0FB-A019-430A-B05A-F55CAC7C50FD}"
 EndProject

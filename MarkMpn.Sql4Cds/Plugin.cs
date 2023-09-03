@@ -1,8 +1,6 @@
 ﻿using System;
 using System.ComponentModel.Composition;
 using System.IO;
-using System.Linq;
-using System.Collections.Generic;
 using System.Reflection;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
@@ -23,63 +21,21 @@ namespace MarkMpn.Sql4Cds
         ExportMetadata("SecondaryFontColor", "Gray")]
     public class Plugin : PluginBase, IPayPalPlugin
     {
-        private Assembly _primaryAssembly;
+        private static Assembly _primaryAssembly;
+
+        static Plugin()
+        {
+            var currAssembly = Assembly.GetExecutingAssembly();
+            var dir = Path.GetDirectoryName(currAssembly.Location).ToLower();
+            var folder = Path.GetFileNameWithoutExtension(currAssembly.Location);
+            dir = Path.Combine(dir, folder);
+            _primaryAssembly = Assembly.LoadFrom(Path.Combine(dir, "MarkMpn.Sql4Cds.XTB.dll"));
+        }
 
         public override IXrmToolBoxPluginControl GetControl()
         {
-            var controlType = Type.GetType("MarkMpn.Sql4Cds.XTB.PluginControl, MarkMpn.Sql4Cds.XTB");
+            var controlType = _primaryAssembly.GetType("MarkMpn.Sql4Cds.XTB.PluginControl");
             return (IXrmToolBoxPluginControl) Activator.CreateInstance(controlType, this);
-        }
-
-        /// <summary>
-        /// Constructor 
-        /// </summary>
-        public Plugin()
-        {
-            AppDomain.CurrentDomain.AssemblyResolve += new ResolveEventHandler(AssemblyResolveEventHandler);
-        }
-
-        /// <summary>
-        /// Event fired by CLR when an assembly reference fails to load
-        /// Assumes that related assemblies will be loaded from a subfolder named the same as the Plugin
-        /// For example, a folder named Sample.XrmToolBox.MyPlugin 
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="args"></param>
-        /// <returns></returns>
-        private Assembly AssemblyResolveEventHandler(object sender, ResolveEventArgs args)
-        {
-            Assembly loadAssembly = null;
-            Assembly currAssembly = Assembly.GetExecutingAssembly();
-
-            // base name of the assembly that failed to resolve
-            var argName = args.Name.Split(',')[0];
-
-            // check to see if the failing assembly is one that we reference.
-            if (argName == "MarkMpn.Sql4Cds.XTB" ||
-                _primaryAssembly != null && _primaryAssembly.GetReferencedAssemblies().Any(a => a.Name == argName))
-            {
-                // load from the path to this plugin assembly, not host executable
-                string dir = Path.GetDirectoryName(currAssembly.Location).ToLower();
-                string folder = Path.GetFileNameWithoutExtension(currAssembly.Location);
-                dir = Path.Combine(dir, folder);
-
-                var assmbPath = Path.Combine(dir, $"{argName}.dll");
-
-                if (File.Exists(assmbPath))
-                {
-                    loadAssembly = Assembly.LoadFrom(assmbPath);
-                }
-                else
-                {
-                    throw new FileNotFoundException($"Unable to locate dependency: {assmbPath}");
-                }
-
-                if (_primaryAssembly == null && argName == "MarkMpn.Sql4Cds.XTB")
-                    _primaryAssembly = loadAssembly;
-            }
-
-            return loadAssembly;
         }
 
         string IPayPalPlugin.DonationDescription => "SQL 4 CDS Donation";

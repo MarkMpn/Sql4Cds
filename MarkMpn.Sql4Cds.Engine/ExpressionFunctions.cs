@@ -1,4 +1,5 @@
 ﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
@@ -17,6 +18,11 @@ using System.Xml;
 using System.Xml.XPath;
 using Wmhelp.XPath2;
 using Wmhelp.XPath2.Value;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -81,6 +87,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 var value = jtoken.Value<string>();
+
+                if (value == null)
+                    return SqlString.Null;
 
                 if (value.Length > 4000)
                 {
@@ -870,6 +879,131 @@ namespace MarkMpn.Sql4Cds.Engine
                 sb.Insert(start.Value - 1, replaceWith.Value);
 
             return new SqlString(sb.ToString(), value.LCID, value.SqlCompareOptions);
+        }
+
+        public static SqlVariant ServerProperty(SqlString propertyName, ExpressionExecutionContext context)
+        {
+            if (propertyName.IsNull)
+                return SqlVariant.Null;
+
+            var dataSource = context.PrimaryDataSource;
+
+#if NETCOREAPP
+            var svc = dataSource.Connection as ServiceClient;
+#else
+            var svc = dataSource.Connection as CrmServiceClient;
+#endif
+
+            switch (propertyName.Value.ToLowerInvariant())
+            {
+                case "collation":
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(dataSource.DefaultCollation.Name));
+
+                case "collationid":
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(dataSource.DefaultCollation.LCID));
+
+                case "comparisonstyle":
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32((int)dataSource.DefaultCollation.CompareOptions));
+
+                case "edition":
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString("Enterprise Edition"));
+
+                case "editionid":
+                    return new SqlVariant(DataTypeHelpers.BigInt, new SqlInt64(1804890536));
+
+                case "enginedition":
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(3));
+
+                case "issingleuser":
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(0));
+
+                case "machinename":
+                case "servername":
+                    string machineName = dataSource.Name;
+
+#if NETCOREAPP
+                    if (svc != null)
+                        machineName = svc.ConnectedOrgUriActual.Host;
+#else
+                    if (svc != null)
+                        machineName = svc.CrmConnectOrgUriActual.Host;
+#endif
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(machineName));
+
+                case "pathseparator":
+                    return new SqlVariant(DataTypeHelpers.NVarChar(1, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(Path.DirectorySeparatorChar.ToString()));
+
+                case "processid":
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(System.Diagnostics.Process.GetCurrentProcess().Id));
+
+                case "productversion":
+                    string orgVersion = null;
+
+#if NETCOREAPP
+                    if (svc != null)
+                        orgVersion = svc.ConnectedOrgVersion.ToString();
+#else
+                    if (svc != null)
+                        orgVersion = svc.ConnectedOrgVersion.ToString();
+#endif
+
+                    if (orgVersion == null)
+                        orgVersion = ((RetrieveVersionResponse)dataSource.Execute(new RetrieveVersionRequest())).Version;
+
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(orgVersion));
+            }
+
+            return SqlVariant.Null;
+        }
+
+        public static SqlVariant Sql_Variant_Property(SqlVariant expression, SqlString property)
+        {
+            if (property.IsNull)
+                return SqlVariant.Null;
+
+            switch (property.Value.ToLowerInvariant())
+            {
+                case "basetype":
+                    if (expression.BaseType == null)
+                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), SqlString.Null);
+
+                    if (expression.BaseType is SqlDataTypeReference sqlType)
+                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(sqlType.SqlDataTypeOption.ToString().ToLowerInvariant()));
+
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(expression.BaseType.ToSql()));
+
+                case "precision":
+                    if (expression.BaseType == null)
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetPrecision()));
+
+                case "scale":
+                    if (expression.BaseType == null)
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetScale()));
+
+                case "totalbytes":
+                    if (expression.BaseType == null)
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+
+                    return new SqlVariant(DataTypeHelpers.Int, DataLength<INullable>(expression.Value, expression.BaseType));
+
+                case "collation":
+                    if (!(expression.BaseType is SqlDataTypeReferenceWithCollation coll))
+                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), SqlString.Null);
+
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(coll.Collation.Name));
+
+                case "maxlength":
+                    if (expression.BaseType == null)
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetSize()));
+            }
+
+            return SqlVariant.Null;
         }
     }
 

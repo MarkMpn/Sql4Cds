@@ -10,7 +10,7 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     public struct SqlEntityReference : INullable, IComparable
     {
-        private SqlGuid _guid;
+        private readonly SqlGuid _guid;
 
         public SqlEntityReference(string dataSource, string logicalName, SqlGuid id)
         {

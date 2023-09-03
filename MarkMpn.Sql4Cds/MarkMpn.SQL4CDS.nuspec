@@ -22,30 +22,38 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added support for long-term retention data
-Fixed errors with common XML queries
-Improved performance with subqueries
-Avoid exposing internal names for computed columns
-Convert outer joins with filters to inner joins
-Fixed use of UPDATE with CASE expression with a first value of NULL
-Fixed use of joins or subqueries with multiple correlated conditions
-Improved handling of LEFT OUTER JOIN using nested loop operator
-Implemented many-to-many joins using merge join operator
-Fixed cross-instance string comparison
-Lift more filters directly to FetchXML link-entity
-Extended folding of sorts to FetchXML around nested loops
-Improved ambiguous table name detection in UPDATE/DELETE statements with subqueries
-Avoid errors with un-aliased calculated columns in subqueries
-Improved error reporting for AVG and SUM aggregates on non-numeric types
-Handle MIN and MAX aggregates for primary key and lookup columns
-Added support for STRING_AGG function
-Fixed filtering metadata by attribute.sourcetype
+    <releaseNotes>Added sql_variant type support, including SQL_VARIANT_PROPERTY function
+Added IS [NOT] DISTINCT FROM predicate support
+Added @@SERVERNAME and @@VERSION global variables
+Added SERVERPROPERTY function support
+Added USE_LEGACY_UPDATE_MESSAGES query hint to use legacy update messages Assign, SetState, SetParentBusinessUnit and SetBusinessEquipment
+
+Subquery fixes:
+- Only include requested columns from CROSS APPLY and query-defined tables
+- Performance improvements for uncorrelated scalar subqueries
+- Only retrieve minimal rows for scalar subqueries
+- Fixed use of nested IN and EXISTS subqueries
+
+Fixed use of table-valued function with alias
+Fixed JSON_VALUE function with embedded null literals
+Fixed bulk DML operations that require non-standard requests
+Do not use merge joins for data types with different sort ordering
+Fixed filtering and sorting on non-lowercase attributes
+Fixed executing messages with OptionSetValue parameters
+Improved error reporting on batch DML statements
+
+Updated minimum XTB version
+Improved plugin load logic to avoid version problems with dependencies
+Added autocomplete for collation names and variable names
+Fixed cross-threading error when showing warning messages
+Preserve tool window locations
+Improved display of string values containing line breaks and tabs
 </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
     <dependencies>
-      <dependency id="XrmToolBox" version="1.2022.10.58" />
+      <dependency id="XrmToolBox" version="1.2023.6.65" />
     </dependencies>
   </metadata>
   <files>

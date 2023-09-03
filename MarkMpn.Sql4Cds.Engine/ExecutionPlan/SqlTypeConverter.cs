@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlDateTimeOffset)] = SqlDateTimeOffset.Null,
                 [typeof(SqlTime)] = SqlTime.Null,
                 [typeof(SqlXml)] = SqlXml.Null,
-                [typeof(object)] = null
+                [typeof(SqlVariant)] = SqlVariant.Null
             };
 
             _hijriCulture = (CultureInfo)CultureInfo.GetCultureInfo("ar-JO").Clone();
@@ -231,13 +231,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
-            if (lhsUser != null && (lhsUser.Name.Identifiers.Count != 1 || lhsUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+            if (lhsUser != null && !lhsUser.IsSameAs(DataTypeHelpers.EntityReference))
             {
                 consistent = null;
                 return false;
             }
 
-            if (rhsUser != null && (rhsUser.Name.Identifiers.Count != 1 || rhsUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+            if (rhsUser != null && !rhsUser.IsSameAs(DataTypeHelpers.EntityReference))
             {
                 consistent = null;
                 return false;
@@ -360,7 +360,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return String.Join(".", fromUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", toUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
 
             // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
-            if (fromUser != null && (fromUser.Name.Identifiers.Count != 1 || fromUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+            if (fromUser != null && !fromUser.IsSameAs(DataTypeHelpers.EntityReference))
                 return false;
 
             // Nothing can be converted to SqlEntityReference
@@ -416,6 +416,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fromType == SqlDataTypeOption.UniqueIdentifier && fromUser != null && toType == SqlDataTypeOption.UniqueIdentifier)
                 return true;
 
+            // Anything can be converted to sql_variant except timestamp, image, text, ntext, xml and hierarchyid
+            if (toType == SqlDataTypeOption.Sql_Variant &&
+                fromType != SqlDataTypeOption.Timestamp &&
+                fromType != SqlDataTypeOption.Image &&
+                fromType != SqlDataTypeOption.Text &&
+                fromType != SqlDataTypeOption.NText)
+                return true;
+
             return false;
         }
 
@@ -445,6 +453,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Require explicit conversion from xml to string/binary types
             if (fromXml != null && toSql != null && (toSql.SqlDataTypeOption.IsStringType() || toSql.SqlDataTypeOption == SqlDataTypeOption.Binary || toSql.SqlDataTypeOption == SqlDataTypeOption.VarBinary))
+                return true;
+
+            // Require explicit conversion from sql_variant to everything other than timestamp, image, text, ntext, xml and hierarchyid
+            if (fromSql?.SqlDataTypeOption == SqlDataTypeOption.Sql_Variant &&
+                toSql != null &&
+                toSql.SqlDataTypeOption != SqlDataTypeOption.Timestamp &&
+                toSql.SqlDataTypeOption != SqlDataTypeOption.Image &&
+                toSql.SqlDataTypeOption != SqlDataTypeOption.Text &&
+                toSql.SqlDataTypeOption != SqlDataTypeOption.NText)
                 return true;
 
             return false;
@@ -549,6 +566,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>An expression to generate values of the required type</returns>
         public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, ConvertCall convert = null)
         {
+            if (from.IsSameAs(to))
+                return expr;
+
             from.ToNetType(out var fromSqlType);
             var targetType = to.ToNetType(out var toSqlType);
 
@@ -573,6 +593,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (!CanChangeTypeImplicit(styleType, DataTypeHelpers.Int))
                 throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType.ToSql()} to {DataTypeHelpers.Int.ToSql()}", convert.Style);
+
+            // Special case for conversion to sql_variant
+            if (to.IsSameAs(DataTypeHelpers.Variant))
+            {
+                var ctor = typeof(SqlVariant).GetConstructor(new[] { typeof(DataTypeReference), typeof(INullable) });
+                return Expression.New(ctor, Expression.Constant(from), Expression.Convert(expr, typeof(INullable)));
+            }
+
+            // Special case for conversion from sql_variant
+            if (from.IsSameAs(DataTypeHelpers.Variant))
+            {
+                return Expression.Convert(Expr.Call(() => Convert(Expr.Arg<SqlVariant>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), expr, Expression.Constant(to), style), targetType);
+            }
 
             var targetCollation = (to as SqlDataTypeReferenceWithCollation)?.Collation;
 
@@ -1052,6 +1085,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         /// <summary>
+        /// Specialized type conversion from sql_variant to a target type
+        /// </summary>
+        /// <param name="variant">The variant to convert</param>
+        /// <param name="targetType">The type to convert to</param>
+        /// <param name="style">The style of the conversion</param>
+        /// <returns>The underlying value of the variant converted to the target type</returns>
+        private static INullable Convert(SqlVariant variant, DataTypeReference targetType, SqlInt32 style)
+        {
+            if (variant.BaseType == null)
+                return GetNullValue(targetType.ToNetType(out _));
+
+            if (variant.BaseType.IsSameAs(targetType))
+                return variant.Value;
+
+            if (!CanChangeTypeExplicit(variant.BaseType, targetType))
+                throw new QueryExecutionException($"No type conversion available from {variant.BaseType.ToSql()} to {targetType.ToSql()}");
+
+            var conversion = GetConversion(variant.BaseType, targetType, style.IsNull ? (int?)null : style.Value);
+            return conversion(variant.Value);
+        }
+
+        /// <summary>
         /// Converts a standard CLR type to the equivalent SQL type
         /// </summary>
         /// <param name="type">The CLR type to convert from</param>
@@ -1064,7 +1119,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var originalType = type;
             type = type.BaseType;
 
-            while (type != null)
+            while (type != null && type != typeof(object))
             {
                 if (_netToSqlTypeConversions.TryGetValue(type, out sqlType))
                 {
@@ -1231,6 +1286,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(destType), expression, Expression.Constant(true));
                 expression = Expression.Convert(expression, destType);
             }
+            else if (expression.Type == typeof(SqlInt32) && destType == typeof(OptionSetValue))
+            {
+                var nullCheck = NullCheck(expression);
+                var nullValue = (Expression)Expression.Constant(null, destType);
+                var parsedValue = (Expression)Expression.Convert(expression, typeof(int));
+                parsedValue = Expression.New(typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }), parsedValue);
+                expression = Expression.Condition(nullCheck, nullValue, parsedValue);
+            }
             else
             {
                 expression = Expression.Convert(expression, destType);
@@ -1248,8 +1311,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="sourceType">The type to convert from</param>
         /// <param name="destType">The type to convert to</param>
+        /// <param name="style">The style of the converesion</param>
         /// <returns>A function that converts between the requested types</returns>
-        public static Func<INullable, INullable> GetConversion(DataTypeReference sourceType, DataTypeReference destType)
+        public static Func<INullable, INullable> GetConversion(DataTypeReference sourceType, DataTypeReference destType, int? style = null)
         {
             var key = sourceType.ToSql() + " -> " + destType.ToSql();
 
@@ -1260,11 +1324,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     key += " COLLATE " + collation.Collation.LCID + ":" + collation.Collation.CompareOptions;
             }
+
+            if (style != null)
+                key += " STYLE " + style;
             
-            return _sqlConversions.GetOrAdd(key, _ => CompileConversion(sourceType, destType));
+            return _sqlConversions.GetOrAdd(key, _ => CompileConversion(sourceType, destType, style));
         }
 
-        private static Func<INullable, INullable> CompileConversion(DataTypeReference sourceType, DataTypeReference destType)
+        private static Func<INullable, INullable> CompileConversion(DataTypeReference sourceType, DataTypeReference destType, int? style = null)
         {
             if (sourceType.IsSameAs(destType))
                 return (INullable value) => value;
@@ -1274,7 +1341,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var param = Expression.Parameter(typeof(INullable));
             var expression = (Expression)Expression.Convert(param, sourceNetType);
-            expression = Convert(expression, sourceType, destType);
+            var styleExpr = (Expression)null;
+            var styleType = (DataTypeReference)null;
+
+            if (style != null)
+            {
+                styleExpr = Expression.Constant(new SqlInt32(style.Value));
+                styleType = DataTypeHelpers.Int;
+            }
+
+            expression = Convert(expression, sourceType, destType, styleExpr, styleType);
             expression = Expression.Convert(expression, typeof(INullable));
             return Expression.Lambda<Func<INullable, INullable>>(expression, param).Compile();
         }

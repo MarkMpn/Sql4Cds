@@ -1060,7 +1060,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
@@ -1154,7 +1155,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
             AssertFetchXml(subAggregateFetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='2'>
                     <entity name='account'>
                         <attribute name='name' />
                         <filter>
@@ -1240,7 +1241,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
             var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
@@ -1290,7 +1292,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
             var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
@@ -1342,7 +1345,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
-            var subCompute = AssertNode<ComputeScalarNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subCompute = AssertNode<ComputeScalarNode>(subTop.Source);
             var subIndexSpool = AssertNode<IndexSpoolNode>(subCompute.Source);
             Assert.AreEqual("account.accountid", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
@@ -1740,22 +1744,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            var loop = AssertNode<NestedLoopNode>(filter.Source);
-            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            var subFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(subFetch, @"
+                <fetch top='1'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                    </entity>
+                </fetch>");
+            var filter = AssertNode<FilterNode>(loop.RightSource);
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
-                    </entity>
-                </fetch>");
-            var subSpool = AssertNode<TableSpoolNode>(loop.RightSource);
-            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
-            AssertFetchXml(subFetch, @"
-                <fetch top='1'>
-                    <entity name='contact'>
-                        <attribute name='contactid' />
                     </entity>
                 </fetch>");
         }
@@ -2108,6 +2111,185 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
                             <attribute name='firstname' />
                             <attribute name='lastname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossApplyAllColumns()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT *
+                        FROM   contact
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a.contactid", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("a.createdon", select.ColumnSet[2].SourceColumn);
+            Assert.AreEqual("a.firstname", select.ColumnSet[3].SourceColumn);
+            Assert.AreEqual("a.fullname", select.ColumnSet[4].SourceColumn);
+            Assert.AreEqual("a.lastname", select.ColumnSet[5].SourceColumn);
+            Assert.AreEqual("a.parentcustomerid", select.ColumnSet[6].SourceColumn);
+            Assert.AreEqual("a.parentcustomeridname", select.ColumnSet[7].SourceColumn);
+            Assert.AreEqual("a.parentcustomeridtype", select.ColumnSet[8].SourceColumn);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.IsNull(fetch.ColumnMappings[0].SourceColumn);
+            Assert.IsTrue(fetch.ColumnMappings[0].AllColumns);
+            Assert.AreEqual("a", fetch.ColumnMappings[0].OutputColumn);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <all-attributes />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossApplyRestrictedColumns()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT firstname,
+                               lastname
+                        FROM   contact
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='firstname' />
+                            <attribute name='lastname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossApplyRestrictedColumnsWithAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT firstname AS fname,
+                               lastname AS lname
+                        FROM   contact
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='firstname' alias='fname' />
+                            <attribute name='lastname' alias='lname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossApplyJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name,
+                    a.*
+                FROM
+                    account
+                    CROSS APPLY
+                    (
+                        SELECT contact.firstname AS fname,
+                               contact.lastname AS lname,
+                               systemuser.domainname AS uname
+                        FROM   contact
+                               INNER JOIN systemuser ON systemuser.systemuserid = contact.parentcustomerid
+                        WHERE  primarycontactid = contactid
+                    ) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
+            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
+            Assert.AreEqual("systemuser.uname", fetch.ColumnMappings[2].SourceColumn);
+            Assert.AreEqual("a.uname", fetch.ColumnMappings[2].OutputColumn);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='firstname' alias='fname' />
+                            <attribute name='lastname' alias='lname' />
+                            <link-entity name='systemuser' alias='systemuser' from='systemuserid' to='parentcustomerid' link-type='inner'>
+                                <attribute name='domainname' alias='uname' />
+                            </link-entity>
                         </link-entity>
                     </entity>
                 </fetch>");
@@ -2989,7 +3171,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("contact.firstname", select.ColumnSet[0].SourceColumn);
             var filter = AssertNode<FilterNode>(select.Source);
             Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
-            var join = AssertNode<HashJoinNode>(filter.Source);
+            var join = AssertNode<MergeJoinNode>(filter.Source);
             Assert.AreEqual("contact.firstname", join.LeftAttribute.GetColumnName());
             Assert.AreEqual("Expr1.firstname", join.RightAttribute.GetColumnName());
             Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
@@ -3000,10 +3182,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
 
-            var innerAlias = AssertNode<AliasNode>(join.RightSource);
+            var innerSort = AssertNode<SortNode>(join.RightSource);
+            Assert.AreEqual("Expr1.firstname", innerSort.Sorts.Single().Expression.ToSql());
+            var innerAlias = AssertNode<AliasNode>(innerSort.Source);
             Assert.AreEqual("Expr1", innerAlias.Alias);
             var innerFilter = AssertNode<FilterNode>(innerAlias.Source);
             Assert.AreEqual("count > 1", innerFilter.Filter.ToSql());
@@ -3995,6 +4180,31 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='name' operator='ne' value='Data8' />
                             <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DistinctFromAllowsNull()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT name FROM account WHERE name IS DISTINCT FROM 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='ne' value='Data8' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -5797,6 +6007,99 @@ FROM   account AS r;";
                     <entity name='account'>
                         <attribute name='name' />
                         <order attribute='name' descending='true' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void NestedExistsAndIn()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "IF NOT EXISTS(SELECT * FROM account WHERE primarycontactid IN (SELECT contactid FROM contact WHERE firstname = 'Mark')) SELECT 1";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+        }
+
+        [TestMethod]
+        public void HashJoinUsedForDifferentDataTypes()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT * FROM account WHERE NOT EXISTS(SELECT * FROM contact WHERE account.name = contact.createdon)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var hashJoin = AssertNode<HashJoinNode>(filter.Source);
+            var accountFetch = AssertNode<FetchXmlScan>(hashJoin.LeftSource);
+            AssertFetchXml(accountFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(hashJoin.RightSource);
+            AssertFetchXml(contactFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                        <order attribute='createdon' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotFoldFilterOnParameterToIndexSpool()
+        {
+            // Subquery on right side of nested loop will use an index spool to reduce number of FetchXML requests. Do not use this logic if the
+            // filter variable is an external parameter or the FetchXML is on the left side of the loop
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT * FROM account WHERE name = @name and primarycontactid = (SELECT contactid FROM contact WHERE firstname = 'Mark')";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@name"] = DataTypeHelpers.NVarChar(100, Collation.USEnglish, CollationLabel.CoercibleDefault)
+            };
+
+            var plans = planBuilder.Build(query, parameters, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.Inner, loop.JoinType);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["Expr1"]);
+
+            var assert = AssertNode<AssertNode>(loop.LeftSource);
+
+            var aggregate = AssertNode<StreamAggregateNode>(assert.Source);
+            Assert.AreEqual("contact.contactid", aggregate.Aggregates["Expr1"].SqlExpression.ToSql());
+            Assert.AreEqual(AggregateType.First, aggregate.Aggregates["Expr1"].AggregateType);
+
+            var contactFetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(contactFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='2'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            var accountFetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            AssertFetchXml(accountFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition generator:IsVariable='true' attribute='name' operator='eq' value='@name' />
+                            <condition generator:IsVariable='true' attribute='primarycontactid' operator='eq' value='@Expr1' />
+                        </filter>
                     </entity>
                 </fetch>");
         }

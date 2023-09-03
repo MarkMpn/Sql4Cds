@@ -72,7 +72,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static UserDataTypeReference Object(Type type)
         {
-            return new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = type.FullName } } } };
+            return Object(type.FullName);
+        }
+
+        private static UserDataTypeReference Object(string name)
+        {
+            return new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = name } } } };
         }
 
         public static SqlDataTypeReference Float { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
@@ -92,9 +97,74 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Time, Parameters = { new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
         }
 
-        public static UserDataTypeReference EntityReference { get; } = Object(typeof(SqlEntityReference));
+        public static UserDataTypeReference EntityReference { get; } = Object(nameof(EntityReference));
 
         public static XmlDataTypeReference Xml { get; } = new XmlDataTypeReference();
+
+        public static SqlDataTypeReference Variant { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Sql_Variant };
+
+        /// <summary>
+        /// Gets the data type family the type belongs to.
+        /// </summary>
+        /// <param name="type">The type to get the family for</param>
+        /// <returns>The family of the data type</returns>
+        /// <remarks>
+        /// Uses the definitions from https://learn.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql?view=sql-server-ver16#data-type-categories
+        /// </remarks>
+        public static DataTypeFamily GetDataTypeFamily(this DataTypeReference type)
+        {
+            if (type is SqlDataTypeReference sqlType)
+            {
+                switch (sqlType.SqlDataTypeOption)
+                {
+                    case SqlDataTypeOption.BigInt:
+                    case SqlDataTypeOption.Bit:
+                    case SqlDataTypeOption.Decimal:
+                    case SqlDataTypeOption.Int:
+                    case SqlDataTypeOption.Money:
+                    case SqlDataTypeOption.Numeric:
+                    case SqlDataTypeOption.SmallInt:
+                    case SqlDataTypeOption.SmallMoney:
+                    case SqlDataTypeOption.TinyInt:
+                        return DataTypeFamily.ExactNumeric;
+
+                    case SqlDataTypeOption.Float:
+                    case SqlDataTypeOption.Real:
+                        return DataTypeFamily.ApproximateNumeric;
+
+                    case SqlDataTypeOption.Date:
+                    case SqlDataTypeOption.DateTime2:
+                    case SqlDataTypeOption.DateTime:
+                    case SqlDataTypeOption.DateTimeOffset:
+                    case SqlDataTypeOption.SmallDateTime:
+                    case SqlDataTypeOption.Time:
+                        return DataTypeFamily.DateTime;
+
+                    case SqlDataTypeOption.Char:
+                    case SqlDataTypeOption.Text:
+                    case SqlDataTypeOption.VarChar:
+                        return DataTypeFamily.Character;
+
+                    case SqlDataTypeOption.NChar:
+                    case SqlDataTypeOption.NText:
+                    case SqlDataTypeOption.NVarChar:
+                        return DataTypeFamily.UnicodeCharacter;
+
+                    case SqlDataTypeOption.Binary:
+                    case SqlDataTypeOption.Image:
+                    case SqlDataTypeOption.VarBinary:
+                        return DataTypeFamily.Binary;
+
+                    default:
+                        return DataTypeFamily.Other;
+                }
+            }
+
+            if (type is UserDataTypeReference)
+                return DataTypeFamily.Custom;
+
+            return DataTypeFamily.Other;
+        }
 
         /// <summary>
         /// Checks if a type represents an exact numeric type
@@ -176,7 +246,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (!(type is SqlDataTypeReference dataType))
             {
-                if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                if (type.IsSameAs(EntityReference))
                     dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
                 else if (type is XmlDataTypeReference)
                     return Int32.MaxValue;
@@ -635,5 +705,18 @@ namespace MarkMpn.Sql4Cds.Engine
         Implicit,
         Explicit,
         NoCollation
+    }
+
+    enum DataTypeFamily
+    {
+        Variant,
+        DateTime,
+        ApproximateNumeric,
+        ExactNumeric,
+        Character,
+        UnicodeCharacter,
+        Binary,
+        Other,
+        Custom
     }
 }
