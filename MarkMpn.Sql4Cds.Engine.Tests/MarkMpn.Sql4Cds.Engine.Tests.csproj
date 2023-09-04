@@ -78,6 +78,7 @@
   <ItemGroup>
     <Compile Include="CollationTests.cs" />
     <Compile Include="ExecutionPlanNodeTests.cs" />
+    <Compile Include="CteTests.cs" />
     <Compile Include="ExecutionPlanTests.cs" />
     <Compile Include="ExpressionTests.cs" />
     <Compile Include="FakeXrmEasyTestsBase.cs" />

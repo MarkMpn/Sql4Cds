@@ -20,6 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private ExpressionCompilationContext _staticContext;
         private NodeCompilationContext _nodeContext;
+        private Dictionary<string, IDataExecutionPlanNodeInternal> _cteSubplans;
 
         public ExecutionPlanBuilder(IEnumerable<DataSource> dataSources, IQueryExecutionOptions options)
         {
@@ -166,7 +167,38 @@ namespace MarkMpn.Sql4Cds.Engine
             var originalSql = statement.ToSql();
 
             IRootExecutionPlanNodeInternal[] plans;
-            var hints = statement is StatementWithCtesAndXmlNamespaces stmtWithCtes ? stmtWithCtes.OptimizerHints : null;
+            IList<OptimizerHint> hints = null;
+            _cteSubplans = new Dictionary<string, IDataExecutionPlanNodeInternal>(StringComparer.OrdinalIgnoreCase);
+
+            if (statement is StatementWithCtesAndXmlNamespaces stmtWithCtes)
+            {
+                hints = stmtWithCtes.OptimizerHints;
+
+                if (stmtWithCtes.WithCtesAndXmlNamespaces != null)
+                {
+                    foreach (var cte in stmtWithCtes.WithCtesAndXmlNamespaces.CommonTableExpressions)
+                    {
+                        if (_cteSubplans.ContainsKey(cte.ExpressionName.Value))
+                            throw new NotSupportedQueryFragmentException($"A CTE with the name '{cte.ExpressionName.Value}' has already been declared.", cte.ExpressionName);
+
+                        // If the CTE isn't recursive then we can just convert it to a subquery
+                        var plan = ConvertSelectStatement(cte.QueryExpression, hints, null, null, _nodeContext);
+
+                        // Apply column aliases
+                        if (cte.Columns.Count > 0)
+                        {
+                            // TODO: What if a different number of columns?
+
+                            plan.ExpandWildcardColumns(_nodeContext);
+
+                            for (var i = 0; i < cte.Columns.Count; i++)
+                                plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
+                        }
+
+                        _cteSubplans.Add(cte.ExpressionName.Value, new AliasNode(plan, cte.ExpressionName, _nodeContext));
+                    }
+                }
+            }
 
             if (statement is SelectStatement select)
                 plans = new[] { ConvertSelectStatement(select) };
@@ -1657,9 +1689,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (select.On != null)
                 throw new NotSupportedQueryFragmentException("Unsupported ON clause", select.On);
-
-            if (select.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException("Unsupported CTE clause", select.WithCtesAndXmlNamespaces);
 
             var variableAssignments = new List<string>();
             SelectElement firstNonSetSelectElement = null;
@@ -3471,6 +3500,9 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (reference is NamedTableReference table)
             {
+                if (table.SchemaObject.Identifiers.Count == 1 && _cteSubplans.TryGetValue(table.SchemaObject.BaseIdentifier.Value, out var cteSubplan))
+                    return cteSubplan;
+
                 var dataSource = SelectDataSource(table.SchemaObject);
                 var entityName = table.SchemaObject.BaseIdentifier.Value;
 

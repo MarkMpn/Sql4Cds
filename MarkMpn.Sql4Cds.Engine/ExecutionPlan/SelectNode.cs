@@ -117,11 +117,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (col.SourceColumn == null)
                         {
                             // Add an all-attributes to the main entity and all link-entities
-                            fetchXml.Entity.AddItem(new allattributes());
+                            if (!fetchXml.HiddenAliases.Contains(fetchXml.Alias))
+                                fetchXml.Entity.AddItem(new allattributes());
 
                             foreach (var link in fetchXml.Entity.GetLinkEntities())
                             {
-                                if (link.SemiJoin)
+                                if (link.SemiJoin || fetchXml.HiddenAliases.Contains(link.alias))
                                     continue;
 
                                 link.AddItem(new allattributes());
