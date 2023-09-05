@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata);
                     fragment.Accept(tdsEndpointCompatibilityVisitor);
 
-                    if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                    if (tdsEndpointCompatibilityVisitor.IsCompatible && !tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
                     {
                         useTDSEndpointDirectly = true;
                         var sqlNode = new SqlNode
@@ -1663,6 +1663,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (tdsEndpointCompatibilityVisitor.IsCompatible && hintCompatibilityVisitor.TdsCompatible)
                     {
+                        if (tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
+                            select.Accept(new ReplaceCtesWithSubqueriesVisitor());
+
                         select.ScriptTokenStream = null;
                         var sql = new SqlNode
                         {

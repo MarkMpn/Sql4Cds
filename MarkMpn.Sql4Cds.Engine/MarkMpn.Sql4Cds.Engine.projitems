@@ -119,6 +119,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)SqlDateTypes.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlVariant.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)StateTransitionLoader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\CteValidatorVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ExplicitCollationVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\JoinConditionVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetadataExtensions.cs" />
@@ -139,6 +140,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\InSubqueryVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\OptimizerHintValidatingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ParameterlessCollectingVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplaceCtesWithSubqueriesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />
