@@ -176,6 +176,41 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void MultipleReferencesInUnionAll()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark')
+                SELECT * FROM cte UNION ALL SELECT cte.* FROM cte";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var concat = AssertNode<ConcatenateNode>(select.Source);
+            var fetch1 = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            var fetch2 = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            Assert.AreNotEqual(fetch1, fetch2);
+
+            foreach (var fetch in new[] { fetch1, fetch2 })
+            {
+                AssertFetchXml(fetch, @"
+                    <fetch>
+                        <entity name='contact'>
+                            <attribute name='contactid' />
+                            <attribute name='firstname' />
+                            <attribute name='lastname' />
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                        </entity>
+                    </fetch>");
+            }
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));

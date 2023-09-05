@@ -1818,6 +1818,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 concat.Sources.Add(left.Source);
 
+                left.ExpandWildcardColumns(context);
+
                 foreach (var col in left.ColumnSet)
                 {
                     concat.ColumnSet.Add(new ConcatenateColumn
@@ -1830,6 +1832,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             concat.Sources.Add(right.Source);
+
+            right.ExpandWildcardColumns(context);
 
             if (concat.ColumnSet.Count != right.ColumnSet.Count)
                 throw new NotSupportedQueryFragmentException("UNION must have the same number of columns in each query", binary);
