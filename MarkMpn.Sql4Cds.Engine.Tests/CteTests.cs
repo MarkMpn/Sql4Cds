@@ -109,6 +109,73 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void MergeFilters()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark')
+                SELECT * FROM cte WHERE lastname = 'Carrington'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MultipleReferencesWithAliases()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark')
+                SELECT * FROM cte a INNER JOIN cte b ON a.lastname = b.lastname";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <link-entity name='contact' from='lastname' to='lastname' alias='b' link-type='inner'>
+                            <attribute name='contactid' />
+                            <attribute name='firstname' />
+                            <attribute name='lastname' />
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                            <order attribute='contactid' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                        <order attribute='contactid' />
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));

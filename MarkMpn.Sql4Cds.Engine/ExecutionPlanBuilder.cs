@@ -20,7 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private ExpressionCompilationContext _staticContext;
         private NodeCompilationContext _nodeContext;
-        private Dictionary<string, IDataExecutionPlanNodeInternal> _cteSubplans;
+        private Dictionary<string, AliasNode> _cteSubplans;
 
         public ExecutionPlanBuilder(IEnumerable<DataSource> dataSources, IQueryExecutionOptions options)
         {
@@ -168,7 +168,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             IRootExecutionPlanNodeInternal[] plans;
             IList<OptimizerHint> hints = null;
-            _cteSubplans = new Dictionary<string, IDataExecutionPlanNodeInternal>(StringComparer.OrdinalIgnoreCase);
+            _cteSubplans = new Dictionary<string, AliasNode>(StringComparer.OrdinalIgnoreCase);
 
             if (statement is StatementWithCtesAndXmlNamespaces stmtWithCtes)
             {
@@ -3504,7 +3504,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (reference is NamedTableReference table)
             {
                 if (table.SchemaObject.Identifiers.Count == 1 && _cteSubplans.TryGetValue(table.SchemaObject.BaseIdentifier.Value, out var cteSubplan))
-                    return cteSubplan;
+                {
+                    var aliasNode = (AliasNode)cteSubplan.Clone();
+
+                    if (table.Alias != null)
+                        aliasNode.Alias = table.Alias.Value;
+
+                    return aliasNode;
+                }
 
                 var dataSource = SelectDataSource(table.SchemaObject);
                 var entityName = table.SchemaObject.BaseIdentifier.Value;
