@@ -147,6 +147,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         private EntityMetadata TryGetEntity(string logicalname)
         {
+            if (!IsCompatible)
+                return null;
+
             if (_tableNames.TryGetValue(logicalname, out var tableName))
                 logicalname = tableName;
 
