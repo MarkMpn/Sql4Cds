@@ -211,6 +211,160 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
         }
 
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void MultipleRecursiveReferences()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT cte.* FROM cte a INNER JOIN cte b ON a.lastname = b.lastname
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void HintsOnRecursiveReference()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT cte.* FROM cte WITH (NOLOCK)
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void RecursionWithoutUnionAll()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION
+                    SELECT cte.* FROM cte
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void OrderByWithoutTop()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT cte.* FROM cte
+                    ORDER BY firstname
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void GroupByOnRecursiveReference()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT cte.* FROM cte GROUP BY contactid, firstname, lastname
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void AggregateOnRecursiveReference()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT MIN(contactid), MIN(firstname), MIN(lastname) FROM cte
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void TopOnRecursiveReference()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT TOP 10 cte.* FROM cte
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void OuterJoinOnRecursiveReference()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT cte.* FROM contact LEFT OUTER JOIN cte ON contact.lastname = cte.lastname
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void SubqueryOnRecursiveReference()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT contactid, firstname, lastname FROM contact WHERE lastname IN (SELECT lastname FROM cte)
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));
