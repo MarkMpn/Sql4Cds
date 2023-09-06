@@ -192,9 +192,13 @@ namespace MarkMpn.Sql4Cds.Engine
                             // Apply column aliases
                             if (cte.Columns.Count > 0)
                             {
-                                // TODO: What if a different number of columns?
-
                                 plan.ExpandWildcardColumns(_nodeContext);
+
+                                if (cte.Columns.Count < plan.ColumnSet.Count)
+                                    throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has more columns than were specified in the column list.", cte);
+
+                                if (cte.Columns.Count > plan.ColumnSet.Count)
+                                    throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has fewer columns than were specified in the column list.", cte);
 
                                 for (var i = 0; i < cte.Columns.Count; i++)
                                     plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;

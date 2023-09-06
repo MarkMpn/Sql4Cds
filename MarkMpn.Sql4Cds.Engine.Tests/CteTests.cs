@@ -110,6 +110,30 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void ColumnAliases()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte (id, n) AS (SELECT accountid, name FROM account)
+                SELECT * FROM cte";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' alias='id' />
+                        <attribute name='name' alias='n' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void MergeFilters()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
@@ -359,6 +383,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
                     UNION ALL
                     SELECT contactid, firstname, lastname FROM contact WHERE lastname IN (SELECT lastname FROM cte)
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void IncorrectColumnCount()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte (id, fname) AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
                 )
                 SELECT * FROM cte";
 
