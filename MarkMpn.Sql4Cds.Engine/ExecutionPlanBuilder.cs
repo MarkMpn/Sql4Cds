@@ -181,21 +181,31 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (_cteSubplans.ContainsKey(cte.ExpressionName.Value))
                             throw new NotSupportedQueryFragmentException($"A CTE with the name '{cte.ExpressionName.Value}' has already been declared.", cte.ExpressionName);
 
-                        // If the CTE isn't recursive then we can just convert it to a subquery
-                        var plan = ConvertSelectStatement(cte.QueryExpression, hints, null, null, _nodeContext);
+                        var cteValidator = new CteValidatorVisitor();
+                        cte.Accept(cteValidator);
 
-                        // Apply column aliases
-                        if (cte.Columns.Count > 0)
+                        if (!cteValidator.IsRecursive)
                         {
-                            // TODO: What if a different number of columns?
+                            // If the CTE isn't recursive then we can just convert it to a subquery
+                            var plan = ConvertSelectStatement(cte.QueryExpression, hints, null, null, _nodeContext);
 
-                            plan.ExpandWildcardColumns(_nodeContext);
+                            // Apply column aliases
+                            if (cte.Columns.Count > 0)
+                            {
+                                // TODO: What if a different number of columns?
 
-                            for (var i = 0; i < cte.Columns.Count; i++)
-                                plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
+                                plan.ExpandWildcardColumns(_nodeContext);
+
+                                for (var i = 0; i < cte.Columns.Count; i++)
+                                    plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
+                            }
+
+                            _cteSubplans.Add(cte.ExpressionName.Value, new AliasNode(plan, cte.ExpressionName, _nodeContext));
                         }
-
-                        _cteSubplans.Add(cte.ExpressionName.Value, new AliasNode(plan, cte.ExpressionName, _nodeContext));
+                        else
+                        {
+                            throw new NotSupportedQueryFragmentException("Recursive CTEs are not yet supported", cte);
+                        }
                     }
                 }
             }

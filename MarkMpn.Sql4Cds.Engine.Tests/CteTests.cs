@@ -263,7 +263,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        [ExpectedException(typeof(QueryParseException))]
         public void OrderByWithoutTop()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
