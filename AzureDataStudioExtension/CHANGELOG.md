@@ -1,5 +1,11 @@
 # Change Log
 
+## [v7.5.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.0) - 2023-09-10
+
+Return correct schema for global option set values
+Fixed applying alias to primary key field
+Fixed CROSS APPLY with UNION ALL and references in each child query to the same outer column
+
 ## [v7.5.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.0) - 2023-09-03
 
 Added `sql_variant` type support, including `SQL_VARIANT_PROPERTY` function
