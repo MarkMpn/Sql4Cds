@@ -204,6 +204,12 @@ namespace MarkMpn.Sql4Cds.Engine
                                     plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
                             }
 
+                            for (var i = 0; i < plan.ColumnSet.Count; i++)
+                            {
+                                if (plan.ColumnSet[i].OutputColumn == null)
+                                    throw new NotSupportedQueryFragmentException($"No column name was specified for column {i+1} of '{cteValidator.Name}'", cte);
+                            }
+
                             _cteSubplans.Add(cte.ExpressionName.Value, new AliasNode(plan, cte.ExpressionName, _nodeContext));
                         }
                         else

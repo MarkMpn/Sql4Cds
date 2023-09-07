@@ -404,6 +404,59 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             planBuilder.Build(query, null, out _);
         }
 
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void AnonymousColumn()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname + '', lastname FROM contact WHERE firstname = 'Mark'
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void AliasedAnonymousColumn()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte (id, fname, lname) AS (
+                    SELECT contactid, firstname + '', lastname FROM contact WHERE firstname = 'Mark'
+                )
+                SELECT * FROM cte";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("id", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("contact.contactid", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("fname", select.ColumnSet[1].OutputColumn);
+            Assert.AreEqual("Expr1", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("lname", select.ColumnSet[2].OutputColumn);
+            Assert.AreEqual("contact.lastname", select.ColumnSet[2].SourceColumn);
+            var compute = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual("firstname + ''", compute.Columns["Expr1"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='lastname' />
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute=""firstname"" operator=""eq"" value=""Mark"" />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));
