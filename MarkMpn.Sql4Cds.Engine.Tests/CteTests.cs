@@ -134,6 +134,39 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void MultipleAnchorQueries()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte (id, n) AS (SELECT accountid, name FROM account UNION ALL select contactid, fullname FROM contact)
+                SELECT * FROM cte";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var concat = AssertNode<ConcatenateNode>(select.Source);
+            var account = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            AssertFetchXml(account, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var contact = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            AssertFetchXml(contact, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='fullname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void MergeFilters()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
@@ -455,6 +488,35 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void SimpleRecursion()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte AS (
+                    SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark'
+                    UNION ALL
+                    SELECT c.contactid, c.firstname, c.lastname FROM contact c INNER JOIN cte ON c.parentcustomerid = cte.contactid
+                )
+                SELECT * FROM cte";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var spoolProducer = AssertNode<IndexSpoolNode>(select.Source);
+            var concat = AssertNode<ConcatenateNode>(spoolProducer.Source);
+            var depth0 = AssertNode<ComputeScalarNode>(concat.Sources[0]);
+            var anchor = AssertNode<FetchXmlScan>(depth0.Source);
+            var assert = AssertNode<AssertNode>(concat.Sources[1]);
+            var nestedLoop = AssertNode<NestedLoopNode>(assert.Source);
+            var depthPlus1 = AssertNode<ComputeScalarNode>(nestedLoop.LeftSource);
+            var spoolConsumer = AssertNode<TableSpoolNode>(depthPlus1);
+            var children = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode

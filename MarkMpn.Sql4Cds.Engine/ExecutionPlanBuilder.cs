@@ -184,38 +184,129 @@ namespace MarkMpn.Sql4Cds.Engine
                         var cteValidator = new CteValidatorVisitor();
                         cte.Accept(cteValidator);
 
-                        if (!cteValidator.IsRecursive)
+                        // Start by converting the anchor query to a subquery
+                        var plan = ConvertSelectStatement(cteValidator.AnchorQuery, hints, null, null, _nodeContext);
+
+                        // Apply column aliases
+                        if (cte.Columns.Count > 0)
                         {
-                            // If the CTE isn't recursive then we can just convert it to a subquery
-                            var plan = ConvertSelectStatement(cte.QueryExpression, hints, null, null, _nodeContext);
+                            plan.ExpandWildcardColumns(_nodeContext);
 
-                            // Apply column aliases
-                            if (cte.Columns.Count > 0)
+                            if (cte.Columns.Count < plan.ColumnSet.Count)
+                                throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has more columns than were specified in the column list.", cte);
+
+                            if (cte.Columns.Count > plan.ColumnSet.Count)
+                                throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has fewer columns than were specified in the column list.", cte);
+
+                            for (var i = 0; i < cte.Columns.Count; i++)
+                                plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
+                        }
+
+                        for (var i = 0; i < plan.ColumnSet.Count; i++)
+                        {
+                            if (plan.ColumnSet[i].OutputColumn == null)
+                                throw new NotSupportedQueryFragmentException($"No column name was specified for column {i+1} of '{cteValidator.Name}'", cte);
+                        }
+
+                        var anchorQuery = new AliasNode(plan, cte.ExpressionName, _nodeContext);
+
+                        if (cteValidator.RecursiveQueries.Count > 0)
+                        {
+                            var ctePlan = anchorQuery.Source;
+
+                            // Add a ComputeScalar node to add the initial recursion depth (0)
+                            var recursionDepthField = _nodeContext.GetExpressionName();
+                            var initialRecursionDepthComputeScalar = new ComputeScalarNode
                             {
-                                plan.ExpandWildcardColumns(_nodeContext);
+                                Source = ctePlan,
+                                Columns =
+                                {
+                                    [recursionDepthField] = new IntegerLiteral { Value = "0" }
+                                }
+                            };
 
-                                if (cte.Columns.Count < plan.ColumnSet.Count)
-                                    throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has more columns than were specified in the column list.", cte);
+                            // Add a ConcatenateNode to combine the anchor results with the recursion results
+                            var recurseConcat = new ConcatenateNode
+                            {
+                                Sources = { initialRecursionDepthComputeScalar },
+                            };
 
-                                if (cte.Columns.Count > plan.ColumnSet.Count)
-                                    throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has fewer columns than were specified in the column list.", cte);
+                            foreach (var col in anchorQuery.ColumnSet)
+                            {
+                                var concatCol = new ConcatenateColumn
+                                {
+                                    SourceColumns = { col.SourceColumn },
+                                    OutputColumn = col.OutputColumn
+                                };
 
-                                for (var i = 0; i < cte.Columns.Count; i++)
-                                    plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
+                                recurseConcat.ColumnSet.Add(concatCol);
                             }
 
-                            for (var i = 0; i < plan.ColumnSet.Count; i++)
+                            recurseConcat.ColumnSet.Add(new ConcatenateColumn
                             {
-                                if (plan.ColumnSet[i].OutputColumn == null)
-                                    throw new NotSupportedQueryFragmentException($"No column name was specified for column {i+1} of '{cteValidator.Name}'", cte);
-                            }
+                                SourceColumns = { recursionDepthField },
+                                OutputColumn = recursionDepthField
+                            });
 
-                            _cteSubplans.Add(cte.ExpressionName.Value, new AliasNode(plan, cte.ExpressionName, _nodeContext));
+                            // Add an IndexSpool node in stack mode to enable the recursion
+                            var recurseIndexStack = new IndexSpoolNode
+                            {
+                                Source = recurseConcat,
+                                // TODO: WithStack = true
+                            };
+
+                            // Pull the same records into the recursive loop
+                            var recurseTableSpool = new TableSpoolNode
+                            {
+                                // TODO: Producer = recurseIndexStack
+                            };
+
+                            // Increment the depth
+                            var incrementedDepthField = _nodeContext.GetExpressionName();
+                            var incrementRecursionDepthComputeScalar = new ComputeScalarNode
+                            {
+                                Source = recurseTableSpool,
+                                Columns =
+                                {
+                                    [incrementedDepthField] = new BinaryExpression
+                                    {
+                                        FirstExpression = recursionDepthField.ToColumnReference(),
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        SecondExpression = new IntegerLiteral { Value = "1" }
+                                    }
+                                }
+                            };
+
+                            // Use a nested loop to pass through the records to the recusive queries
+                            var recurseLoop = new NestedLoopNode
+                            {
+                                LeftSource = incrementRecursionDepthComputeScalar,
+                                // TODO: Capture all CTE fields in the outer references
+                                JoinType = QualifiedJoinType.Inner,
+                            };
+
+                            // Ensure we don't get stuck in an infinite loop
+                            var assert = new AssertNode
+                            {
+                                Source = recurseLoop,
+                                Assertion = e =>
+                                {
+                                    var depth = e.GetAttributeValue<SqlInt32>(incrementedDepthField);
+                                    return depth.Value < 100;
+                                },
+                                ErrorMessage = "Recursion depth exceeded"
+                            };
+
+                            // Combine the recursion results into the main results
+                            recurseConcat.Sources.Add(assert);
+
+                            // TODO: Update the sources for each field in the concat node
+                            recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
+
+                            anchorQuery.Source = incrementRecursionDepthComputeScalar;
                         }
-                        else
-                        {
-                            throw new NotSupportedQueryFragmentException("Recursive CTEs are not yet supported", cte);
-                        }
+
+                        _cteSubplans.Add(cte.ExpressionName.Value, new AliasNode(plan, cte.ExpressionName, _nodeContext));
                     }
                 }
             }

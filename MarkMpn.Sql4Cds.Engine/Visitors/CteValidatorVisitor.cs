@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     /// <remarks>
     /// https://learn.microsoft.com/en-us/sql/t-sql/queries/with-common-table-expression-transact-sql?view=sql-server-ver16
     /// </remarks>
-    class CteValidatorVisitor : TSqlFragmentVisitor
+    class CteValidatorVisitor : TSqlConcreteFragmentVisitor
     {
         private int _cteReferenceCount;
         private FunctionCall _scalarAggregate;
@@ -21,6 +21,10 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public string Name { get; private set; }
 
         public bool IsRecursive { get; private set; }
+
+        public QueryExpression AnchorQuery { get; private set; }
+
+        public List<QueryExpression> RecursiveQueries { get; } = new List<QueryExpression>();
 
         public override void Visit(CommonTableExpression node)
         {
@@ -69,9 +73,32 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             base.ExplicitVisit(node);
 
+            if (!IsRecursive)
+                AnchorQuery = node;
+
             // UNION ALL is the only set operator allowed between the last anchor member and first recursive member, and when combining multiple recursive members.
             if (IsRecursive && (node.BinaryQueryExpressionType != BinaryQueryExpressionType.Union || !node.All))
                 throw new NotSupportedQueryFragmentException($"Recursive common table expression '{Name}' does not contain a top-level UNION ALL operator", node);
+        }
+
+        public override void ExplicitVisit(QuerySpecification node)
+        {
+            base.ExplicitVisit(node);
+
+            if (!IsRecursive)
+                AnchorQuery = node;
+            else
+                RecursiveQueries.Add(node);
+        }
+
+        public override void ExplicitVisit(QueryParenthesisExpression node)
+        {
+            base.ExplicitVisit(node);
+
+            if (!IsRecursive)
+                AnchorQuery = node;
+            else
+                RecursiveQueries.Add(node);
         }
 
         public override void Visit(QuerySpecification node)
