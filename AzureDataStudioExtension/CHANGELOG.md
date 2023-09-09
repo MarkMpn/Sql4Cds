@@ -1,5 +1,9 @@
 # Change Log
 
+## [v7.5.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.1) - 2023-09-10
+
+Autcomplete variable names at start of query
+
 ## [v7.5.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.0) - 2023-09-03
 
 Added `sql_variant` type support, including `SQL_VARIANT_PROPERTY` function

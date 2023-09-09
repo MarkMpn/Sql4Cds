@@ -22,33 +22,8 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added sql_variant type support, including SQL_VARIANT_PROPERTY function
-Added IS [NOT] DISTINCT FROM predicate support
-Added @@SERVERNAME and @@VERSION global variables
-Added SERVERPROPERTY function support
-Added USE_LEGACY_UPDATE_MESSAGES query hint to use legacy update messages Assign, SetState, SetParentBusinessUnit and SetBusinessEquipment
-
-Subquery fixes:
-- Only include requested columns from CROSS APPLY and query-defined tables
-- Performance improvements for uncorrelated scalar subqueries
-- Only retrieve minimal rows for scalar subqueries
-- Fixed use of nested IN and EXISTS subqueries
-
-Fixed use of table-valued function with alias
-Fixed JSON_VALUE function with embedded null literals
-Fixed bulk DML operations that require non-standard requests
-Do not use merge joins for data types with different sort ordering
-Fixed filtering and sorting on non-lowercase attributes
-Fixed executing messages with OptionSetValue parameters
-Improved error reporting on batch DML statements
-
-Updated minimum XTB version
-Improved plugin load logic to avoid version problems with dependencies
-Added autocomplete for collation names and variable names
-Fixed cross-threading error when showing warning messages
-Preserve tool window locations
-Improved display of string values containing line breaks and tabs
-</releaseNotes>
+    <releaseNotes>Autcomplete variable names at start of query
+    </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
