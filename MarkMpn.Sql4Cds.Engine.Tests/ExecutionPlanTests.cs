@@ -6103,5 +6103,78 @@ FROM   account AS r;";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void DoNotFoldJoinsOnReusedAliases()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT s.systemuserid,
+                       b_s.systemuserid
+                FROM   account AS a
+                       INNER JOIN
+                       systemuser AS s
+                       ON a.ownerid = s.systemuserid
+                          AND s.domainname LIKE 'AAA%'
+                       INNER JOIN
+                       (SELECT a.name,
+                               s.systemuserid,
+                               s.msdyn_agenttype
+                        FROM   account AS a
+                               INNER JOIN
+                               systemuser AS s
+                               ON a.ownerid = s.systemuserid
+                        WHERE  s.domainname LIKE 'XXX%') AS b_s
+                       ON s.systemuserid = b_s.systemuserid
+            ";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var join = AssertNode<HashJoinNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.Inner, join.JoinType);
+            Assert.AreEqual("s.systemuserid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("b_s.systemuserid", join.RightAttribute.ToSql());
+
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            Assert.AreEqual("a", fetch1.Alias);
+            AssertFetchXml(fetch1, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <link-entity name='systemuser' from='systemuserid' to='ownerid' link-type='inner' alias='s'>
+                            <attribute name='systemuserid' />
+                            <filter>
+                                <condition attribute='domainname' operator='like' value='AAA%' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+
+            var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+            Assert.AreEqual("b_s", fetch2.Alias);
+            CollectionAssert.Contains(fetch2.HiddenAliases, "b_s");
+            CollectionAssert.Contains(fetch2.HiddenAliases, "s");
+            Assert.AreEqual("b_s.name", fetch2.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("b_s.name", fetch2.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("s.systemuserid", fetch2.ColumnMappings[1].SourceColumn);
+            Assert.AreEqual("b_s.systemuserid", fetch2.ColumnMappings[1].OutputColumn);
+            Assert.AreEqual("s.msdyn_agentType", fetch2.ColumnMappings[2].SourceColumn);
+            Assert.AreEqual("b_s.msdyn_agenttype", fetch2.ColumnMappings[2].OutputColumn);
+            AssertFetchXml(fetch2, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='systemuser' from='systemuserid' to='ownerid' link-type='inner' alias='s'>
+                            <attribute name='systemuserid' />
+                            <attribute name='msdyn_agentType' />
+                            <filter>
+                                <condition attribute='domainname' operator='like' value='XXX%' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
     }
 }
