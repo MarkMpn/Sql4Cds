@@ -3,7 +3,9 @@
 By [Mark Carrington](https://markcarrington.dev/sql-4-cds/), supported by [Data8](https://www.data-8.co.uk/)
 
 SQL 4 CDS provides an [engine](https://www.nuget.org/packages/MarkMpn.Sql4Cds.Engine/),
-[XrmToolBox tool](https://www.xrmtoolbox.com/plugins/MarkMpn.SQL4CDS/) and [SSMS plugin](https://markcarrington.dev/sql-4-cds/sql-4-cds-ssms-edition/)
+[XrmToolBox tool](https://www.xrmtoolbox.com/plugins/MarkMpn.SQL4CDS/),
+[Azure Data Studio plugin](https://github.com/microsoft/azuredatastudio/wiki/List-of-Extensions)
+and [SSMS plugin](https://markcarrington.dev/sql-4-cds/sql-4-cds-ssms-edition/)
 for using standard SQL syntax to query data stored in Microsoft Dataverse / Dynamics 365.
 
 It converts the provided SQL query into the corresponding [FetchXML](https://docs.microsoft.com/en-us/powerapps/developer/common-data-service/fetchxml-schema?WT.mc_id=DX-MVP-5004203)
@@ -60,6 +62,20 @@ FROM   metadata.entity
        INNER JOIN metadata.attribute
        ON entity.logicalname = attribute.entitylogicalname
 WHERE  attribute.description IS NULL
+```
+
+You can also execute messages using stored procedure or table valued function syntax:
+
+```sql
+-- Execute the WhoAmI message as a stored procedure. Capture the output parameters in variables
+declare @orgid uniqueidentifier, @buid uniqueidentifier, @userid uniqueidentifier
+exec WhoAmI @UserId = @userid output, @BusinessUnitId = @buid output, @OrganizationId = @orgid output
+
+-- Show the values of the variables
+select @userid, @orgid, @buid
+
+-- Execute the same message using table valued function syntax
+select * from WhoAmI()
 ```
 
 ## FetchXML Builder Integration

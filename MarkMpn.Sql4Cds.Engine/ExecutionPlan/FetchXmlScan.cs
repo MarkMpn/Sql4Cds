@@ -107,10 +107,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool _lastFullSchema;
         private string _lastHiddenAliases;
         private string _lastColumnMappings;
-        private bool _lastBuildingSelectClause;
         private bool _resetPage;
         private string _startingPage;
-        private List<string> _pagingFields;
+        private List<KeyValuePair<string, string>> _pagingFields;
         private List<SqlEntityReference> _lastPageValues;
 
         public FetchXmlScan()
@@ -396,9 +395,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var subFilter = new filter();
 
                 for (var j = 0; j < i; j++)
-                    subFilter.AddItem(new condition { entityname = j == 0 ? null : _pagingFields[j].Split('.')[0], attribute = _pagingFields[j].Split('.')[1], @operator = _lastPageValues[j].IsNull ? @operator.@null : @operator.eq, value = _lastPageValues[j].IsNull ? null : _lastPageValues[j].Id.ToString() });
+                    subFilter.AddItem(new condition { entityname = j == 0 ? null : _pagingFields[j].Key.Split('.')[0], attribute = _pagingFields[j].Key.Split('.')[1], @operator = _lastPageValues[j].IsNull ? @operator.@null : @operator.eq, value = _lastPageValues[j].IsNull ? null : _lastPageValues[j].Id.ToString() });
 
-                subFilter.AddItem(new condition { entityname = i == 0 ? null : _pagingFields[i].Split('.')[0], attribute = _pagingFields[i].Split('.')[1], @operator = @operator.gt, value = _lastPageValues[i].Id.ToString() });
+                subFilter.AddItem(new condition { entityname = i == 0 ? null : _pagingFields[i].Key.Split('.')[0], attribute = _pagingFields[i].Key.Split('.')[1], @operator = @operator.gt, value = _lastPageValues[i].Id.ToString() });
 
                 filter.AddItem(subFilter);
             }
@@ -591,7 +590,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastPageValues.Clear();
 
                 foreach (var pagingField in _pagingFields)
-                    _lastPageValues.Add((SqlEntityReference)entity[pagingField]);
+                    _lastPageValues.Add((SqlEntityReference)entity[pagingField.Value]);
             }
         }
 
@@ -1660,7 +1659,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 RemoveSorts();
 
-                _pagingFields = new List<string>();
+                _pagingFields = new List<KeyValuePair<string,string>>();
                 _lastPageValues = new List<SqlEntityReference>();
 
                 // Ensure the primary key of each entity is included
@@ -1686,7 +1685,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private object[] AddPrimaryIdAttribute(object[] items, string alias, EntityMetadata metadata)
         {
-            _pagingFields.Add(alias + "." + metadata.PrimaryIdAttribute);
+            var attrName = metadata.PrimaryIdAttribute;
+            var attrAlias = items == null ? attrName : items.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == attrName)?.alias ?? attrName;
+            _pagingFields.Add(new KeyValuePair<string, string>(alias + "." + attrName, alias + "." + attrAlias));
 
             if (items == null || items.Length == 0)
             {

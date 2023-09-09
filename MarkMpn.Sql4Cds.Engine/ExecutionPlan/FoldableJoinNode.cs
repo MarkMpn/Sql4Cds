@@ -273,6 +273,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!FetchXmlScan.IsValidAlias(rightFetch.Alias))
                 return false;
 
+            // Can't fold joins if the two FetchXML instances reuse aliases
+            if (leftFetch.Entity
+                .GetLinkEntities()
+                .Select(le => le.alias)
+                .Concat(new[] { leftFetch.Alias })
+                .Intersect(
+                    rightFetch.Entity
+                    .GetLinkEntities()
+                    .Select(le => le.alias)
+                    .Concat(new[] { rightFetch.Alias }),
+                    StringComparer.OrdinalIgnoreCase)
+                .Any())
+                return false;
+
             var leftEntity = leftFetch.Entity;
             var rightEntity = rightFetch.Entity;
 

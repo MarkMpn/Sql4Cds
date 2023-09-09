@@ -2973,9 +2973,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (fromOuter)
                 {
-                    var paramName = "@" + context.GetExpressionName();
-                    outerReferences.Add(outerColumn, paramName);
-                    context.ParameterTypes[paramName] = outerSchema.Schema[outerColumn].Type;
+                    if (!outerReferences.TryGetValue(outerColumn, out var paramName))
+                    {
+                        // If the column is not already being passed through, add it to the list
+                        paramName = "@" + context.GetExpressionName();
+                        outerReferences.Add(outerColumn, paramName);
+                        context.ParameterTypes[paramName] = outerSchema.Schema[outerColumn].Type;
+                    }
 
                     rewrites.Add(
                         new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = column } } } },
