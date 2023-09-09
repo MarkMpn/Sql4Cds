@@ -22,7 +22,11 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Autcomplete variable names at start of query
+    <releaseNotes>Return correct schema for global option set values
+Fixed applying alias to primary key field
+Fixed CROSS APPLY with UNION ALL and references in each child query to the same outer column
+Fixed joins on subqueries with reused table aliases
+Autcomplete variable names at start of query
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

@@ -11,25 +11,10 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added sql_variant type support, including SQL_VARIANT_PROPERTY function
-Added IS [NOT] DISTINCT FROM predicate support
-Added @@SERVERNAME and @@VERSION global variables
-Added SERVERPROPERTY function support
-Added USE_LEGACY_UPDATE_MESSAGES query hint to use legacy update messages Assign, SetState, SetParentBusinessUnit and SetBusinessEquipment
-
-Subquery fixes:
-- Only include requested columns from CROSS APPLY and query-defined tables
-- Performance improvements for uncorrelated scalar subqueries
-- Only retrieve minimal rows for scalar subqueries
-- Fixed use of nested IN and EXISTS subqueries
-
-Fixed use of table-valued function with alias
-Fixed JSON_VALUE function with embedded null literals
-Fixed bulk DML operations that require non-standard requests
-Do not use merge joins for data types with different sort ordering
-Fixed filtering and sorting on non-lowercase attributes
-Fixed executing messages with OptionSetValue parameters
-Improved error reporting on batch DML statements
+    <releaseNotes>Return correct schema for global option set values
+Fixed applying alias to primary key field
+Fixed CROSS APPLY with UNION ALL and references in each child query to the same outer column
+Fixed joins on subqueries with reused table aliases
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

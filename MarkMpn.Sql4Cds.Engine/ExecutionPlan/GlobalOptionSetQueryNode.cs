@@ -122,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
 
-            var props = (IEnumerable<OptionSetProperty>)_optionsetProps.Values;
+            var props = (IEnumerable<OptionSetProperty>)(_optionsetCols ?? _optionsetProps).Values;
 
             if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
                 props = props.OrderBy(p => p.Name);
