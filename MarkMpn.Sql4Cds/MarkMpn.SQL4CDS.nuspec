@@ -25,6 +25,7 @@ Using the preview TDS Endpoint, SELECT queries can also be run that aren't conve
     <releaseNotes>Return correct schema for global option set values
 Fixed applying alias to primary key field
 Fixed CROSS APPLY with UNION ALL and references in each child query to the same outer column
+Fixed joins on subqueries with reused table aliases
 Autcomplete variable names at start of query
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
