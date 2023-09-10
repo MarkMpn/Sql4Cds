@@ -285,20 +285,55 @@ namespace MarkMpn.Sql4Cds.Engine
                                 JoinType = QualifiedJoinType.Inner,
                             };
 
-                            // Ensure we don't get stuck in an infinite loop
-                            var assert = new AssertNode
+                            if (cteValidator.RecursiveQueries.Count > 1)
                             {
-                                Source = recurseLoop,
-                                Assertion = e =>
-                                {
-                                    var depth = e.GetAttributeValue<SqlInt32>(incrementedDepthField);
-                                    return depth.Value < 100;
-                                },
-                                ErrorMessage = "Recursion depth exceeded"
-                            };
+                                // Combine the results of each recursive query with a concat node
+                                var concat = new ConcatenateNode();
+                                recurseLoop.RightSource = concat;
 
-                            // Combine the recursion results into the main results
-                            recurseConcat.Sources.Add(assert);
+                                foreach (var qry in cteValidator.RecursiveQueries)
+                                    concat.Sources.Add(ConvertRecursiveCTEQuery(qry));
+                            }
+                            else
+                            {
+                                recurseLoop.RightSource = ConvertRecursiveCTEQuery(cteValidator.RecursiveQueries[0]);
+                            }
+
+                            // Ensure we don't get stuck in an infinite loop
+                            var maxRecursion = stmtWithCtes.OptimizerHints
+                                .OfType<LiteralOptimizerHint>()
+                                .Where(hint => hint.HintKind == OptimizerHintKind.MaxRecursion)
+                                .FirstOrDefault()
+                                ?.Value
+                                ?.Value
+                                ?? "100";
+
+                            if (!Int32.TryParse(maxRecursion, out var max) || max < 0)
+                                throw new NotSupportedQueryFragmentException("Invalid MAXRECURSION hint", stmtWithCtes.OptimizerHints
+                                .OfType<LiteralOptimizerHint>()
+                                .Where(hint => hint.HintKind == OptimizerHintKind.MaxRecursion)
+                                .First());
+
+                            if (max > 0)
+                            {
+                                var assert = new AssertNode
+                                {
+                                    Source = recurseLoop,
+                                    Assertion = e =>
+                                    {
+                                        var depth = e.GetAttributeValue<SqlInt32>(incrementedDepthField);
+                                        return depth.Value < max;
+                                    },
+                                    ErrorMessage = "Recursion depth exceeded"
+                                };
+
+                                // Combine the recursion results into the main results
+                                recurseConcat.Sources.Add(assert);
+                            }
+                            else
+                            {
+                                recurseConcat.Sources.Add(recurseLoop);
+                            }
 
                             // TODO: Update the sources for each field in the concat node
                             recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
