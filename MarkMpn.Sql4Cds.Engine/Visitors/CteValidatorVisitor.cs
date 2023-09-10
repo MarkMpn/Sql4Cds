@@ -81,16 +81,6 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 throw new NotSupportedQueryFragmentException($"Recursive common table expression '{Name}' does not contain a top-level UNION ALL operator", node);
         }
 
-        public override void ExplicitVisit(QuerySpecification node)
-        {
-            base.ExplicitVisit(node);
-
-            if (!IsRecursive)
-                AnchorQuery = node;
-            else
-                RecursiveQueries.Add(node);
-        }
-
         public override void ExplicitVisit(QueryParenthesisExpression node)
         {
             base.ExplicitVisit(node);
@@ -101,13 +91,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 RecursiveQueries.Add(node);
         }
 
-        public override void Visit(QuerySpecification node)
+        public override void ExplicitVisit(QuerySpecification node)
         {
             _scalarAggregate = null;
             _subquery = null;
             _outerJoin = null;
 
-            base.Visit(node);
+            base.ExplicitVisit(node);
 
             // The following clauses can't be used in the CTE_query_definition:
             // ORDER BY (except when a TOP clause is specified)
@@ -151,6 +141,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 if (_subquery != null)
                     throw new NotSupportedQueryFragmentException("Recursive references are not allowed in subqueries", _subquery);
             }
+
+            if (!IsRecursive)
+                AnchorQuery = node;
+            else
+                RecursiveQueries.Add(node);
         }
 
         public override void Visit(SelectStatement node)
@@ -175,6 +170,32 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             if (_cteReferenceCount > count)
                 _subquery = node;
+        }
+
+        public override void Visit(FunctionCall node)
+        {
+            base.Visit(node);
+
+            switch (node.FunctionName.Value.ToLowerInvariant())
+            {
+                case "approx_count_distinct":
+                case "avg":
+                case "checksum_agg":
+                case "count":
+                case "count_big":
+                case "grouping":
+                case "grouping_id":
+                case "max":
+                case "min":
+                case "stdev":
+                case "stdevp":
+                case "string_agg":
+                case "sum":
+                case "var":
+                case "varp":
+                    _scalarAggregate = node;
+                    break;
+            }
         }
     }
 }

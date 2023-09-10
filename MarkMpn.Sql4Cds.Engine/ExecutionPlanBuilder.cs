@@ -209,6 +209,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
 
                         var anchorQuery = new AliasNode(plan, cte.ExpressionName, _nodeContext);
+                        _cteSubplans.Add(cte.ExpressionName.Value, anchorQuery);
 
                         if (cteValidator.RecursiveQueries.Count > 0)
                         {
@@ -281,9 +282,15 @@ namespace MarkMpn.Sql4Cds.Engine
                             var recurseLoop = new NestedLoopNode
                             {
                                 LeftSource = incrementRecursionDepthComputeScalar,
-                                // TODO: Capture all CTE fields in the outer references
                                 JoinType = QualifiedJoinType.Inner,
+                                OuterReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                             };
+
+                            // Capture all CTE fields in the outer references
+                            var anchorSchema = anchorQuery.GetSchema(_nodeContext);
+
+                            foreach (var col in anchorSchema.Schema)
+                                recurseLoop.OuterReferences[col.Key] = "@" + _nodeContext.GetExpressionName();
 
                             if (cteValidator.RecursiveQueries.Count > 1)
                             {
@@ -292,11 +299,39 @@ namespace MarkMpn.Sql4Cds.Engine
                                 recurseLoop.RightSource = concat;
 
                                 foreach (var qry in cteValidator.RecursiveQueries)
-                                    concat.Sources.Add(ConvertRecursiveCTEQuery(qry));
+                                {
+                                    var rightSource = ConvertRecursiveCTEQuery(qry, anchorSchema, cteValidator, recurseLoop.OuterReferences);
+                                    concat.Sources.Add(rightSource.Source);
+
+                                    if (concat.Sources.Count == 1)
+                                    {
+                                        for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                        {
+                                            var col = rightSource.ColumnSet[i];
+                                            var expr = _nodeContext.GetExpressionName();
+                                            concat.ColumnSet.Add(new ConcatenateColumn { OutputColumn = expr });
+                                            recurseLoop.DefinedValues.Add(expr, expr);
+                                            recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
+                                        }
+                                    }
+
+                                    for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                        concat.ColumnSet[i].SourceColumns.Add(rightSource.ColumnSet[i].SourceColumn);
+                                }
                             }
                             else
                             {
-                                recurseLoop.RightSource = ConvertRecursiveCTEQuery(cteValidator.RecursiveQueries[0]);
+                                var rightSource = ConvertRecursiveCTEQuery(cteValidator.RecursiveQueries[0], anchorSchema, cteValidator, recurseLoop.OuterReferences);
+                                recurseLoop.RightSource = rightSource.Source;
+
+                                for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                {
+                                    var col = rightSource.ColumnSet[i];
+                                    var expr = _nodeContext.GetExpressionName();
+
+                                    recurseLoop.DefinedValues.Add(expr, col.SourceColumn);
+                                    recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
+                                }
                             }
 
                             // Ensure we don't get stuck in an infinite loop
@@ -335,13 +370,10 @@ namespace MarkMpn.Sql4Cds.Engine
                                 recurseConcat.Sources.Add(recurseLoop);
                             }
 
-                            // TODO: Update the sources for each field in the concat node
                             recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
 
                             anchorQuery.Source = incrementRecursionDepthComputeScalar;
                         }
-
-                        _cteSubplans.Add(cte.ExpressionName.Value, new AliasNode(plan, cte.ExpressionName, _nodeContext));
                     }
                 }
             }
@@ -400,6 +432,21 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 queries.AddRange(optimized);
             }
+        }
+
+        private SelectNode ConvertRecursiveCTEQuery(QueryExpression queryExpression, INodeSchema anchorSchema, CteValidatorVisitor cteValidator, Dictionary<string, string> outerReferences)
+        {
+            // Convert the query using the anchor query as a subquery to check for ambiguous column names
+            ConvertSelectStatement(queryExpression, null, null, null, _nodeContext);
+
+            // Remove recursive references from the FROM clause, moving join predicates to the WHERE clause
+            // If the recursive reference was in an unqualified join, replace it with (SELECT @Expr1, @Expr2) AS cte (field1, field2)
+            // Otherwise, remove it entirely and replace column references with variables
+            var cteReplacer = new RemoveRecursiveCTETableReferencesVisitor(cteValidator.Name, anchorSchema.Schema.Keys.ToArray(), outerReferences);
+            queryExpression.Accept(cteReplacer);
+
+            // Convert the modified query.
+            return ConvertSelectStatement(queryExpression, null, anchorSchema, outerReferences, _nodeContext);
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertExecuteStatement(ExecuteStatement execute)
