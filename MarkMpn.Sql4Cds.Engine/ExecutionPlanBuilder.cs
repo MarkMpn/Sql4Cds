@@ -253,13 +253,13 @@ namespace MarkMpn.Sql4Cds.Engine
                             var recurseIndexStack = new IndexSpoolNode
                             {
                                 Source = recurseConcat,
-                                // TODO: WithStack = true
+                                WithStack = true
                             };
 
                             // Pull the same records into the recursive loop
                             var recurseTableSpool = new TableSpoolNode
                             {
-                                // TODO: Producer = recurseIndexStack
+                                Producer = recurseIndexStack
                             };
 
                             // Increment the depth
@@ -372,7 +372,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
 
-                            anchorQuery.Source = incrementRecursionDepthComputeScalar;
+                            anchorQuery.Source = recurseIndexStack;
                         }
                     }
                 }
@@ -446,7 +446,8 @@ namespace MarkMpn.Sql4Cds.Engine
             queryExpression.Accept(cteReplacer);
 
             // Convert the modified query.
-            return ConvertSelectStatement(queryExpression, null, anchorSchema, outerReferences, _nodeContext);
+            var childContext = new NodeCompilationContext(_nodeContext, outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[kvp.Key].Type, StringComparer.OrdinalIgnoreCase));
+            return ConvertSelectStatement(queryExpression, null, null, null, childContext);
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertExecuteStatement(ExecuteStatement execute)
@@ -3322,7 +3323,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         if (EstimateRowsOut(node, context) > 1)
                         {
-                            var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy };
+                            var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy, IsPerformanceSpool = true };
                             loopRightSource = spool;
                         }
                     }
@@ -3600,7 +3601,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 var spool = new TableSpoolNode
                 {
                     Source = lastCorrelatedStep.Source,
-                    SpoolType = SpoolType.Lazy
+                    SpoolType = SpoolType.Lazy,
+                    IsPerformanceSpool = true
                 };
 
                 lastCorrelatedStep.Source = spool;
@@ -3951,7 +3953,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // Spool the inner table so the results can be reused by the nested loop
-                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Eager };
+                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Eager, IsPerformanceSpool = true };
 
                     joinNode = new NestedLoopNode
                     {

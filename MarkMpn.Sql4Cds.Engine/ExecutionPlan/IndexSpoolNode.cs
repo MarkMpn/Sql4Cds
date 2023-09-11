@@ -13,11 +13,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Stores data in a hashtable for fast lookups
     /// </summary>
-    class IndexSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class IndexSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode, ISpoolProducerNode
     {
         private IDictionary<INullable, List<Entity>> _hashTable;
         private Func<INullable, INullable> _keySelector;
         private Func<INullable, INullable> _seekSelector;
+        private Stack<Entity> _stack;
 
         public IndexSpoolNode() { }
 
@@ -28,17 +29,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The column in the data source to create an index on
         /// </summary>
         [Category("Index Spool")]
-        [Description("The column in the data source to create an index on")]
         [DisplayName("Key Column")]
+        [Description("The column in the data source to create an index on")]
         public string KeyColumn { get; set; }
 
         /// <summary>
         /// The name of the parameter to use for seeking in the index
         /// </summary>
         [Category("Index Spool")]
-        [Description("The name of the parameter to use for seeking in the index")]
         [DisplayName("Seek Value")]
+        [Description("The name of the parameter to use for seeking in the index")]
         public string SeekValue { get; set; }
+
+        /// <summary>
+        /// Stores the records in a stack to support recursive CTEs
+        /// </summary>
+        [Category("Index Spool")]
+        [DisplayName("With Stack")]
+        [Description("Stores the records in a stack to support recursive CTEs")]
+        public bool WithStack { get; set; }
+
+        [Browsable(false)]
+        public ISpoolProducerNode LastClone { get; private set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -61,15 +73,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             Source = Source.FoldQuery(context, hints);
 
-            // Index and seek values must be the same type
-            var indexType = Source.GetSchema(context).Schema[KeyColumn].Type;
-            var seekType = context.ParameterTypes[SeekValue];
+            if (KeyColumn != null && SeekValue != null)
+            {
+                // Index and seek values must be the same type
+                var indexType = Source.GetSchema(context).Schema[KeyColumn].Type;
+                var seekType = context.ParameterTypes[SeekValue];
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, context.PrimaryDataSource, out var consistentType))
-                throw new QueryExecutionException($"No type conversion available for {indexType.ToSql()} and {seekType.ToSql()}");
+                if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, context.PrimaryDataSource, out var consistentType))
+                    throw new QueryExecutionException($"No type conversion available for {indexType.ToSql()} and {seekType.ToSql()}");
 
-            _keySelector = SqlTypeConverter.GetConversion(indexType, consistentType);
-            _seekSelector = SqlTypeConverter.GetConversion(seekType, consistentType);
+                _keySelector = SqlTypeConverter.GetConversion(indexType, consistentType);
+                _seekSelector = SqlTypeConverter.GetConversion(seekType, consistentType);
+            }
 
             return this;
         }
@@ -86,6 +101,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
+            if (WithStack)
+                return ExecuteInternalWithStack(context);
+
             // Build an internal hash table of the source indexed by the key column
             if (_hashTable == null)
             {
@@ -102,6 +120,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return matches;
         }
 
+        private IEnumerable<Entity> ExecuteInternalWithStack(NodeExecutionContext context)
+        {
+            _stack = new Stack<Entity>();
+
+            foreach (var entity in Source.Execute(context))
+            {
+                _stack.Push(entity);
+                yield return entity;
+            }
+        }
+
+        public IEnumerable<Entity> GetWorkTable()
+        {
+            while (_stack.Count > 0)
+                yield return _stack.Pop();
+        }
+
         public override string ToString()
         {
             return "Index Spool\r\n(Eager Spool)";
@@ -111,14 +146,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new IndexSpoolNode
             {
-                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 KeyColumn = KeyColumn,
                 SeekValue = SeekValue,
                 _keySelector = _keySelector,
                 _seekSelector = _seekSelector
             };
 
+            LastClone = clone;
+
+            clone.Source = (IDataExecutionPlanNodeInternal)Source.Clone();
             clone.Source.Parent = clone;
+
             return clone;
         }
     }

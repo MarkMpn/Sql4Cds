@@ -13,7 +13,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Provides a rewindable cache of a data source
     /// </summary>
-    class TableSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class TableSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode, ISpoolProducerNode
     {
         class CachedList<T> : IEnumerable<T>
         {
@@ -83,6 +83,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public TableSpoolNode() { }
+
         private Entity[] _eagerSpool;
         private CachedList<Entity> _lazyCache;
 
@@ -95,6 +97,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Table Spool")]
         [DisplayName("Spool Type")]
         public SpoolType SpoolType { get; set; }
+
+        /// <summary>
+        /// Indicates if this spool is in place only for performance reasons
+        /// </summary>
+        internal bool IsPerformanceSpool { get; set; }
+
+        /// <summary>
+        /// The node that produces data that this node should repeat
+        /// </summary>
+        /// <remarks>
+        /// If this property is set, the node operates in Consumer mode.
+        /// </remarks>
+        [Browsable(false)]
+        public ISpoolProducerNode Producer { get; set; }
+
+        [Browsable(false)]
+        public ISpoolProducerNode LastClone { get; private set; }
 
         internal int GetCount(NodeExecutionContext context)
         {
@@ -124,19 +143,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            yield return Source;
+            if (Source != null)
+                yield return Source;
         }
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            return Source.GetSchema(context);
+            return (Source ?? Producer).GetSchema(context);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            if (Source == null)
+                return this;
+
             Source = Source.FoldQuery(context, hints);
 
-            if (hints != null && hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
+            if (IsPerformanceSpool && hints != null && hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
                 return Source;
 
             Source.Parent = this;
@@ -145,12 +168,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            Source.AddRequiredColumns(context, requiredColumns);
+            Source?.AddRequiredColumns(context, requiredColumns);
         }
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
+            if (Source == null)
+                return new RowCountEstimate(1);
+
             return Source.EstimateRowsOut(context);
+        }
+
+        public IEnumerable<Entity> GetWorkTable()
+        {
+            return (IEnumerable<Entity>)_eagerSpool ?? _lazyCache;
         }
 
         public override string ToString()
@@ -162,11 +193,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new TableSpoolNode
             {
-                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                Producer = Producer?.LastClone,
                 SpoolType = SpoolType
             };
 
-            clone.Source.Parent = clone;
+            LastClone = clone;
+
+            if (Source != null)
+            {
+                clone.Source = (IDataExecutionPlanNodeInternal)Source.Clone();
+                clone.Source.Parent = clone;
+            }
+
             return clone;
         }
     }
