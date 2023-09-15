@@ -1902,5 +1902,62 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 collation.CollationLabel == CollationLabel.NoCollation)
                 throw new NotSupportedQueryFragmentException($"Cannot resolve collation conflict for {description}", fragment);
         }
+
+        /// <summary>
+        /// Combines two boolean expressions with AND
+        /// </summary>
+        /// <param name="expr1">The first expression</param>
+        /// <param name="expr2">The second expression</param>
+        /// <returns>The two expressions combined with AND</returns>
+        public static BooleanExpression And(this BooleanExpression expr1, BooleanExpression expr2)
+        {
+            if (expr1 == null)
+                return expr2;
+
+            if (expr2 == null)
+                return expr1;
+
+            return new BooleanBinaryExpression
+            {
+                FirstExpression = expr1,
+                BinaryExpressionType = BooleanBinaryExpressionType.And,
+                SecondExpression = expr2
+            };
+        }
+
+        /// <summary>
+        /// Returns the comparison type that can be used for the transitive comparison
+        /// </summary>
+        /// <param name="cmp">The comparison type to get the transitive version of</param>
+        /// <returns>The transitive comparison type</returns>
+        public static BooleanComparisonType TransitiveComparison(this BooleanComparisonType cmp)
+        {
+            switch (cmp)
+            {
+                case BooleanComparisonType.Equals:
+                case BooleanComparisonType.NotEqualToBrackets:
+                case BooleanComparisonType.NotEqualToExclamation:
+                case BooleanComparisonType.IsDistinctFrom:
+                case BooleanComparisonType.IsNotDistinctFrom:
+                    return cmp;
+
+                case BooleanComparisonType.LessThan:
+                    return BooleanComparisonType.GreaterThanOrEqualTo;
+
+                case BooleanComparisonType.LessThanOrEqualTo:
+                case BooleanComparisonType.NotGreaterThan:
+                    return BooleanComparisonType.GreaterThan;
+
+                case BooleanComparisonType.GreaterThan:
+                    return BooleanComparisonType.LessThanOrEqualTo;
+
+                case BooleanComparisonType.GreaterThanOrEqualTo:
+                case BooleanComparisonType.NotLessThan:
+                    return BooleanComparisonType.LessThan;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(cmp));
+            }
+        }
     }
 }

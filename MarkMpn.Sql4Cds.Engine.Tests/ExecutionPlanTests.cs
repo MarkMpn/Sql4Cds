@@ -6176,5 +6176,77 @@ FROM   account AS r;";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void FoldFiltersToUnionAllAndJoins()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = @"
+SELECT   a1.entitylogicalname,
+         a1.logicalname,
+         a1.environment
+FROM     (SELECT entitylogicalname,
+                 logicalname,
+                 'env1' AS environment
+          FROM   uat.metadata.attribute
+          UNION ALL
+          SELECT entitylogicalname,
+                 logicalname,
+                 'env2' AS environment
+          FROM   prod.metadata.attribute) AS a1
+         INNER JOIN
+         french.metadata.attribute AS a2
+         ON a1.entitylogicalname = a2.entitylogicalname
+            AND a1.logicalname = a2.logicalname
+WHERE    a1.entitylogicalname IN ('systemuser', 'businessunit')
+         AND a1.logicalname IN ('createdon')
+ORDER BY a1.entitylogicalname";
+
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var sort = AssertNode<SortNode>(select.Source);
+
+            var join1 = AssertNode<HashJoinNode>(sort.Source);
+            Assert.AreEqual("a2.entitylogicalname", join1.LeftAttribute.ToSql());
+            Assert.AreEqual("a1.entitylogicalname", join1.RightAttribute.ToSql());
+            Assert.AreEqual("a1.logicalname = a2.logicalname", join1.AdditionalJoinCriteria.ToSql());
+
+            var mq1 = AssertNode<MetadataQueryNode>(join1.LeftSource);
+            Assert.AreEqual("french", mq1.DataSource);
+            Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq1.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, mq1.Query.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq1.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq1.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, mq1.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq1.Query.AttributeQuery.Criteria.Conditions[0].Value);
+
+            var alias = AssertNode<AliasNode>(join1.RightSource);
+
+            var concat = AssertNode<ConcatenateNode>(alias.Source);
+
+            var compute2 = AssertNode<ComputeScalarNode>(concat.Sources[0]);
+            var mq2 = AssertNode<MetadataQueryNode>(compute2.Source);
+            Assert.AreEqual("uat", mq2.DataSource);
+            Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq2.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, mq2.Query.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq2.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq2.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, mq2.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq2.Query.AttributeQuery.Criteria.Conditions[0].Value);
+
+            var compute3 = AssertNode<ComputeScalarNode>(concat.Sources[1]);
+            var mq3 = AssertNode<MetadataQueryNode>(compute3.Source);
+            Assert.AreEqual("prod", mq3.DataSource);
+            Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq3.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq3.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq3.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq3.Query.AttributeQuery.Criteria.Conditions[0].Value);
+        }
     }
 }
