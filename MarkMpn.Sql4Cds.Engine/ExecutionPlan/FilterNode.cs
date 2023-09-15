@@ -540,12 +540,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (Source is FilterNode filter)
             {
-                filter.Filter = new BooleanBinaryExpression
-                {
-                    FirstExpression = filter.Filter,
-                    BinaryExpressionType = BooleanBinaryExpressionType.And,
-                    SecondExpression = Filter
-                };
+                filter.Filter = filter.Filter.And(Filter);
                 Filter = null;
                 return true;
             }

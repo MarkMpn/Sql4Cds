@@ -3414,33 +3414,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (splitLhs || splitRhs)
                 {
-                    if (correlatedLhs != null && correlatedRhs != null)
-                    {
-                        correlatedFilter = new BooleanBinaryExpression
-                        {
-                            FirstExpression = correlatedLhs,
-                            BinaryExpressionType = BooleanBinaryExpressionType.And,
-                            SecondExpression = correlatedRhs
-                        };
-                    }
-                    else
-                    {
-                        correlatedFilter = correlatedLhs ?? correlatedRhs;
-                    }
-
-                    if (nonCorrelatedLhs != null && nonCorrelatedRhs != null)
-                    {
-                        nonCorrelatedFilter = new BooleanBinaryExpression
-                        {
-                            FirstExpression = nonCorrelatedLhs,
-                            BinaryExpressionType = BooleanBinaryExpressionType.And,
-                            SecondExpression = nonCorrelatedRhs
-                        };
-                    }
-                    else
-                    {
-                        nonCorrelatedFilter = nonCorrelatedLhs ?? nonCorrelatedRhs;
-                    }
+                    correlatedFilter = correlatedLhs.And(correlatedRhs);
+                    nonCorrelatedFilter = nonCorrelatedLhs.And(nonCorrelatedRhs);
 
                     return true;
                 }
