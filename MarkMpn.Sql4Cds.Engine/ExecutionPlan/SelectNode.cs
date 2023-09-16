@@ -356,6 +356,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The name of the column in the source data
         /// </summary>
+        [Description("The names of the column in the source node that generates the data for this column")]
         public string SourceColumn { get; set; }
 
         /// <summary>
@@ -370,6 +371,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The requested name of the column in the output data
         /// </summary>
+        [Description("The name of the column that is generated in the output")]
+        [DictionaryKey]
         public string OutputColumn { get; set; }
 
         /// <summary>
