@@ -79,7 +79,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             var mappings = ColumnSet.Where(col => !col.AllColumns).ToDictionary(col => col.OutputColumn, col => col.SourceColumn);
-            ColumnSet.Clear();
+            var required = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             var escapedAlias = Alias.EscapeIdentifier();
 
@@ -90,17 +90,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     requiredColumns[i] = requiredColumns[i].Substring(escapedAlias.Length + 1);
 
-                    if (!mappings.TryGetValue(requiredColumns[i], out var sourceCol))
-                        sourceCol = requiredColumns[i];
-
-                    ColumnSet.Add(new SelectColumn
+                    if (mappings.TryGetValue(requiredColumns[i], out var sourceCol))
                     {
-                        SourceColumn = sourceCol,
-                        OutputColumn = requiredColumns[i]
-                    });
-
-                    requiredColumns[i] = sourceCol;
+                        required.Add(requiredColumns[i]);
+                        requiredColumns[i] = sourceCol;
+                    }
                 }
+            }
+
+            // Remove any unsued column mappings
+            for (var i = ColumnSet.Count - 1; i >= 0; i--)
+            {
+                if (!ColumnSet[i].AllColumns && !required.Contains(ColumnSet[i].OutputColumn))
+                    ColumnSet.RemoveAt(i);
             }
 
             Source.AddRequiredColumns(context, requiredColumns);

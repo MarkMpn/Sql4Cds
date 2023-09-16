@@ -6278,6 +6278,8 @@ ORDER BY [union. all].eln";
             CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq1.Query.AttributeQuery.Criteria.Conditions[0].Value);
 
             var alias = AssertNode<AliasNode>(join1.RightSource);
+            Assert.AreEqual("union. all", alias.Alias);
+            CollectionAssert.AreEqual(new[] { "eln", "logicalname", "environment" }, alias.ColumnSet.Select(col => col.OutputColumn).ToArray());
 
             var concat = AssertNode<ConcatenateNode>(alias.Source);
 
