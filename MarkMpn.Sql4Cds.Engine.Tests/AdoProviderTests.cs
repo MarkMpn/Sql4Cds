@@ -1493,5 +1493,26 @@ EXEC SetState @id, 1, 2";
                 }
             }
         }
+
+        [TestMethod]
+        public void ComplexFetchXmlAlias()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('Data8')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name AS [acc. name] FROM account AS [acc. table]";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("acc. name", reader.GetName(0));
+                    Assert.AreEqual("Data8", reader.GetString(0));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

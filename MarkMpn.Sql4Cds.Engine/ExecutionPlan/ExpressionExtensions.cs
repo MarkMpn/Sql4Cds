@@ -1790,7 +1790,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The name of the column being referenced</returns>
         public static string GetColumnName(this ColumnReferenceExpression col)
         {
-            return String.Join(".", col.MultiPartIdentifier.Identifiers.Select(id => id.Value));
+            return String.Join(".", col.MultiPartIdentifier.Identifiers.Select(id => id.Value.EscapeIdentifier()));
+        }
+
+        /// <summary>
+        /// Escapes an identifier if necessary
+        /// </summary>
+        /// <param name="identifier">The unescaped identifier</param>
+        /// <returns>An</returns>
+        public static string EscapeIdentifier(this string identifier)
+        {
+            if (IsValidIdentifier(identifier))
+                return identifier;
+
+            return Identifier.EncodeIdentifier(identifier);
+        }
+
+        /// <summary>
+        /// Checks if an identifier is valid without escaping
+        /// </summary>
+        /// <param name="identifier">The unescaped identifier</param>
+        /// <returns><c>true</c> if the identifier meets the rules of regular identifiers, or <c>false</c> otherwise</returns>
+        /// <remarks>
+        /// https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-identifiers?view=sql-server-ver16&redirectedfrom=MSDN#rules-for-regular-identifiers
+        /// </remarks>
+        private static bool IsValidIdentifier(string identifier)
+        {
+            if (String.IsNullOrEmpty(identifier))
+                return false;
+
+            // The first character must be a letter, _, @ or #
+            // However, @ or # are special and indicate variables or temporary tables, so don't allow them as
+            // this is designed for columns only
+            if (!Char.IsLetter(identifier[0]) && identifier[0] != '_')
+                return false;
+
+            // Subsequent characters can be letters, numbers, @, $, # or _
+            if (!identifier.All(ch => Char.IsLetterOrDigit(ch) || ch == '_' || ch == '@' || ch == '$' || ch == '#'))
+                return false;
+
+            // TODO: The identifier must not be a reserved word
+
+            return true;
         }
 
         /// <summary>
@@ -1833,10 +1874,70 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
 
-            foreach (var part in colName.Split('.'))
-                col.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+            foreach (var part in colName.SplitMultiPartIdentifier())
+            {
+                var identifier = new Identifier { Value = part };
+
+                if (!IsValidIdentifier(part))
+                    identifier.QuoteType = QuoteType.SquareBracket;
+
+                col.MultiPartIdentifier.Identifiers.Add(identifier);
+            }
 
             return col;
+        }
+
+        /// <summary>
+        /// Splits a multi-part identifier into its constituent parts
+        /// </summary>
+        /// <param name="colName">The multi-part identifier to split</param>
+        /// <returns></returns>
+        /// <exception cref="FormatException"></exception>
+        public static string[] SplitMultiPartIdentifier(this string colName)
+        {
+            var parts = new List<string>();
+
+            var i = 0;
+            while (i < colName.Length)
+            {
+                if (colName[i] == '[' || colName[i] == '"')
+                {
+                    // Escaped identifier
+                    var escape = colName[i] == '[' ? ']' : '"';
+                    i++;
+
+                    int end;
+                    do
+                    {
+                        end = colName.IndexOf(escape, i);
+                    } while (end < colName.Length - 1 && colName[end + 1] == escape);
+
+                    parts.Add(colName.Substring(i, end - i));
+
+                    i = end + 1;
+                }
+                else
+                {
+                    var end = colName.IndexOf('.', i);
+
+                    if (end == -1)
+                        end = colName.Length;
+
+                    parts.Add(colName.Substring(i, end - i));
+
+                    i = end;
+                }
+
+                if (i < colName.Length)
+                {
+                    if (colName[i] != '.')
+                        throw new FormatException();
+
+                    i++;
+                }
+            }
+
+            return parts.ToArray();
         }
 
         /// <summary>

@@ -86,7 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is AliasNode alias)
             {
-                var aliasColumns = alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn);
+                var aliasColumns = alias.ColumnSet.ToDictionary(col => alias.Alias.EscapeIdentifier() + "." + col.OutputColumn, col => col.SourceColumn);
 
                 foreach (var col in ColumnSet)
                     col.SourceColumn = aliasColumns[col.SourceColumn];
@@ -117,11 +117,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (col.SourceColumn == null)
                         {
                             // Add an all-attributes to the main entity and all link-entities
-                            fetchXml.Entity.AddItem(new allattributes());
+                            if (!fetchXml.HiddenAliases.Contains(fetchXml.Alias))
+                                fetchXml.Entity.AddItem(new allattributes());
 
                             foreach (var link in fetchXml.Entity.GetLinkEntities())
                             {
                                 if (link.SemiJoin)
+                                    continue;
+
+                                if (fetchXml.HiddenAliases.Contains(link.alias))
                                     continue;
 
                                 link.AddItem(new allattributes());
@@ -144,7 +148,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (!hasStar)
                     {
                         // Only fold individual columns down to the FetchXML if there is no corresponding all-attributes
-                        var parts = col.SourceColumn.Split('.');
+                        var parts = col.SourceColumn.SplitMultiPartIdentifier();
 
                         if (parts.Length == 1 || !aliasStars.Contains(parts[0]))
                         {
@@ -179,7 +183,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         .Select(g => g.Single())
                         .Where(c =>
                         {
-                            var parts = c.SourceColumn.Split('.');
+                            var parts = c.SourceColumn.SplitMultiPartIdentifier();
 
                             if (parts.Length > 1 && aliasStars.Contains(parts[0]))
                                 return false; // Don't fold aliases if we're using an <all-attributes/>
@@ -221,7 +225,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     foreach (var aliasedColumn in aliasedColumns)
                     {
                         aliasedColumn.Attr.alias = aliasedColumn.Alias;
-                        aliasedColumn.Mapping.SourceColumn = aliasedColumn.SourceColumn.Split('.')[0] + "." + aliasedColumn.Alias;
+                        aliasedColumn.Mapping.SourceColumn = aliasedColumn.SourceColumn.SplitMultiPartIdentifier()[0] + "." + aliasedColumn.Alias;
                     }
                 }
             }
@@ -300,7 +304,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         expanded.Add(new SelectColumn
                         {
                             SourceColumn = src,
-                            OutputColumn = src.Split('.').Last()
+                            OutputColumn = src.SplitMultiPartIdentifier().Last()
                         });
                     }
                 }

@@ -301,8 +301,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rightAttribute = RightAttribute.GetColumnName();
             if (!rightSchema.ContainsColumn(rightAttribute, out rightAttribute))
                 return false;
-            var leftAttributeParts = leftAttribute.Split('.');
-            var rightAttributeParts = rightAttribute.Split('.');
+            var leftAttributeParts = leftAttribute.SplitMultiPartIdentifier();
+            var rightAttributeParts = rightAttribute.SplitMultiPartIdentifier();
             if (leftAttributeParts.Length != 2)
                 return false;
             if (rightAttributeParts.Length != 2)
@@ -557,7 +557,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Move the relationship details into the entity source
                     entityMeta.MetadataSource |= otherMeta.MetadataSource;
                     entityMeta.ManyToManyRelationshipAlias = otherMeta.ManyToManyRelationshipAlias;
-                    entityMeta.ManyToManyRelationshipJoin = otherKey.Split('.')[1];
+                    entityMeta.ManyToManyRelationshipJoin = otherKey.SplitMultiPartIdentifier()[1];
                     entityMeta.Query.RelationshipQuery = otherMeta.Query.RelationshipQuery;
 
                     folded = entityMeta;

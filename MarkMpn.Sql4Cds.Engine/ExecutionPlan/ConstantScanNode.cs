@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (String.IsNullOrEmpty(Alias))
                 return columnName;
 
-            return Alias + "." + columnName;
+            return Alias.EscapeIdentifier() + "." + columnName;
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)

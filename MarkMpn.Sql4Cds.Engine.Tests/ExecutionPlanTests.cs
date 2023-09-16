@@ -6178,15 +6178,68 @@ FROM   account AS r;";
         }
 
         [TestMethod]
+        public void ComplexFetchXmlAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = "SELECT name FROM account AS [acc. table]";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("[acc. table].name", select.ColumnSet[0].SourceColumn);
+
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.AreEqual("acc. table", fetch.Alias);
+        }
+
+        [TestMethod]
+        public void ComplexMetadataAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = "SELECT logicalname FROM metadata.entity AS [m.d. table] WHERE [m.d. table].logicalname = 'account'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("[m.d. table].logicalname", select.ColumnSet[0].SourceColumn);
+
+            var metadata = AssertNode<MetadataQueryNode>(select.Source);
+            Assert.AreEqual("m.d. table", metadata.EntityAlias);
+            Assert.AreEqual(nameof(EntityMetadata.LogicalName), metadata.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.Equals, metadata.Query.Criteria.Conditions[0].ConditionOperator);
+            Assert.AreEqual("account", metadata.Query.Criteria.Conditions[0].Value);
+        }
+
+        [TestMethod]
+        public void ComplexInlineTableAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = "SELECT [full name] FROM (VALUES ('Mark Carrington')) AS [inline table] ([full name])";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("[inline table].[full name]", select.ColumnSet[0].SourceColumn);
+
+            var constant = AssertNode<ConstantScanNode>(select.Source);
+            Assert.AreEqual("inline table", constant.Alias);
+            Assert.AreEqual(1, constant.Schema.Count);
+            Assert.AreEqual(DataTypeHelpers.VarChar(15, Collation.USEnglish, CollationLabel.CoercibleDefault), constant.Schema["[full name]"].Type, DataTypeComparer.Instance);
+        }
+
+        [TestMethod]
         public void FoldFiltersToUnionAllAndJoins()
         {
             var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = @"
-SELECT   a1.entitylogicalname,
-         a1.logicalname,
-         a1.environment
-FROM     (SELECT entitylogicalname,
+SELECT   [union. all].eln,
+         [union. all].logicalname,
+         [union. all].environment
+FROM     (SELECT entitylogicalname AS eln,
                  logicalname,
                  'env1' AS environment
           FROM   uat.metadata.attribute
@@ -6194,14 +6247,14 @@ FROM     (SELECT entitylogicalname,
           SELECT entitylogicalname,
                  logicalname,
                  'env2' AS environment
-          FROM   prod.metadata.attribute) AS a1
+          FROM   prod.metadata.attribute) AS [union. all]
          INNER JOIN
          french.metadata.attribute AS a2
-         ON a1.entitylogicalname = a2.entitylogicalname
-            AND a1.logicalname = a2.logicalname
-WHERE    a1.entitylogicalname IN ('systemuser', 'businessunit')
-         AND a1.logicalname IN ('createdon')
-ORDER BY a1.entitylogicalname";
+         ON [union. all].eln = a2.entitylogicalname
+            AND [union. all].logicalname = a2.logicalname
+WHERE    [union. all].eln IN ('systemuser', 'businessunit')
+         AND [union. all].logicalname IN ('createdon')
+ORDER BY [union. all].eln";
 
 
             var plans = planBuilder.Build(query, null, out _);
@@ -6212,8 +6265,8 @@ ORDER BY a1.entitylogicalname";
 
             var join1 = AssertNode<HashJoinNode>(sort.Source);
             Assert.AreEqual("a2.entitylogicalname", join1.LeftAttribute.ToSql());
-            Assert.AreEqual("a1.entitylogicalname", join1.RightAttribute.ToSql());
-            Assert.AreEqual("a1.logicalname = a2.logicalname", join1.AdditionalJoinCriteria.ToSql());
+            Assert.AreEqual("[union. all].eln", join1.RightAttribute.ToSql());
+            Assert.AreEqual("[union. all].logicalname = a2.logicalname", join1.AdditionalJoinCriteria.ToSql());
 
             var mq1 = AssertNode<MetadataQueryNode>(join1.LeftSource);
             Assert.AreEqual("french", mq1.DataSource);

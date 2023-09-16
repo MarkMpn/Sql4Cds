@@ -274,7 +274,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var col in requiredColumns)
             {
-                var parts = col.Split('.');
+                var parts = col.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     continue;
@@ -464,9 +464,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     entityProps = entityProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
+                var escapedEntityAlias = EntityAlias.EscapeIdentifier();
+
                 foreach (var prop in entityProps)
                 {
-                    var fullName = $"{EntityAlias}.{prop.SqlName}";
+                    var fullName = $"{escapedEntityAlias}.{prop.SqlName}";
                     var nullable = true;
 
                     if (_entityNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.Criteria, prop.PropertyName))
@@ -498,9 +500,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     attributeProps = attributeProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
+                var escapedAttributeAlias = AttributeAlias.EscapeIdentifier();
+
                 foreach (var prop in attributeProps)
                 {
-                    var fullName = $"{AttributeAlias}.{prop.SqlName}";
+                    var fullName = $"{escapedAttributeAlias}.{prop.SqlName}";
                     var nullable = true;
 
                     if (_attributeNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.AttributeQuery?.Criteria, prop.PropertyName))
@@ -533,9 +537,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
+                var escapedOneToManyRelationshipAlias = OneToManyRelationshipAlias.EscapeIdentifier();
+
                 foreach (var prop in relationshipProps)
                 {
-                    var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
+                    var fullName = $"{escapedOneToManyRelationshipAlias}.{prop.SqlName}";
                     var nullable = true;
 
                     if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
@@ -568,9 +574,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
+                var escapedManyToOneRelationshipAlias = ManyToOneRelationshipAlias.EscapeIdentifier();
+
                 foreach (var prop in relationshipProps)
                 {
-                    var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
+                    var fullName = $"{escapedManyToOneRelationshipAlias}.{prop.SqlName}";
                     var nullable = true;
 
                     if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
@@ -603,9 +611,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
+                var escapedManyToManyRelationshipAlias = ManyToManyRelationshipAlias.EscapeIdentifier();
+
                 foreach (var prop in relationshipProps)
                 {
-                    var fullName = $"{ManyToManyRelationshipAlias}.{prop.SqlName}";
+                    var fullName = $"{escapedManyToManyRelationshipAlias}.{prop.SqlName}";
                     var nullable = true;
 
                     if (_manyToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))

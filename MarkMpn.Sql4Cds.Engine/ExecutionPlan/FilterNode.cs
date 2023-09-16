@@ -976,8 +976,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!(indexSpool.Source is FetchXmlScan rightFetch))
                         break;
 
-                    if (indexSpool.KeyColumn.Split('.').Length != 2 ||
-                        !indexSpool.KeyColumn.Split('.')[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                    var keyParts = indexSpool.KeyColumn.SplitMultiPartIdentifier();
+                    var outerReferenceParts = loop.OuterReferences.Single().Key.SplitMultiPartIdentifier();
+
+                    if (keyParts.Length != 2 ||
+                        !keyParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
                         break;
 
                     var notNullFilter = FindNotNullFilter(Filter, loop.DefinedValues.Single().Key, out var notNullFilterRemovable);
@@ -992,13 +995,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         name = rightFetch.Entity.name,
                         alias = rightFetch.Alias,
-                        from = indexSpool.KeyColumn.Split('.')[1],
-                        to = loop.OuterReferences.Single().Key.Split('.')[1],
+                        from = keyParts[1],
+                        to = outerReferenceParts[1],
                         linktype = "exists",
                         Items = rightFetch.Entity.Items
                     };
                     semiJoin = true;
-                    leftAlias = loop.OuterReferences.Single().Key.Split('.')[0];
+                    leftAlias = outerReferenceParts[0];
                 }
                 else
                 {
@@ -1159,14 +1162,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     // Extract filters on this alias and rewrite them to the source columns
                     // Move these filters to within the alias node and re-fold them
-                    Filter = ExtractChildFilters(Filter, schema, colName => alias.ColumnSet.Any(col => (alias.Alias + "." + col.OutputColumn).Equals(colName, StringComparison.OrdinalIgnoreCase)), out var aliasFilter);
+                    var escapedAlias = alias.Alias.EscapeIdentifier();
+
+                    Filter = ExtractChildFilters(Filter, schema, colName => alias.ColumnSet.Any(col => (escapedAlias + "." + col.OutputColumn).Equals(colName, StringComparison.OrdinalIgnoreCase)), out var aliasFilter);
 
                     if (aliasFilter != null)
                     {
                         var aliasFilterNode = new FilterNode
                         {
                             Source = alias.Source,
-                            Filter = ReplaceColumnNames(aliasFilter, alias.ColumnSet.ToDictionary(col => (ScalarExpression)(alias.Alias + "." + col.OutputColumn).ToColumnReference(), col => col.SourceColumn))
+                            Filter = ReplaceColumnNames(aliasFilter, alias.ColumnSet.ToDictionary(col => (ScalarExpression)(escapedAlias + "." + col.OutputColumn).ToColumnReference(), col => col.SourceColumn))
                         };
                         alias.Source = aliasFilterNode.FoldQuery(context, hints);
 
@@ -1536,7 +1541,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
-                var parts = colName.Split('.');
+                var parts = colName.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     return false;
@@ -1582,7 +1587,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
-                var parts = colName.Split('.');
+                var parts = colName.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     return false;
@@ -1606,7 +1611,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
-                var parts = colName.Split('.');
+                var parts = colName.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     return false;
