@@ -165,7 +165,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (querySpec.WhereClause == null)
                                 querySpec.WhereClause = new WhereClause { SearchCondition = contradiction };
                             else
-                                querySpec.WhereClause.SearchCondition = new BooleanBinaryExpression { FirstExpression = querySpec.WhereClause.SearchCondition, BinaryExpressionType = BooleanBinaryExpressionType.And, SecondExpression = contradiction };
+                                querySpec.WhereClause.SearchCondition = querySpec.WhereClause.SearchCondition.And(contradiction);
                         }
                     }
                 }

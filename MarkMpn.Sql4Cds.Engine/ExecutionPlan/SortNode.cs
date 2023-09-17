@@ -286,7 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!fetchSchema.ContainsColumn(sortColRef.GetColumnName(), out var sortCol))
                         return this;
 
-                    var parts = sortCol.Split('.');
+                    var parts = sortCol.SplitMultiPartIdentifier();
                     string entityName;
                     string attrName;
 

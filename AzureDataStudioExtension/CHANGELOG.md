@@ -1,6 +1,13 @@
 # Change Log
 
-## [v7.5.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.0) - 2023-09-10
+## [v7.5.2](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.2) - 2023-09-17
+
+Fixed ordering of hash join results
+Improved filter folding across joins
+Improved handling of alias names requiring escaping
+Improved display of column sets in properties window
+
+## [v7.5.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.1) - 2023-09-10
 
 Return correct schema for global option set values
 Fixed applying alias to primary key field

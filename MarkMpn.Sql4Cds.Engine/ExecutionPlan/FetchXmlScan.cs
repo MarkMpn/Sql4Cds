@@ -395,9 +395,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var subFilter = new filter();
 
                 for (var j = 0; j < i; j++)
-                    subFilter.AddItem(new condition { entityname = j == 0 ? null : _pagingFields[j].Key.Split('.')[0], attribute = _pagingFields[j].Key.Split('.')[1], @operator = _lastPageValues[j].IsNull ? @operator.@null : @operator.eq, value = _lastPageValues[j].IsNull ? null : _lastPageValues[j].Id.ToString() });
+                {
+                    var subParts = _pagingFields[j].Key.ToColumnReference().MultiPartIdentifier.Identifiers;
+                    subFilter.AddItem(new condition { entityname = j == 0 ? null : subParts[0].Value, attribute = subParts[1].Value, @operator = _lastPageValues[j].IsNull ? @operator.@null : @operator.eq, value = _lastPageValues[j].IsNull ? null : _lastPageValues[j].Id.ToString() });
+                }
 
-                subFilter.AddItem(new condition { entityname = i == 0 ? null : _pagingFields[i].Key.Split('.')[0], attribute = _pagingFields[i].Key.Split('.')[1], @operator = @operator.gt, value = _lastPageValues[i].Id.ToString() });
+                var parts = _pagingFields[i].Key.ToColumnReference().MultiPartIdentifier.Identifiers;
+                subFilter.AddItem(new condition { entityname = i == 0 ? null : parts[0].Value, attribute = parts[1].Value, @operator = @operator.gt, value = _lastPageValues[i].Id.ToString() });
 
                 filter.AddItem(subFilter);
             }
@@ -513,8 +517,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Prefix all attributes of the main entity with the expected alias
+            var escapedAlias = Alias.EscapeIdentifier();
             foreach (var attribute in entity.Attributes.Where(attr => !attr.Key.Contains('.') && !(attr.Value is AliasedValue)).ToList())
-                entity[$"{Alias}.{attribute.Key}"] = attribute.Value;
+                entity[$"{escapedAlias}.{attribute.Key}"] = attribute.Value;
 
             // Only prefix aliased values if they're not aggregates
             PrefixAliasedScalarAttributes(entity, Entity.Items, Alias);
@@ -577,7 +582,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (mapping.AllColumns)
                 {
                     foreach (var col in entity.Attributes.Where(c => mapping.SourceColumn == null || c.Key.StartsWith(mapping.SourceColumn.Replace(".*", "") + ".")).ToList())
-                        entity[mapping.OutputColumn.Replace(".*", "") + "." + col.Key.Split('.').Last()] = col.Value;
+                        entity[mapping.OutputColumn.Replace(".*", "") + "." + col.Key.ToColumnReference().MultiPartIdentifier.Identifiers.Last().Value.EscapeIdentifier()] = col.Value;
                 }
                 else
                 {
@@ -765,17 +770,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-            var primaryKey = FetchXml.aggregate ? null : $"{Alias}.{meta.PrimaryIdAttribute}";
+            var primaryKey = FetchXml.aggregate ? null : $"{Alias.EscapeIdentifier()}.{meta.PrimaryIdAttribute}";
             var sortOrder = new List<string>();
 
-            AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, entity.name, Alias, entity.Items, true, false);
+            AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, entity.name, Alias.EscapeIdentifier(), entity.Items, true, false);
 
             foreach (var mapping in ColumnMappings)
             {
                 if (mapping.AllColumns)
                 {
                     foreach (var col in schema.Where(c => mapping.SourceColumn == null || c.Key.StartsWith(mapping.SourceColumn.Replace(".*", "") + ".")).ToList())
-                        MapColumn(col.Key, mapping.OutputColumn.Replace(".*", "") + "." + col.Key.Split('.').Last(), schema, aliases, sortOrder);
+                        MapColumn(col.Key, mapping.OutputColumn.Replace(".*", "") + "." + col.Key.ToColumnReference().MultiPartIdentifier.Identifiers.Last().Value.EscapeIdentifier(), schema, aliases, sortOrder);
                 }
                 else
                 {
@@ -803,7 +808,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var src = schema[sourceColumn];
             schema[outputColumn] = new ColumnDefinition(src.Type, src.IsNullable, src.IsCalculated);
 
-            var simpleName = outputColumn.Split('.').Last();
+            var simpleName = outputColumn.ToColumnReference().MultiPartIdentifier.Identifiers.Last().Value.EscapeIdentifier();
 
             if (!aliases.TryGetValue(simpleName, out var aliasList))
             {
@@ -828,7 +833,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
         {
-            var parts = colName.Split('.');
+            var parts = colName.SplitMultiPartIdentifier();
 
             if (parts.Length == 1)
             {
@@ -1143,7 +1148,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, bool notNull)
         {
-            var parts = fullName.Split('.');
+            var parts = fullName.SplitMultiPartIdentifier();
             var visible = true;
             if (parts.Length == 2 && HiddenAliases.Contains(parts[0]))
                 visible = false;
@@ -1626,7 +1631,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col, out var normalizedCol))
                     continue;
 
-                var parts = normalizedCol.Split('.');
+                var parts = normalizedCol.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     continue;
@@ -1640,10 +1645,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (mapping != null)
                 {
-                    if (attr.name != parts[1])
+                    if (attr.name != parts[1] && IsValidAlias(parts[1]))
                         attr.alias = parts[1];
 
-                    mapping.SourceColumn = (linkEntity?.alias ?? Alias) + "." + (attr.alias ?? attr.name);
+                    mapping.SourceColumn = (linkEntity?.alias ?? Alias).EscapeIdentifier() + "." + (attr.alias ?? attr.name).EscapeIdentifier();
                 }
             }
 

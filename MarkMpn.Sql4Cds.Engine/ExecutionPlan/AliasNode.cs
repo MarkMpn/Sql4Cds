@@ -40,6 +40,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (string.IsNullOrEmpty(col.OutputColumn))
                     col.OutputColumn = context.GetExpressionName();
+                else
+                    col.OutputColumn = col.OutputColumn.EscapeIdentifier();
             }
         }
 
@@ -77,26 +79,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             var mappings = ColumnSet.Where(col => !col.AllColumns).ToDictionary(col => col.OutputColumn, col => col.SourceColumn);
-            ColumnSet.Clear();
+            var required = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var escapedAlias = Alias.EscapeIdentifier();
 
             // Map the aliased names to the base names
             for (var i = 0; i < requiredColumns.Count; i++)
             {
-                if (requiredColumns[i].StartsWith(Alias + "."))
+                if (requiredColumns[i].StartsWith(escapedAlias + "."))
                 {
-                    requiredColumns[i] = requiredColumns[i].Substring(Alias.Length + 1);
+                    requiredColumns[i] = requiredColumns[i].Substring(escapedAlias.Length + 1);
 
-                    if (!mappings.TryGetValue(requiredColumns[i], out var sourceCol))
-                        sourceCol = requiredColumns[i];
-
-                    ColumnSet.Add(new SelectColumn
+                    if (mappings.TryGetValue(requiredColumns[i], out var sourceCol))
                     {
-                        SourceColumn = sourceCol,
-                        OutputColumn = requiredColumns[i]
-                    });
-
-                    requiredColumns[i] = sourceCol;
+                        required.Add(requiredColumns[i]);
+                        requiredColumns[i] = sourceCol;
+                    }
                 }
+            }
+
+            // Remove any unsued column mappings
+            for (var i = ColumnSet.Count - 1; i >= 0; i--)
+            {
+                if (!ColumnSet[i].AllColumns && !required.Contains(ColumnSet[i].OutputColumn))
+                    ColumnSet.RemoveAt(i);
             }
 
             Source.AddRequiredColumns(context, requiredColumns);
@@ -120,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 // Remove any unused columns
                 var unusedColumns = constant.Schema.Keys
-                    .Where(sourceCol => !ColumnSet.Any(col => col.SourceColumn.Split('.').Last() == sourceCol))
+                    .Where(sourceCol => !ColumnSet.Any(col => col.SourceColumn.SplitMultiPartIdentifier().Last().EscapeIdentifier() == sourceCol))
                     .ToList();
 
                 foreach (var col in unusedColumns)
@@ -134,10 +140,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Copy/rename any columns using the new aliases
                 foreach (var col in ColumnSet)
                 {
-                    var sourceColumn = col.SourceColumn.Split('.').Last();
+                    var sourceColumn = col.SourceColumn.SplitMultiPartIdentifier().Last();
 
                     if (String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != col.SourceColumn ||
-                        !String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != constant.Alias + "." + col.SourceColumn)
+                        !String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != constant.Alias.EscapeIdentifier() + "." + col.SourceColumn)
                     {
                         constant.Schema[col.OutputColumn] = constant.Schema[sourceColumn];
 
@@ -157,18 +163,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         internal void FoldToFetchXML(FetchXmlScan fetchXml)
         {
             // Add the mappings to the FetchXML to produce the columns with the expected names, and hide all other possible columns
-            var originalAlias = fetchXml.Alias;
+            var originalAlias = fetchXml.Alias.EscapeIdentifier();
             fetchXml.Alias = Alias;
+
+            var escapedAlias = Alias.EscapeIdentifier();
 
             foreach (var col in ColumnSet)
             {
                 if (col.SourceColumn != null && col.SourceColumn.StartsWith(originalAlias + "."))
-                    col.SourceColumn = Alias + col.SourceColumn.Substring(originalAlias.Length);
+                    col.SourceColumn = escapedAlias + col.SourceColumn.Substring(originalAlias.Length);
 
                 if (col.AllColumns)
-                    col.OutputColumn = Alias;
+                    col.OutputColumn = escapedAlias;
                 else if (col.OutputColumn != null)
-                    col.OutputColumn = Alias + "." + col.OutputColumn;
+                    col.OutputColumn = escapedAlias + "." + col.OutputColumn;
 
                 fetchXml.ColumnMappings.Add(col);
             }
@@ -187,6 +195,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var aliases = new Dictionary<string, IReadOnlyList<string>>();
             var primaryKey = (string)null;
             var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var escapedAlias = Alias.EscapeIdentifier();
 
             foreach (var col in ColumnSet)
             {
@@ -197,15 +206,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (col.SourceColumn != null && !sourceCol.Key.StartsWith(col.SourceColumn + "."))
                             continue;
 
-                        var simpleName = sourceCol.Key.Split('.').Last();
-                        var outputName = $"{Alias}.{simpleName}";
-
-                        AddSchemaColumn(simpleName, sourceCol.Key, schema, aliases, ref primaryKey, mappings, sourceSchema);
+                        var simpleName = sourceCol.Key.SplitMultiPartIdentifier().Last();
+                        AddSchemaColumn(escapedAlias, simpleName, sourceCol.Key, schema, aliases, ref primaryKey, mappings, sourceSchema);
                     }
                 }
                 else
                 {
-                    AddSchemaColumn(col.OutputColumn, col.SourceColumn, schema, aliases, ref primaryKey, mappings, sourceSchema);
+                    AddSchemaColumn(escapedAlias, col.OutputColumn, col.SourceColumn, schema, aliases, ref primaryKey, mappings, sourceSchema);
                 }
             }
 
@@ -231,12 +238,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sortOrder: sortOrder);
         }
 
-        private void AddSchemaColumn(string outputColumn, string sourceColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
+        private void AddSchemaColumn(string escapedAlias, string outputColumn, string sourceColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
         {
             if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
                 return;
 
-            var mapped = $"{Alias}.{outputColumn}";
+            var mapped = $"{escapedAlias}.{outputColumn}";
             schema[mapped] = new ColumnDefinition(sourceSchema.Schema[normalized].Type, sourceSchema.Schema[normalized].IsNullable, false);
             mappings[normalized] = mapped;
 
@@ -254,11 +261,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
+            var escapedAlias = Alias.EscapeIdentifier();
+
             foreach (var entity in Source.Execute(context))
             {
                 foreach (var col in ColumnSet)
                 {
-                    var mapped = $"{Alias}.{col.OutputColumn}";
+                    var mapped = $"{escapedAlias}.{col.OutputColumn.EscapeIdentifier()}";
                     entity[mapped] = entity[col.SourceColumn];
                 }
 

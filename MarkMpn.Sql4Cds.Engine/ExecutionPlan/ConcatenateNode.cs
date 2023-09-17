@@ -222,6 +222,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The name of the column that is generated in the output
         /// </summary>
         [Description("The name of the column that is generated in the output")]
+        [DictionaryKey]
         public string OutputColumn { get; set; }
 
         /// <summary>

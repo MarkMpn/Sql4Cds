@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override IReadOnlyList<string> GetSortOrder(INodeSchema outerSchema, INodeSchema innerSchema)
         {
             if ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && innerSchema.ContainsColumn(RightAttribute.GetColumnName(), out var sortColumn))
-                return new[] { sortColumn };
+                return innerSchema.SortOrder;
 
             return null;
         }
