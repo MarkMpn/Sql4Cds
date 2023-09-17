@@ -141,10 +141,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foldedFilters |= FoldNestedLoopFiltersToJoins(context, hints);
             foldedFilters |= FoldInExistsToFetchXml(context, hints, out var addedLinks);
             foldedFilters |= FoldTableSpoolToIndexSpool(context, hints);
-            foldedFilters |= FoldFiltersToDataSources(context);
-
-            if (FoldColumnComparisonsWithKnownValues(context))
-                foldedFilters |= FoldFiltersToDataSources(context);
+            foldedFilters |= ExpandFiltersOnColumnComparisons(context);
+            foldedFilters |= FoldFiltersToDataSources(context, hints);
 
             foreach (var addedLink in addedLinks)
             {
@@ -165,6 +163,265 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return nestedLoop.FoldQuery(context, hints);
 
             return this;
+        }
+
+        private bool ExpandFiltersOnColumnComparisons(NodeCompilationContext context)
+        {
+            // Expand filters so if we have:
+            // col1 < col2 AND col1 = 5
+            // we also know:
+            // col2 > 5
+            // We can often fold these additional filters down to the data sources to reduce the number of records we need to retrieve
+            // before performing the column comparison in memory
+
+            // Start by getting the graph of column comparisons from the filter
+            var schema = Source.GetSchema(context);
+            var columns = new Dictionary<string, Column>(StringComparer.OrdinalIgnoreCase);
+            FindColumnComparisons(columns, Filter, schema);
+
+            // Add more column comparisons from any source joins
+            FindColumnComparisons(columns, Source, context);
+
+            var removeConditions = new List<BooleanExpression>();
+            BooleanExpression additionalFilter = null;
+            ExpandFiltersOnColumnComparisons(columns, Filter, schema, removeConditions, ref additionalFilter);
+
+            if (additionalFilter == null)
+                return false;
+
+            foreach (var condition in removeConditions)
+                Filter = Filter.RemoveCondition(condition);
+
+            Filter = Filter.And(additionalFilter);
+
+            return true;
+        }
+
+        private void FindColumnComparisons(Dictionary<string, Column> columns, IDataExecutionPlanNodeInternal source, NodeCompilationContext context)
+        {
+            if (source == null)
+                return;
+
+            if (source is BaseJoinNode join && join.JoinType == QualifiedJoinType.Inner)
+            {
+                var schema = join.GetSchema(context);
+
+                if (join is NestedLoopNode loop)
+                {
+                    FindColumnComparisons(columns, loop.JoinCondition, schema);
+                }
+                else if (join is FoldableJoinNode foldable)
+                {
+                    FindColumnComparisons(columns, new BooleanComparisonExpression { FirstExpression = foldable.LeftAttribute, ComparisonType = BooleanComparisonType.Equals, SecondExpression = foldable.RightAttribute }, schema);
+                    FindColumnComparisons(columns, foldable.AdditionalJoinCriteria, schema);
+                }
+
+                FindColumnComparisons(columns, join.LeftSource, context);
+                FindColumnComparisons(columns, join.RightSource, context);
+            }
+
+            if (source is FetchXmlScan fetchXml)
+                AddLinkEntities(columns, fetchXml.Alias, fetchXml.Entity.Items);
+
+            if (source is MetadataQueryNode meta &&
+                !String.IsNullOrEmpty(meta.EntityAlias))
+            {
+                if (!String.IsNullOrEmpty(meta.AttributeAlias))
+                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalName)}", $"{meta.AttributeAlias}.{nameof(AttributeMetadata.EntityLogicalName)}");
+
+                if (!String.IsNullOrEmpty(meta.OneToManyRelationshipAlias))
+                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalCollectionName)}", $"{meta.OneToManyRelationshipAlias}.{nameof(OneToManyRelationshipMetadata.ReferencedEntity)}");
+
+                if (!String.IsNullOrEmpty(meta.ManyToOneRelationshipAlias))
+                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalCollectionName)}", $"{meta.OneToManyRelationshipAlias}.{nameof(OneToManyRelationshipMetadata.ReferencingEntity)}");
+
+                if (!String.IsNullOrEmpty(meta.ManyToManyRelationshipAlias))
+                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalCollectionName)}", $"{meta.ManyToManyRelationshipAlias}.{meta.ManyToManyRelationshipJoin}");
+            }
+        }
+
+        private void AddLinkEntities(Dictionary<string, Column> columns, string alias, object[] items)
+        {
+            if (items == null)
+                return;
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                AddColumnComparison(columns, $"{alias}.{linkEntity.to}", $"{linkEntity.alias}.{linkEntity.from}");
+
+                AddLinkEntities(columns, linkEntity.alias, linkEntity.Items);
+            }
+        }
+
+        private void AddColumnComparison(Dictionary<string, Column> columns, string col1Name, string col2Name)
+        {
+            if (!columns.TryGetValue(col1Name, out var col1))
+            {
+                col1 = new Column { ColumnName = col1Name };
+                columns[col1Name] = col1;
+            }
+
+            if (!columns.TryGetValue(col2Name, out var col2))
+            {
+                col2 = new Column { ColumnName = col2Name };
+                columns[col2Name] = col2;
+            }
+
+            col1.Comparisons.Add(new ColumnComparison
+            {
+                Column2 = col2,
+                Comparison = BooleanComparisonType.Equals
+            });
+
+            col2.Comparisons.Add(new ColumnComparison
+            {
+                Column2 = col1,
+                Comparison = BooleanComparisonType.Equals
+            });
+        }
+
+        private void ExpandFiltersOnColumnComparisons(Dictionary<string, Column> columns, BooleanExpression filter, INodeSchema schema, List<BooleanExpression> removeConditions, ref BooleanExpression additionalFilter)
+        {
+            if (filter is BooleanBinaryExpression bin && bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                ExpandFiltersOnColumnComparisons(columns, bin.FirstExpression, schema, removeConditions, ref additionalFilter);
+                ExpandFiltersOnColumnComparisons(columns, bin.SecondExpression, schema, removeConditions, ref additionalFilter);
+            }
+            else if (filter is BooleanParenthesisExpression paren)
+            {
+                ExpandFiltersOnColumnComparisons(columns, paren.Expression, schema, removeConditions, ref additionalFilter);
+            }
+            else if (filter is BooleanComparisonExpression cmp)
+            {
+                var colRef1 = cmp.FirstExpression as ColumnReferenceExpression;
+                var colRef2 = cmp.SecondExpression as ColumnReferenceExpression;
+
+                if (colRef1 != null && colRef2 == null &&
+                    schema.ContainsColumn(colRef1.GetColumnName(), out var colName1) &&
+                    columns.TryGetValue(colName1, out var col1))
+                {
+                    ExpandFiltersOnColumnComparisons(new HashSet<Column> { col1 }, col1, cmp.ComparisonType, cmp.SecondExpression, removeConditions, ref additionalFilter);
+                }
+                else if (colRef1 == null && colRef2 != null &&
+                    schema.ContainsColumn(colRef2.GetColumnName(), out var colName2) &&
+                    columns.TryGetValue(colName2, out var col2))
+                {
+                    ExpandFiltersOnColumnComparisons(new HashSet<Column> { col2 }, col2, cmp.ComparisonType.TransitiveComparison(), cmp.FirstExpression, removeConditions, ref additionalFilter);
+                }
+            }
+            else if (filter is InPredicate @in)
+            {
+                var colRef = @in.Expression as ColumnReferenceExpression;
+
+                if (colRef != null &&
+                    schema.ContainsColumn(colRef.GetColumnName(), out var colName) &&
+                    columns.TryGetValue(colName, out var col))
+                {
+                    ExpandFiltersOnColumnComparisons(new HashSet<Column> { col }, col, @in, ref additionalFilter);
+                }
+            }
+        }
+
+        private void ExpandFiltersOnColumnComparisons(HashSet<Column> addedColumns, Column col, BooleanComparisonType comparisonType, ScalarExpression value, List<BooleanExpression> removeConditions, ref BooleanExpression additionalFilter)
+        {
+            foreach (var comparison in col.Comparisons)
+            {
+                if (comparison.Comparison != BooleanComparisonType.Equals && comparisonType != BooleanComparisonType.Equals)
+                    continue;
+
+                if (!addedColumns.Add(comparison.Column2))
+                    continue;
+
+                additionalFilter = additionalFilter.And(new BooleanComparisonExpression
+                {
+                    FirstExpression = comparison.Column2.ColumnName.ToColumnReference(),
+                    ComparisonType = comparisonType == BooleanComparisonType.Equals ? comparison.Comparison : comparisonType,
+                    SecondExpression = value
+                });
+
+                if (comparison.Comparison == BooleanComparisonType.Equals && comparisonType == BooleanComparisonType.Equals)
+                {
+                    // If we knew "a = b AND a = 1" and we've now added " AND b = 1", we can also remove "a = b"
+                    if (comparison.Expression != null)
+                        removeConditions.Add(comparison.Expression);
+
+                    ExpandFiltersOnColumnComparisons(addedColumns, comparison.Column2, comparisonType, value, removeConditions, ref additionalFilter);
+                }
+            }
+        }
+
+        private void ExpandFiltersOnColumnComparisons(HashSet<Column> addedColumns, Column col, InPredicate @in, ref BooleanExpression additionalFilter)
+        {
+            foreach (var comparison in col.Comparisons)
+            {
+                if (comparison.Comparison != BooleanComparisonType.Equals)
+                    continue;
+
+                if (!addedColumns.Add(comparison.Column2))
+                    continue;
+
+                var newIn = new InPredicate
+                {
+                    Expression = comparison.Column2.ColumnName.ToColumnReference(),
+                    NotDefined = @in.NotDefined,
+                    Subquery = @in.Subquery
+                };
+
+                foreach (var val in @in.Values)
+                    newIn.Values.Add(val);
+
+                additionalFilter = additionalFilter.And(newIn);
+
+                ExpandFiltersOnColumnComparisons(addedColumns, comparison.Column2, @in, ref additionalFilter);
+            }
+        }
+
+        private void FindColumnComparisons(Dictionary<string, Column> columns, BooleanExpression filter, INodeSchema schema)
+        {
+            if (filter is BooleanBinaryExpression bin && bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                FindColumnComparisons(columns, bin.FirstExpression, schema);
+                FindColumnComparisons(columns, bin.SecondExpression, schema);
+            }
+            else if (filter is BooleanParenthesisExpression paren)
+            {
+                FindColumnComparisons(columns, paren.Expression, schema);
+            }
+            else if (filter is BooleanComparisonExpression cmp &&
+                cmp.FirstExpression is ColumnReferenceExpression colRef1 &&
+                cmp.SecondExpression is ColumnReferenceExpression colRef2 &&
+                schema.ContainsColumn(colRef1.GetColumnName(), out var colName1) &&
+                schema.ContainsColumn(colRef2.GetColumnName(), out var colName2))
+            {
+                if (!columns.TryGetValue(colName1, out var col1))
+                {
+                    col1 = new Column { ColumnName = colName1 };
+                    columns.Add(colName1, col1);
+                }
+
+                if (!columns.TryGetValue(colName2, out var col2))
+                {
+                    col2 = new Column { ColumnName = colName2 };
+                    columns.Add(colName2, col2);
+                }
+
+                col1.Comparisons.Add(new ColumnComparison { Comparison = cmp.ComparisonType, Column2 = col2, Expression = cmp });
+                col2.Comparisons.Add(new ColumnComparison { Comparison = cmp.ComparisonType.TransitiveComparison(), Column2 = col1, Expression = cmp });
+            }
+        }
+
+        class Column
+        {
+            public string ColumnName { get; set; }
+
+            public List<ColumnComparison> Comparisons { get; } = new List<ColumnComparison>();
+        }
+
+        class ColumnComparison
+        {
+            public BooleanComparisonType Comparison { get; set; }
+            public Column Column2 { get; set; }
+            public BooleanExpression Expression { get; set; }
         }
 
         private bool FoldScalarSubqueries(NodeCompilationContext context, out NestedLoopNode nestedLoop)
@@ -283,12 +540,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (Source is FilterNode filter)
             {
-                filter.Filter = new BooleanBinaryExpression
-                {
-                    FirstExpression = filter.Filter,
-                    BinaryExpressionType = BooleanBinaryExpressionType.And,
-                    SecondExpression = Filter
-                };
+                filter.Filter = filter.Filter.And(Filter);
                 Filter = null;
                 return true;
             }
@@ -724,8 +976,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!(indexSpool.Source is FetchXmlScan rightFetch))
                         break;
 
-                    if (indexSpool.KeyColumn.Split('.').Length != 2 ||
-                        !indexSpool.KeyColumn.Split('.')[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                    var keyParts = indexSpool.KeyColumn.SplitMultiPartIdentifier();
+                    var outerReferenceParts = loop.OuterReferences.Single().Key.SplitMultiPartIdentifier();
+
+                    if (keyParts.Length != 2 ||
+                        !keyParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
                         break;
 
                     var notNullFilter = FindNotNullFilter(Filter, loop.DefinedValues.Single().Key, out var notNullFilterRemovable);
@@ -740,13 +995,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         name = rightFetch.Entity.name,
                         alias = rightFetch.Alias,
-                        from = indexSpool.KeyColumn.Split('.')[1],
-                        to = loop.OuterReferences.Single().Key.Split('.')[1],
+                        from = keyParts[1],
+                        to = outerReferenceParts[1],
                         linktype = "exists",
                         Items = rightFetch.Entity.Items
                     };
                     semiJoin = true;
-                    leftAlias = loop.OuterReferences.Single().Key.Split('.')[0];
+                    leftAlias = outerReferenceParts[0];
                 }
                 else
                 {
@@ -845,7 +1100,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        private bool FoldFiltersToDataSources(NodeCompilationContext context)
+        private bool FoldFiltersToDataSources(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             var foldedFilters = false;
 
@@ -902,142 +1157,59 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (entityFilter != null || attributeFilter != null || relationshipFilter != null)
                         foldedFilters = true;
                 }
-            }
 
-            return foldedFilters;
-        }
-
-        private bool FoldColumnComparisonsWithKnownValues(NodeCompilationContext context)
-        {
-            var foldedFilters = false;
-
-            // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
-            foreach (var source in GetFoldableSources(Source))
-            {
-                if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
+                if (source is AliasNode alias)
                 {
-                    if (!context.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
-                        throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
+                    // Extract filters on this alias and rewrite them to the source columns
+                    // Move these filters to within the alias node and re-fold them
+                    var escapedAlias = alias.Alias.EscapeIdentifier();
 
-                    var schema = source.GetSchema(context);
+                    Filter = ExtractChildFilters(Filter, schema, colName => alias.ColumnSet.Any(col => (escapedAlias + "." + col.OutputColumn).Equals(colName, StringComparison.OrdinalIgnoreCase)), out var aliasFilter);
 
-                    var newFilter = FoldColumnComparisonsWithKnownValues(context, fetchXml, schema, Filter);
-
-                    if (newFilter != Filter)
+                    if (aliasFilter != null)
                     {
-                        Filter = newFilter;
+                        var aliasFilterNode = new FilterNode
+                        {
+                            Source = alias.Source,
+                            Filter = ReplaceColumnNames(aliasFilter, alias.ColumnSet.ToDictionary(col => (ScalarExpression)(escapedAlias + "." + col.OutputColumn).ToColumnReference(), col => col.SourceColumn))
+                        };
+                        alias.Source = aliasFilterNode.FoldQuery(context, hints);
+
                         foldedFilters = true;
                     }
                 }
 
-                //if (source is MetadataQueryNode meta)
-                //    foldedFilters |= FoldColumnComparisonsWithKnownValues(dataSources, options, parameterTypes, meta, Filter);
+                if (source is ConcatenateNode concat)
+                {
+                    // Duplicate the filters and rewrite them to the source columns of each input
+                    // Place these filters within the inputs and re-fold them
+                    Filter = ExtractChildFilters(Filter, schema, colName => concat.ColumnSet.Any(col => col.OutputColumn.Equals(colName, StringComparison.OrdinalIgnoreCase)), out var concatFilter);
+
+                    if (concatFilter != null)
+                    {
+                        for (var i = 0; i < concat.Sources.Count; i++)
+                        {
+                            var concatFilterNode = new FilterNode
+                            {
+                                Source = concat.Sources[i],
+                                Filter = ReplaceColumnNames(concatFilter, concat.ColumnSet.ToDictionary(col => (ScalarExpression)col.OutputColumn.ToColumnReference(), col => col.SourceColumns[i]))
+                            };
+                            concat.Sources[i] = concatFilterNode.FoldQuery(context, hints);
+                        }
+
+                        foldedFilters = true;
+                    }
+                }
             }
 
             return foldedFilters;
         }
 
-        private BooleanExpression FoldColumnComparisonsWithKnownValues(NodeCompilationContext context, FetchXmlScan fetchXml, INodeSchema schema, BooleanExpression filter)
+        private BooleanExpression ReplaceColumnNames(BooleanExpression filter, Dictionary<ScalarExpression, string> replacements)
         {
-            if (filter is BooleanComparisonExpression cmp &&
-                cmp.FirstExpression is ColumnReferenceExpression col1 &&
-                cmp.SecondExpression is ColumnReferenceExpression col2)
-            {
-                if (HasKnownValue(context, fetchXml, col1, schema, out var value))
-                {
-                    return new BooleanComparisonExpression
-                    {
-                        FirstExpression = value,
-                        ComparisonType = cmp.ComparisonType,
-                        SecondExpression = col2
-                    };
-                }
-                else if (HasKnownValue(context, fetchXml, col2, schema, out value))
-                {
-                    return new BooleanComparisonExpression
-                    {
-                        FirstExpression = col1,
-                        ComparisonType = cmp.ComparisonType,
-                        SecondExpression = value
-                    };
-                }
-            }
-            else if (filter is BooleanBinaryExpression bin &&
-                bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
-            {
-                var bin1 = FoldColumnComparisonsWithKnownValues(context, fetchXml, schema, bin.FirstExpression);
-                var bin2 = FoldColumnComparisonsWithKnownValues(context, fetchXml, schema, bin.SecondExpression);
-
-                if (bin1 != bin.FirstExpression || bin2 != bin.SecondExpression)
-                {
-                    return new BooleanBinaryExpression
-                    {
-                        FirstExpression = bin1,
-                        BinaryExpressionType = bin.BinaryExpressionType,
-                        SecondExpression = bin2
-                    };
-                }
-            }
-
+            filter = filter.Clone();
+            filter.Accept(new RewriteVisitor(replacements));
             return filter;
-        }
-
-        private bool HasKnownValue(NodeCompilationContext context, FetchXmlScan fetchXml, ColumnReferenceExpression col, INodeSchema schema, out Literal value)
-        {
-            value = null;
-
-            if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
-                return false;
-
-            var parts = colName.Split('.');
-            object[] items;
-
-            if (parts[0] == fetchXml.Alias)
-                items = fetchXml.Entity.Items;
-            else
-                items = fetchXml.Entity.GetLinkEntities().SingleOrDefault(le => le.alias == parts[0])?.Items;
-
-            if (items != fetchXml.Entity.Items)
-            {
-                foreach (var filter in fetchXml.Entity.Items.OfType<filter>())
-                {
-                    if (HasKnownValue(parts[0], parts[1], filter, out value))
-                        return true;
-                }
-            }
-
-            if (items == null)
-                return false;
-
-            foreach (var filter in items.OfType<filter>())
-            {
-                if (HasKnownValue(null, parts[1], filter, out value))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private bool HasKnownValue(string table, string column, filter filter, out Literal value)
-        {
-            value = null;
-
-            if (filter.type == filterType.or)
-                return false;
-
-            if (filter.Items == null)
-                return false;
-
-            foreach (var condition in filter.Items.OfType<condition>())
-            {
-                if (condition.entityname == table && condition.attribute == column && condition.@operator == @operator.eq)
-                {
-                    value = new StringLiteral { Value = condition.value };
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private BooleanIsNullExpression FindNotNullFilter(BooleanExpression filter, string attribute, out bool and)
@@ -1071,13 +1243,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IEnumerable<IDataExecutionPlanNodeInternal> GetFoldableSources(IDataExecutionPlanNodeInternal source)
         {
-            if (source is FetchXmlScan)
-            {
-                yield return source;
-                yield break;
-            }
-
-            if (source is MetadataQueryNode)
+            if (source is FetchXmlScan ||
+                source is MetadataQueryNode ||
+                source is AliasNode ||
+                source is ConcatenateNode)
             {
                 yield return source;
                 yield break;
@@ -1241,6 +1410,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return bin.FirstExpression ?? bin.SecondExpression;
         }
 
+        private BooleanExpression ExtractChildFilters(BooleanExpression criteria, INodeSchema schema, Func<string, bool> columnPredicate, out BooleanExpression childFilter)
+        {
+            if (TranslateChildFilters(criteria, schema, columnPredicate, out childFilter))
+                return null;
+
+            if (!(criteria is BooleanBinaryExpression bin))
+                return criteria;
+
+            if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
+                return criteria;
+
+            bin.FirstExpression = ExtractChildFilters(bin.FirstExpression, schema, columnPredicate, out var lhsFilter);
+            bin.SecondExpression = ExtractChildFilters(bin.SecondExpression, schema, columnPredicate, out var rhsFilter);
+
+            childFilter = lhsFilter.And(rhsFilter);
+
+            if (bin.FirstExpression != null && bin.SecondExpression != null)
+                return bin;
+
+            return bin.FirstExpression ?? bin.SecondExpression;
+        }
+
+        private bool TranslateChildFilters(BooleanExpression criteria, INodeSchema schema, Func<string, bool> columnPredicate, out BooleanExpression childFilter)
+        {
+            childFilter = null;
+
+            // If all the columns are from the target child we can move the whole filter to that child
+            var columns = criteria.GetColumns().ToList();
+
+            if (columns.Count == 0)
+                return false;
+
+            if (columns.All(col => columnPredicate(col)))
+            {
+                childFilter = criteria;
+                return true;
+            }
+
+            return false;
+        }
+
         protected bool TranslateMetadataCriteria(NodeCompilationContext context, BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
             entityFilter = null;
@@ -1331,7 +1541,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
-                var parts = colName.Split('.');
+                var parts = colName.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     return false;
@@ -1377,7 +1587,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
-                var parts = colName.Split('.');
+                var parts = colName.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     return false;
@@ -1401,7 +1611,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
-                var parts = colName.Split('.');
+                var parts = colName.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     return false;

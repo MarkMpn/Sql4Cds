@@ -458,7 +458,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(columnName, out columnName))
                     return false;
 
-                var parts = columnName.Split('.');
+                var parts = columnName.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     return false;
@@ -487,7 +487,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!schema.ContainsColumn(columnName2, out columnName2))
                         return false;
 
-                    var parts2 = columnName2.Split('.');
+                    var parts2 = columnName2.SplitMultiPartIdentifier();
                     var entityAlias2 = parts2[0];
                     var attrName2 = parts2[1];
 
@@ -592,7 +592,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(columnName, out columnName))
                     return false;
 
-                var parts = columnName.Split('.');
+                var parts = columnName.SplitMultiPartIdentifier();
                 var entityAlias = parts[0];
                 var attrName = parts[1];
 
@@ -619,7 +619,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(columnName, out columnName))
                     return false;
 
-                var parts = columnName.Split('.');
+                var parts = columnName.SplitMultiPartIdentifier();
                 var entityAlias = parts[0];
                 var attrName = parts[1];
 
@@ -652,7 +652,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(columnName, out columnName))
                     return false;
 
-                var parts = columnName.Split('.');
+                var parts = columnName.SplitMultiPartIdentifier();
                 var entityAlias = parts[0];
                 var attrName = parts[1];
 
@@ -699,7 +699,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(columnName, out columnName))
                     return false;
 
-                var parts = columnName.Split('.');
+                var parts = columnName.SplitMultiPartIdentifier();
                 var entityAlias = parts[0];
                 var attrName = parts[1];
 

@@ -94,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var col in requiredColumns)
             {
-                var parts = col.Split('.');
+                var parts = col.SplitMultiPartIdentifier();
 
                 if (parts.Length != 2)
                     continue;

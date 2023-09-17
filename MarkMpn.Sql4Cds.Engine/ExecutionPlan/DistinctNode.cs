@@ -100,7 +100,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity);
 
-                        if (attr.name != normalized.Split('.')[1])
+                        var nameParts = normalized.SplitMultiPartIdentifier();
+
+                        if (attr.name != nameParts[1])
                             virtualAttr = true;
 
                         if (!sortedAttributes.Add(linkEntity?.alias + "." + attr.name))

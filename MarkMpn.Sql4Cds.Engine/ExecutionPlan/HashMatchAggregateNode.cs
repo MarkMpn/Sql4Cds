@@ -277,7 +277,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    var parts = groupCol.Split('.');
+                    var parts = groupCol.SplitMultiPartIdentifier();
                     string entityName;
 
                     if (parts[0] == fetchXml.Alias)
@@ -447,7 +447,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         // min, max, sum and avg are not supported for optionset & boolean attributes
-                        var parts = colName.Split('.');
+                        var parts = colName.SplitMultiPartIdentifier();
                         string entityName;
 
                         if (parts[0] == fetchXml.Alias)

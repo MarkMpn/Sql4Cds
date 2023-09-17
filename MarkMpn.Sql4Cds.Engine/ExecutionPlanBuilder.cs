@@ -2120,13 +2120,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     foreach (var field in preOrderSchema.Schema.Keys.OrderBy(f => f))
                     {
                         if (star.Qualifier == null || field.StartsWith(String.Join(".", star.Qualifier.Identifiers.Select(id => id.Value)) + "."))
-                        {
-                            var colRef = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
-                            foreach (var part in field.Split('.'))
-                                colRef.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
-
-                            selectFields.Add(colRef);
-                        }
+                            selectFields.Add(field.ToColumnReference());
                     }
                 }
             }
@@ -2613,7 +2607,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             if (partnames.TryGetValue(partName, out var dateGrouping) && schema.ContainsColumn(colName, out colName))
                             {
-                                name = colName.Split('.').Last() + "_" + dateGrouping;
+                                name = colName.SplitMultiPartIdentifier().Last() + "_" + dateGrouping;
                                 var baseName = name;
 
                                 var suffix = 0;
@@ -3199,7 +3193,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (col.AllColumns)
                     {
                         var distinctSchema = distinct.GetSchema(context);
-                        distinct.Columns.AddRange(distinctSchema.Schema.Keys.Where(k => col.SourceColumn == null || (k.Split('.')[0] + ".*") == col.SourceColumn));
+                        distinct.Columns.AddRange(distinctSchema.Schema.Keys.Where(k => col.SourceColumn == null || (k.SplitMultiPartIdentifier()[0] + ".*") == col.SourceColumn));
                     }
                     else
                     {
@@ -3292,13 +3286,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 [outputcol] = new Aggregate
                                 {
                                     AggregateType = AggregateType.First,
-                                    SqlExpression = new ColumnReferenceExpression
-                                    {
-                                        MultiPartIdentifier = new MultiPartIdentifier
-                                        {
-                                            Identifiers = { new Identifier { Value = subqueryCol } }
-                                        }
-                                    }
+                                    SqlExpression = subqueryCol.ToColumnReference()
                                 },
                                 [rowCountCol] = new Aggregate
                                 {
@@ -3465,7 +3453,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (semiJoin && alias == null)
             {
                 var select = new SelectNode { Source = subNode };
-                select.ColumnSet.Add(new SelectColumn { SourceColumn = subqueryCol, OutputColumn = subqueryCol.Split('.').Last() });
+                select.ColumnSet.Add(new SelectColumn { SourceColumn = subqueryCol, OutputColumn = subqueryCol.SplitMultiPartIdentifier().Last() });
                 alias = new AliasNode(select, new Identifier { Value = context.GetExpressionName() }, context);
                 subAlias = alias.Alias;
             }
@@ -3645,33 +3633,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (splitLhs || splitRhs)
                 {
-                    if (correlatedLhs != null && correlatedRhs != null)
-                    {
-                        correlatedFilter = new BooleanBinaryExpression
-                        {
-                            FirstExpression = correlatedLhs,
-                            BinaryExpressionType = BooleanBinaryExpressionType.And,
-                            SecondExpression = correlatedRhs
-                        };
-                    }
-                    else
-                    {
-                        correlatedFilter = correlatedLhs ?? correlatedRhs;
-                    }
-
-                    if (nonCorrelatedLhs != null && nonCorrelatedRhs != null)
-                    {
-                        nonCorrelatedFilter = new BooleanBinaryExpression
-                        {
-                            FirstExpression = nonCorrelatedLhs,
-                            BinaryExpressionType = BooleanBinaryExpressionType.And,
-                            SecondExpression = nonCorrelatedRhs
-                        };
-                    }
-                    else
-                    {
-                        nonCorrelatedFilter = nonCorrelatedLhs ?? nonCorrelatedRhs;
-                    }
+                    correlatedFilter = correlatedLhs.And(correlatedRhs);
+                    nonCorrelatedFilter = nonCorrelatedLhs.And(nonCorrelatedRhs);
 
                     return true;
                 }
@@ -4186,8 +4149,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 for (var i = 0; i < inlineDerivedTable.Columns.Count; i++)
                 {
-                    concat.ColumnSet[i].OutputColumn = inlineDerivedTable.Columns[i].Value;
-                    converted.ColumnSet[i].SourceColumn = inlineDerivedTable.Columns[i].Value;
+                    concat.ColumnSet[i].OutputColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier();
+                    converted.ColumnSet[i].SourceColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier();
                 }
             }
             else if (source is ComputeScalarNode compute)
@@ -4196,9 +4159,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (converted.ColumnSet[i].SourceColumn != converted.ColumnSet[i].OutputColumn && compute.Columns.TryGetValue(converted.ColumnSet[i].SourceColumn, out var expr))
                     {
-                        compute.Columns[converted.ColumnSet[i].OutputColumn] = expr;
+                        compute.Columns[converted.ColumnSet[i].OutputColumn.EscapeIdentifier()] = expr;
                         compute.Columns.Remove(converted.ColumnSet[i].SourceColumn);
-                        converted.ColumnSet[i].SourceColumn = converted.ColumnSet[i].OutputColumn;
+                        converted.ColumnSet[i].SourceColumn = converted.ColumnSet[i].OutputColumn.EscapeIdentifier();
                     }
                 }
             }

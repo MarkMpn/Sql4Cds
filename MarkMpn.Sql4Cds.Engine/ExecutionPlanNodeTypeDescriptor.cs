@@ -293,8 +293,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
     class DataCollectionItemPropertyDescriptor : WrappedPropertyDescriptor
     {
-        public DataCollectionItemPropertyDescriptor(System.Collections.IList list, object item, int index) : base(list, index.ToString().PadLeft((int)Math.Ceiling(Math.Log10(list.Count)), '0'), item)
+        public DataCollectionItemPropertyDescriptor(System.Collections.IList list, object item, int index) : base(list, GetPropertyName(list, item, index), item)
         {
+        }
+
+        private static string GetPropertyName(System.Collections.IList list, object item, int index)
+        {
+            var dictionaryKeyProperty = item.GetType()
+                .GetProperties()
+                .SingleOrDefault(p => p.GetCustomAttribute<DictionaryKeyAttribute>() != null);
+
+            if (dictionaryKeyProperty != null)
+                return dictionaryKeyProperty.GetValue(item).ToString();
+
+            return index.ToString().PadLeft((int)Math.Ceiling(Math.Log10(list.Count)), '0');
         }
     }
 
@@ -362,5 +374,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return String.Join(".", id.Identifiers.Select(i => i.Value));
         }
+    }
+
+    [AttributeUsage(AttributeTargets.Property)]
+    class DictionaryKeyAttribute : Attribute
+    {
     }
 }
