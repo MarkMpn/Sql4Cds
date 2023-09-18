@@ -455,7 +455,91 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            throw new NotSupportedQueryFragmentException("Unhandled expression type", fragment);
+            if (fragment is QuerySpecification querySpec)
+            {
+                var clone = new QuerySpecification
+                {
+                    ForClause = querySpec.ForClause?.Clone(),
+                    FromClause = querySpec.FromClause?.Clone(),
+                    GroupByClause = querySpec.GroupByClause?.Clone(),
+                    HavingClause = querySpec.HavingClause?.Clone(),
+                    OffsetClause = querySpec.OffsetClause?.Clone(),
+                    OrderByClause = querySpec.OrderByClause?.Clone(),
+                    TopRowFilter = querySpec.TopRowFilter?.Clone(),
+                    UniqueRowFilter = querySpec.UniqueRowFilter,
+                    WhereClause = querySpec.WhereClause?.Clone(),
+                    WindowClause = querySpec.WindowClause?.Clone()
+                };
+
+                foreach (var selectElement in querySpec.SelectElements)
+                    clone.SelectElements.Add(selectElement.Clone());
+
+                return (T)(object)clone;
+            }
+
+            if (fragment is FromClause from)
+            {
+                var clone = new FromClause();
+
+                foreach (var predict in from.PredictTableReference)
+                    clone.PredictTableReference.Add(predict.Clone());
+
+                foreach (var table in from.TableReferences)
+                    clone.TableReferences.Add(table.Clone());
+
+                return (T)(object)clone;
+            }
+
+            if (fragment is NamedTableReference tableRef)
+            {
+                var clone = new NamedTableReference
+                {
+                    Alias = tableRef.Alias?.Clone(),
+                    ForPath = tableRef.ForPath,
+                    SchemaObject = tableRef.SchemaObject.Clone(),
+                    TableSampleClause = tableRef.TableSampleClause?.Clone(),
+                    TemporalClause = tableRef.TemporalClause?.Clone(),
+                };
+
+                foreach (var hint in tableRef.TableHints)
+                    clone.TableHints.Add(hint.Clone());
+
+                return (T)(object)clone;
+            }
+
+            if (fragment is GroupByClause groupBy)
+            {
+                var clone = new GroupByClause
+                {
+                    All = groupBy.All,
+                    GroupByOption = groupBy.GroupByOption
+                };
+
+                foreach (var groupBySpec in groupBy.GroupingSpecifications)
+                    clone.GroupingSpecifications.Add(groupBySpec.Clone());
+
+                return (T)(object)clone;
+            }
+
+            if (fragment is WhereClause where)
+            {
+                return (T)(object)new WhereClause
+                {
+                    Cursor = where.Cursor?.Clone(),
+                    SearchCondition = where.SearchCondition?.Clone()
+                };
+            }
+
+            if (fragment is SelectScalarExpression selectScalarExpression)
+            {
+                return (T)(object)new SelectScalarExpression
+                {
+                    ColumnName = selectScalarExpression.ColumnName?.Clone(),
+                    Expression = selectScalarExpression.Expression?.Clone()
+                };
+            }
+
+            throw new NotSupportedQueryFragmentException("Unhandled expression type " + fragment.GetType().Name, fragment);
         }
     }
 }

@@ -290,7 +290,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             var anchorSchema = anchorQuery.GetSchema(_nodeContext);
 
                             foreach (var col in anchorSchema.Schema)
-                                recurseLoop.OuterReferences[col.Key] = "@" + _nodeContext.GetExpressionName();
+                                recurseLoop.OuterReferences[col.Key.SplitMultiPartIdentifier().Last()] = "@" + _nodeContext.GetExpressionName();
 
                             if (cteValidator.RecursiveQueries.Count > 1)
                             {
@@ -437,7 +437,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private SelectNode ConvertRecursiveCTEQuery(QueryExpression queryExpression, INodeSchema anchorSchema, CteValidatorVisitor cteValidator, Dictionary<string, string> outerReferences)
         {
             // Convert the query using the anchor query as a subquery to check for ambiguous column names
-            ConvertSelectStatement(queryExpression, null, null, null, _nodeContext);
+            ConvertSelectStatement(queryExpression.Clone(), null, null, null, _nodeContext);
 
             // Remove recursive references from the FROM clause, moving join predicates to the WHERE clause
             // If the recursive reference was in an unqualified join, replace it with (SELECT @Expr1, @Expr2) AS cte (field1, field2)
@@ -446,7 +446,7 @@ namespace MarkMpn.Sql4Cds.Engine
             queryExpression.Accept(cteReplacer);
 
             // Convert the modified query.
-            var childContext = new NodeCompilationContext(_nodeContext, outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[kvp.Key].Type, StringComparer.OrdinalIgnoreCase));
+            var childContext = new NodeCompilationContext(_nodeContext, outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[cteValidator.Name.EscapeIdentifier() + "." + kvp.Key].Type, StringComparer.OrdinalIgnoreCase));
             return ConvertSelectStatement(queryExpression, null, null, null, childContext);
         }
 
@@ -2081,7 +2081,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
-            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
+            var node = querySpec.FromClause == null || querySpec.FromClause.TableReferences.Count == 0 ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
             var logicalSchema = node.GetSchema(context);
 
             node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);

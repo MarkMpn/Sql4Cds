@@ -169,7 +169,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             {
                 // Replace references to the recursive CTE columns with variables
                 var rewrites = _outerReferences
-                    .SelectMany(kvp => new[] { kvp, new KeyValuePair<string, string>(kvp.Key.Split('.')[1], kvp.Value) })
+                    .SelectMany(kvp => new[] { kvp, new KeyValuePair<string, string>(_name.EscapeIdentifier() + "." + kvp.Key, kvp.Value) })
                     .ToDictionary(kvp => (ScalarExpression)kvp.Key.ToColumnReference(), kvp => (ScalarExpression)new VariableReference { Name = kvp.Value });
 
                 node.Accept(new RewriteVisitor(rewrites));

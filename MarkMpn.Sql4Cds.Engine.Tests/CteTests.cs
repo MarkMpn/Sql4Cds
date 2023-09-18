@@ -512,11 +512,69 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var concat = AssertNode<ConcatenateNode>(spoolProducer.Source);
             var depth0 = AssertNode<ComputeScalarNode>(concat.Sources[0]);
             var anchor = AssertNode<FetchXmlScan>(depth0.Source);
+
+            AssertFetchXml(anchor, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute=""firstname"" operator=""eq"" value=""Mark"" />
+                        </filter>
+                    </entity>
+                </fetch>");
+
             var assert = AssertNode<AssertNode>(concat.Sources[1]);
             var nestedLoop = AssertNode<NestedLoopNode>(assert.Source);
             var depthPlus1 = AssertNode<ComputeScalarNode>(nestedLoop.LeftSource);
-            var spoolConsumer = AssertNode<TableSpoolNode>(depthPlus1);
+            var spoolConsumer = AssertNode<TableSpoolNode>(depthPlus1.Source);
             var children = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
+
+            AssertFetchXml(children, @"
+                <fetch xmlns:generator=""MarkMpn.SQL4CDS"">
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute=""parentcustomerid"" operator=""eq"" value=""@Expr3"" generator:IsVariable=""true"" />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FactorialCalc()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    WITH Factorial (N, Factorial) AS (
+                        SELECT 1, 1
+                        UNION ALL
+                        SELECT N + 1, (N + 1) * Factorial FROM Factorial WHERE N < 5)
+                    SELECT N, Factorial FROM Factorial";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var n = 1;
+                    var factorial = 1;
+
+                    while (n <= 5)
+                    {
+                        Assert.IsTrue(reader.Read());
+                        Assert.AreEqual(n, reader.GetInt32(0));
+                        Assert.AreEqual(factorial, reader.GetInt32(1));
+
+                        n++;
+                        factorial *= n;
+                    }
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
