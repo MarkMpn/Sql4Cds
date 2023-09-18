@@ -64,9 +64,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Sort the items in the FetchXml nodes to match examples in documentation
                 SortFetchXmlElements(n);
+
+                // Let the nodes know that folding is now finished so they can do any internal tidy-up
+                MarkComplete(n);
             }
 
             return nodes;
+        }
+
+        private void MarkComplete(IExecutionPlanNodeInternal node)
+        {
+            foreach (var child in node.GetSources())
+                MarkComplete((IExecutionPlanNodeInternal)child);
+
+            node.FinishedFolding();
         }
 
         private void SortFetchXmlElements(IExecutionPlanNode node)

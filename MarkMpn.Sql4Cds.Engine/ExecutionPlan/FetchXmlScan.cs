@@ -235,12 +235,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override IEnumerable<Entity> Execute(NodeExecutionContext context)
-        {
-            ReturnFullSchema = false;
-            return base.Execute(context);
-        }
-
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             PagesRetrieved = 0;
@@ -1785,6 +1779,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FetchXml.count = "500";
 
             ReturnFullSchema = fullSchema;
+        }
+
+        public override void FinishedFolding()
+        {
+            ReturnFullSchema = false;
         }
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
