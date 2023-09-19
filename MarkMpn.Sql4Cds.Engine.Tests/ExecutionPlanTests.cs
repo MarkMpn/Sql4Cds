@@ -1895,28 +1895,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            Assert.AreEqual("NOT Expr3 IS NOT NULL", filter.Filter.ToSql());
-            var join = AssertNode<MergeJoinNode>(filter.Source);
-            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
-            Assert.IsTrue(join.SemiJoin);
-            var fetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.IsTrue(fetch.UsingCustomPaging);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <link-entity name='contact' alias='Expr2' from='parentcustomerid' to='accountid' link-type='outer'>
+                            <attribute name='contactid' />
+                            <order attribute='contactid' />
+                        </link-entity>
+                        <filter>
+                            <condition entityname='Expr2' attribute='contactid' operator='null' />
+                        </filter>
                         <order attribute='accountid' />
-                    </entity>
-                </fetch>");
-            var sort = AssertNode<SortNode>(join.RightSource);
-            Assert.AreEqual("Expr2.parentcustomerid ASC", sort.Sorts[0].ToSql());
-            var subFetch = AssertNode<FetchXmlScan>(sort.Source);
-            Assert.AreEqual("Expr2", subFetch.Alias);
-            AssertFetchXml(subFetch, @"
-                <fetch distinct='true'>
-                    <entity name='contact'>
-                        <attribute name='parentcustomerid' />
                     </entity>
                 </fetch>");
         }
@@ -2767,6 +2760,41 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 _supportedJoins.Remove(JoinOperator.Any);
             }
+        }
+
+        [TestMethod]
+        public void FoldNotInToLeftOuterJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = "SELECT name from account where name like 'Data8%' and createdon not in (select createdon from contact where firstname = 'Mark')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            Assert.IsTrue(fetch.UsingCustomPaging);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='outer'>
+                            <attribute name='contactid' />
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                            <order attribute='contactid' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                            <condition entityname='Expr1' attribute='contactid' operator='null' />
+                        </filter>
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
         }
 
         [TestMethod]
@@ -6027,7 +6055,7 @@ FROM   account AS r;";
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
 
-            var query = "SELECT * FROM account WHERE NOT EXISTS(SELECT * FROM contact WHERE account.name = contact.createdon)";
+            var query = "SELECT * FROM account WHERE EXISTS(SELECT * FROM contact WHERE account.name = contact.createdon)";
 
             var plans = planBuilder.Build(query, null, out _);
 

@@ -133,5 +133,21 @@ namespace MarkMpn.Sql4Cds.Engine
             return items.OfType<condition>()
                 .Concat(items.OfType<filter>().Where(f => f.type == filterType.and || !andOnly).SelectMany(f => GetConditions(f.Items, andOnly)));
         }
+
+        public static void RemoveAttributes(this FetchEntityType entity)
+        {
+            if (entity.Items == null)
+                return;
+
+            entity.Items = entity.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
+
+            foreach (var link in entity.GetLinkEntities())
+            {
+                if (link.Items == null)
+                    continue;
+
+                link.Items = link.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
+            }
+        }
     }
 }
