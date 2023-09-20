@@ -80,7 +80,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
             if (leftMeta != null && rightMeta != null && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(context, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
-                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
+            {
+                folded = PrependFilters(folded, context, hints, leftFilter, rightFilter);
+
+                if (AdditionalJoinCriteria != null)
+                {
+                    folded = new FilterNode
+                    {
+                        Source = folded,
+                        Filter = AdditionalJoinCriteria
+                    }.FoldQuery(context, hints);
+                }
+
+                return folded;
+            }
 
             // Add not-null filter on join keys
             // Inner join - both must be non-null
