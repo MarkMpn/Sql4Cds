@@ -836,7 +836,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var databaseName = schemaObject.DatabaseIdentifier?.Value ?? Options.PrimaryDataSource;
             
             if (!DataSources.TryGetValue(databaseName, out var dataSource))
-                throw new NotSupportedQueryFragmentException("Invalid database name", schemaObject) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+                throw new NotSupportedQueryFragmentException("Invalid database name", schemaObject) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n* ", DataSources.Keys.OrderBy(k => k))}" };
 
             return dataSource;
         }
