@@ -6284,7 +6284,6 @@ WHERE    [union. all].eln IN ('systemuser', 'businessunit')
          AND [union. all].logicalname IN ('createdon')
 ORDER BY [union. all].eln";
 
-
             var plans = planBuilder.Build(query, null, out _);
 
             var select = AssertNode<SelectNode>(plans[0]);
@@ -6330,6 +6329,38 @@ ORDER BY [union. all].eln";
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq3.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
             CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq3.Query.AttributeQuery.Criteria.Conditions[0].Value);
+        }
+
+        [TestMethod]
+        public void PreserveAdditionalFiltersInMetadataJoinConditions()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = @"
+SELECT e.logicalname,
+       a.logicalname,
+       a.targets
+FROM   metadata.entity AS e
+       INNER JOIN
+       metadata.attribute AS a
+       ON e.logicalname = a.entitylogicalname
+          AND a.targets IS NOT NULL
+WHERE  e.logicalname IN ('systemuser');";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("a.targets IS NOT NULL", filter.Filter.ToSql());
+            var metadata = AssertNode<MetadataQueryNode>(filter.Source);
+            Assert.AreEqual("e", metadata.EntityAlias);
+            Assert.AreEqual("a", metadata.AttributeAlias);
+            Assert.AreEqual(MetadataSource.Entity | MetadataSource.Attribute, metadata.MetadataSource);
+            CollectionAssert.AreEquivalent(new[] { nameof(EntityMetadata.LogicalName) }, metadata.Query.Properties.PropertyNames);
+            CollectionAssert.AreEquivalent(new[] { nameof(AttributeMetadata.LogicalName), nameof(LookupAttributeMetadata.Targets) }, metadata.Query.AttributeQuery.Properties.PropertyNames);
+            Assert.AreEqual(nameof(EntityMetadata.LogicalName), metadata.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, metadata.Query.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEquivalent(new[] { "systemuser" }, (string[])metadata.Query.Criteria.Conditions[0].Value);
         }
     }
 }
