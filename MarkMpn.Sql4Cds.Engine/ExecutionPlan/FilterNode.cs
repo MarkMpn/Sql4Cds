@@ -227,65 +227,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FindColumnComparisons(columns, join.LeftSource, context);
                 FindColumnComparisons(columns, join.RightSource, context);
             }
-
-            if (source is FetchXmlScan fetchXml)
-                AddLinkEntities(columns, fetchXml.Alias, fetchXml.Entity.Items);
-
-            if (source is MetadataQueryNode meta &&
-                !String.IsNullOrEmpty(meta.EntityAlias))
-            {
-                if (!String.IsNullOrEmpty(meta.AttributeAlias))
-                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalName)}", $"{meta.AttributeAlias}.{nameof(AttributeMetadata.EntityLogicalName)}");
-
-                if (!String.IsNullOrEmpty(meta.OneToManyRelationshipAlias))
-                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalCollectionName)}", $"{meta.OneToManyRelationshipAlias}.{nameof(OneToManyRelationshipMetadata.ReferencedEntity)}");
-
-                if (!String.IsNullOrEmpty(meta.ManyToOneRelationshipAlias))
-                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalCollectionName)}", $"{meta.OneToManyRelationshipAlias}.{nameof(OneToManyRelationshipMetadata.ReferencingEntity)}");
-
-                if (!String.IsNullOrEmpty(meta.ManyToManyRelationshipAlias))
-                    AddColumnComparison(columns, $"{meta.EntityAlias}.{nameof(EntityMetadata.LogicalCollectionName)}", $"{meta.ManyToManyRelationshipAlias}.{meta.ManyToManyRelationshipJoin}");
-            }
-        }
-
-        private void AddLinkEntities(Dictionary<string, Column> columns, string alias, object[] items)
-        {
-            if (items == null)
-                return;
-
-            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-            {
-                AddColumnComparison(columns, $"{alias}.{linkEntity.to}", $"{linkEntity.alias}.{linkEntity.from}");
-
-                AddLinkEntities(columns, linkEntity.alias, linkEntity.Items);
-            }
-        }
-
-        private void AddColumnComparison(Dictionary<string, Column> columns, string col1Name, string col2Name)
-        {
-            if (!columns.TryGetValue(col1Name, out var col1))
-            {
-                col1 = new Column { ColumnName = col1Name };
-                columns[col1Name] = col1;
-            }
-
-            if (!columns.TryGetValue(col2Name, out var col2))
-            {
-                col2 = new Column { ColumnName = col2Name };
-                columns[col2Name] = col2;
-            }
-
-            col1.Comparisons.Add(new ColumnComparison
-            {
-                Column2 = col2,
-                Comparison = BooleanComparisonType.Equals
-            });
-
-            col2.Comparisons.Add(new ColumnComparison
-            {
-                Column2 = col1,
-                Comparison = BooleanComparisonType.Equals
-            });
         }
 
         private void ExpandFiltersOnColumnComparisons(Dictionary<string, Column> columns, BooleanExpression filter, INodeSchema schema, List<BooleanExpression> removeConditions, ref BooleanExpression additionalFilter)
