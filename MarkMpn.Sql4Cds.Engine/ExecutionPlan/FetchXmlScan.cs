@@ -1637,7 +1637,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var attr = AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out var linkEntity);
 
-                if (mapping != null)
+                if (mapping != null && attr != null)
                 {
                     if (attr.name != parts[1] && IsValidAlias(parts[1]))
                         attr.alias = parts[1];
