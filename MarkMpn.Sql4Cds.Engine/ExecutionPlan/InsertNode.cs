@@ -146,14 +146,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (entityId == null)
                     throw new QueryExecutionException("Cannot insert value NULL into listmember.entityid");
 
-                return new OrganizationRequest
+                return new AddMemberListRequest
                 {
-                    RequestName = "AddMemberList",
-                    Parameters = new ParameterCollection
-                    {
-                        ["ListId"] = listId.Value,
-                        ["EntityId"] = entityId.Value
-                    }
+                    ListId = listId.Value,
+                    EntityId = entityId.Value
                 };
             }
             
@@ -176,7 +172,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     Target = new EntityReference(relationship.Entity1LogicalName, e1.Value),
                     Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
-                    RelatedEntities = new EntityReferenceCollection(new[] { new EntityReference(relationship.Entity2LogicalName, e2.Value) })
+                    RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, e2.Value) }
                 };
             }
 
