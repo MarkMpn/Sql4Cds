@@ -139,6 +139,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override string ToString()
         {
+            if (WithStack)
+                return "Index Spool\r\n(Lazy Spool)";
+
             return "Index Spool\r\n(Eager Spool)";
         }
 
@@ -149,7 +152,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 KeyColumn = KeyColumn,
                 SeekValue = SeekValue,
                 _keySelector = _keySelector,
-                _seekSelector = _seekSelector
+                _seekSelector = _seekSelector,
+                WithStack = WithStack,
             };
 
             LastClone = clone;
