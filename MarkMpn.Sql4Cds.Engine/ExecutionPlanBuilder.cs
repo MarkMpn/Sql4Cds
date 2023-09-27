@@ -1258,7 +1258,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(ex.Message, updateTarget.Target);
             }
 
-            if (targetMetadata.IsIntersect == false)
+            if (targetMetadata.IsIntersect != true)
             {
                 queryExpression.SelectElements.Add(new SelectScalarExpression
                 {
