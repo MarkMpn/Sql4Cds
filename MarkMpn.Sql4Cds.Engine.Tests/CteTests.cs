@@ -508,6 +508,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("contactid", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("firstname", select.ColumnSet[1].OutputColumn);
+            Assert.AreEqual("lastname", select.ColumnSet[2].OutputColumn);
             var spoolProducer = AssertNode<IndexSpoolNode>(select.Source);
             var concat = AssertNode<ConcatenateNode>(spoolProducer.Source);
             var depth0 = AssertNode<ComputeScalarNode>(concat.Sources[0]);
@@ -574,6 +577,42 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                     Assert.IsFalse(reader.Read());
                 }
+            }
+        }
+
+        [TestMethod]
+        public void FactorialCalcFiltered()
+        {
+
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    WITH Factorial (N, Factorial) AS (
+                        SELECT 1, 1
+                        UNION ALL
+                        SELECT N + 1, (N + 1) * Factorial FROM Factorial WHERE N < 5)
+                    SELECT Factorial FROM Factorial WHERE N = 3";
+
+                Assert.AreEqual(6, cmd.ExecuteScalar());
+            }
+        }
+
+        [TestMethod]
+        public void FactorialCalcFilteredCaseInsensitive()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    with factorial (N, Factorial) as (
+                      select 1, 1
+                      union all
+                      select N + 1, (N + 1) * factorial from factorial where n < 10
+                      )
+                    select factorial from factorial where n = 3";
+
+                Assert.AreEqual(6, cmd.ExecuteScalar());
             }
         }
 
