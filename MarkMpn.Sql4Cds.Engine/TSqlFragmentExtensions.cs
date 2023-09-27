@@ -507,6 +507,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 return (T)(object)clone;
             }
 
+            if (fragment is QualifiedJoin qualifiedJoin)
+            {
+                return (T)(object)new QualifiedJoin
+                {
+                    FirstTableReference = qualifiedJoin.FirstTableReference.Clone(),
+                    JoinHint = qualifiedJoin.JoinHint,
+                    QualifiedJoinType = qualifiedJoin.QualifiedJoinType,
+                    SearchCondition = qualifiedJoin.SearchCondition?.Clone(),
+                    SecondTableReference = qualifiedJoin.SecondTableReference.Clone()
+                };
+            }
+
             if (fragment is GroupByClause groupBy)
             {
                 var clone = new GroupByClause
