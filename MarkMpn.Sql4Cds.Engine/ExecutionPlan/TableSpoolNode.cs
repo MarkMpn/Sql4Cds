@@ -125,6 +125,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
+            if (Producer != null)
+                return Producer.GetWorkTable();
+
             if (SpoolType == SpoolType.Eager)
             {
                 if (_eagerSpool == null)
