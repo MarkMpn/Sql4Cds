@@ -728,7 +728,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 var messageSuffix = "";
                 IRootExecutionPlanNode plan = null;
 
-                if (error is Sql4CdsException sql4CdsException)
+                if (error is Sql4CdsException sql4CdsException && sql4CdsException.InnerException != null)
                     error = sql4CdsException.InnerException;
 
                 if (error is QueryException queryException)
