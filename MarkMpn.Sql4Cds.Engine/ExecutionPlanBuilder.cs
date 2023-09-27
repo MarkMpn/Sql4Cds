@@ -213,7 +213,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         if (cteValidator.RecursiveQueries.Count > 0)
                         {
+                            anchorQuery = (AliasNode)anchorQuery.Clone();
                             var ctePlan = anchorQuery.Source;
+                            var anchorSchema = anchorQuery.GetSchema(_nodeContext);
 
                             // Add a ComputeScalar node to add the initial recursion depth (0)
                             var recursionDepthField = _nodeContext.GetExpressionName();
@@ -241,6 +243,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 };
 
                                 recurseConcat.ColumnSet.Add(concatCol);
+
+                                col.SourceColumn = col.OutputColumn;
                             }
 
                             recurseConcat.ColumnSet.Add(new ConcatenateColumn
@@ -259,7 +263,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             // Pull the same records into the recursive loop
                             var recurseTableSpool = new TableSpoolNode
                             {
-                                Producer = recurseIndexStack
+                                Producer = recurseIndexStack,
+                                SpoolType = SpoolType.Lazy
                             };
 
                             // Increment the depth
@@ -287,8 +292,6 @@ namespace MarkMpn.Sql4Cds.Engine
                             };
 
                             // Capture all CTE fields in the outer references
-                            var anchorSchema = anchorQuery.GetSchema(_nodeContext);
-
                             foreach (var col in anchorSchema.Schema)
                                 recurseLoop.OuterReferences[col.Key.SplitMultiPartIdentifier().Last()] = "@" + _nodeContext.GetExpressionName();
 
@@ -373,6 +376,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
 
                             anchorQuery.Source = recurseIndexStack;
+                            _cteSubplans[cte.ExpressionName.Value] = anchorQuery;
                         }
                     }
                 }
