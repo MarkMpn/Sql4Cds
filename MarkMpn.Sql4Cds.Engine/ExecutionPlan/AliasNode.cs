@@ -192,7 +192,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Map the base names to the alias names
             var sourceSchema = Source.GetSchema(context);
             var schema = new ColumnList();
-            var aliases = new Dictionary<string, IReadOnlyList<string>>();
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = (string)null;
             var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var escapedAlias = Alias.EscapeIdentifier();
