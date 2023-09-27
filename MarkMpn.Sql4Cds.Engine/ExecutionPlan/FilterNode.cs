@@ -1184,6 +1184,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         foldedFilters = true;
                     }
                 }
+
+                if (Filter == null)
+                    break;
             }
 
             return foldedFilters;

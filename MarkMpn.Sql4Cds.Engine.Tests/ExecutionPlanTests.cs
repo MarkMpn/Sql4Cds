@@ -6362,5 +6362,28 @@ WHERE  e.logicalname IN ('systemuser');";
             Assert.AreEqual(MetadataConditionOperator.In, metadata.Query.Criteria.Conditions[0].ConditionOperator);
             CollectionAssert.AreEquivalent(new[] { "systemuser" }, (string[])metadata.Query.Criteria.Conditions[0].Value);
         }
+
+        [TestMethod]
+        public void FoldFilterToJoinWithAlias()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/364
+            // Filter is applied to a join with a LHS of FetchXmlScan, which the filter can be entirely folded to
+            // Exception is thrown when trying to fold the remaining null filter to the RHS of the join
+
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = @"
+SELECT app.*
+FROM   (SELECT a.accountid, c.contactid, tot = sum(1)
+FROM account a
+INNER JOIN contact c ON a.accountid = c.parentcustomerid
+WHERE a.name = 'Data8'
+GROUP BY a.accountid, c.contactid
+HAVING sum(1) > 1) AS dups
+INNER JOIN account app ON app.accountid = dups.accountid
+WHERE  app.name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+        }
     }
 }
