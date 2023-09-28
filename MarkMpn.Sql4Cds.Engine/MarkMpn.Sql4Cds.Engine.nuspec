@@ -11,10 +11,12 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed ordering of hash join results
-Improved filter folding across joins
-Improved handling of alias names requiring escaping
-Improved display of column sets in properties window
+    <releaseNotes>Allow updating many-to-many intersect tables
+Allow folding `NOT EXISTS` predicates to FetchXML for improved performance
+Fixed KeyNotFoundException from certain joins
+Fixed NullReferenceException when applying filters to certain joins
+Preserve additional join criteria on `metadata` schema tables
+Fixed use of `SELECT *` in subqueries
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
