@@ -241,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             batch.Statements.Add(select);
 
-            new Sql150ScriptGenerator().GenerateScript(batch, out var sql);
+            new Sql160ScriptGenerator().GenerateScript(batch, out var sql);
 
             return sql;
         }

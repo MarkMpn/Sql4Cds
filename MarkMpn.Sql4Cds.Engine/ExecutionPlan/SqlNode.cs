@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return sql;
 
             // TDS Endpoint doesn't support command behavior flags, so fake them by modifying the SQL query
-            var dom = new TSql150Parser(options.QuotedIdentifiers);
+            var dom = new TSql160Parser(options.QuotedIdentifiers);
             var script = (TSqlScript) dom.Parse(new StringReader(sql), out _);
 
             if (behavior.HasFlag(CommandBehavior.SchemaOnly))

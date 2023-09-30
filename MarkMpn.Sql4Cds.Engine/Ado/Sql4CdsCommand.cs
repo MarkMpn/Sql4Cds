@@ -256,7 +256,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (Parameters.Count > 0)
                     {
-                        var dom = new TSql150Parser(_connection.Options.QuotedIdentifiers);
+                        var dom = new TSql160Parser(_connection.Options.QuotedIdentifiers);
                         var fragment = dom.Parse(new StringReader(CommandText), out _);
                         var variables = new VariableCollectingVisitor();
                         fragment.Accept(variables);
