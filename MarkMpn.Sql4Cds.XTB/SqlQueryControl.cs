@@ -229,13 +229,13 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             _ai.TrackEvent("Format SQL", new Dictionary<string, string> { ["Source"] = "XrmToolBox" });
 
-            var dom = new TSql150Parser(true);
+            var dom = new TSql160Parser(true);
             var fragment = dom.Parse(new StringReader(_editor.Text), out var errors);
 
             if (errors.Count != 0)
                 return;
 
-            new Sql150ScriptGenerator().GenerateScript(fragment, out var sql);
+            new Sql160ScriptGenerator().GenerateScript(fragment, out var sql);
             _editor.Text = sql;
         }
 
