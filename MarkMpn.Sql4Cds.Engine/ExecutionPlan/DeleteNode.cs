@@ -212,14 +212,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (meta.LogicalName == "listmember")
                 {
-                    return new OrganizationRequest
+                    return new RemoveMemberListRequest
                     {
-                        RequestName = "RemoveMemberList",
-                        Parameters = new ParameterCollection
-                        {
-                            ["ListId"] = id,
-                            ["EntityId"] = secondaryId
-                        }
+                        ListId = id,
+                        EntityId = secondaryId
                     };
                 }
 
@@ -228,7 +224,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return new DisassociateRequest
                 {
                     Target = new EntityReference(relationship.Entity1LogicalName, id),
-                    RelatedEntities = new EntityReferenceCollection(new[] { new EntityReference(relationship.Entity2LogicalName, secondaryId) }),
+                    RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, secondaryId) },
                     Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
                 };
             }

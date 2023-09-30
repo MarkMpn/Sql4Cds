@@ -45,6 +45,7 @@
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(284, 261);
             this.Controls.Add(this.propertyGrid);
+            this.HideOnClose = true;
             this.Name = "PropertiesWindow";
             this.Text = "Properties";
             this.ResumeLayout(false);

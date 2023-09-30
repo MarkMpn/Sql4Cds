@@ -180,7 +180,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 
             TopRowFilter?.ToString(buf, indent);
 
-            var selectIndent = Sql150ScriptGenerator.GetCurrentIndent(buf);
+            var selectIndent = Sql160ScriptGenerator.GetCurrentIndent(buf);
 
             for (var i = 0; i < SelectElements.Count; i++)
             {
@@ -956,7 +956,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void ToString(StringBuilder buf, int indent)
         {
             buf.Append("(");
-            Expression.ToString(buf, Sql150ScriptGenerator.GetCurrentIndent(buf));
+            Expression.ToString(buf, Sql160ScriptGenerator.GetCurrentIndent(buf));
             buf.Append(")");
         }
     }
@@ -1109,7 +1109,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 
             if (Subquery != null)
             {
-                Subquery.ToString(buf, Sql150ScriptGenerator.GetCurrentIndent(buf));
+                Subquery.ToString(buf, Sql160ScriptGenerator.GetCurrentIndent(buf));
             }
             else
             {
@@ -1683,7 +1683,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
     }
 
-    class Sql150ScriptGenerator
+    class Sql160ScriptGenerator
     {
         public void GenerateScript(TSqlBatch batch, out string sql)
         {

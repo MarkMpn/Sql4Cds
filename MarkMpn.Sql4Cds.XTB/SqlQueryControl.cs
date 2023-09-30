@@ -229,13 +229,13 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             _ai.TrackEvent("Format SQL", new Dictionary<string, string> { ["Source"] = "XrmToolBox" });
 
-            var dom = new TSql150Parser(true);
+            var dom = new TSql160Parser(true);
             var fragment = dom.Parse(new StringReader(_editor.Text), out var errors);
 
             if (errors.Count != 0)
                 return;
 
-            new Sql150ScriptGenerator().GenerateScript(fragment, out var sql);
+            new Sql160ScriptGenerator().GenerateScript(fragment, out var sql);
             _editor.Text = sql;
         }
 
@@ -728,7 +728,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 var messageSuffix = "";
                 IRootExecutionPlanNode plan = null;
 
-                if (error is Sql4CdsException sql4CdsException)
+                if (error is Sql4CdsException sql4CdsException && sql4CdsException.InnerException != null)
                     error = sql4CdsException.InnerException;
 
                 if (error is QueryException queryException)

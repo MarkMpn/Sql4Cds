@@ -235,12 +235,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override IEnumerable<Entity> Execute(NodeExecutionContext context)
-        {
-            ReturnFullSchema = false;
-            return base.Execute(context);
-        }
-
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             PagesRetrieved = 0;
@@ -1643,7 +1637,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var attr = AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out var linkEntity);
 
-                if (mapping != null)
+                if (mapping != null && attr != null)
                 {
                     if (attr.name != parts[1] && IsValidAlias(parts[1]))
                         attr.alias = parts[1];
@@ -1785,6 +1779,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FetchXml.count = "500";
 
             ReturnFullSchema = fullSchema;
+        }
+
+        public override void FinishedFolding()
+        {
+            ReturnFullSchema = false;
         }
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)

@@ -614,7 +614,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         public void ShowSettings()
         {
-            using (var form = new SettingsForm(Settings.Instance))
+            using (var form = new SettingsForm(Settings.Instance, this))
             {
                 if (form.ShowDialog(this) == DialogResult.OK)
                     SaveSettings();
@@ -924,6 +924,12 @@ in
         {
             var saveable = (ISaveableDocumentWindow)dockPanel.ActiveDocument;
             Process.Start("explorer.exe", $"/select,\"{saveable.Filename}\"");
+        }
+
+        internal void ResetDockLayout()
+        {
+            _objectExplorer.Show(dockPanel, DockState.DockLeft);
+            _properties.Show(dockPanel, DockState.DockRightAutoHide);
         }
     }
 }

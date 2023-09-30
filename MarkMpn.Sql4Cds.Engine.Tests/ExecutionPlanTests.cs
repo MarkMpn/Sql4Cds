@@ -1895,28 +1895,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            Assert.AreEqual("NOT Expr3 IS NOT NULL", filter.Filter.ToSql());
-            var join = AssertNode<MergeJoinNode>(filter.Source);
-            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
-            Assert.IsTrue(join.SemiJoin);
-            var fetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.IsTrue(fetch.UsingCustomPaging);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <link-entity name='contact' alias='Expr2' from='parentcustomerid' to='accountid' link-type='outer'>
+                            <attribute name='contactid' />
+                            <order attribute='contactid' />
+                        </link-entity>
+                        <filter>
+                            <condition entityname='Expr2' attribute='contactid' operator='null' />
+                        </filter>
                         <order attribute='accountid' />
-                    </entity>
-                </fetch>");
-            var sort = AssertNode<SortNode>(join.RightSource);
-            Assert.AreEqual("Expr2.parentcustomerid ASC", sort.Sorts[0].ToSql());
-            var subFetch = AssertNode<FetchXmlScan>(sort.Source);
-            Assert.AreEqual("Expr2", subFetch.Alias);
-            AssertFetchXml(subFetch, @"
-                <fetch distinct='true'>
-                    <entity name='contact'>
-                        <attribute name='parentcustomerid' />
                     </entity>
                 </fetch>");
         }
@@ -2767,6 +2760,41 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 _supportedJoins.Remove(JoinOperator.Any);
             }
+        }
+
+        [TestMethod]
+        public void FoldNotInToLeftOuterJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = "SELECT name from account where name like 'Data8%' and createdon not in (select createdon from contact where firstname = 'Mark')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            Assert.IsTrue(fetch.UsingCustomPaging);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='outer'>
+                            <attribute name='contactid' />
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                            <order attribute='contactid' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                            <condition entityname='Expr1' attribute='contactid' operator='null' />
+                        </filter>
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
         }
 
         [TestMethod]
@@ -6027,7 +6055,7 @@ FROM   account AS r;";
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
 
-            var query = "SELECT * FROM account WHERE NOT EXISTS(SELECT * FROM contact WHERE account.name = contact.createdon)";
+            var query = "SELECT * FROM account WHERE EXISTS(SELECT * FROM contact WHERE account.name = contact.createdon)";
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6256,7 +6284,6 @@ WHERE    [union. all].eln IN ('systemuser', 'businessunit')
          AND [union. all].logicalname IN ('createdon')
 ORDER BY [union. all].eln";
 
-
             var plans = planBuilder.Build(query, null, out _);
 
             var select = AssertNode<SelectNode>(plans[0]);
@@ -6302,6 +6329,61 @@ ORDER BY [union. all].eln";
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq3.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
             CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq3.Query.AttributeQuery.Criteria.Conditions[0].Value);
+        }
+
+        [TestMethod]
+        public void PreserveAdditionalFiltersInMetadataJoinConditions()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = @"
+SELECT e.logicalname,
+       a.logicalname,
+       a.targets
+FROM   metadata.entity AS e
+       INNER JOIN
+       metadata.attribute AS a
+       ON e.logicalname = a.entitylogicalname
+          AND a.targets IS NOT NULL
+WHERE  e.logicalname IN ('systemuser');";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("a.targets IS NOT NULL", filter.Filter.ToSql());
+            var metadata = AssertNode<MetadataQueryNode>(filter.Source);
+            Assert.AreEqual("e", metadata.EntityAlias);
+            Assert.AreEqual("a", metadata.AttributeAlias);
+            Assert.AreEqual(MetadataSource.Entity | MetadataSource.Attribute, metadata.MetadataSource);
+            CollectionAssert.AreEquivalent(new[] { nameof(EntityMetadata.LogicalName) }, metadata.Query.Properties.PropertyNames);
+            CollectionAssert.AreEquivalent(new[] { nameof(AttributeMetadata.LogicalName), nameof(LookupAttributeMetadata.Targets) }, metadata.Query.AttributeQuery.Properties.PropertyNames);
+            Assert.AreEqual(nameof(EntityMetadata.LogicalName), metadata.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.In, metadata.Query.Criteria.Conditions[0].ConditionOperator);
+            CollectionAssert.AreEquivalent(new[] { "systemuser" }, (string[])metadata.Query.Criteria.Conditions[0].Value);
+        }
+
+        [TestMethod]
+        public void FoldFilterToJoinWithAlias()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/364
+            // Filter is applied to a join with a LHS of FetchXmlScan, which the filter can be entirely folded to
+            // Exception is thrown when trying to fold the remaining null filter to the RHS of the join
+
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+            var query = @"
+SELECT app.*
+FROM   (SELECT a.accountid, c.contactid, tot = sum(1)
+FROM account a
+INNER JOIN contact c ON a.accountid = c.parentcustomerid
+WHERE a.name = 'Data8'
+GROUP BY a.accountid, c.contactid
+HAVING sum(1) > 1) AS dups
+INNER JOIN account app ON app.accountid = dups.accountid
+WHERE  app.name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
         }
     }
 }
