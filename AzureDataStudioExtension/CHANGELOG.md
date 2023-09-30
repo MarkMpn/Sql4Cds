@@ -1,9 +1,10 @@
 # Change Log
 
-## [v7.5.3](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.5.3) - 2023-09-29
+## [v7.6.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.6.0) - 2023-09-30
 
 Allow updating many-to-many intersect tables
 Allow folding `NOT EXISTS` predicates to FetchXML for improved performance
+Improved sorting reliability on audit and elastic tables
 Fixed KeyNotFoundException from certain joins
 Fixed NullReferenceException when applying filters to certain joins
 Preserve additional join criteria on `metadata` schema tables

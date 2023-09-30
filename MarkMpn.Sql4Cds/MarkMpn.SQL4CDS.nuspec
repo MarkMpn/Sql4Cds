@@ -24,9 +24,10 @@ Using the preview TDS Endpoint, SELECT queries can also be run that aren't conve
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
     <releaseNotes>Allow updating many-to-many intersect tables
 Allow folding `NOT EXISTS` predicates to FetchXML for improved performance
+Improved sorting reliability on audit and elastic tables
 Fixed KeyNotFoundException from certain joins
-Preserve additional join criteria on `metadata` schema tables
 Fixed NullReferenceException when applying filters to certain joins
+Preserve additional join criteria on `metadata` schema tables
 Fixed use of `SELECT *` in subqueries
 Added option to reset tool windows
 Fixed error message when cancelling query
