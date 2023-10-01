@@ -101,18 +101,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key1"] = new IntegerLiteral { Value = "1" },
                             ["firstname"] = new StringLiteral { Value = "Mark" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["key1"] = new IntegerLiteral { Value = "2" },
                             ["firstname"] = new StringLiteral { Value = "Joe" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key1"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "f"
@@ -121,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
-                        Identifiers = { new Identifier { Value = "f" }, new Identifier { Value = "key" } }
+                        Identifiers = { new Identifier { Value = "f" }, new Identifier { Value = "key1" } }
                     }
                 },
                 RightSource = new ConstantScanNode
@@ -130,23 +130,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Carrington" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Twain" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["key2"] = new IntegerLiteral { Value = "3" },
                             ["lastname"] = new StringLiteral { Value = "Webber" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key2"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["lastname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "l"
@@ -155,7 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
-                        Identifiers = { new Identifier { Value = "l" }, new Identifier { Value = "key" } }
+                        Identifiers = { new Identifier { Value = "l" }, new Identifier { Value = "key2" } }
                     }
                 },
                 JoinType = QualifiedJoinType.Inner
@@ -181,18 +181,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key1"] = new IntegerLiteral { Value = "1" },
                             ["firstname"] = new StringLiteral { Value = "Mark" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["key1"] = new IntegerLiteral { Value = "2" },
                             ["firstname"] = new StringLiteral { Value = "Joe" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key1"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "f"
@@ -201,7 +201,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
-                        Identifiers = { new Identifier { Value = "f" }, new Identifier { Value = "key" } }
+                        Identifiers = { new Identifier { Value = "f" }, new Identifier { Value = "key1" } }
                     }
                 },
                 RightSource = new ConstantScanNode
@@ -210,23 +210,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Carrington" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Twain" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["key2"] = new IntegerLiteral { Value = "3" },
                             ["lastname"] = new StringLiteral { Value = "Hamill" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key2"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["lastname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "l"
@@ -235,7 +235,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
-                        Identifiers = { new Identifier { Value = "l" }, new Identifier { Value = "key" } }
+                        Identifiers = { new Identifier { Value = "l" }, new Identifier { Value = "key2" } }
                     }
                 },
                 JoinType = QualifiedJoinType.LeftOuter
@@ -263,18 +263,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key1"] = new IntegerLiteral { Value = "1" },
                             ["firstname"] = new StringLiteral { Value = "Mark" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["key1"] = new IntegerLiteral { Value = "2" },
                             ["firstname"] = new StringLiteral { Value = "Joe" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key1"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "f"
@@ -283,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
-                        Identifiers = { new Identifier { Value = "f" }, new Identifier { Value = "key" } }
+                        Identifiers = { new Identifier { Value = "f" }, new Identifier { Value = "key1" } }
                     }
                 },
                 RightSource = new ConstantScanNode
@@ -292,23 +292,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Carrington" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Twain" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["key2"] = new IntegerLiteral { Value = "3" },
                             ["lastname"] = new StringLiteral { Value = "Hamill" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key2"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["lastname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "l"
@@ -317,7 +317,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
-                        Identifiers = { new Identifier { Value = "l" }, new Identifier { Value = "key" } }
+                        Identifiers = { new Identifier { Value = "l" }, new Identifier { Value = "key2" } }
                     }
                 },
                 JoinType = QualifiedJoinType.RightOuter
@@ -910,18 +910,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key1"] = new IntegerLiteral { Value = "1" },
                             ["firstname"] = new StringLiteral { Value = "Mark" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["key1"] = new IntegerLiteral { Value = "2" },
                             ["firstname"] = new StringLiteral { Value = "Joe" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key1"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "f"
@@ -932,23 +932,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Carrington" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Twain" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["key2"] = new IntegerLiteral { Value = "3" },
                             ["lastname"] = new StringLiteral { Value = "Webber" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key2"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["lastname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "l"
@@ -957,8 +957,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinCondition = new BooleanComparisonExpression
                 {
                     ComparisonType = BooleanComparisonType.Equals,
-                    FirstExpression = "f.key".ToColumnReference(),
-                    SecondExpression = "l.key".ToColumnReference()
+                    FirstExpression = "f.key1".ToColumnReference(),
+                    SecondExpression = "l.key2".ToColumnReference()
                 }
             };
 
@@ -982,18 +982,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key1"] = new IntegerLiteral { Value = "1" },
                             ["firstname"] = new StringLiteral { Value = "Mark" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["key1"] = new IntegerLiteral { Value = "2" },
                             ["firstname"] = new StringLiteral { Value = "Joe" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key1"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "f"
@@ -1004,23 +1004,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     {
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Carrington" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["key2"] = new IntegerLiteral { Value = "1" },
                             ["lastname"] = new StringLiteral { Value = "Twain" }
                         },
                         new Dictionary<string, ScalarExpression>
                         {
-                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["key2"] = new IntegerLiteral { Value = "3" },
                             ["lastname"] = new StringLiteral { Value = "Hamill" }
                         }
                     },
                     Schema =
                     {
-                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["key2"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
                         ["lastname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
                     },
                     Alias = "l"
@@ -1029,8 +1029,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinCondition = new BooleanComparisonExpression
                 {
                     ComparisonType = BooleanComparisonType.Equals,
-                    FirstExpression = "f.key".ToColumnReference(),
-                    SecondExpression = "l.key".ToColumnReference()
+                    FirstExpression = "f.key1".ToColumnReference(),
+                    SecondExpression = "l.key2".ToColumnReference()
                 }
             };
 

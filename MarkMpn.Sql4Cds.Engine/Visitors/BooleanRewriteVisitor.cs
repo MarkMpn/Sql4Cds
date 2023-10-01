@@ -21,11 +21,21 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             var prop = (PropertyInfo) ((MemberExpression) expr.Body).Member;
 
             var value = (BooleanExpression) prop.GetValue(source, null);
-            if (_mappings.TryGetValue(value, out var mapped))
+            var mapped = ReplaceExpression(value);
+
+            if (value != mapped)
             {
                 prop.SetValue(source, mapped);
                 source.ScriptTokenStream = null;
             }
+        }
+
+        protected virtual BooleanExpression ReplaceExpression(BooleanExpression expr)
+        {
+            if (_mappings.TryGetValue(expr, out var mapped))
+                return mapped;
+
+            return expr;
         }
 
         public override void ExplicitVisit(WhereClause node)

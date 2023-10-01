@@ -205,6 +205,7 @@
             this.ClientSize = new System.Drawing.Size(284, 261);
             this.Controls.Add(this.treeView);
             this.Controls.Add(this.toolStrip1);
+            this.HideOnClose = true;
             this.Name = "ObjectExplorer";
             this.Text = "Object Explorer";
             this.tsqlContextMenuStrip.ResumeLayout(false);

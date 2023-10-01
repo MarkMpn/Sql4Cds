@@ -1066,7 +1066,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var databaseName = schemaObject.DatabaseIdentifier?.Value ?? Options.PrimaryDataSource;
             
             if (!DataSources.TryGetValue(databaseName, out var dataSource))
-                throw new NotSupportedQueryFragmentException("Invalid database name", schemaObject) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+                throw new NotSupportedQueryFragmentException("Invalid database name", schemaObject) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n* ", DataSources.Keys.OrderBy(k => k))}" };
 
             return dataSource;
         }
@@ -1488,69 +1488,64 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(ex.Message, updateTarget.Target);
             }
 
-            if (targetMetadata.IsIntersect == true)
+            if (targetMetadata.IsIntersect != true)
             {
-                throw new NotSupportedQueryFragmentException("Cannot update many-to-many intersect entities", updateTarget.Target)
+                queryExpression.SelectElements.Add(new SelectScalarExpression
                 {
-                    Suggestion = "DELETE any unwanted records and then INSERT the correct values instead"
-                };
-            }
-
-            queryExpression.SelectElements.Add(new SelectScalarExpression
-            {
-                Expression = new ColumnReferenceExpression
-                {
-                    MultiPartIdentifier = new MultiPartIdentifier
-                    {
-                        Identifiers =
-                        {
-                            new Identifier { Value = targetAlias },
-                            new Identifier { Value = targetMetadata.PrimaryIdAttribute }
-                        }
-                    }
-                },
-                ColumnName = new IdentifierOrValueExpression
-                {
-                    Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
-                }
-            });
-
-            if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
-            {
-                // partitionid is required as part of the primary key for Elastic tables - included it as any
-                // other column in the update statement. Check first that the column isn't already being updated -
-                // the metadata shows it's valid for update but  actually has no effect and is documented as not updateable
-                // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#update-a-record-in-an-elastic-table
-                var existingSet = update.SetClauses.OfType<AssignmentSetClause>().FirstOrDefault(set => set.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
-
-                if (existingSet != null)
-                    throw new NotSupportedQueryFragmentException("Column cannot be updated", existingSet.Column);
-
-                update.SetClauses.Add(new AssignmentSetClause
-                {
-                    Column = new ColumnReferenceExpression
+                    Expression = new ColumnReferenceExpression
                     {
                         MultiPartIdentifier = new MultiPartIdentifier
                         {
                             Identifiers =
                             {
                                 new Identifier { Value = targetAlias },
-                                new Identifier { Value = "partitionid" }
+                                new Identifier { Value = targetMetadata.PrimaryIdAttribute }
                             }
                         }
                     },
-                    NewValue = new ColumnReferenceExpression
+                    ColumnName = new IdentifierOrValueExpression
                     {
-                        MultiPartIdentifier = new MultiPartIdentifier
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = targetAlias },
-                                new Identifier { Value = "partitionid" }
-                            }
-                        }
+                        Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
                     }
                 });
+
+                if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
+                {
+                    // partitionid is required as part of the primary key for Elastic tables - included it as any
+                    // other column in the update statement. Check first that the column isn't already being updated -
+                    // the metadata shows it's valid for update but  actually has no effect and is documented as not updateable
+                    // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#update-a-record-in-an-elastic-table
+                    var existingSet = update.SetClauses.OfType<AssignmentSetClause>().FirstOrDefault(set => set.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
+
+                    if (existingSet != null)
+                        throw new NotSupportedQueryFragmentException("Column cannot be updated", existingSet.Column);
+
+                    update.SetClauses.Add(new AssignmentSetClause
+                    {
+                        Column = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = targetAlias },
+                                    new Identifier { Value = "partitionid" }
+                                }
+                            }
+                        },
+                        NewValue = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = targetAlias },
+                                    new Identifier { Value = "partitionid" }
+                                }
+                            }
+                        }
+                    });
+                }
             }
 
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
@@ -1559,6 +1554,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var existingAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var useStateTransitions = !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
             var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
+            var manyToManyRelationship = targetMetadata.IsIntersect == true && targetMetadata.LogicalName != "listmember" ? targetMetadata.ManyToManyRelationships.Single() : null;
 
             foreach (var set in update.SetClauses)
             {
@@ -1621,11 +1617,24 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!attributes.TryGetValue(targetAttrName, out attr))
                         throw new NotSupportedQueryFragmentException("Unknown column name", assignment.Column);
 
-                    if (attr.IsValidForUpdate == false)
-                        throw new NotSupportedQueryFragmentException("Column cannot be updated", assignment.Column);
-
                     if (!attributeNames.Add(attr.LogicalName))
                         throw new NotSupportedQueryFragmentException("Duplicate column name", assignment.Column);
+
+                    if (manyToManyRelationship != null)
+                    {
+                        if (attr.LogicalName != manyToManyRelationship.Entity1IntersectAttribute & attr.LogicalName != manyToManyRelationship.Entity2IntersectAttribute)
+                            throw new NotSupportedQueryFragmentException($"Only the {manyToManyRelationship.Entity1IntersectAttribute} and {manyToManyRelationship.Entity2IntersectAttribute} columns can be used when updating values in the {targetMetadata.LogicalName} table", assignment.Column);
+                    }
+                    else if (targetMetadata.LogicalName == "listmember")
+                    {
+                        if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
+                            throw new NotSupportedQueryFragmentException("Only the listid and entityid columns can be used when updating values in the listmember table", assignment.Column);
+                    }
+                    else
+                    {
+                        if (attr.IsValidForUpdate == false)
+                            throw new NotSupportedQueryFragmentException("Column cannot be updated", assignment.Column);
+                    }
 
                     targetAttrName = attr.LogicalName;
                 }
@@ -1646,6 +1655,18 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 existingAttributes.Add("statecode");
                 existingAttributes.Add("statuscode");
+            }
+
+            // many-to-many intersect entities need both the existing IDs so we can remove the existing association and add the new one
+            if (manyToManyRelationship != null)
+            {
+                existingAttributes.Add(manyToManyRelationship.Entity1IntersectAttribute);
+                existingAttributes.Add(manyToManyRelationship.Entity2IntersectAttribute);
+            }
+            else if (targetLogicalName == "listmember")
+            {
+                existingAttributes.Add("listid");
+                existingAttributes.Add("entityid");
             }
 
             foreach (var existingAttribute in existingAttributes)

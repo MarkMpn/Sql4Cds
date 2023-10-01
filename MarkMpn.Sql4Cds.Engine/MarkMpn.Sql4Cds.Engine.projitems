@@ -141,6 +141,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\InSubqueryVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\OptimizerHintValidatingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ParameterlessCollectingVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\RefactorNotIsNullVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RemoveRecursiveCTETableReferencesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplaceCtesWithSubqueriesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplacePrimaryFunctionsVisitor.cs" />

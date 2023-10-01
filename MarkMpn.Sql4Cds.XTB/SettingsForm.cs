@@ -16,8 +16,9 @@ namespace MarkMpn.Sql4Cds.XTB
     {
         private readonly Settings _settings;
         private readonly FetchXml2SqlOptions _fetchXml2SqlOptions;
+        private readonly PluginControl _pluginControl;
 
-        public SettingsForm(Settings settings)
+        public SettingsForm(Settings settings, PluginControl plugin)
         {
             InitializeComponent();
 
@@ -54,6 +55,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 ConvertFetchXmlOperatorsTo = _settings.FetchXml2SqlOptions.ConvertFetchXmlOperatorsTo,
                 UseParametersForLiterals = _settings.FetchXml2SqlOptions.UseParametersForLiterals
             };
+            _pluginControl = plugin;
         }
 
         private void SetSqlStyle(Scintilla scintilla)
@@ -164,6 +166,11 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 form.ShowDialog(this);
             }
+        }
+
+        private void resetToolWindowsButton_Click(object sender, EventArgs e)
+        {
+            _pluginControl.ResetDockLayout();
         }
     }
 }

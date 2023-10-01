@@ -267,7 +267,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (canFold && !context.DataSources.TryGetValue(fetchXml.DataSource, out dataSource))
                 throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
 
-            if (canFold && fetchXml.FetchXml.aggregate && (fetchXml.Entity.name == "audit" || dataSource.Metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider))
+            var isAuditOrElastic = fetchXml != null && (fetchXml.Entity.name == "audit" || dataSource != null && dataSource.Metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider);
+
+            if (canFold && fetchXml.FetchXml.aggregate && isAuditOrElastic)
                 canFold = false;
 
             if (canFold)
@@ -284,6 +286,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return this;
 
                     if (!fetchSchema.ContainsColumn(sortColRef.GetColumnName(), out var sortCol))
+                        return this;
+
+                    // Elastic tables can only be sorted by a single field unless a compound key has been manually created
+                    // Audit table doesn't throw the same error, but ignores subsequent sorts
+                    if (PresortedCount == 1 && isAuditOrElastic)
                         return this;
 
                     var parts = sortCol.SplitMultiPartIdentifier();
@@ -319,21 +326,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var meta = dataSource.Metadata[entity.name];
                             var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
 
-                            // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
-                            if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
-                                return this;
-
                             // Sorting on multi-select picklist fields isn't supported in FetchXML
                             if (attribute is MultiSelectPicklistAttributeMetadata)
                                 return this;
 
-                            // Sorts on the virtual ___name attribute should be applied to the underlying field
-                            if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
+                            if (isAuditOrElastic)
                             {
-                                attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
+                                // Different logic applies to sorting on Cosmos DB backed tables:
+                                // Sorting on guids is done in string order, not guid order, so don't fold them
+                                if (attribute is LookupAttributeMetadata || attribute?.AttributeType == AttributeTypeCode.Uniqueidentifier)
+                                    return this;
 
-                                if (attribute != null)
-                                    fetchSort.attribute = attribute.LogicalName;
+                                // Sorts on picklist columns are done on the underlying value, not the name, so we can fold them as normal
+
+                                // We can't sort on some columns in the audit table
+                                if (fetchXml.Entity.name == "audit" && attribute?.IsValidForAdvancedFind?.Value == false)
+                                    return this;
+                            }
+                            else
+                            {
+                                // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
+                                if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                                    return this;
+
+                                // Sorts on the virtual ___name attribute should be applied to the underlying field
+                                if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
+                                {
+                                    attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
+
+                                    if (attribute != null)
+                                        fetchSort.attribute = attribute.LogicalName;
+                                }
                             }
 
                             if (attribute == null)

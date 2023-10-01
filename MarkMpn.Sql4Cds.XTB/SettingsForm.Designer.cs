@@ -87,6 +87,7 @@
             this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
+            this.resetToolWindowsButton = new System.Windows.Forms.Button();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -674,6 +675,7 @@
             // 
             // tabPage3
             // 
+            this.tabPage3.Controls.Add(this.resetToolWindowsButton);
             this.tabPage3.Controls.Add(this.localDateFormatCheckbox);
             this.tabPage3.Controls.Add(this.rememberSessionCheckbox);
             this.tabPage3.Controls.Add(this.autoSizeColumnsCheckBox);
@@ -786,6 +788,16 @@
             this.label17.TabIndex = 0;
             this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
             // 
+            // resetToolWindowsButton
+            // 
+            this.resetToolWindowsButton.Location = new System.Drawing.Point(6, 98);
+            this.resetToolWindowsButton.Name = "resetToolWindowsButton";
+            this.resetToolWindowsButton.Size = new System.Drawing.Size(119, 23);
+            this.resetToolWindowsButton.TabIndex = 4;
+            this.resetToolWindowsButton.Text = "Reset Tool Windows";
+            this.resetToolWindowsButton.UseVisualStyleBackColor = true;
+            this.resetToolWindowsButton.Click += new System.EventHandler(this.resetToolWindowsButton_Click);
+            // 
             // SettingsForm
             // 
             this.AcceptButton = this.okButton;
@@ -895,5 +907,6 @@
         private System.Windows.Forms.CheckBox showFetchXMLInEstimatedExecutionPlansCheckBox;
         private System.Windows.Forms.LinkLabel fetchXml2SqlConversionAdvancedLinkLabel;
         private System.Windows.Forms.CheckBox schemaColumnOrderingCheckbox;
+        private System.Windows.Forms.Button resetToolWindowsButton;
     }
 }

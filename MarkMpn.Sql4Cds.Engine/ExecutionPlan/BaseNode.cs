@@ -63,6 +63,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 meta.LogicalName;
         }
 
+        /// <summary>
+        /// Notifies the node that query folding is complete
+        /// </summary>
+        public virtual void FinishedFolding()
+        {
+        }
+
         public override string ToString()
         {
             return System.Text.RegularExpressions.Regex.Replace(GetType().Name.Replace("Node", ""), "([a-z])([A-Z])", "$1 $2");

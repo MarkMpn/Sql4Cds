@@ -55,5 +55,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="context">The context in which the node is being built</param>
         /// <param name="requiredColumns">The columns which are required by the parent node</param>
         void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns);
+
+        /// <summary>
+        /// Notifies the node that all folding of the query is completed
+        /// </summary>
+        void FinishedFolding();
     }
 }

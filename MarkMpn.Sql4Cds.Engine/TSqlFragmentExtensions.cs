@@ -22,7 +22,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         .Select(t => t.Text));
             }
 
-            new Sql150ScriptGenerator().GenerateScript(fragment, out var sql);
+            new Sql160ScriptGenerator().GenerateScript(fragment, out var sql);
             return sql;
         }
 
