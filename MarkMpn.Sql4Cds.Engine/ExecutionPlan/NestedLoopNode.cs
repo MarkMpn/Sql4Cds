@@ -114,7 +114,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (!hasRight && JoinType == QualifiedJoinType.LeftOuter)
+                {
+                    if (rightSchema == null)
+                    {
+                        rightSchema = RightSource.GetSchema(rightCompilationContext);
+                        mergedSchema = GetSchema(context, true);
+                        joinCondition = JoinCondition?.Compile(new ExpressionCompilationContext(context, mergedSchema, null));
+                        joinConditionContext = joinCondition == null ? null : new ExpressionExecutionContext(context);
+                    }
+
                     yield return Merge(left, leftSchema, null, rightSchema);
+                }
             }
         }
 
