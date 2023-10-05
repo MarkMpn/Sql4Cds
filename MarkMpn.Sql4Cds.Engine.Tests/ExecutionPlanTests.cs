@@ -3672,7 +3672,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var sort = AssertNode<SortNode>(merge.RightSource);
-            Assert.AreEqual("entity.metadataid ASC", sort.Sorts[0].ToSql());
+            Assert.AreEqual("entity.metadataid", sort.Sorts[0].ToSql());
             var meta = AssertNode<MetadataQueryNode>(sort.Source);
         }
 
