@@ -90,7 +90,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             InitializePartitionedAggregates(expressionCompilationContext);
             var aggregates = CreateAggregateFunctions(expressionExecutionContext, true);
 
-            var fetchXmlNode = (FetchXmlScan)Source;
+            // Clone the source FetchXmlScan node so we can safely modify it later by adding the partitioning filter
+            // We might be called in a loop and need to execute again, so don't make any changes to the original
+            // source query.
+            var fetchXmlNode = (FetchXmlScan)Source.Clone();
 
             var name = fetchXmlNode.Entity.name;
             var meta = context.DataSources[fetchXmlNode.DataSource].Metadata[name];
