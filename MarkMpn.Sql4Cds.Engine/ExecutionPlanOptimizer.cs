@@ -52,10 +52,8 @@ namespace MarkMpn.Sql4Cds.Engine
             var context = new NodeCompilationContext(DataSources, Options, ParameterTypes);
 
             // Move any additional operators down to the FetchXml
-            var nodes =
-                hints != null && hints.OfType<UseHintList>().Any(list => list.Hints.Any(h => h.Value.Equals("DEBUG_BYPASS_OPTIMIZATION", StringComparison.OrdinalIgnoreCase)))
-                ? new[] { node }
-                : node.FoldQuery(context, hints);
+            var bypassOptimization = hints != null && hints.OfType<UseHintList>().Any(list => list.Hints.Any(h => h.Value.Equals("DEBUG_BYPASS_OPTIMIZATION", StringComparison.OrdinalIgnoreCase)));
+            var nodes = bypassOptimization ? new[] { node } : node.FoldQuery(context, hints);
 
             foreach (var n in nodes)
             {
@@ -66,7 +64,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 SortFetchXmlElements(n);
 
                 // Let the nodes know that folding is now finished so they can do any internal tidy-up
-                MarkComplete(n);
+                if (!bypassOptimization)
+                    MarkComplete(n);
             }
 
             return nodes;
