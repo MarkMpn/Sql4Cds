@@ -22,15 +22,13 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Allow updating many-to-many intersect tables
-Allow folding `NOT EXISTS` predicates to FetchXML for improved performance
-Improved sorting reliability on audit and elastic tables
-Fixed KeyNotFoundException from certain joins
-Fixed NullReferenceException when applying filters to certain joins
-Preserve additional join criteria on `metadata` schema tables
-Fixed use of `SELECT *` in subqueries
-Added option to reset tool windows
-Fixed error message when cancelling query
+    <releaseNotes>Fixed use of IN subqueries when data source cannot be converted to FetchXML
+Fixed use of LIKE filters with data containing embedded returns
+Fixed incorrect row count estimates with joins of huge tables
+Fixed left outer join in nested loop when the first record has no matching records from the right source
+Fixed use of partitioned aggregates within a loop
+Avoid errors when using DEBUG_BYPASS_OPTIMIZATION hint
+Avoid using custom paging for IN and EXISTS filters, and where a single child record is guaranteed by the filters
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
