@@ -1,7 +1,9 @@
 ﻿using System;
 using System.ComponentModel.Composition;
 using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.Windows.Forms;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
 
@@ -34,6 +36,29 @@ namespace MarkMpn.Sql4Cds
 
         public override IXrmToolBoxPluginControl GetControl()
         {
+            // Tool install can unpack files that should only exist in the MarkMpn.Sql4Cds subfolder into the main plugin folder as well
+            // Those files are loaded automatically when XrmToolBox starts, so if a newer tool version is installed and those files are
+            // not overwritten we could end up with unexpected behaviour. The files are locked so we can't delete them automatically, but
+            // let the user know what's going on and how to fix it.
+            var pluginFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            var subfolder = Path.Combine(pluginFolder, Path.GetFileNameWithoutExtension(Assembly.GetExecutingAssembly().Location));
+            var files = Directory.GetFiles(subfolder, "*.dll")
+                .Select(f => Path.GetFileName(f))
+                .Where(f => File.Exists(Path.Combine(pluginFolder, f)))
+                .ToList();
+
+            if (files.Count > 0)
+            {
+                var expectedVersion = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyFileVersionAttribute>().Version;
+
+                var result = MessageBox.Show($"You have some files left over from a previous installation of SQL 4 CDS version.\r\n\r\nTo ensure everything works as expected with version {expectedVersion}, please delete the following files that exist in {pluginFolder} and restart XrmToolBox.\r\n\r\n" + String.Join("\r\n", files.Select(f => $"* {f}")) + "\r\n\r\nWould you like to open this folder now?", "Multiple Versions", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
+
+                if (result == DialogResult.Yes)
+                {
+                    windowsExplorerFileSelector.ShowSelectedInExplorer.FilesOrFolders(pluginFolder, files);
+                }
+            }
+
             var controlType = _primaryAssembly.GetType("MarkMpn.Sql4Cds.XTB.PluginControl");
             return (IXrmToolBoxPluginControl) Activator.CreateInstance(controlType, this);
         }

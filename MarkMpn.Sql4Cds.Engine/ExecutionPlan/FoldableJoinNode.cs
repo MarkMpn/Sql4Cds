@@ -728,6 +728,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 estimate = leftMax * rightMax;
+
+                // Check for overflow
+                if (estimate < leftMax || estimate < rightMax)
+                    estimate = Int32.MaxValue;
             }
 
             if (leftIsRange && rightIsRange)
