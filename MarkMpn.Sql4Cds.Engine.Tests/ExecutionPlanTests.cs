@@ -1896,20 +1896,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var fetch = AssertNode<FetchXmlScan>(select.Source);
-            Assert.IsTrue(fetch.UsingCustomPaging);
+            Assert.IsFalse(fetch.UsingCustomPaging);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
                         <link-entity name='contact' alias='Expr2' from='parentcustomerid' to='accountid' link-type='outer'>
-                            <attribute name='contactid' />
-                            <order attribute='contactid' />
                         </link-entity>
                         <filter>
                             <condition entityname='Expr2' attribute='contactid' operator='null' />
                         </filter>
-                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
         }
@@ -2775,24 +2772,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var fetch = AssertNode<FetchXmlScan>(select.Source);
 
-            Assert.IsTrue(fetch.UsingCustomPaging);
+            Assert.IsFalse(fetch.UsingCustomPaging);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <attribute name='accountid' />
                         <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='outer'>
-                            <attribute name='contactid' />
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
-                            <order attribute='contactid' />
                         </link-entity>
                         <filter>
                             <condition attribute='name' operator='like' value='Data8%' />
                             <condition entityname='Expr1' attribute='contactid' operator='null' />
                         </filter>
-                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
         }
@@ -3672,7 +3665,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var sort = AssertNode<SortNode>(merge.RightSource);
-            Assert.AreEqual("entity.metadataid ASC", sort.Sorts[0].ToSql());
+            Assert.AreEqual("entity.metadataid", sort.Sorts[0].ToSql());
             var meta = AssertNode<MetadataQueryNode>(sort.Source);
         }
 
@@ -6384,6 +6377,52 @@ INNER JOIN account app ON app.accountid = dups.accountid
 WHERE  app.name = 'Data8'";
 
             var plans = planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void DoNotUseCustomPagingForInJoin()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/366
+
+            _supportedJoins.Add(JoinOperator.Any);
+
+            try
+            {
+                var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+
+                var query = @"
+SELECT contactid
+FROM   contact
+WHERE  contactid IN (SELECT DISTINCT primarycontactid FROM account WHERE name = 'Data8')
+AND    contactid NOT IN (SELECT DISTINCT primarycontactid FROM account WHERE employees IS NULL)";
+
+                var plans = planBuilder.Build(query, null, out _);
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                        <entity name='contact'>
+                            <attribute name='contactid' />
+                            <link-entity name='account' from='primarycontactid' to='contactid' link-type='in' alias='Expr1'>
+                                <filter>
+                                    <condition attribute='name' operator='eq' value='Data8' />
+                                </filter>
+                            </link-entity>
+                            <link-entity name='account' from='primarycontactid' to='contactid' link-type='outer' alias='Expr3'>
+                                <filter>
+                                    <condition attribute='employees' operator='null' />
+                                </filter>
+                            </link-entity>
+                            <filter>
+                                <condition entityname='Expr3' attribute='accountid' operator='null' />
+                            </filter>
+                        </entity>
+                    </fetch>");
+            }
+            finally
+            {
+                _supportedJoins.Remove(JoinOperator.Any);
+            }
         }
     }
 }

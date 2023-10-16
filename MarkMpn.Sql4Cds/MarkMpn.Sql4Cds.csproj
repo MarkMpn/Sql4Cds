@@ -73,6 +73,7 @@
   <ItemGroup>
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="WindowsExplorerFileSelector.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj">

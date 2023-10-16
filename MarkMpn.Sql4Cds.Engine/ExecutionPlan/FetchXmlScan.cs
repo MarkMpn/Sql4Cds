@@ -214,6 +214,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
+            // Custom paging is required if we have links to child entities, as standard Dataverse paging is applied at
+            // the top-level entity only.
+            // Custom paging can't be used with distinct queries, as the primary key fields required to implement the paging
+            // may not be included.
+            // It also can't be used with aggregate queries as doing so would affect the aggregae behaviour.
             if (FetchXml.distinct)
                 return false;
 
@@ -225,10 +230,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var linkEntity in Entity.GetLinkEntities())
             {
+                // Link entities used for filtering do not require paging
                 if (linkEntity.linktype == "exists" || linkEntity.linktype == "in")
                     continue;
 
-                if (linkEntity.from != dataSource.Metadata[linkEntity.name].PrimaryIdAttribute)
+                if (HasSingleRecordFilter(linkEntity, dataSource.Metadata[linkEntity.name].PrimaryIdAttribute))
+                    continue;
+
+                // Parental lookups do not require paging
+                if (linkEntity.from == dataSource.Metadata[linkEntity.name].PrimaryIdAttribute)
+                    continue;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool HasSingleRecordFilter(FetchLinkEntityType linkEntity, string primaryIdAttribute)
+        {
+            // Look for outer joins where we are filtering on a null primary key, i.e. there are no child records,
+            // or any join where we are filtering on the primary key equals a fixed guid.
+            return HasSingleRecordFilter(linkEntity, primaryIdAttribute, Entity.Items, linkEntity.alias) ||
+                HasSingleRecordFilter(linkEntity, primaryIdAttribute, linkEntity.Items, null);
+        }
+
+        private bool HasSingleRecordFilter(FetchLinkEntityType linkEntity, string primaryIdAttribute, object[] items, string alias)
+        {
+            if (items == null)
+                return false;
+
+            foreach (var filter in items.OfType<filter>().Where(f => f.type == filterType.and))
+            {
+                if (HasSingleRecordFilter(linkEntity, primaryIdAttribute, filter.Items, alias))
+                    return true;
+            }
+
+            foreach (var condition in items.OfType<condition>())
+            {
+                if (condition.entityname != alias)
+                    continue;
+
+                if (condition.attribute != primaryIdAttribute)
+                    continue;
+
+                if (condition.@operator == @operator.@null)
+                    return true;
+
+                if (condition.@operator == @operator.eq)
+                    return true;
+
+                if (condition.@operator == @operator.@in && condition.Items != null && condition.Items.Length == 1)
                     return true;
             }
 
@@ -1664,7 +1716,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Ensure the primary key of each entity is included
                 AddPrimaryIdAttribute(Entity, dataSource);
 
-                foreach (var linkEntity in Entity.GetLinkEntities())
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
                     AddPrimaryIdAttribute(linkEntity, dataSource);
             }
 

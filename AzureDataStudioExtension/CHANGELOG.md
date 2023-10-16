@@ -1,5 +1,15 @@
 # Change Log
 
+## [v7.6.1)(https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.6.1) - 2023-10-15
+
+Fixed use of `IN` subqueries when data source cannot be converted to FetchXML
+Fixed use of `LIKE` filters with data containing embedded returns
+Fixed incorrect row count estimates with joins of huge tables
+Fixed left outer join in nested loop when the first record has no matching records from the right source
+Fixed use of partitioned aggregates within a loop
+Avoid errors when using `DEBUG_BYPASS_OPTIMIZATION` hint
+Avoid using custom paging for `IN` and `EXISTS` filters, and where a single child record is guaranteed by the filters
+
 ## [v7.6.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.6.0) - 2023-09-30
 
 Allow updating many-to-many intersect tables

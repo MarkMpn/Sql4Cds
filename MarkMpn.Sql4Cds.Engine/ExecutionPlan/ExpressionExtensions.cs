@@ -1257,7 +1257,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!patIndex || !endWildcard)
                 regexBuilder.Append("$");
 
-            return new Regex(regexBuilder.ToString(), pattern.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreCase) ? RegexOptions.IgnoreCase : RegexOptions.None);
+            var regexOptions = RegexOptions.Multiline;
+
+            if (pattern.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreCase))
+                regexOptions |= RegexOptions.IgnoreCase;
+
+            return new Regex(regexBuilder.ToString(), regexOptions);
         }
 
         private static SqlBoolean Like(SqlString value, SqlString pattern, SqlString escape, bool not)

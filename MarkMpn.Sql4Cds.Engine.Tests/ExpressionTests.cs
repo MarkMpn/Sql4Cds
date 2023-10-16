@@ -96,6 +96,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(compilationContext.PrimaryDataSource.DefaultCollation.ToSqlString("2022-01-02"), value);
         }
 
+        [TestMethod]
+        public void LikeWithEmbeddedReturns()
+        {
+            var expr = new LikePredicate
+            {
+                FirstExpression = Col("content"),
+                SecondExpression = new StringLiteral { Value = "%func%" }
+            };
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>
+            {
+                ["content"] = new ExecutionPlan.ColumnDefinition(DataTypeHelpers.VarChar(100, Collation.USEnglish, CollationLabel.Implicit), true, false)
+            }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var options = new StubOptions();
+            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
+
+            var record = new Entity
+            {
+                ["content"] = Collation.USEnglish.ToSqlString(@"function func() {
+   console.log(""hello"");
+};")
+            };
+            var executionContext = new ExpressionExecutionContext(compilationContext);
+            executionContext.Entity = record;
+
+            var value = func(executionContext);
+            Assert.AreEqual(true, value);
+        }
+
         private ColumnReferenceExpression Col(string name)
         {
             return new ColumnReferenceExpression
