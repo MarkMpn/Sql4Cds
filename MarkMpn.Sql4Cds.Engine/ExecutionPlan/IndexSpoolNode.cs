@@ -20,8 +20,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Func<INullable, INullable> _seekSelector;
         private Stack<Entity> _stack;
 
-        public IndexSpoolNode() { }
-
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 

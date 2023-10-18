@@ -141,7 +141,12 @@ namespace MarkMpn.Sql4Cds.Controls
 
                 if (iconRect.IntersectsWith(clipRect))
                 {
-                    using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + kvp.Key.GetType().Name + ".ico"))
+                    var imageName = kvp.Key.GetType().Name;
+
+                    if (imageName == "AdaptiveIndexSpoolNode")
+                        imageName = "IndexSpoolNode";
+
+                    using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + imageName + ".ico"))
                     {
                         Image image;
 

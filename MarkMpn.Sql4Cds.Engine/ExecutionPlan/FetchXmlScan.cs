@@ -1249,14 +1249,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (FoldFilterToIndexSpool(context, out var indexSpool))
             {
+                NormalizeFilters();
                 Parent = indexSpool;
-                return indexSpool;
+                return indexSpool.FoldQuery(context, hints);
             }
 
             return this;
         }
 
-        private bool FoldFilterToIndexSpool(NodeCompilationContext context, out IndexSpoolNode indexSpool)
+        private bool FoldFilterToIndexSpool(NodeCompilationContext context, out IDataExecutionPlanNodeInternal indexSpool)
         {
             if (Entity.Items == null)
             {
@@ -1288,15 +1289,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var loop = parent as NestedLoopNode;
 
-                if (loop != null && prev == loop.RightSource)
+                if (loop != null && prev == loop.RightSource && loop.OuterReferences.Any(kvp => kvp.Value.Equals(variableCondition.value, StringComparison.OrdinalIgnoreCase)))
                 {
                     var rowCount = loop.LeftSource.EstimateRowsOut(context);
 
-                    if (rowCount.Value >= 100 && loop.OuterReferences.Any(kvp => kvp.Value.Equals(variableCondition.value, StringComparison.OrdinalIgnoreCase)))
+                    if (rowCount.Value >= 100)
                     {
                         indexSpool = new IndexSpoolNode
                         {
                             Source = this,
+                            KeyColumn = (variableCondition.entityname ?? Alias) + "." + variableCondition.attribute,
+                            SeekValue = variableCondition.value
+                        };
+
+                        foreach (var filter in Entity.Items.OfType<filter>())
+                            filter.Items = filter.Items.Except(new[] { variableCondition }).ToArray();
+
+                        return true;
+                    }
+                    else if (loop.LeftSource is ComputeScalarNode leftComputeScalar &&
+                        leftComputeScalar.Source is TableSpoolNode leftSpool &&
+                        leftSpool.Producer != null)
+                    {
+                        // In the recursive part of a CTE. We might only be being called for one record at a time, but that might happen
+                        // lots of times. Add an adaptive spool in to avoid excessive calls
+                        var clone = (FetchXmlScan)Clone();
+
+                        indexSpool = new AdaptiveIndexSpoolNode
+                        {
+                            UnspooledSource = clone,
+                            SpooledSource = this,
                             KeyColumn = (variableCondition.entityname ?? Alias) + "." + variableCondition.attribute,
                             SeekValue = variableCondition.value
                         };

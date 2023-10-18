@@ -532,9 +532,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var nestedLoop = AssertNode<NestedLoopNode>(assert.Source);
             var depthPlus1 = AssertNode<ComputeScalarNode>(nestedLoop.LeftSource);
             var spoolConsumer = AssertNode<TableSpoolNode>(depthPlus1.Source);
-            var children = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
+            var adaptiveSpool = AssertNode<AdaptiveIndexSpoolNode>(nestedLoop.RightSource);
+            var childrenFiltered = AssertNode<FetchXmlScan>(adaptiveSpool.UnspooledSource);
+            var childrenUnfiltered = AssertNode<FetchXmlScan>(adaptiveSpool.SpooledSource);
 
-            AssertFetchXml(children, @"
+            AssertFetchXml(childrenFiltered, @"
                 <fetch xmlns:generator=""MarkMpn.SQL4CDS"">
                     <entity name='contact'>
                         <attribute name='contactid' />
@@ -543,6 +545,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute=""parentcustomerid"" operator=""eq"" value=""@Expr3"" generator:IsVariable=""true"" />
                         </filter>
+                    </entity>
+                </fetch>");
+
+            AssertFetchXml(childrenUnfiltered, @"
+                <fetch xmlns:generator=""MarkMpn.SQL4CDS"">
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <attribute name='parentcustomerid' />
                     </entity>
                 </fetch>");
         }
