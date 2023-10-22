@@ -31,12 +31,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         /// <param name="isEntireBatch">Indicates if this query is the entire SQL batch, or a single statement within it</param>
         /// <param name="outerTableNames">A mapping of table aliases to table names available from the outer query</param>
         /// <param name="supportedTables">A pre-calculated list of supported tables</param>
-        public TDSEndpointCompatibilityVisitor(IDbConnection con, IAttributeMetadataCache metadata, bool? isEntireBatch = null, Dictionary<string, string> outerTableNames = null, HashSet<string> supportedTables = null)
+        /// <param name="ctes">A mapping of CTE names to their definitions from the outer query</param>
+        public TDSEndpointCompatibilityVisitor(IDbConnection con, IAttributeMetadataCache metadata, bool? isEntireBatch = null, Dictionary<string, string> outerTableNames = null, HashSet<string> supportedTables = null, Dictionary<string, CommonTableExpression> ctes = null)
         {
             _con = con;
             _metadata = metadata;
             _tableNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            _ctes = new Dictionary<string, CommonTableExpression>(StringComparer.OrdinalIgnoreCase);
+            _ctes = ctes ?? new Dictionary<string, CommonTableExpression>(StringComparer.OrdinalIgnoreCase);
             _isEntireBatch = isEntireBatch;
 
             if (outerTableNames != null)
@@ -126,15 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     // Table name not specified. Try to find it in the list of current tables
                     foreach (var table in _tableNames.Values)
                     {
-                        if (GetCTECols(table, out var cols))
-                        {
-                            if (!cols.Contains(columnName))
-                            {
-                                IsCompatible = false;
-                                return;
-                            }
-                        }
-                        else
+                        if (!GetCTECols(table, out _))
                         {
                             var attribute = TryGetEntity(table)?.Attributes?.SingleOrDefault(a => a.LogicalName.Equals(columnName));
 
@@ -296,7 +289,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, _tableNames, _supportedTables);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, _tableNames, _supportedTables, _ctes);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
@@ -316,7 +309,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables, ctes: _ctes);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
@@ -336,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables, ctes: _ctes);
                 subVisitor._root = node;
 
                 // Visit CTEs first
