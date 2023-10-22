@@ -165,11 +165,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 anchorFetchXml.Entity.name != spooledRecursiveFetchXml.Entity.name)
                 return this;
 
-            // TODO: Check for any other filters or link-entities
+            // Check for any other filters or link-entities
+            if (spooledRecursiveFetchXml.Entity.GetLinkEntities().Any() ||
+                spooledRecursiveFetchXml.Entity.Items != null && spooledRecursiveFetchXml.Entity.Items.OfType<filter>().Any())
+                return this;
 
-            // TODO: Check all columns are consistent
+            // Check there are no extra calculated columns
+            if (initialDepthCompute.Columns.Count != 1 || incrementDepthCompute.Columns.Count != 1)
+                return this;
 
-            // TODO: Check there are no extra calculated columns
+            // Check all columns are consistent
+            var depthField = initialDepthCompute.Columns.Single().Key;
+
+            for (var i = 0; i < concat.ColumnSet.Count; i++)
+            {
+                if (concat.ColumnSet[i].SourceColumns[0] == depthField)
+                    continue;
+
+                var anchorAttribute = concat.ColumnSet[i].SourceColumns[0];
+                var recurseAttribute = concat.ColumnSet[i].SourceColumns[1];
+                recurseAttribute = recurseLoop.DefinedValues[recurseAttribute];
+
+                // Ignore any differences in the aliases used for the anchor and recursive parts
+                anchorAttribute = anchorAttribute.ToColumnReference().MultiPartIdentifier.Identifiers.Last().Value;
+                recurseAttribute = recurseAttribute.ToColumnReference().MultiPartIdentifier.Identifiers.Last().Value;
+
+                if (anchorAttribute != recurseAttribute)
+                    return this;
+            }
 
             var metadata = context.DataSources[anchorFetchXml.DataSource].Metadata[anchorFetchXml.Entity.name];
             var hierarchicalRelationship = metadata.OneToManyRelationships.SingleOrDefault(r => r.IsHierarchical == true);
@@ -200,7 +223,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return this;
 
             // The depth counter is no longer generated or used, so remove it from the concat column list
-            var depthField = initialDepthCompute.Columns.Single().Key;
             var depthFieldConcatColumn = concat.ColumnSet.Single(c => c.SourceColumns[0] == depthField);
             concat.ColumnSet.Remove(depthFieldConcatColumn);
 

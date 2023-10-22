@@ -117,6 +117,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetColumnNumber(_context);
             SetColumnNumber(_context2);
+
+            SetRelationships(_context);
+            SetRelationships(_context2);
         }
 
         private void SetPrimaryNameAttributes(XrmFakedContext context)
@@ -239,6 +242,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 foreach (var attr in entity.Attributes)
                     typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.ColumnNumber)).SetValue(attr, index++);
+
+                context.SetEntityMetadata(entity);
+            }
+        }
+
+        private void SetRelationships(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.OneToManyRelationships == null)
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.OneToManyRelationships)).SetValue(entity, Array.Empty<OneToManyRelationshipMetadata>());
+
+                if (entity.ManyToOneRelationships == null)
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ManyToOneRelationships)).SetValue(entity, Array.Empty<OneToManyRelationshipMetadata>());
 
                 context.SetEntityMetadata(entity);
             }

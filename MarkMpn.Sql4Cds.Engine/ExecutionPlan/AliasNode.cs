@@ -165,6 +165,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Add the mappings to the FetchXML to produce the columns with the expected names, and hide all other possible columns
             var originalAlias = fetchXml.Alias.EscapeIdentifier();
             fetchXml.Alias = Alias;
+            fetchXml.ColumnMappings.Clear();
 
             var escapedAlias = Alias.EscapeIdentifier();
 
