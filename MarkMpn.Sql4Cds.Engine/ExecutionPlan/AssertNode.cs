@@ -14,6 +14,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class AssertNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
+        public AssertNode()
+        {
+            ExceptionConstructor = msg => new ApplicationException(msg);
+        }
+
         /// <summary>
         /// The data source for the assertion
         /// </summary>
@@ -34,12 +39,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Error Message")]
         public string ErrorMessage { get; set; }
 
+        /// <summary>
+        /// The type of exception to throw when the <see cref="Assertion"/> returns <c>false</c>
+        /// </summary>
+        [Browsable(false)]
+        public Func<string,Exception> ExceptionConstructor { get; set; }
+
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             foreach (var entity in Source.Execute(context))
             {
                 if (!Assertion(entity))
-                    throw new ApplicationException(ErrorMessage);
+                    throw ExceptionConstructor(ErrorMessage);
 
                 yield return entity;
             }
@@ -78,7 +89,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 Assertion = Assertion,
-                ErrorMessage = ErrorMessage
+                ErrorMessage = ErrorMessage,
+                ExceptionConstructor = ExceptionConstructor
             };
 
             clone.Source.Parent = clone;
