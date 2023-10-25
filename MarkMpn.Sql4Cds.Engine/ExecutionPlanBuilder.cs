@@ -3840,6 +3840,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 var rhsSchema = rhs.GetSchema(context);
                 var fixedValueColumns = GetFixedValueColumnsFromWhereClause(query, lhsSchema, rhsSchema);
 
+                // Capture any references to data from an outer query
+                CaptureOuterReferences(outerSchema, null, join.SearchCondition, context, outerReferences);
+
                 var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                 join.SearchCondition.Accept(joinConditionVisitor);
 
