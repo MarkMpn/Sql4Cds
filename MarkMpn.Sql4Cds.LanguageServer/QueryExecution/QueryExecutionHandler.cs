@@ -676,6 +676,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 converted.Type = "languageConstructCatchAll";
             else if (converted.Type == "xmlWriter")
                 converted.Type = "udx";
+            else if (converted.Type == "adaptiveIndexSpool")
+                converted.Type = "indexSpool";
 
             // Get the filtered list of properties
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);
