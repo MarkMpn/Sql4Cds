@@ -1674,7 +1674,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             case @operator.eqorunder:
                             case @operator.notunder:
                                 {
-                                    var cte = GetUnderCte(meta, new Guid(condition.value), ctes);
+                                    var cte = GetUnderCte(meta, new Guid(condition.value), ctes, condition.@operator == @operator.under);
                                     var inPred = new InPredicate
                                     {
                                         Expression = field,
@@ -1692,7 +1692,6 @@ namespace MarkMpn.Sql4Cds.Engine
                                                             {
                                                                 Identifiers =
                                                                 {
-                                                                    new Identifier { Value = cte.ExpressionName.Value },
                                                                     new Identifier { Value = meta.PrimaryIdAttribute }
                                                                 }
                                                             }
@@ -1713,25 +1712,6 @@ namespace MarkMpn.Sql4Cds.Engine
                                                                 }
                                                             }
                                                         }
-                                                    }
-                                                },
-                                                WhereClause = condition.@operator != @operator.under ? null : new WhereClause
-                                                {
-                                                    SearchCondition = new BooleanComparisonExpression
-                                                    {
-                                                        FirstExpression = new ColumnReferenceExpression
-                                                        {
-                                                            MultiPartIdentifier = new MultiPartIdentifier
-                                                            {
-                                                                Identifiers =
-                                                                {
-                                                                    new Identifier { Value = cte.ExpressionName.Value },
-                                                                    new Identifier { Value = "Level" }
-                                                                }
-                                                            }
-                                                        },
-                                                        ComparisonType = BooleanComparisonType.NotEqualToBrackets,
-                                                        SecondExpression = new IntegerLiteral { Value = "0" }
                                                     }
                                                 }
                                             }
@@ -1756,7 +1736,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             case @operator.above:
                             case @operator.eqorabove:
                                 {
-                                    var cte = GetAboveCte(meta, new Guid(condition.value), ctes);
+                                    var cte = GetAboveCte(meta, new Guid(condition.value), ctes, condition.@operator == @operator.above);
                                     var inPred = new InPredicate
                                     {
                                         Expression = field,
@@ -1774,7 +1754,6 @@ namespace MarkMpn.Sql4Cds.Engine
                                                             {
                                                                 Identifiers =
                                                                 {
-                                                                    new Identifier { Value = cte.ExpressionName.Value },
                                                                     new Identifier { Value = meta.PrimaryIdAttribute }
                                                                 }
                                                             }
@@ -1795,25 +1774,6 @@ namespace MarkMpn.Sql4Cds.Engine
                                                                 }
                                                             }
                                                         }
-                                                    }
-                                                },
-                                                WhereClause = condition.@operator != @operator.above ? null : new WhereClause
-                                                {
-                                                    SearchCondition = new BooleanComparisonExpression
-                                                    {
-                                                        FirstExpression = new ColumnReferenceExpression
-                                                        {
-                                                            MultiPartIdentifier = new MultiPartIdentifier
-                                                            {
-                                                                Identifiers =
-                                                                {
-                                                                    new Identifier { Value = cte.ExpressionName.Value },
-                                                                    new Identifier { Value = "Level" }
-                                                                }
-                                                            }
-                                                        },
-                                                        ComparisonType = BooleanComparisonType.NotEqualToBrackets,
-                                                        SecondExpression = new IntegerLiteral { Value = "0" }
                                                     }
                                                 }
                                             }
@@ -1999,19 +1959,20 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="meta">The metadata of the entity to recurse in</param>
         /// <param name="guid">The unique identifier of the starting record to recurse down from</param>
         /// <param name="ctes">The details of all the CTEs already in the query</param>
+        /// <param name="excludeAnchor">Indicates if the starting record should be excluded from the results</param>
         /// <returns>The CTE that represents the required query</returns>
         /// <remarks>
         /// Generates a CTE like:
         /// 
-        /// account_hierarchical([Level], AccountId, ParentAccountId) AS 
+        /// account_hierarchical(AccountId) AS 
         /// (
-        /// SELECT 0, accountid, parentaccountid FROM account WHERE accountid = 'guid'
+        /// SELECT accountid FROM account WHERE accountid = 'guid'
         /// UNION ALL
-        /// SELECT Level + 1, account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
+        /// SELECT account.accountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
         /// </remarks>
-        private static CommonTableExpression GetUnderCte(EntityMetadata meta, Guid guid, IDictionary<string, CommonTableExpression> ctes)
+        private static CommonTableExpression GetUnderCte(EntityMetadata meta, Guid guid, IDictionary<string, CommonTableExpression> ctes, bool excludeAnchor)
         {
-            return GetCte(meta, guid, false, ctes);
+            return GetCte(meta, guid, false, ctes, excludeAnchor);
         }
 
         /// <summary>
@@ -2020,19 +1981,20 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="meta">The metadata of the entity to recurse in</param>
         /// <param name="guid">The unique identifier of the starting record to recurse down from</param>
         /// <param name="ctes">The details of all the CTEs already in the query</param>
+        /// <param name="excludeAnchor">Indicates if the starting record should be excluded from the results</param>
         /// <returns>The CTE that represents the required query</returns>
         /// <remarks>
         /// Generates a CTE like:
         /// 
-        /// account_hierarchical([Level], AccountId, ParentAccountId) AS 
+        /// account_hierarchical(AccountId, ParentAccountId) AS 
         /// (
-        /// SELECT 0, accountid, parentaccountid FROM account WHERE accountid = 'guid'
+        /// SELECT accountid, parentaccountid FROM account WHERE accountid = 'guid'
         /// UNION ALL
-        /// SELECT Level + 1, account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
+        /// SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
         /// </remarks>
-        private static CommonTableExpression GetAboveCte(EntityMetadata meta, Guid guid, IDictionary<string, CommonTableExpression> ctes)
+        private static CommonTableExpression GetAboveCte(EntityMetadata meta, Guid guid, IDictionary<string, CommonTableExpression> ctes, bool excludeAnchor)
         {
-            return GetCte(meta, guid, true, ctes);
+            return GetCte(meta, guid, true, ctes, excludeAnchor);
         }
 
         /// <summary>
@@ -2043,7 +2005,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="above">Indicates if the CTE should find records above the selected record (<c>true</c>) or below (<c>false</c>)</param>
         /// <param name="ctes">The details of all the CTEs already in the query</param>
         /// <returns>The CTE that represents the required query</returns>
-        private static CommonTableExpression GetCte(EntityMetadata meta, Guid guid, bool above, IDictionary<string, CommonTableExpression> ctes)
+        private static CommonTableExpression GetCte(EntityMetadata meta, Guid guid, bool above, IDictionary<string, CommonTableExpression> ctes, bool excludeAnchor)
         {
             if (meta == null)
                 throw new DisconnectedException();
@@ -2070,7 +2032,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 ExpressionName = new Identifier { Value = name },
                 Columns =
                 {
-                    new Identifier { Value = "Level" },
                     new Identifier { Value = meta.PrimaryIdAttribute },
                     new Identifier { Value = parentLookupAttribute }
                 },
@@ -2080,10 +2041,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         SelectElements =
                         {
-                            new SelectScalarExpression
-                            {
-                                Expression = new IntegerLiteral { Value = "0" }
-                            },
                             new SelectScalarExpression
                             {
                                 Expression = new ColumnReferenceExpression
@@ -2137,7 +2094,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     {
                                         Identifiers =
                                         {
-                                            new Identifier { Value = meta.PrimaryIdAttribute }
+                                            new Identifier { Value = excludeAnchor && !above ? parentLookupAttribute : meta.PrimaryIdAttribute }
                                         }
                                     }
                                 },
@@ -2152,24 +2109,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         SelectElements =
                         {
-                            new SelectScalarExpression
-                            {
-                                Expression = new BinaryExpression
-                                {
-                                    FirstExpression = new ColumnReferenceExpression
-                                    {
-                                        MultiPartIdentifier = new MultiPartIdentifier
-                                        {
-                                            Identifiers =
-                                            {
-                                                new Identifier { Value = "Level" }
-                                            }
-                                        }
-                                    },
-                                    BinaryExpressionType = BinaryExpressionType.Add,
-                                    SecondExpression = new IntegerLiteral { Value = "1" }
-                                }
-                            },
                             new SelectScalarExpression
                             {
                                 Expression = new ColumnReferenceExpression
@@ -2258,6 +2197,75 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 }
             };
+
+            if (excludeAnchor && above)
+            {
+                // Need to include a join in the anchor query to find the records above the source record but not including that record
+                var query = (BinaryQueryExpression)cte.QueryExpression;
+                var anchorQuery = (QuerySpecification)query.FirstQueryExpression;
+                var filter = (BooleanComparisonExpression)anchorQuery.WhereClause.SearchCondition;
+                var field = (ColumnReferenceExpression)filter.FirstExpression;
+
+                anchorQuery.FromClause.TableReferences[0] = new QualifiedJoin
+                {
+                    FirstTableReference = anchorQuery.FromClause.TableReferences[0],
+                    QualifiedJoinType = QualifiedJoinType.Inner,
+                    SecondTableReference = new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = meta.LogicalName }
+                            }
+                        },
+                        Alias = new Identifier { Value = "anchor" }
+                    },
+                    SearchCondition = new BooleanComparisonExpression
+                    {
+                        FirstExpression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = meta.LogicalName },
+                                    new Identifier { Value = meta.PrimaryIdAttribute }
+                                }
+                            }
+                        },
+                        ComparisonType = BooleanComparisonType.Equals,
+                        SecondExpression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = "anchor" },
+                                    new Identifier { Value = parentLookupAttribute }
+                                }
+                            }
+                        }
+                    }
+                };
+
+                ((ColumnReferenceExpression)((SelectScalarExpression)anchorQuery.SelectElements[0]).Expression).MultiPartIdentifier.Identifiers.Insert(0, new Identifier { Value = meta.LogicalName });
+                ((ColumnReferenceExpression)((SelectScalarExpression)anchorQuery.SelectElements[1]).Expression).MultiPartIdentifier.Identifiers.Insert(0, new Identifier { Value = meta.LogicalName });
+                field.MultiPartIdentifier.Identifiers.Insert(0, new Identifier { Value = "anchor" });
+            }
+
+            if (!above)
+            {
+                // Don't need the parent attribute in the CTE for "under" queries
+                cte.Columns.RemoveAt(1);
+
+                var query = (BinaryQueryExpression)cte.QueryExpression;
+                var anchorQuery = (QuerySpecification)query.FirstQueryExpression;
+                var recursiveQuery = (QuerySpecification)query.SecondQueryExpression;
+
+                anchorQuery.SelectElements.RemoveAt(1);
+                recursiveQuery.SelectElements.RemoveAt(1);
+            }
 
             ctes.Add(name, cte);
 

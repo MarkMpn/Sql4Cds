@@ -431,9 +431,129 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM archive.contact INNER JOIN archive.account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
         }
 
+        [TestMethod]
+        public void Under()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='account'>
+                        <filter>
+                            <condition attribute='accountid' operator='under' value='E2218046-F778-42F6-A8A7-772D0653349B' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                WITH account_hierarchical(accountid) AS (
+                    SELECT accountid FROM account WHERE parentaccountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void EqOrUnder()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='account'>
+                        <filter>
+                            <condition attribute='accountid' operator='eq-or-under' value='E2218046-F778-42F6-A8A7-772D0653349B' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                WITH account_hierarchical(accountid) AS (
+                    SELECT accountid FROM account WHERE accountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void NotUnder()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='account'>
+                        <filter>
+                            <condition attribute='accountid' operator='not-under' value='E2218046-F778-42F6-A8A7-772D0653349B' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                WITH account_hierarchical(accountid) AS (
+                    SELECT accountid FROM account WHERE accountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
+                )
+                SELECT * FROM account WHERE (accountid IS NULL OR accountid NOT IN ( SELECT accountid FROM account_hierarchical ))"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void Above()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='account'>
+                        <filter>
+                            <condition attribute='accountid' operator='above' value='E2218046-F778-42F6-A8A7-772D0653349B' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                WITH account_hierarchical(accountid, parentaccountid) AS (
+                    SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account AS anchor ON account.accountid = anchor.parentaccountid WHERE anchor.accountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void EqOrAbove()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='account'>
+                        <filter>
+                            <condition attribute='accountid' operator='eq-or-above' value='E2218046-F778-42F6-A8A7-772D0653349B' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                WITH account_hierarchical(accountid, parentaccountid) AS (
+                    SELECT accountid, parentaccountid FROM account WHERE accountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )"), NormalizeWhitespace(converted));
+        }
+
         private static string NormalizeWhitespace(string s)
         {
-            return Regex.Replace(s, "\\s+", " ");
+            return Regex.Replace(s, "\\s+", " ").Trim();
         }
     }
 }

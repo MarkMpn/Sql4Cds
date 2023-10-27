@@ -29,5 +29,12 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests.Metadata
         [AttributeLogicalName("primarycontactid")]
         [RelationshipSchemaName("account_primarycontact")]
         public Contact PrimaryContact { get; set; }
+
+        [AttributeLogicalName("parentaccountid")]
+        public EntityReference ParentAccountId { get; set; }
+
+        [AttributeLogicalName("parentaccountid")]
+        [RelationshipSchemaName("account_parentaccount")]
+        public Account ParentAccount { get; set; }
     }
 }

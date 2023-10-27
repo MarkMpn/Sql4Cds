@@ -8,6 +8,7 @@ using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 {
@@ -23,6 +24,39 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             _context.AddFakeMessageExecutor<WhoAmIRequest>(new WhoAmIHandler());
 
             _service = _context.GetOrganizationService();
+
+            SetRelationships(_context);
+        }
+
+        private void SetRelationships(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.OneToManyRelationships == null)
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.OneToManyRelationships)).SetValue(entity, Array.Empty<OneToManyRelationshipMetadata>());
+
+                if (entity.ManyToOneRelationships == null)
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ManyToOneRelationships)).SetValue(entity, Array.Empty<OneToManyRelationshipMetadata>());
+
+                if (entity.LogicalName == "account")
+                {
+                    // Add parentaccountid relationship
+                    var relationship = new OneToManyRelationshipMetadata
+                    {
+                        SchemaName = "account_parentaccount",
+                        ReferencedEntity = "account",
+                        ReferencedAttribute = "accountid",
+                        ReferencingEntity = "account",
+                        ReferencingAttribute = "parentaccountid",
+                        IsHierarchical = true
+                    };
+
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.OneToManyRelationships)).SetValue(entity, entity.OneToManyRelationships.Concat(new[] { relationship }).ToArray());
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ManyToOneRelationships)).SetValue(entity, entity.ManyToOneRelationships.Concat(new[] { relationship }).ToArray());
+                }
+
+                context.SetEntityMetadata(entity);
+            }
         }
     }
 
