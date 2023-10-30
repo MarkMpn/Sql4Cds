@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         JobName = $"SQL 4 CDS {GetDisplayName(0, meta)} Bulk Delete Job",
                         QuerySet = new[] { query },
-                        StartDateTime = DateTime.Now,
+                        StartDateTime = DateTime.UtcNow,
                         RecurrencePattern = String.Empty,
                         SendEmailNotification = false,
                         ToRecipients = Array.Empty<Guid>(),
