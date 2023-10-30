@@ -48,5 +48,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("owneridname")]
         public string OwnerIdName { get; }
+
+        [AttributeLogicalName("parentaccountid")]
+        [RelationshipSchemaName("account_parent")]
+        public Account ParentAccount { get; set; }
+
+        [AttributeLogicalName("parentaccountid")]
+        public EntityReference ParentAccountId { get; set; }
     }
 }

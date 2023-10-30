@@ -595,7 +595,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FactorialCalcFiltered()
         {
-
             using (var con = new Sql4CdsConnection(_localDataSource))
             using (var cmd = con.CreateCommand())
             {
@@ -626,6 +625,130 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 Assert.AreEqual(6, cmd.ExecuteScalar());
             }
+        }
+
+        [TestMethod]
+        public void Under()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH account_hierarchical(accountid) AS (
+                    SELECT accountid FROM account WHERE parentaccountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='accountid' operator='under' value='e2218046-f778-42f6-a8a7-772d0653349b' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void EqOrUnder()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH account_hierarchical(accountid) AS (
+                    SELECT accountid FROM account WHERE accountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='accountid' operator='eq-or-under' value='e2218046-f778-42f6-a8a7-772d0653349b' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void Above()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH account_hierarchical(accountid, parentaccountid) AS (
+                    SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account AS anchor ON account.accountid = anchor.parentaccountid WHERE anchor.accountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='accountid' operator='above' value='e2218046-f778-42f6-a8a7-772d0653349b' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void EqOrAbove()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH account_hierarchical(accountid, parentaccountid) AS (
+                    SELECT accountid, parentaccountid FROM account WHERE accountid = 'e2218046-f778-42f6-a8a7-772d0653349b'
+                    UNION ALL
+                    SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
+                )
+                SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='accountid' operator='eq-or-above' value='e2218046-f778-42f6-a8a7-772d0653349b' />
+                        </filter>
+                    </entity>
+                </fetch>");
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
