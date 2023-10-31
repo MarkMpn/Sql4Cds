@@ -205,9 +205,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             anchorKey = recurseLoop.OuterReferences.Single(kvp => kvp.Value == anchorKey).Key; // Will now be the column name defined by the concatenate node
             anchorKey = concat.ColumnSet.Single(col => col.OutputColumn == anchorKey).SourceColumns[0]; // Will now be the column from the anchor FetchXML
             var anchorCol = anchorKey.ToColumnReference();
+            var anchorIsUnder = false;
+            var anchorIsAbove = false;
+            FetchLinkEntityType anchorLink = null;
+
+            // The anchor query will normally have the target table as the root entity, but could be a related entity if
+            // we want to use the "above" condition instead of "eq-or-above"
             if (anchorCol.MultiPartIdentifier.Count != 2 ||
                 anchorCol.MultiPartIdentifier.Identifiers[0].Value != anchorFetchXml.Alias)
-                return this;
+            {
+                anchorLink = anchorFetchXml.Entity.Items
+                    .OfType<FetchLinkEntityType>()
+                    .Where(link => link.alias == anchorCol.MultiPartIdentifier.Identifiers[0].Value)
+                    .SingleOrDefault();
+
+                if (anchorLink == null)
+                    return this;
+
+                if (anchorLink.name != anchorFetchXml.Entity.name)
+                    return this;
+
+                if (anchorLink.from == hierarchicalRelationship.ReferencedAttribute &&
+                    anchorLink.to == hierarchicalRelationship.ReferencingAttribute)
+                {
+                    anchorIsAbove = true;
+                }
+                else
+                {
+                    return this;
+                }
+            }
+
             var anchorAttr = anchorCol.MultiPartIdentifier[1].Value;
 
             var recurseCol = adaptiveSpool.KeyColumn.ToColumnReference();
@@ -230,9 +258,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // query filters on a single primary key
             var at = GetPrimaryKeyFilter(anchorFetchXml, metadata);
 
+            // Also check for a filter on the hierarchy lookup attribute to convert to "under".
+            if (at == null && isUnder)
+            {
+                at = GetForeignKeyFilter(anchorFetchXml, hierarchicalRelationship);
+
+                if (at != null)
+                    anchorIsUnder = true;
+            }
+
             if (at != null)
             {
                 at.@operator = isUnder ? @operator.eqorunder : @operator.eqorabove;
+
+                if (at.@operator == @operator.eqorabove && anchorIsAbove)
+                {
+                    // If we're using a link entity in the anchor query to find only records above the target record,
+                    // not at-or-above, we can remove the link now. We'll have been using that link for the output values,
+                    // so switch the alias of the top-level entity too
+                    anchorFetchXml.Entity.Items = anchorFetchXml.Entity.Items.Except(new[] { anchorLink }).ToArray();
+                    at.@operator = @operator.above;
+                    anchorFetchXml.Alias = anchorLink.alias;
+                }
+                else if (at.@operator == @operator.eqorunder && anchorIsUnder)
+                {
+                    // If we're using a filter on the foreign key to represent an "under" condition, switch the filter to
+                    // be on the primary key attribute instead.
+                    at.@operator = @operator.under;
+                    at.attribute = metadata.PrimaryIdAttribute;
+                }
 
                 // We might have some column renamings applied, so update them too
                 var alias = Parent as AliasNode;
@@ -292,7 +346,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return concat;
         }
 
+        private condition GetForeignKeyFilter(FetchXmlScan anchorFetchXml, OneToManyRelationshipMetadata hierarchicalRelationship)
+        {
+            return GetFilter(anchorFetchXml, hierarchicalRelationship.ReferencingAttribute);
+        }
+
         private condition GetPrimaryKeyFilter(FetchXmlScan anchorFetchXml, EntityMetadata metadata)
+        {
+            return GetFilter(anchorFetchXml, metadata.PrimaryIdAttribute);
+        }
+
+        private condition GetFilter(FetchXmlScan anchorFetchXml, string attribute)
         {
             if (anchorFetchXml.Entity.Items == null)
                 return null;
@@ -301,7 +365,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return null;
             if (anchorFilters[0].Items == null || anchorFilters[0].Items.Length != 1 || !(anchorFilters[0].Items[0] is condition anchorCondition))
                 return null;
-            if (anchorCondition.attribute != metadata.PrimaryIdAttribute || anchorCondition.@operator != @operator.eq)
+            if (anchorCondition.attribute != attribute || anchorCondition.@operator != @operator.eq)
                 return null;
 
             return anchorCondition;
