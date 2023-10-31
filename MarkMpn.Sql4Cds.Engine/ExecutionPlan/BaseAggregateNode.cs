@@ -387,7 +387,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (GroupBy.Count == 0)
                 return RowCountEstimateDefiniteRange.ExactlyOne;
 
-            var rows = Source.EstimateRowsOut(context).Value * 4 / 10;
+            var sourceRows = Source.EstimateRowsOut(context).Value;
+            var rows = sourceRows * 4 / 10;
+
+            if (rows < 0)
+                rows = sourceRows / 10 * 4;
 
             return new RowCountEstimate(rows);
         }
