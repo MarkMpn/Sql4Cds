@@ -1157,7 +1157,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             Source = alias.Source,
                             Filter = ReplaceColumnNames(aliasFilter, alias.ColumnSet.ToDictionary(col => (ScalarExpression)(escapedAlias + "." + col.OutputColumn).ToColumnReference(), col => col.SourceColumn))
                         };
-                        alias.Source = aliasFilterNode.FoldQuery(context, hints);
+                        alias.Source = aliasFilterNode;
 
                         foldedFilters = true;
                     }
