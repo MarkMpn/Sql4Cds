@@ -1089,6 +1089,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var foldedFilters = false;
 
             // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
+            // CTEs or other query-derived tables can contain a table with the same alias as a table in the main query. Identify these and prefer using the table
+            // from the outer query.
+            var ignoreAliasesByNode = GetIgnoreAliasesByNode();
+
             foreach (var source in GetFoldableSources(Source))
             {
                 var schema = source.GetSchema(context);
@@ -1099,7 +1103,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(context, dataSource.Metadata, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
+                    Filter = ExtractFetchXMLFilters(context, dataSource.Metadata, Filter, schema, null, ignoreAliasesByNode[fetchXml], fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
@@ -1190,6 +1194,64 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return foldedFilters;
+        }
+
+        private Dictionary<FetchXmlScan,HashSet<string>> GetIgnoreAliasesByNode()
+        {
+            var fetchXmlSources = GetFoldableSources(Source)
+                .OfType<FetchXmlScan>()
+                .ToList();
+
+            // Build a full list of where we see each alias
+            var nodesByAlias = new Dictionary<string, List<FetchXmlScan>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var fetchXml in fetchXmlSources)
+            {
+                foreach (var alias in GetAliases(fetchXml))
+                {
+                    if (!nodesByAlias.TryGetValue(alias, out var nodes))
+                    {
+                        nodes = new List<FetchXmlScan>();
+                        nodesByAlias.Add(alias, nodes);
+                    }
+
+                    nodes.Add(fetchXml);
+                }
+            }
+
+            var ignoreAliases = fetchXmlSources
+                .ToDictionary(f => f, f => new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+            // Aliases should be ignored if they appear as visible in another node, or they are hidden in all nodes
+            foreach (var alias in nodesByAlias)
+            {
+                if (alias.Value.Count < 2)
+                    continue;
+
+                var hiddenNodes = alias.Value
+                    .Where(n => n.HiddenAliases.Contains(alias.Key, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                var visibleNodes = alias.Value
+                    .Except(hiddenNodes)
+                    .ToList();
+
+                foreach (var node in alias.Value)
+                {
+                    if (visibleNodes.Count == 0 || visibleNodes.Any(n => n != node))
+                        ignoreAliases[node].Add(alias.Key);
+                }
+            }
+
+            return ignoreAliases;
+        }
+
+        private IEnumerable<string> GetAliases(FetchXmlScan fetchXml)
+        {
+            yield return fetchXml.Alias;
+
+            foreach (var linkEntity in fetchXml.Entity.GetLinkEntities())
+                yield return linkEntity.alias;
         }
 
         private BooleanExpression ReplaceColumnNames(BooleanExpression filter, Dictionary<ScalarExpression, string> replacements)
@@ -1350,9 +1412,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, IAttributeMetadataCache metadata, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, IAttributeMetadataCache metadata, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
-            if (TranslateFetchXMLCriteria(context, metadata, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out filter))
+            if (TranslateFetchXMLCriteria(context, metadata, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out filter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -1361,8 +1423,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(context, metadata, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsFilter);
-            bin.SecondExpression = ExtractFetchXMLFilters(context, metadata, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(context, metadata, bin.FirstExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(context, metadata, bin.SecondExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var rhsFilter);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 

@@ -1704,14 +1704,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     continue;
 
-                var mapping = ColumnMappings.SingleOrDefault(map => map.OutputColumn == normalizedCol);
+                var mapping = ColumnMappings.SingleOrDefault(map => map.OutputColumn == normalizedCol || map.OutputColumn == parts[0] && map.AllColumns);
 
-                if (mapping != null)
+                if (mapping != null && mapping.AllColumns)
+                    normalizedCol = (mapping.SourceColumn ?? parts[0]).EscapeIdentifier() + "." + parts[1].EscapeIdentifier();
+                else if (mapping != null)
                     normalizedCol = mapping.SourceColumn;
+                else if (HiddenAliases.Contains(parts[0], StringComparer.OrdinalIgnoreCase))
+                    continue;
 
                 var attr = AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out var linkEntity);
 
-                if (mapping != null && attr != null)
+                if (mapping != null && !mapping.AllColumns && attr != null)
                 {
                     if (attr.name != parts[1] && IsValidAlias(parts[1]))
                         attr.alias = parts[1];

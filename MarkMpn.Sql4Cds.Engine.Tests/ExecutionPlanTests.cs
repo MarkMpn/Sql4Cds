@@ -6426,5 +6426,52 @@ AND    contactid NOT IN (SELECT DISTINCT primarycontactid FROM account WHERE emp
                 _supportedJoins.Remove(JoinOperator.Any);
             }
         }
+
+        [TestMethod]
+        public void FoldFilterToCorrectTableAlias()
+        {
+            // The same table alias can be used in the main query and in a query-derived table. Ensure filters are
+            // folded to the correct one.
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+SELECT *
+FROM (SELECT name FROM account AS a INNER JOIN contact AS c ON a.primarycontactid = c.contactid) AS q
+INNER JOIN contact AS c ON q.name = c.fullname
+WHERE c.firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            var leftFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            var rightFetch = AssertNode<FetchXmlScan>(join.RightSource);
+
+            AssertFetchXml(leftFetch, @"
+                    <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                        <entity name='contact'>
+                            <all-attributes />
+                            <filter>
+                                <condition attribute='fullname' operator='not-null' />
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                        </entity>
+                    </fetch>");
+
+            AssertFetchXml(rightFetch, @"
+                    <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                        <entity name='account'>
+                            <attribute name='name' />
+                            <link-entity name='contact' from='contactid' to='primarycontactid' link-type='inner' alias='c'>
+                            </link-entity>
+                            <filter>
+                                <condition attribute='name' operator='not-null' />
+                            </filter>
+                        </entity>
+                    </fetch>");
+        }
     }
 }
