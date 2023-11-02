@@ -217,6 +217,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (folded != this)
                 return folded;
 
+            var hashJoin = new HashJoinNode
+            {
+                LeftSource = LeftSource,
+                RightSource = RightSource,
+                LeftAttribute = LeftAttribute,
+                RightAttribute = RightAttribute,
+                JoinType = JoinType,
+                AdditionalJoinCriteria = AdditionalJoinCriteria,
+                SemiJoin = SemiJoin
+            };
+
+            foreach (var kvp in DefinedValues)
+                hashJoin.DefinedValues.Add(kvp);
+
+            hashJoin.LeftSource.Parent = hashJoin;
+            hashJoin.RightSource.Parent = hashJoin;
+
             // Can't use a merge join if the join key types have different sort orders
             if (LeftAttribute != null && RightAttribute != null)
             {
@@ -229,26 +246,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var rightType = rightSchema.Schema[rightColumn].Type;
 
                 if (!IsConsistentSortTypes(leftType, rightType))
-                {
-                    var hashJoin = new HashJoinNode
-                    {
-                        LeftSource = LeftSource,
-                        RightSource = RightSource,
-                        LeftAttribute = LeftAttribute,
-                        RightAttribute = RightAttribute,
-                        JoinType = JoinType,
-                        AdditionalJoinCriteria = AdditionalJoinCriteria,
-                        SemiJoin = SemiJoin
-                    };
-
-                    foreach (var kvp in DefinedValues)
-                        hashJoin.DefinedValues.Add(kvp);
-
-                    hashJoin.LeftSource.Parent = hashJoin;
-                    hashJoin.RightSource.Parent = hashJoin;
-
-                    return hashJoin;
-                }
+                    return hashJoin.FoldQuery(context, hints);
             }
 
             // This is a many-to-many join if the left attribute is not unique
@@ -301,27 +299,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // If we couldn't fold the sorts, it's probably faster to use a hash join instead if we only want partial results
             var leftSort = LeftSource as SortNode;
             var rightSort = RightSource as SortNode;
-            if (Parent is TopNode && (leftSort != null || rightSort != null))
-            {
-                var hashJoin = new HashJoinNode
-                {
-                    LeftSource = leftSort?.Source ?? LeftSource,
-                    RightSource = rightSort?.Source ?? RightSource,
-                    LeftAttribute = LeftAttribute,
-                    RightAttribute = RightAttribute,
-                    JoinType = JoinType,
-                    AdditionalJoinCriteria = AdditionalJoinCriteria,
-                    SemiJoin = SemiJoin
-                };
 
-                foreach (var kvp in DefinedValues)
-                    hashJoin.DefinedValues.Add(kvp);
+            if (leftSort == null && rightSort == null)
+                return this;
 
-                hashJoin.LeftSource.Parent = hashJoin;
-                hashJoin.RightSource.Parent = hashJoin;
+            hashJoin.LeftSource = leftSort?.Source ?? LeftSource;
+            hashJoin.RightSource = rightSort?.Source ?? RightSource;
 
-                return hashJoin;
-            }
+
+            var foldedHashJoin = hashJoin.FoldQuery(context, hints);
+
+            if (Parent is TopNode ||
+                leftSort != null && rightSort != null)
+                return foldedHashJoin;
+
+            LeftSource.Parent = this;
+            RightSource.Parent = this;
 
             return this;
         }
