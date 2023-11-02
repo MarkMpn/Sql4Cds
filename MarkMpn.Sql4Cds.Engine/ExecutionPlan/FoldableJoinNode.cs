@@ -371,7 +371,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // in the new link entity or we must be using an inner join so we can use a post-filter node
             var additionalCriteria = AdditionalJoinCriteria;
 
-            if (TranslateFetchXMLCriteria(context, dataSource.Metadata, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter))
+            if (TranslateFetchXMLCriteria(context, dataSource.Metadata, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter))
             {
                 rightEntity.AddItem(filter);
                 additionalCriteria = null;
@@ -411,12 +411,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     leftLinkEntity.Items = leftLinkEntity.Items.Concat(new object[] { rightLinkEntity }).ToArray();
             }
 
-            if (additionalCriteria != null)
-            {
-                folded = new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(context, hints);
-                return true;
-            }
-
             foreach (var alias in rightFetch.HiddenAliases)
                 leftFetch.HiddenAliases.Add(alias);
 
@@ -425,6 +419,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             folded = leftFetch;
 
+            if (additionalCriteria != null)
+                folded = new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(context, hints);
+
+            // We might have previously folded a sort to the FetchXML that is no longer valid as we require custom paging
+            if (leftFetch.RequiresCustomPaging(context.DataSources))
+                leftFetch.RemoveSorts();
+            
             return true;
         }
 
