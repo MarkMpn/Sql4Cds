@@ -893,6 +893,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // We can fold NOT IN to a left outer join, using similar rules to IN on the primary key
                     else if (!nullFilter.IsNot && rightFetch.FetchXml.top == null)
                     {
+                        // Can't add an outer join if the right side includes an inner join
+                        // https://github.com/MarkMpn/Sql4Cds/issues/382
+                        if (rightFetch.Entity.GetLinkEntities().Any(l => l.linktype == "inner"))
+                            break;
+
                         // Replace the filter on the defined value name with a filter on the primary key column
                         nullFilter.Expression = (rightFetch.Alias + "." + context.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute).ToColumnReference();
 
