@@ -829,19 +829,25 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (fault.Message != error.Message)
                     msg += "\r\n" + fault.Message;
 
+                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
+                    msg += "\r\nError from plugin: " + plugin;
+
+                if (!String.IsNullOrEmpty(fault.TraceText))
+                    msg += "\r\nTrace log: " + fault.TraceText;
+
                 while (fault.InnerFault != null)
                 {
                     if (fault.InnerFault.Message != fault.Message)
                         msg += "\r\n" + fault.InnerFault.Message;
 
                     fault = fault.InnerFault;
+
+                    if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out plugin))
+                        msg += "\r\nError from plugin: " + plugin;
+
+                    if (!String.IsNullOrEmpty(fault.TraceText))
+                        msg += "\r\nTrace log: " + fault.TraceText;
                 }
-
-                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
-                    msg += "\r\nError from plugin: " + plugin;
-
-                if (!String.IsNullOrEmpty(fault.TraceText))
-                    msg += "\r\nTrace log: " + fault.TraceText;
             }
 
             return msg;
