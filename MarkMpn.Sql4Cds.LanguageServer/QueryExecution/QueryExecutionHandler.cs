@@ -6,6 +6,7 @@ using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.ServiceModel;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -18,11 +19,9 @@ using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
-using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 {
@@ -400,7 +399,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     {
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
-                        Message = ex.Message,
+                        Message = GetErrorMessage(ex),
                         IsError = true
                     }
                 });
@@ -505,6 +504,54 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         batchSummary
                     }
             });
+        }
+
+        private string GetErrorMessage(Exception error)
+        {
+            string msg;
+
+            if (error is AggregateException aggregateException)
+                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
+            else
+                msg = error.Message;
+
+            while (error.InnerException != null)
+            {
+                if (error.InnerException.Message != error.Message)
+                    msg += "\r\n" + error.InnerException.Message;
+
+                error = error.InnerException;
+            }
+
+            if (error is FaultException<OrganizationServiceFault> faultEx)
+            {
+                var fault = faultEx.Detail;
+
+                if (fault.Message != error.Message)
+                    msg += "\r\n" + fault.Message;
+
+                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
+                    msg += "\r\nError from plugin: " + plugin;
+
+                if (!String.IsNullOrEmpty(fault.TraceText))
+                    msg += "\r\nTrace log: " + fault.TraceText;
+
+                while (fault.InnerFault != null)
+                {
+                    if (fault.InnerFault.Message != fault.Message)
+                        msg += "\r\n" + fault.InnerFault.Message;
+
+                    fault = fault.InnerFault;
+
+                    if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out plugin))
+                        msg += "\r\nError from plugin: " + plugin;
+
+                    if (!String.IsNullOrEmpty(fault.TraceText))
+                        msg += "\r\nTrace log: " + fault.TraceText;
+                }
+            }
+
+            return msg;
         }
 
         private string GetDisplayName(int count, EntityMetadata meta)
