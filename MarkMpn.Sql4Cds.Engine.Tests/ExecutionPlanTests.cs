@@ -3273,7 +3273,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
             
-            var result = select.Execute(new NodeExecutionContext(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>()), CommandBehavior.Default);
+            var result = select.Execute(new NodeExecutionContext(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(result);
 
@@ -3722,7 +3722,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3732,7 +3732,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3776,7 +3776,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3786,7 +3786,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3834,7 +3834,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3844,7 +3844,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3868,7 +3868,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3878,7 +3878,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3960,7 +3960,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3970,7 +3970,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3994,7 +3994,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4004,7 +4004,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -6472,6 +6472,21 @@ WHERE c.firstname = 'Mark'";
                             </filter>
                         </entity>
                     </fetch>");
+        }
+
+        [TestMethod]
+        public void IgnoreDupKeyHint()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"INSERT INTO account (accountid, name) VALUES ('{CD503427-E785-40D8-AD0E-FBDF4918D298}', 'Data8') OPTION (USE HINT ('IGNORE_DUP_KEY'))";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var insert = AssertNode<InsertNode>(plans[0]);
+            Assert.IsTrue(insert.IgnoreDuplicateKey);
         }
     }
 }

@@ -57,6 +57,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // Custom hint to use legacy specialized update messages - https://learn.microsoft.com/en-us/power-apps/developer/data-platform/org-service/entity-operations-update-delete?tabs=late#legacy-update-messages
             "USE_LEGACY_UPDATE_MESSAGES",
+
+            // Ignore duplicate keys on insert, equivalent to IGNORE_DUP_KEY option on creation of index
+            "IGNORE_DUP_KEY",
         };
 
         private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
