@@ -48,6 +48,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public bool EstimatedPlanOnly { get; set; }
 
+        /// <summary>
+        /// A callback function to log messages
+        /// </summary>
+        public Action<string> Log { get; set; }
+
         private DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
 
         /// <summary>
@@ -63,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // affecting the original collection until the query is actually run
             var parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
             _staticContext = new ExpressionCompilationContext(DataSources, Options, parameterTypes, null, null);
-            _nodeContext = new NodeCompilationContext(DataSources, Options, parameterTypes);
+            _nodeContext = new NodeCompilationContext(DataSources, Options, parameterTypes, Log);
 
             if (parameters != null)
             {
@@ -125,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
             script.Accept(new ExplicitCollationVisitor());
-            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, parameterTypes, !EstimatedPlanOnly);
+            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, parameterTypes, !EstimatedPlanOnly, _nodeContext.Log);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -2303,7 +2308,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         // We need the inner list to be distinct to avoid creating duplicates during the join
-                        var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters));
+                        var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
                         if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                         {
                             innerQuery.Source = new DistinctNode
@@ -2402,7 +2407,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var innerContext = new NodeCompilationContext(context, parameters);
                 var references = new Dictionary<string, string>();
                 var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-                var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters));
+                var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
                 var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
 
                 // Create the join
@@ -3447,8 +3452,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (outerKey == null)
                 return false;
 
-            var outerSchema = node.GetSchema(new NodeCompilationContext(DataSources, Options, null));
-            var innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null));
+            var outerSchema = node.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
+            var innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
 
             if (!outerSchema.ContainsColumn(outerKey, out outerKey) ||
                 !innerSchema.ContainsColumn(innerKey, out innerKey))
@@ -3521,7 +3526,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (semiJoin)
             {
                 // Regenerate the schema after changing the alias
-                innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null));
+                innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
 
                 if (innerSchema.PrimaryKey != rightAttribute.GetColumnName() && !(merge.RightSource is DistinctNode))
                 {

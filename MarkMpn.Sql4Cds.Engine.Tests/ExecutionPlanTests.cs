@@ -1997,7 +1997,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var filter = AssertNode<FilterNode>(top.Source);
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
-            var schema = constant.GetSchema(new NodeCompilationContext(_dataSources, this, null));
+            var schema = constant.GetSchema(new NodeCompilationContext(_dataSources, this, null, null));
             Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"].Type.ToNetType(out _));
             Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"].Type.ToNetType(out _));
         }

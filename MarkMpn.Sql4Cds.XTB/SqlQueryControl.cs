@@ -1212,7 +1212,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             else if (msg != null)
             {
-                AddMessage(query.Index, query.Length, msg, false);
+                AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, false);
             }
             else if (args.IncludeFetchXml)
             {

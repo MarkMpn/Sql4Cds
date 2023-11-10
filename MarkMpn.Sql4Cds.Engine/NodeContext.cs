@@ -21,14 +21,17 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="dataSources">The data sources that are available to the query</param>
         /// <param name="options">The options that the query will be executed with</param>
         /// <param name="parameterTypes">The names and types of the parameters that are available to the query</param>
+        /// <param name="log">A callback function to log messages</param>
         public NodeCompilationContext(
             IDictionary<string, DataSource> dataSources,
             IQueryExecutionOptions options,
-            IDictionary<string, DataTypeReference> parameterTypes)
+            IDictionary<string, DataTypeReference> parameterTypes,
+            Action<string> log)
         {
             DataSources = dataSources;
             Options = options;
             ParameterTypes = parameterTypes;
+            Log = log ?? (msg => { });
         }
 
         /// <summary>
@@ -43,6 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine
             DataSources = parentContext.DataSources;
             Options = parentContext.Options;
             ParameterTypes = parameterTypes;
+            Log = parentContext.Log;
             _parentContext = parentContext;
         }
 
@@ -65,6 +69,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the details of the primary data source
         /// </summary>
         public DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
+
+        /// <summary>
+        /// A callback function to log messages
+        /// </summary>
+        public Action<string> Log { get; }
 
         /// <summary>
         /// Generates a unique name for an expression
@@ -98,18 +107,15 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, DataTypeReference> parameterTypes,
             IDictionary<string, object> parameterValues,
             Action<string> log)
-            : base(dataSources, options, parameterTypes)
+            : base(dataSources, options, parameterTypes, log)
         {
             ParameterValues = parameterValues;
-            Log = log ?? (msg => { });
         }
 
         /// <summary>
         /// Returns the current value of each parameter
         /// </summary>
         public IDictionary<string, object> ParameterValues { get; }
-
-        public Action<string> Log { get; }
     }
 
     /// <summary>
@@ -131,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, DataTypeReference> parameterTypes,
             INodeSchema schema,
             INodeSchema nonAggregateSchema)
-            : base(dataSources, options, parameterTypes)
+            : base(dataSources, options, parameterTypes, null)
         {
             Schema = schema;
             NonAggregateSchema = nonAggregateSchema;
@@ -147,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine
             NodeCompilationContext nodeContext,
             INodeSchema schema,
             INodeSchema nonAggregateSchema)
-            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes)
+            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.Log)
         {
             Schema = schema;
             NonAggregateSchema = nonAggregateSchema;

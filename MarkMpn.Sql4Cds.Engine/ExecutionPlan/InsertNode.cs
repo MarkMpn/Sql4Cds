@@ -79,6 +79,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private bool GetIgnoreDuplicateKey(NodeCompilationContext context, IList<OptimizerHint> queryHints)
         {
+            var ignoreDupKey = GetIgnoreDuplicateKeyHint(queryHints);
+
+            if (!ignoreDupKey && LogicalName == "listmember")
+            {
+                ignoreDupKey = true;
+                context.Log("Duplicate entries will be silently ignored for listmember inserts");
+            }
+
+            return ignoreDupKey;
+        }
+
+        private bool GetIgnoreDuplicateKeyHint(IList<OptimizerHint> queryHints)
+        {
             if (queryHints == null)
                 return false;
 
