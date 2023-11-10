@@ -65,6 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         public override string Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -101,7 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    return ExecuteDmlOperation(
+                    ExecuteDmlOperation(
                         dataSource,
                         context.Options,
                         entities,
@@ -113,8 +114,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressLowercase = "inserting",
                             CompletedLowercase = "inserted"
                         },
+                        context,
                         out recordsAffected,
-                        context.ParameterValues,
                         LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, context.ParameterValues))
                         );
                 }

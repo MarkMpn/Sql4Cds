@@ -1511,7 +1511,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             relationshipFilter = null;
 
             var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
-            var expressionExecutionContext = new ExpressionExecutionContext(new NodeExecutionContext(context.DataSources, context.Options, context.ParameterTypes, null));
+            var expressionExecutionContext = new ExpressionExecutionContext(new NodeExecutionContext(context.DataSources, context.Options, context.ParameterTypes, null, null));
 
             if (criteria is BooleanBinaryExpression binary)
             {

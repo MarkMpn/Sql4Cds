@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public string Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     recordsAffected = 1;
                     context.ParameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, "asyncoperation", resp.JobId);
-                    return $"Bulk delete job started";
+                    context.Log("Bulk delete job started");
                 }
             }
             catch (QueryExecutionException ex)

@@ -129,8 +129,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="context">The context in which the node is being executed</param>
         /// <param name="recordsAffected">The number of records that were affected by the query</param>
-        /// <returns>A log message to display</returns>
-        public abstract string Execute(NodeExecutionContext context, out int recordsAffected);
+        public abstract void Execute(NodeExecutionContext context, out int recordsAffected);
 
         /// <summary>
         /// Indicates if some errors returned by the server can be silently ignored
@@ -539,8 +538,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="meta">The metadata of the entity that will be affected</param>
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
-        /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
+        /// <param name="log">A callback function to be executed when a log message is generated</param>
+        protected void ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, NodeExecutionContext context, out int recordsAffected, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -618,13 +617,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
                                 catch (FaultException<OrganizationServiceFault> ex)
                                 {
-                                    if (FilterErrors(ex.Detail))
+                                    if (FilterErrors(context, request, ex.Detail))
                                     {
                                         if (ContinueOnError)
                                             fault = fault ?? ex.Detail;
                                         else
                                             throw;
                                     }
+
+                                    Interlocked.Increment(ref errorCount);
                                 }
                             }
                             else
@@ -650,7 +651,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                 if (threadLocalState.EMR.Requests.Count == BatchSize)
                                 {
-                                    ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler, ref fault);
+                                    ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, ref fault);
 
                                     threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
                                 }
@@ -661,7 +662,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         (threadLocalState) =>
                         {
                             if (threadLocalState.EMR != null)
-                                ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler, ref fault);
+                                ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, ref fault);
 
                             Interlocked.Decrement(ref threadCount);
 
@@ -692,8 +693,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             recordsAffected = count;
-            parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
-            return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
+            context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)count;
+            context.Log($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}");
         }
 
         protected class BulkApiErrorDetail
@@ -703,7 +704,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public int StatusCode { get; set; }
         }
 
-        private void ProcessBatch(ExecuteMultipleRequest req, int threadCount, ref int count, ref int inProgressCount, ref int errorCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, Action<OrganizationResponse> responseHandler, ref OrganizationServiceFault fault)
+        private void ProcessBatch(ExecuteMultipleRequest req, int threadCount, ref int count, ref int inProgressCount, ref int errorCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, NodeExecutionContext context, Action<OrganizationResponse> responseHandler, ref OrganizationServiceFault fault)
         {
             var newCount = Interlocked.Add(ref inProgressCount, req.Requests.Count);
             var progress = (double)newCount / entities.Count;
@@ -727,7 +728,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
             Interlocked.Add(ref errorCount, errorResponses.Count);
 
-            var error = errorResponses.FirstOrDefault(item => FilterErrors(item.Fault));
+            var error = errorResponses.FirstOrDefault(item => FilterErrors(context, req.Requests[item.RequestIndex], item.Fault));
 
             if (error != null)
             {
@@ -738,7 +739,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected virtual bool FilterErrors(OrganizationServiceFault fault)
+        protected virtual bool FilterErrors(NodeExecutionContext context, OrganizationRequest request, OrganizationServiceFault fault)
         {
             return true;
         }

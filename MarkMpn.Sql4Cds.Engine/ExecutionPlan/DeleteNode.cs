@@ -106,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SecondaryIdSource = secondaryIdSourceRenamed;
         }
 
-        public override string Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -172,7 +172,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    return ExecuteDmlOperation(
+                    ExecuteDmlOperation(
                         dataSource,
                         context.Options,
                         entities,
@@ -184,8 +184,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressLowercase = "deleting",
                             CompletedLowercase = "deleted"
                         },
-                        out recordsAffected,
-                        context.ParameterValues);
+                        context,
+                        out recordsAffected);
                 }
             }
             catch (QueryExecutionException ex)
@@ -250,7 +250,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return req;
         }
 
-        protected override bool FilterErrors(OrganizationServiceFault fault)
+        protected override bool FilterErrors(NodeExecutionContext context, OrganizationRequest request, OrganizationServiceFault fault)
         {
             // Ignore errors trying to delete records that don't exist - record may have been deleted by another
             // process in parallel.

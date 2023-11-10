@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var hasRight = false;
 
-                foreach (var right in RightSource.Execute(new NodeExecutionContext(context.DataSources, context.Options, innerParameterTypes, innerParameters)))
+                foreach (var right in RightSource.Execute(new NodeExecutionContext(context.DataSources, context.Options, innerParameterTypes, innerParameters, context.Log)))
                 {
                     if (rightSchema == null)
                     {

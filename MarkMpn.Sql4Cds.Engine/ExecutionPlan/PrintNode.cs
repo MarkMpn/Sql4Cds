@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
-        public string Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
             recordsAffected = -1;
@@ -56,10 +56,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var value = (SqlString)_expression(new ExpressionExecutionContext(context));
 
-                if (value.IsNull)
-                    return null;
-
-                return value.Value;
+                if (!value.IsNull)
+                    context.Log(value.Value);
             }
         }
 

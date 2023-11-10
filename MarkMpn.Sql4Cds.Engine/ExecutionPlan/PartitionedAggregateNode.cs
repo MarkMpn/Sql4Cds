@@ -202,7 +202,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 partitionParameterValues[kvp.Key] = kvp.Value;
                         }
 
-                        var partitionContext = new NodeExecutionContext(context.DataSources, context.Options, context.ParameterTypes, partitionParameterValues);
+                        var partitionContext = new NodeExecutionContext(context.DataSources, context.Options, context.ParameterTypes, partitionParameterValues, context.Log);
 
                         return new { Context = partitionContext, Fetch = fetch };
                     },
