@@ -100,7 +100,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     qry += '\n';
                 }
 
-                await Execute(session, request, qry, request.QuerySelection);
+                await ExecuteAsync(session, request, qry, request.QuerySelection);
             });
 
             return new ExecuteRequestResult();
@@ -123,13 +123,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             _ = Task.Run(async () =>
             {
                 var lines = request.Query.Split('\n');
-                await Execute(session, request, request.Query, new SelectionData { StartLine =0, StartColumn = 0, EndLine = lines.Length - 1, EndColumn = lines[lines.Length - 1].Length  });
+                await ExecuteAsync(session, request, request.Query, new SelectionData { StartLine =0, StartColumn = 0, EndLine = lines.Length - 1, EndColumn = lines[lines.Length - 1].Length  });
             });
 
             return new ExecuteRequestResult();
         }
 
-        private async Task Execute(Connection.Session session, ExecuteRequestParamsBase request, string qry, SelectionData selection)
+        private async Task ExecuteAsync(Connection.Session session, ExecuteRequestParamsBase request, string qry, SelectionData selection)
         {
             // query/batchStart (BatchEventParams)
             // query/message (MessagePArams)
