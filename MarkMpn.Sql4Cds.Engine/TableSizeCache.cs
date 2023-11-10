@@ -8,6 +8,11 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -24,7 +29,17 @@ namespace MarkMpn.Sql4Cds.Engine
             _org = org;
             _metadata = metadata;
 
-            _version = new Version(((RetrieveVersionResponse)_org.Execute(new RetrieveVersionRequest())).Version);
+#if NETCOREAPP
+            if (org is ServiceClient svc)
+                _version = svc.ConnectedOrgVersion;
+            else
+#else
+            if (org is CrmServiceClient svc)
+                _version = svc.ConnectedOrgVersion;
+            else
+#endif
+
+                _version = new Version(((RetrieveVersionResponse)_org.Execute(new RetrieveVersionRequest())).Version);
         }
 
         private bool UseRetrieveTotalRecordCountRequest => _version.Major >= 9;
