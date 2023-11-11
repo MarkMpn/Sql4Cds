@@ -1514,5 +1514,98 @@ EXEC SetState @id, 1, 2";
                 }
             }
         }
+
+        [TestMethod]
+        public void OpenJsonDefaultSchema()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @json NVARCHAR(MAX)
+
+SET @json='{""name"":""John"",""surname"":""Doe"",""age"":45,""skills"":[""SQL"",""C#"",""MVC""]}';
+
+SELECT *
+FROM OPENJSON(@json);";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("key", reader.GetName(0));
+                    Assert.AreEqual("value", reader.GetName(1));
+                    Assert.AreEqual("type", reader.GetName(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("name", reader.GetString(0));
+                    Assert.AreEqual("John", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("surname", reader.GetString(0));
+                    Assert.AreEqual("Doe", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("age", reader.GetString(0));
+                    Assert.AreEqual("45", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("skills", reader.GetString(0));
+                    Assert.AreEqual("[\r\n  \"SQL\",\r\n  \"C#\",\r\n  \"MVC\"\r\n]", reader.GetString(1));
+                    Assert.AreEqual(4, reader.GetInt32(2));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void OpenJsonDefaultSchemaWithPath()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @json NVARCHAR(4000) = N'{  
+      ""path"": {  
+            ""to"":{  
+                 ""sub-object"":[""en-GB"", ""en-UK"",""de-AT"",""es-AR"",""sr-Cyrl""]  
+                 }  
+              }  
+ }';
+
+SELECT [key], value
+FROM OPENJSON(@json,'$.path.to.""sub-object""')";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("key", reader.GetName(0));
+                    Assert.AreEqual("value", reader.GetName(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("0", reader.GetString(0));
+                    Assert.AreEqual("en-GB", reader.GetString(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual("en-UK", reader.GetString(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("2", reader.GetString(0));
+                    Assert.AreEqual("de-AT", reader.GetString(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("3", reader.GetString(0));
+                    Assert.AreEqual("es-AR", reader.GetString(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("4", reader.GetString(0));
+                    Assert.AreEqual("sr-Cyrl", reader.GetString(1));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

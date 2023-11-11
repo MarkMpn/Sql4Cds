@@ -58,21 +58,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 return SqlString.Null;
 
             var path = jpath.Value;
-            var lax = !path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase);
-
-            if (path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase))
-                path = path.Substring(7);
-            else if (path.StartsWith("lax ", StringComparison.OrdinalIgnoreCase))
-                path = path.Substring(4);
-
+            
             try
             {
+                var jsonPath = new JsonPath(path);
                 var jsonDoc = JToken.Parse(json.Value);
-                var jtoken = jsonDoc.SelectToken(path);
+                var jtoken = jsonPath.Evaluate(jsonDoc);
 
                 if (jtoken == null)
                 {
-                    if (lax)
+                    if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
                         throw new QueryExecutionException("Property does not exist");
@@ -80,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (jtoken.Type == JTokenType.Object || jtoken.Type == JTokenType.Array)
                 {
-                    if (lax)
+                    if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
                         throw new QueryExecutionException("Not a scalar value");
@@ -93,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (value.Length > 4000)
                 {
-                    if (lax)
+                    if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
                         throw new QueryExecutionException("Value too long");
@@ -120,16 +115,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var path = jpath.Value;
 
-            if (path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase))
-                path = path.Substring(7);
-            else if (path.StartsWith("lax ", StringComparison.OrdinalIgnoreCase))
-                path = path.Substring(4);
-
             try
             {
-
+                var jsonPath = new JsonPath(path);
                 var jsonDoc = JToken.Parse(json.Value);
-                var jtoken = jsonDoc.SelectToken(path);
+                var jtoken = jsonPath.Evaluate(jsonDoc);
 
                 return jtoken != null;
             }
