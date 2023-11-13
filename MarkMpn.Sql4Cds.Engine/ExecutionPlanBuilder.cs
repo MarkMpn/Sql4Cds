@@ -4124,7 +4124,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var scalarSubqueryReferences = new Dictionary<string, string>();
                 CaptureOuterReferences(scalarSubquerySchema, null, openJson, context, scalarSubqueryReferences);
 
-                var execute = new OpenJsonNode(openJson);
+                var execute = new OpenJsonNode(openJson, context);
 
                 if (source == null)
                     return execute;
