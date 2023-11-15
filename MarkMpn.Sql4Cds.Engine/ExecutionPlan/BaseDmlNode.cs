@@ -439,10 +439,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 var sourceTargetColumnName = mappings[destAttributeName + "type"];
                                 var sourceTargetType = schema.Schema[sourceTargetColumnName].Type;
-                                var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
+
                                 targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
-                                targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
-                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                                targetExpr = Expression.Convert(targetExpr, sourceTargetType.ToNetType(out _));
+
+                                if (targetExpr.Type == typeof(SqlInt32))
+                                {
+                                    // Using TDS Endpoint, ___type fields are returned as ObjectTypeCode values, not logical names
+                                    targetExpr = Expr.Call(() => ObjectTypeCodeToLogicalName(Expr.Arg<SqlInt32>(), Expr.Arg<IAttributeMetadataCache>()), targetExpr, Expression.Constant(dataSource.Metadata));
+                                }
+                                else
+                                {
+                                    // Normally we want to specify the target type as a logical name
+                                    var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                                }
                             }
 
                             convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, DataTypeHelpers.UniqueIdentifier);
@@ -506,6 +518,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return attributeAccessors;
+        }
+
+        private static string ObjectTypeCodeToLogicalName(SqlInt32 otc, IAttributeMetadataCache attributeMetadataCache)
+        {
+            if (otc.IsNull)
+                throw new QueryExecutionException("Cannot convert null ObjectTypeCode to EntityReference");
+
+            return attributeMetadataCache[otc.Value].LogicalName;
         }
 
         /// <summary>
