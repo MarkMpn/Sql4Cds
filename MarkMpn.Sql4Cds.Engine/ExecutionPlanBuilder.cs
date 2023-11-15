@@ -455,8 +455,10 @@ namespace MarkMpn.Sql4Cds.Engine
             queryExpression.Accept(cteReplacer);
 
             // Convert the modified query.
-            var childContext = new NodeCompilationContext(_nodeContext, outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[cteValidator.Name.EscapeIdentifier() + "." + kvp.Key].Type, StringComparer.OrdinalIgnoreCase));
-            return ConvertSelectStatement(queryExpression, null, null, null, childContext);
+            var childContext = new NodeCompilationContext(_nodeContext, outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[cteValidator.Name.EscapeIdentifier() + "." + kvp.Key.EscapeIdentifier()].Type, StringComparer.OrdinalIgnoreCase));
+            var converted = ConvertSelectStatement(queryExpression, null, null, null, childContext);
+            converted.ExpandWildcardColumns(childContext);
+            return converted;
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertExecuteStatement(ExecuteStatement execute)
