@@ -1609,6 +1609,77 @@ FROM OPENJSON(@json,'$.path.to.""sub-object""')";
         }
 
         [TestMethod]
+        public void OpenJsonDefaultSchemaDataTypes()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @json NVARCHAR(2048) = N'{
+   ""String_value"": ""John"",
+   ""DoublePrecisionFloatingPoint_value"": 45,
+   ""DoublePrecisionFloatingPoint_value"": 2.3456,
+   ""BooleanTrue_value"": true,
+   ""BooleanFalse_value"": false,
+   ""Null_value"": null,
+   ""Array_value"": [""a"",""r"",""r"",""a"",""y""],
+   ""Object_value"": {""obj"":""ect""}
+}';
+
+SELECT * FROM OpenJson(@json);";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("key", reader.GetName(0));
+                    Assert.AreEqual("value", reader.GetName(1));
+                    Assert.AreEqual("type", reader.GetName(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("String_value", reader.GetString(0));
+                    Assert.AreEqual("John", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("DoublePrecisionFloatingPoint_value", reader.GetString(0));
+                    Assert.AreEqual("45", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("DoublePrecisionFloatingPoint_value", reader.GetString(0));
+                    Assert.AreEqual("2.3456", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("BooleanTrue_value", reader.GetString(0));
+                    Assert.AreEqual("true", reader.GetString(1));
+                    Assert.AreEqual(3, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("BooleanFalse_value", reader.GetString(0));
+                    Assert.AreEqual("false", reader.GetString(1));
+                    Assert.AreEqual(3, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Null_value", reader.GetString(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                    Assert.AreEqual(0, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Array_value", reader.GetString(0));
+                    Assert.AreEqual("[\"a\",\"r\",\"r\",\"a\",\"y\"]", reader.GetString(1));
+                    Assert.AreEqual(4, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Object_value", reader.GetString(0));
+                    Assert.AreEqual("{\"obj\":\"ect\"}", reader.GetString(1));
+                    Assert.AreEqual(5, reader.GetInt32(2));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
         public void OpenJsonExplicitSchema()
         {
             using (var con = new Sql4CdsConnection(_localDataSource))
@@ -1677,6 +1748,52 @@ WITH (
       ""Number"":""SO43661"",  
       ""Date"":""2011-06-01T00:00:00""  
     }", reader.GetString(4));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MergeJson()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @json1 NVARCHAR(MAX),@json2 NVARCHAR(MAX)
+
+SET @json1=N'{""name"": ""John"", ""surname"":""Doe""}'
+
+SET @json2=N'{""name"": ""John"", ""age"":45}'
+
+SELECT *
+FROM OPENJSON(@json1)
+UNION ALL
+SELECT *
+FROM OPENJSON(@json2)
+WHERE [key] NOT IN (SELECT [key] FROM OPENJSON(@json1))";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("key", reader.GetName(0));
+                    Assert.AreEqual("value", reader.GetName(1));
+                    Assert.AreEqual("type", reader.GetName(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("name", reader.GetString(0));
+                    Assert.AreEqual("John", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("surname", reader.GetString(0));
+                    Assert.AreEqual("Doe", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("age", reader.GetString(0));
+                    Assert.AreEqual("45", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
 
                     Assert.IsFalse(reader.Read());
                 }

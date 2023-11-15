@@ -56,11 +56,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource = RightSource.FoldQuery(context, hints);
             RightSource.Parent = this;
 
+            var leftSchema = LeftSource.GetSchema(context);
+            var rightSchema = RightSource.GetSchema(context);
+
+            FoldDefinedValues(rightSchema);
+
             if (SemiJoin)
                 return this;
 
-            var leftSchema = LeftSource.GetSchema(context);
-            var rightSchema = RightSource.GetSchema(context);
             var leftFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter ? LeftSource as FilterNode : null;
             var rightFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter ? RightSource as FilterNode : null;
             var leftFetch = (leftFilter?.Source ?? LeftSource) as FetchXmlScan;
@@ -685,9 +688,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var leftColumns = requiredColumns
                 .Where(col => leftSchema.ContainsColumn(col, out _))
+                .Distinct()
                 .ToList();
             var rightColumns = requiredColumns
                 .Where(col => rightSchema.ContainsColumn(col, out _))
+                .Concat(DefinedValues.Values)
+                .Distinct()
                 .ToList();
 
             if (LeftAttribute != null)

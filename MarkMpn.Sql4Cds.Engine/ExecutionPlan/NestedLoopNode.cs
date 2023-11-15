@@ -180,8 +180,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
             var innerContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes, context.Log);
+            var rightSchema = RightSource.GetSchema(innerContext);
             RightSource = RightSource.FoldQuery(innerContext, hints);
             RightSource.Parent = this;
+
+            FoldDefinedValues(rightSchema);
 
             if (LeftSource is ConstantScanNode constant &&
                 constant.Schema.Count == 0 &&
