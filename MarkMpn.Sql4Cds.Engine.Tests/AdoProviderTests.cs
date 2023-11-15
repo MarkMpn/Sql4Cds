@@ -1889,5 +1889,123 @@ CROSS APPLY OPENJSON ( root.value) AS TheValues";
                 }
             }
         }
+
+        [TestMethod]
+        public void RecursiveCTEJson()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @JSON NVARCHAR(MAX) = N'[
+{
+""OrderNumber"":""SO43659"",
+""OrderDate"":""2011-05-31T00:00:00"",
+""AccountNumber"":""AW29825"",
+""ItemPrice"":2024.9940,
+""ItemQuantity"":1
+},
+{
+""OrderNumber"":""SO43661"",
+""OrderDate"":""2011-06-01T00:00:00"",
+""AccountNumber"":""AW73565"",
+""ItemPrice"":2024.9940,
+""ItemQuantity"":3
+}
+]';
+
+
+with cte ([key], value, type) as (
+    select '$[' + [key] + ']', value, type from OPENJSON(@json)
+
+    union all
+
+    select cte.[key] + case when cte.type = 4 then '[' + childvalues.[key] + ']' else '.' + childvalues.[key] end, childvalues.value, childvalues.type from cte cross apply OPENJSON(cte.value) as childvalues WHERE cte.type in (4, 5)
+)
+
+SELECT * from CTE";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("key", reader.GetName(0));
+                    Assert.AreEqual("value", reader.GetName(1));
+                    Assert.AreEqual("type", reader.GetName(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[0]", reader.GetString(0));
+                    Assert.AreEqual(@"{
+""OrderNumber"":""SO43659"",
+""OrderDate"":""2011-05-31T00:00:00"",
+""AccountNumber"":""AW29825"",
+""ItemPrice"":2024.9940,
+""ItemQuantity"":1
+}", reader.GetString(1));
+                    Assert.AreEqual(5, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[1]", reader.GetString(0));
+                    Assert.AreEqual(@"{
+""OrderNumber"":""SO43661"",
+""OrderDate"":""2011-06-01T00:00:00"",
+""AccountNumber"":""AW73565"",
+""ItemPrice"":2024.9940,
+""ItemQuantity"":3
+}", reader.GetString(1));
+                    Assert.AreEqual(5, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[1].OrderNumber", reader.GetString(0));
+                    Assert.AreEqual("SO43661", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[1].OrderDate", reader.GetString(0));
+                    Assert.AreEqual("2011-06-01T00:00:00", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[1].AccountNumber", reader.GetString(0));
+                    Assert.AreEqual("AW73565", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[1].ItemPrice", reader.GetString(0));
+                    Assert.AreEqual("2024.9940", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[1].ItemQuantity", reader.GetString(0));
+                    Assert.AreEqual("3", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[0].OrderNumber", reader.GetString(0));
+                    Assert.AreEqual("SO43659", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[0].OrderDate", reader.GetString(0));
+                    Assert.AreEqual("2011-05-31T00:00:00", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[0].AccountNumber", reader.GetString(0));
+                    Assert.AreEqual("AW29825", reader.GetString(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[0].ItemPrice", reader.GetString(0));
+                    Assert.AreEqual("2024.9940", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("$[0].ItemQuantity", reader.GetString(0));
+                    Assert.AreEqual("1", reader.GetString(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

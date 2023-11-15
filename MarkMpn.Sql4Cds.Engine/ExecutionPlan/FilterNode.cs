@@ -28,6 +28,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public BooleanExpression Filter { get; set; }
 
         /// <summary>
+        /// Indicates if the filter should be evaluated during startup only
+        /// </summary>
+        [Category("Filter")]
+        [DisplayName("Startup Expression")]
+        [Description("Indicates if the filter shold be evaluated during startup only")]
+        public bool StartupExpression { get; set; }
+
+        /// <summary>
         /// The data source to select from
         /// </summary>
         [Browsable(false)]
@@ -39,6 +47,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var expressionCompilationContext = new ExpressionCompilationContext(context, schema, null);
             var filter = Filter.Compile(expressionCompilationContext);
             var expressionContext = new ExpressionExecutionContext(context);
+
+            if (StartupExpression && !filter(expressionContext))
+                yield break;
 
             foreach (var entity in Source.Execute(context))
             {
@@ -164,7 +175,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (FoldScalarSubqueries(context, out var nestedLoop))
                 return nestedLoop.FoldQuery(context, hints);
 
+            // Check if we can apply the filter during startup instead of per-record
+            StartupExpression = CheckStartupExpression();
+
             return this;
+        }
+
+        private bool CheckStartupExpression()
+        {
+            // We only need to apply the filter expression to individual rows if it references any fields
+            if (Filter.GetColumns().Any())
+                return false;
+
+            return true;
         }
 
         private BooleanExpression FoldNotIsNullToIsNotNull(BooleanExpression filter)
@@ -1836,6 +1859,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var clone = new FilterNode
             {
                 Filter = Filter,
+                StartupExpression = StartupExpression,
                 Source = (IDataExecutionPlanNodeInternal)Source.Clone()
             };
 
