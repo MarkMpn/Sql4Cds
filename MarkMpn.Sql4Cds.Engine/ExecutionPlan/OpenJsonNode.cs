@@ -4,9 +4,9 @@ using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
-using Newtonsoft.Json.Linq;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -33,15 +33,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Alias = tvf.Alias?.Value;
             Json = tvf.Variable.Clone();
             Path = tvf.RowPattern?.Clone();
-            Schema = tvf.SchemaDeclarationItems;
+            Schema = tvf.SchemaDeclarationItems.Count == 0 ? null : tvf.SchemaDeclarationItems;
 
-            // TODO: Check expressions are string types and add conversions if not
+            // Check expressions are string types and add conversions if not
+            var ecc = new ExpressionCompilationContext(context, null, null);
+            if (Json.GetType(ecc, out _) != typeof(SqlString))
+                Json = new ConvertCall { Parameter = Json, DataType = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault) };
+            if (Path != null && Path.GetType(ecc, out _) != typeof(SqlString))
+                Path = new ConvertCall { Parameter = Path, DataType = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault) };
 
             // Validate the schema definition
             if (Schema != null)
             {
                 var schema = GetSchema(context);
 
+                // Set up the conversion functions to convert the string values extracted from the JSON to the type defined in the schema
                 var sourceType = DataTypeHelpers.NVarChar(Int32.MaxValue, Collation.USEnglish, CollationLabel.Implicit);
                 _conversions = schema.Schema
                     .Select(col => SqlTypeConverter.GetConversion(sourceType, col.Value.Type))
@@ -105,13 +111,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else
             {
-                var columnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
                 foreach (var col in Schema)
                 {
-                    if (!columnNames.Add(col.ColumnDefinition.ColumnIdentifier.Value))
-                        throw new NotSupportedQueryFragmentException("Duplicate column name", col.ColumnDefinition.ColumnIdentifier);
-
                     var type = col.ColumnDefinition.DataType;
 
                     if (type is SqlDataTypeReference sqlType && sqlType.SqlDataTypeOption.IsStringType())
@@ -139,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             nvarcharType.Parameters.Count != 1 ||
                             !(nvarcharType.Parameters[0] is MaxLiteral))
                         {
-                            throw new NotSupportedQueryFragmentException("AS JSON column must be of NVARCHAR(max) type", col.ColumnDefinition.DataType);
+                            throw new NotSupportedQueryFragmentException("AS JSON option can be specified only for column of nvarchar(max) type in WITH clause", col.ColumnDefinition.DataType);
                         }
                     }
 
@@ -216,16 +217,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             JsonPath jpath;
-            JToken jsonDoc;
-            JToken jtoken;
+            JsonElement jsonDoc;
+            JsonElement? jtoken;
 
             try
             {
                 jpath = new JsonPath(path);
-                jsonDoc = JToken.Parse(json.Value);
+                jsonDoc = JsonDocument.Parse(json.Value).RootElement;
                 jtoken = jpath.Evaluate(jsonDoc);
             }
-            catch (Newtonsoft.Json.JsonException ex)
+            catch (JsonException ex)
             {
                 throw new QueryExecutionException(ex.Message, ex);
             }
@@ -253,14 +254,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .ToArray();
             }
 
-            if (jtoken.Type == JTokenType.Object)
+            if (jtoken.Value.ValueKind == JsonValueKind.Object)
             {
-                foreach (var prop in ((JObject)jtoken).Properties())
+                foreach (var prop in jtoken.Value.EnumerateObject())
                 {
                     if (Schema == null)
                     {
                         var key = _keyCollation.ToSqlString(prop.Name);
-                        var value = GetValue(prop.Value);
+                        var value = _jsonCollation.ToSqlString(GetValue(prop.Value));
                         var type = GetType(prop.Value);
 
                         yield return new Entity
@@ -276,16 +277,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
             }
-            else if (jtoken.Type == JTokenType.Array)
+            else if (jtoken.Value.ValueKind == JsonValueKind.Array)
             {
-                for (var i = 0; i < ((JArray)jtoken).Count; i++)
+                var i = 0;
+
+                foreach (var item in jtoken.Value.EnumerateArray())
                 {
                     if (Schema == null)
                     {
-                        var subToken = ((JArray)jtoken)[i];
                         var key = _keyCollation.ToSqlString(i.ToString());
-                        var value = GetValue(subToken);
-                        var type = GetType(subToken);
+                        var value = _jsonCollation.ToSqlString(GetValue(item));
+                        var type = GetType(item);
 
                         yield return new Entity
                         {
@@ -296,8 +298,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        yield return TokenToEntity(((JArray)jtoken)[i], schema, mappings);
+                        yield return TokenToEntity(item, schema, mappings);
                     }
+
+                    i++;
                 }
             }
             else
@@ -309,45 +313,56 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private Entity TokenToEntity(JToken token, INodeSchema schema, JsonPath[] mappings)
+        private Entity TokenToEntity(JsonElement token, INodeSchema schema, JsonPath[] mappings)
         {
             var result = new Entity();
 
             for (var i = 0; i < schema.Schema.Count; i++)
             {
                 var mapping = mappings[i];
-                JToken value;
+                JsonElement? value;
 
                 if (mapping != null)
+                {
                     value = mapping.Evaluate(token);
-                else if (token is JObject obj)
-                    value = obj.Property(Schema[i].ColumnDefinition.ColumnIdentifier.Value)?.Value;
+                }
+                else if (token.ValueKind == JsonValueKind.Object)
+                {
+                    if (token.TryGetProperty(Schema[i].ColumnDefinition.ColumnIdentifier.Value, out var prop))
+                        value = prop;
+                    else
+                        value = null;
+                }
                 else
+                {
                     value = null;
+                }
 
                 string stringValue;
 
                 if (Schema[i].AsJson)
                 {
-                    if (value is JArray || value is JObject)
-                        stringValue = value.ToString();
+                    if (value?.ValueKind == JsonValueKind.Array || value?.ValueKind == JsonValueKind.Object)
+                        stringValue = value.Value.ToString();
                     else if (mapping == null || mapping.Mode == JsonPathMode.Lax)
                         stringValue = null;
                     else
-                        throw new QueryExecutionException("");
+                        throw new QueryExecutionException("Object or array cannot be found in the specified JSON path");
                 }
                 else
                 {
-                    if (value is JArray || value is JObject)
+                    if (value?.ValueKind == JsonValueKind.Array || value?.ValueKind == JsonValueKind.Object || value == null)
                     {
                         if (mapping == null || mapping.Mode == JsonPathMode.Lax)
                             stringValue = null;
+                        else if (value == null)
+                            throw new QueryExecutionException("Property cannot be found on the specified JSON path");
                         else
-                            throw new QueryExecutionException("");
+                            throw new QueryExecutionException("Object or array cannot be found in the specified JSON path");
                     }
                     else
                     {
-                        stringValue = value.Value<string>();
+                        stringValue = GetValue(value.Value);
                     }
                 }
 
@@ -360,43 +375,54 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return result;
         }
 
-        private SqlString GetValue(JToken token)
+        private string GetValue(JsonElement token)
         {
-            string str;
+            switch (token.ValueKind)
+            {
+                case JsonValueKind.Object:
+                case JsonValueKind.Array:
+                    return token.ToString();
 
-            if (token is JContainer)
-                str = token.ToString();
-            else
-                str = token.Value<string>();
+                case JsonValueKind.String:
+                    return token.GetString();
 
-            return _jsonCollation.ToSqlString(str);
+                case JsonValueKind.Number:
+                    return token.GetDecimal().ToString();
+
+                case JsonValueKind.True:
+                case JsonValueKind.False:
+                    return token.GetBoolean() ? "true" : "false";
+
+                default:
+                    return null;
+            }
         }
 
-        private SqlInt32 GetType(JToken token)
+        private SqlInt32 GetType(JsonElement token)
         {
-            switch (token.Type)
+            switch (token.ValueKind)
             {
-                case JTokenType.Null:
+                case JsonValueKind.Null:
                     return 0;
 
-                case JTokenType.String:
+                case JsonValueKind.String:
                     return 1;
 
-                case JTokenType.Integer:
-                case JTokenType.Float:
+                case JsonValueKind.Number:
                     return 2;
 
-                case JTokenType.Boolean:
+                case JsonValueKind.True:
+                case JsonValueKind.False:
                     return 3;
 
-                case JTokenType.Array:
+                case JsonValueKind.Array:
                     return 4;
 
-                case JTokenType.Object:
+                case JsonValueKind.Object:
                     return 5;
 
                 default:
-                    throw new QueryExecutionException($"Unexpected token type: {token.Type}");
+                    throw new QueryExecutionException($"Unexpected token type: {token.ValueKind}");
             }
         }
 

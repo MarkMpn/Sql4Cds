@@ -3,7 +3,6 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
@@ -18,6 +17,7 @@ using System.Xml;
 using System.Xml.XPath;
 using Wmhelp.XPath2;
 using Wmhelp.XPath2.Value;
+using System.Text.Json;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -62,8 +62,8 @@ namespace MarkMpn.Sql4Cds.Engine
             try
             {
                 var jsonPath = new JsonPath(path);
-                var jsonDoc = JToken.Parse(json.Value);
-                var jtoken = jsonPath.Evaluate(jsonDoc);
+                var jsonDoc = JsonDocument.Parse(json.Value);
+                var jtoken = jsonPath.Evaluate(jsonDoc.RootElement);
 
                 if (jtoken == null)
                 {
@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new QueryExecutionException("Property does not exist");
                 }
 
-                if (jtoken.Type == JTokenType.Object || jtoken.Type == JTokenType.Array)
+                if (jtoken.Value.ValueKind == JsonValueKind.Object || jtoken.Value.ValueKind == JsonValueKind.Array)
                 {
                     if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new QueryExecutionException("Not a scalar value");
                 }
 
-                var value = jtoken.Value<string>();
+                var value = jtoken.Value.GetString();
 
                 if (value == null)
                     return SqlString.Null;
@@ -118,8 +118,8 @@ namespace MarkMpn.Sql4Cds.Engine
             try
             {
                 var jsonPath = new JsonPath(path);
-                var jsonDoc = JToken.Parse(json.Value);
-                var jtoken = jsonPath.Evaluate(jsonDoc);
+                var jsonDoc = JsonDocument.Parse(json.Value);
+                var jtoken = jsonPath.Evaluate(jsonDoc.RootElement);
 
                 return jtoken != null;
             }

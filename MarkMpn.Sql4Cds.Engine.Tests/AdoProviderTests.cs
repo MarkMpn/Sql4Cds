@@ -1607,5 +1607,80 @@ FROM OPENJSON(@json,'$.path.to.""sub-object""')";
                 }
             }
         }
+
+        [TestMethod]
+        public void OpenJsonExplicitSchema()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @json NVARCHAR(MAX) = N'[  
+  {  
+    ""Order"": {  
+      ""Number"":""SO43659"",  
+      ""Date"":""2011-05-31T00:00:00""  
+    },  
+    ""AccountNumber"":""AW29825"",  
+    ""Item"": {  
+      ""Price"":2024.9940,  
+      ""Quantity"":1  
+    }  
+  },  
+  {  
+    ""Order"": {  
+      ""Number"":""SO43661"",  
+      ""Date"":""2011-06-01T00:00:00""  
+    },  
+    ""AccountNumber"":""AW73565"",  
+    ""Item"": {  
+      ""Price"":2024.9940,  
+      ""Quantity"":3  
+    }  
+  }
+]'  
+   
+SELECT *
+FROM OPENJSON ( @json )  
+WITH (   
+              Number   VARCHAR(200)   '$.Order.Number',  
+              Date     DATETIME       '$.Order.Date',  
+              Customer VARCHAR(200)   '$.AccountNumber',  
+              Quantity INT            '$.Item.Quantity',  
+              [Order]  NVARCHAR(MAX)  AS JSON  
+ )";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("Number", reader.GetName(0));
+                    Assert.AreEqual("Date", reader.GetName(1));
+                    Assert.AreEqual("Customer", reader.GetName(2));
+                    Assert.AreEqual("Quantity", reader.GetName(3));
+                    Assert.AreEqual("Order", reader.GetName(4));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("SO43659", reader.GetString(0));
+                    Assert.AreEqual(new DateTime(2011, 5, 31), reader.GetDateTime(1));
+                    Assert.AreEqual("AW29825", reader.GetString(2));
+                    Assert.AreEqual(1, reader.GetInt32(3));
+                    Assert.AreEqual(@"{
+  ""Number"": ""SO43659"",
+  ""Date"": ""2011-05-31T00:00:00""
+}", reader.GetString(4));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("SO43661", reader.GetString(0));
+                    Assert.AreEqual(new DateTime(2011, 6, 1), reader.GetDateTime(1));
+                    Assert.AreEqual("AW73565", reader.GetString(2));
+                    Assert.AreEqual(3, reader.GetInt32(3));
+                    Assert.AreEqual(@"{
+  ""Number"": ""SO43661"",
+  ""Date"": ""2011-06-01T00:00:00""
+}", reader.GetString(4));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

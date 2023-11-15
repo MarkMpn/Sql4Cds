@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -34,14 +34,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="token">The token to start matching from</param>
         /// <returns>The token matching the path, or <c>null</c> if no match is found</returns>
-        public JToken Evaluate(JToken token)
+        public JsonElement? Evaluate(JsonElement token)
         {
             foreach (var part in _parts)
             {
-                token = part.Match(token);
+                var match = part.Match(token);
 
-                if (token == null)
+                if (match == null)
                     return null;
+
+                token = match.Value;
             }
 
             return token;
@@ -69,13 +71,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     parts.Add(new ContextJsonPathPart());
                 }
-                else if (expression[i] == '.')
+                else if (i > 0 && expression[i] == '.')
                 {
                     // Start of a property key
                     i++;
 
                     if (i == expression.Length)
-                        throw new Newtonsoft.Json.JsonException($"Invalid JSON path - missing property name after '.' at end of '{expression}'");
+                        throw new JsonException($"Invalid JSON path - missing property name after '.' at end of '{expression}'");
 
                     if (expression[i] == '"')
                     {
@@ -103,28 +105,32 @@ namespace MarkMpn.Sql4Cds.Engine
                         expression[i] >= 'A' && expression[i] <= 'Z')
                     {
                         // Start of an unquoted property key
-                        var end = expression.IndexOfAny(new[] { '.', '[' }, i);
+                        var start = i;
 
-                        if (end == -1)
-                            end = expression.Length;
-
-                        var propertyName = expression.Substring(i, end - i);
-
-                        if (propertyName == "sql:identity()")
+                        while (i < expression.Length)
                         {
-                            if (end == expression.Length)
-                                parts.Add(new ArrayIndexJsonPathPart());
+                            if (expression[i] >= 'a' && expression[i] <= 'z' ||
+                                expression[i] >= 'A' && expression[i] <= 'Z' ||
+                                expression[i] >= '0' && expression[i] <= '9')
+                            {
+                                i++;
+                            }
                             else
-                                throw new Newtonsoft.Json.JsonException($"Invalid JSON path - sql:identity() function must be the final token of the path'");
+                            {
+                                break;
+                            }
                         }
 
+                        var propertyName = expression.Substring(start, i - start);
                         parts.Add(new PropertyJsonPathPart(propertyName));
-                        i = end - 1;
+
+                        if (i < expression.Length)
+                            i--;
                     }
                     else
                     {
                         // Error
-                        throw new Newtonsoft.Json.JsonException($"Invalid JSON path - invalid property name at index {i} of '{expression}'");
+                        throw new JsonException($"Invalid JSON path - invalid property name at index {i} of '{expression}'");
                     }
                 }
                 else if (expression[i] == '[')
@@ -133,20 +139,20 @@ namespace MarkMpn.Sql4Cds.Engine
                     var end = expression.IndexOf(']', i);
 
                     if (end == -1)
-                        throw new Newtonsoft.Json.JsonException($"Invalid JSON path - missing closing bracket for indexer at index {i} of '{expression}'");
+                        throw new JsonException($"Invalid JSON path - missing closing bracket for indexer at index {i} of '{expression}'");
 
                     var indexStr = expression.Substring(i + 1, end - i - 1);
 
                     if (!UInt32.TryParse(indexStr, out var index))
-                        throw new Newtonsoft.Json.JsonException($"Invalid JSON path - invalid indexer at index {i} of '{expression}'");
+                        throw new JsonException($"Invalid JSON path - invalid indexer at index {i} of '{expression}'");
 
                     parts.Add(new ArrayElementJsonPathPart(index));
-                    i = end;
+                    i = end ;
                 }
                 else
                 {
                     // Error
-                    throw new Newtonsoft.Json.JsonException($"Invalid JSON path - invalid token at index {i} of '{expression}'");
+                    throw new JsonException($"JSON path is not properly formatted. Unexpected character '{expression[i]}' is found at position {i}");
                 }
             }
 
@@ -168,7 +174,7 @@ namespace MarkMpn.Sql4Cds.Engine
             /// </summary>
             /// <param name="token">The current context token</param>
             /// <returns>The child token that is matched by this part of the path</returns>
-            public abstract JToken Match(JToken token);
+            public abstract JsonElement? Match(JsonElement token);
         }
 
         /// <summary>
@@ -176,7 +182,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         class ContextJsonPathPart : JsonPathPart
         {
-            public override JToken Match(JToken token)
+            public override JsonElement? Match(JsonElement token)
             {
                 return token;
             }
@@ -206,13 +212,18 @@ namespace MarkMpn.Sql4Cds.Engine
             /// </summary>
             public string PropertyName { get; }
 
-            public override JToken Match(JToken token)
+            public override JsonElement? Match(JsonElement token)
             {
-                if (!(token is JObject obj))
+                if (token.ValueKind != JsonValueKind.Object)
                     return null;
 
-                var prop = obj.Property(PropertyName);
-                return prop?.Value;
+                foreach (var prop in token.EnumerateObject())
+                {
+                    if (prop.NameEquals(PropertyName))
+                        return prop.Value;
+                }
+
+                return null;
             }
 
             public override string ToString()
@@ -244,37 +255,17 @@ namespace MarkMpn.Sql4Cds.Engine
             /// </summary>
             public int Index { get; }
 
-            public override JToken Match(JToken token)
+            public override JsonElement? Match(JsonElement token)
             {
-                if (!(token is JArray arr) || arr.Count <= Index)
+                if (token.ValueKind != JsonValueKind.Array || token.GetArrayLength() < Index)
                     return null;
 
-                return arr[Index];
+                return token[Index];
             }
 
             public override string ToString()
             {
                 return $"[{Index}]";
-            }
-        }
-
-        /// <summary>
-        /// Handles the sql:identity() function to return the index of an element within it's containing array
-        /// </summary>
-        class ArrayIndexJsonPathPart : JsonPathPart
-        {
-            public override JToken Match(JToken token)
-            {
-                if (!(token.Parent is JArray arr))
-                    return null;
-
-                var index = arr.IndexOf(token);
-                return new JValue(index);
-            }
-
-            public override string ToString()
-            {
-                return ".sql:identity()";
             }
         }
     }
