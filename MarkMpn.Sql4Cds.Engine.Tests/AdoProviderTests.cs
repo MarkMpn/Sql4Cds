@@ -1552,7 +1552,7 @@ FROM OPENJSON(@json);";
 
                     Assert.IsTrue(reader.Read());
                     Assert.AreEqual("skills", reader.GetString(0));
-                    Assert.AreEqual("[\r\n  \"SQL\",\r\n  \"C#\",\r\n  \"MVC\"\r\n]", reader.GetString(1));
+                    Assert.AreEqual("[\"SQL\",\"C#\",\"MVC\"]", reader.GetString(1));
                     Assert.AreEqual(4, reader.GetInt32(2));
 
                     Assert.IsFalse(reader.Read());
@@ -1663,20 +1663,20 @@ WITH (
                     Assert.AreEqual(new DateTime(2011, 5, 31), reader.GetDateTime(1));
                     Assert.AreEqual("AW29825", reader.GetString(2));
                     Assert.AreEqual(1, reader.GetInt32(3));
-                    Assert.AreEqual(@"{
-  ""Number"": ""SO43659"",
-  ""Date"": ""2011-05-31T00:00:00""
-}", reader.GetString(4));
+                    Assert.AreEqual(@"{  
+      ""Number"":""SO43659"",  
+      ""Date"":""2011-05-31T00:00:00""  
+    }", reader.GetString(4));
 
                     Assert.IsTrue(reader.Read());
                     Assert.AreEqual("SO43661", reader.GetString(0));
                     Assert.AreEqual(new DateTime(2011, 6, 1), reader.GetDateTime(1));
                     Assert.AreEqual("AW73565", reader.GetString(2));
                     Assert.AreEqual(3, reader.GetInt32(3));
-                    Assert.AreEqual(@"{
-  ""Number"": ""SO43661"",
-  ""Date"": ""2011-06-01T00:00:00""
-}", reader.GetString(4));
+                    Assert.AreEqual(@"{  
+      ""Number"":""SO43661"",  
+      ""Date"":""2011-06-01T00:00:00""  
+    }", reader.GetString(4));
 
                     Assert.IsFalse(reader.Read());
                 }
