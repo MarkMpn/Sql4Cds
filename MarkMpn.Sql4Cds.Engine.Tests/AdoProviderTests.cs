@@ -1799,5 +1799,95 @@ WHERE [key] NOT IN (SELECT [key] FROM OPENJSON(@json1))";
                 }
             }
         }
+
+        [TestMethod]
+        public void NestedJson()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+--simple cross apply example
+DECLARE @JSON NVARCHAR(MAX) = N'[
+{
+""OrderNumber"":""SO43659"",
+""OrderDate"":""2011-05-31T00:00:00"",
+""AccountNumber"":""AW29825"",
+""ItemPrice"":2024.9940,
+""ItemQuantity"":1
+},
+{
+""OrderNumber"":""SO43661"",
+""OrderDate"":""2011-06-01T00:00:00"",
+""AccountNumber"":""AW73565"",
+""ItemPrice"":2024.9940,
+""ItemQuantity"":3
+}
+]'
+
+SELECT root.[key] AS [Order],TheValues.[key], TheValues.[value]
+FROM OPENJSON ( @JSON ) AS root
+CROSS APPLY OPENJSON ( root.value) AS TheValues";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("Order", reader.GetName(0));
+                    Assert.AreEqual("key", reader.GetName(1));
+                    Assert.AreEqual("value", reader.GetName(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("0", reader.GetString(0));
+                    Assert.AreEqual("OrderNumber", reader.GetString(1));
+                    Assert.AreEqual("SO43659", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("0", reader.GetString(0));
+                    Assert.AreEqual("OrderDate", reader.GetString(1));
+                    Assert.AreEqual("2011-05-31T00:00:00", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("0", reader.GetString(0));
+                    Assert.AreEqual("AccountNumber", reader.GetString(1));
+                    Assert.AreEqual("AW29825", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("0", reader.GetString(0));
+                    Assert.AreEqual("ItemPrice", reader.GetString(1));
+                    Assert.AreEqual("2024.9940", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("0", reader.GetString(0));
+                    Assert.AreEqual("ItemQuantity", reader.GetString(1));
+                    Assert.AreEqual("1", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual("OrderNumber", reader.GetString(1));
+                    Assert.AreEqual("SO43661", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual("OrderDate", reader.GetString(1));
+                    Assert.AreEqual("2011-06-01T00:00:00", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual("AccountNumber", reader.GetString(1));
+                    Assert.AreEqual("AW73565", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual("ItemPrice", reader.GetString(1));
+                    Assert.AreEqual("2024.9940", reader.GetString(2));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("1", reader.GetString(0));
+                    Assert.AreEqual("ItemQuantity", reader.GetString(1));
+                    Assert.AreEqual("3", reader.GetString(2));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

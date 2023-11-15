@@ -227,5 +227,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 }
             }
         }
+
+        public override void ExplicitVisit(OpenJsonTableReference node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.Variable);
+            ReplaceExpression(node, n => n.RowPattern);
+        }
     }
 }
