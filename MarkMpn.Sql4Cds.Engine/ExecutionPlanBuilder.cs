@@ -298,7 +298,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             // Capture all CTE fields in the outer references
                             foreach (var col in anchorSchema.Schema)
-                                recurseLoop.OuterReferences[col.Key.SplitMultiPartIdentifier().Last()] = "@" + _nodeContext.GetExpressionName();
+                                recurseLoop.OuterReferences[col.Key.SplitMultiPartIdentifier().Last().EscapeIdentifier()] = "@" + _nodeContext.GetExpressionName();
 
                             if (cteValidator.RecursiveQueries.Count > 1)
                             {
