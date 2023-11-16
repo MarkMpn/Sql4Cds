@@ -104,14 +104,14 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private bool ConfirmDelete(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if (e.Count > Settings.Instance.DeleteWarnThreshold || e.BypassCustomPluginExecution)
+            if (e.Count > Settings.Instance.DeleteWarnThreshold)
             {
                 var msg = $"Delete will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
                 var result = ShowMessageBox(msg);
-
+                
                 if (result == DialogResult.No)
                     return false;
             }
