@@ -58,6 +58,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             [Description("Extracts a scalar value from a JSON string")]
             public abstract string json_value(string json, string path);
 
+            [Description("Extracts an object or an array from a JSON string")]
+            public abstract string json_query(string json, string path);
+
+            [Description("Tests whether a string contains valid JSON")]
+            public abstract string isjson(string json, string type);
+
             [Description("Tests whether a specified SQL/JSON path exists in the input JSON string")]
             public abstract bool json_path_exists(string json, string path);
 

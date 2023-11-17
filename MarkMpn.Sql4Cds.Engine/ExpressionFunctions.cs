@@ -52,6 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="jpath">A JSON path that specifies the property to extract</param>
         /// <returns>Returns a single text value of type nvarchar(4000)</returns>
         [MaxLength(4000)]
+        [CollationSensitive]
         public static SqlString Json_Value(SqlString json, SqlString jpath)
         {
             if (json.IsNull || jpath.IsNull)
@@ -73,18 +74,20 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new QueryExecutionException("Property does not exist");
                 }
 
-                if (jtoken.Value.ValueKind == JsonValueKind.Object || jtoken.Value.ValueKind == JsonValueKind.Array)
+                switch (jtoken.Value.ValueKind)
                 {
-                    if (jsonPath.Mode == JsonPathMode.Lax)
+                    case JsonValueKind.Object:
+                    case JsonValueKind.Array:
+                        if (jsonPath.Mode == JsonPathMode.Lax)
+                            return SqlString.Null;
+                        else
+                            throw new QueryExecutionException("Not a scalar value");
+
+                    case JsonValueKind.Null:
                         return SqlString.Null;
-                    else
-                        throw new QueryExecutionException("Not a scalar value");
                 }
 
-                var value = jtoken.Value.GetString();
-
-                if (value == null)
-                    return SqlString.Null;
+                var value = jtoken.Value.ToString();
 
                 if (value.Length > 4000)
                 {
@@ -95,6 +98,53 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 return new SqlString(value, json.LCID, json.SqlCompareOptions);
+            }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex);
+            }
+        }
+
+        /// <summary>
+        /// Extracts an object or an array from a JSON string
+        /// </summary>
+        /// <param name="json">An expression containing the JSON document to parse</param>
+        /// <param name="jpath">A JSON path that specifies the property to extract</param>
+        /// <returns>Returns a JSON fragment of type nvarchar(max)</returns>
+        [CollationSensitive]
+        public static SqlString Json_Query(SqlString json, SqlString jpath)
+        {
+            if (json.IsNull || jpath.IsNull)
+                return SqlString.Null;
+
+            var path = jpath.Value;
+
+            try
+            {
+                var jsonPath = new JsonPath(path);
+                var jsonDoc = JsonDocument.Parse(json.Value);
+                var jtoken = jsonPath.Evaluate(jsonDoc.RootElement);
+
+                if (jtoken == null)
+                {
+                    if (jsonPath.Mode == JsonPathMode.Lax)
+                        return SqlString.Null;
+                    else
+                        throw new QueryExecutionException("Property does not exist");
+                }
+
+                switch (jtoken.Value.ValueKind)
+                {
+                    case JsonValueKind.Object:
+                    case JsonValueKind.Array:
+                        return new SqlString(jtoken.Value.ToString(), json.LCID, json.SqlCompareOptions);
+
+                    default:
+                        if (jsonPath.Mode == JsonPathMode.Lax)
+                            return SqlString.Null;
+                        else
+                            throw new QueryExecutionException("Not a scalar value");
+                }
             }
             catch (Newtonsoft.Json.JsonException ex)
             {
@@ -994,6 +1044,77 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return SqlVariant.Null;
+        }
+
+        /// <summary>
+        /// Tests whether a string contains valid JSON
+        /// </summary>
+        /// <param name="json">The string to test</param>
+        /// <returns><c>null</c> if <paramref name="json"/> is null, <c>true</c> if the input is a valid JSON object or array or <c>false</c> otherwise</returns>
+        public static SqlBoolean IsJson(SqlString json)
+        {
+            if (json.IsNull)
+                return SqlBoolean.Null;
+
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json.Value).AsSpan());
+            JsonElement? element;
+
+            try
+            {
+                if (!JsonElement.TryParseValue(ref reader, out element) || element == null)
+                    return false;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+
+            if (!reader.IsFinalBlock)
+                return false;
+
+            return element.Value.ValueKind == JsonValueKind.Array || element.Value.ValueKind == JsonValueKind.Object;
+        }
+
+        /// <summary>
+        /// Tests whether a string contains valid JSON
+        /// </summary>
+        /// <param name="json">The string to test</param>
+        /// <param name="type">Specifies the JSON type to check in the input</param>
+        /// <returns>Returns <c>true</c> if the string contains valid JSON; otherwise, returns <c>false</c>. Returns <c>null</c> if expression is null</returns>
+        public static SqlBoolean IsJson(SqlString json, SqlString type)
+        {
+            if (json.IsNull)
+                return SqlBoolean.Null;
+
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json.Value).AsSpan());
+            JsonElement? element;
+
+            try
+            {
+                if (!JsonElement.TryParseValue(ref reader, out element) || element == null)
+                    return false;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+
+            if (!reader.IsFinalBlock)
+                return false;
+
+            if (type.Value.Equals("VALUE", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (type.Value.Equals("ARRAY", StringComparison.OrdinalIgnoreCase))
+                return element.Value.ValueKind == JsonValueKind.Array;
+
+            if (type.Value.Equals("OBJECT", StringComparison.OrdinalIgnoreCase))
+                return element.Value.ValueKind == JsonValueKind.Object;
+
+            if (type.Value.Equals("SCALAR", StringComparison.OrdinalIgnoreCase))
+                return element.Value.ValueKind == JsonValueKind.String || element.Value.ValueKind == JsonValueKind.Number;
+
+            return false;
         }
     }
 

@@ -82,6 +82,7 @@
     <Compile Include="ExecutionPlanTests.cs" />
     <Compile Include="ExpressionTests.cs" />
     <Compile Include="FakeXrmEasyTestsBase.cs" />
+    <Compile Include="JsonFunctionTests.cs" />
     <Compile Include="JsonPathTests.cs" />
     <Compile Include="Metadata\Audit.cs" />
     <Compile Include="Metadata\New_CustomEntity.cs" />
@@ -89,6 +90,7 @@
     <Compile Include="Metadata\Account.cs" />
     <Compile Include="Metadata\Team.cs" />
     <Compile Include="Metadata\SystemUser.cs" />
+    <Compile Include="OpenJsonTests.cs" />
     <Compile Include="OptionsWrapper.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />
     <Compile Include="AdoProviderTests.cs" />

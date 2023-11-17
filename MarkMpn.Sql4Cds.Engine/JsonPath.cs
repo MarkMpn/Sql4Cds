@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the mode the path should be evaluated in
         /// </summary>
-        public JsonPathMode Mode { get; }
+        public JsonPathMode Mode { get => _mode; }
 
         /// <summary>
         /// Finds the token matching the path

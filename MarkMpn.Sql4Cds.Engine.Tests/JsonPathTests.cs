@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ExplicitModeStrict()
         {
             var path = new JsonPath("strict $.path.to.\"sub-object\"");
-            Assert.AreEqual(JsonPathMode.Lax, path.Mode);
+            Assert.AreEqual(JsonPathMode.Strict, path.Mode);
         }
 
         [TestMethod]

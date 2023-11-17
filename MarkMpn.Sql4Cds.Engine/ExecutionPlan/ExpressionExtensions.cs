@@ -5,19 +5,12 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Xml;
-using System.Xml.XPath;
 using MarkMpn.Sql4Cds.Engine.Visitors;
-using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
-using Newtonsoft.Json.Linq;
 using Wmhelp.XPath2;
-using Wmhelp.XPath2.Extensions;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -640,47 +633,59 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             KeyValuePair<Expression, DataTypeReference>[] paramExpressionsWithType;
 
-            // Special case for DATEPART / DATEDIFF / DATEADD - first parameter looks like a field but is actually an identifier
-            if (func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
-                func.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
-                func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase))
-            {
-                paramExpressionsWithType = func.Parameters
-                    .Select((param, index) =>
+            paramExpressionsWithType = func.Parameters
+                .Select((param, index) =>
+                {
+                    // Special case for DATEPART / DATEDIFF / DATEADD - first parameter looks like a field but is actually an identifier
+                    if (index == 0 &&
+                        (
+                            func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
+                            func.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
+                            func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase)
+                        ))
                     {
-                        if (index == 0)
+                        // Check parameter is an expected datepart value
+                        if (!(param is ColumnReferenceExpression col) || col.MultiPartIdentifier.Identifiers.Count != 1)
+                            throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
+
+                        try
                         {
-                            // Check parameter is an expected datepart value
-                            if (!(param is ColumnReferenceExpression col))
-                                throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
-
-                            try
-                            {
-                                ExpressionFunctions.DatePartToInterval(col.MultiPartIdentifier.Identifiers.Single().Value);
-                            }
-                            catch
-                            {
-                                throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
-                            }
-
-                            return new KeyValuePair<Expression, DataTypeReference>(Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value), DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                            ExpressionFunctions.DatePartToInterval(col.MultiPartIdentifier.Identifiers.Single().Value);
+                        }
+                        catch
+                        {
+                            throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
                         }
 
-                        var paramExpr = param.ToExpression(context, contextParam, out var paramType);
-                        return new KeyValuePair<Expression, DataTypeReference>(paramExpr, paramType);
-                    })
-                    .ToArray();
-            }
-            else
-            {
-                paramExpressionsWithType = func.Parameters
-                    .Select(param =>
+                        return new KeyValuePair<Expression, DataTypeReference>(Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value), DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                    }
+
+                    // Special case for ISJSON - second optional parameter looks like a field but is actually a JSON data type
+                    if (index == 1 && func.FunctionName.Value.Equals("ISJSON", StringComparison.OrdinalIgnoreCase))
                     {
-                        var paramExpr = param.ToExpression(context, contextParam, out var paramType);
-                        return new KeyValuePair<Expression, DataTypeReference>(paramExpr, paramType);
-                    })
-                    .ToArray();
-            }
+                        // Check parameter is an expected datepart value
+                        if (!(param is ColumnReferenceExpression col) || col.MultiPartIdentifier.Identifiers.Count != 1)
+                            throw new NotSupportedQueryFragmentException("Expected a JSON type", param);
+
+                        switch (col.MultiPartIdentifier.Identifiers.Single().Value.ToLowerInvariant())
+                        {
+                            case "value":
+                            case "array":
+                            case "object":
+                            case "scalar":
+                                break;
+
+                            default:
+                               throw new NotSupportedQueryFragmentException("Expected a JSON type", param);
+                        }
+
+                        return new KeyValuePair<Expression, DataTypeReference>(Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value), DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                    }
+                    
+                    var paramExpr = param.ToExpression(context, contextParam, out var paramType);
+                    return new KeyValuePair<Expression, DataTypeReference>(paramExpr, paramType);
+                })
+                .ToArray();
 
             if (func.CallTarget != null)
             {
