@@ -725,6 +725,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 converted.Type = "udx";
             else if (converted.Type == "adaptiveIndexSpool")
                 converted.Type = "indexSpool";
+            else if (converted.Type == "openJson")
+                converted.Type = "tableValuedFunction";
+            else if (converted.Type == "systemFunction")
+                converted.Type = "tableValuedFunction";
 
             // Get the filtered list of properties
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);

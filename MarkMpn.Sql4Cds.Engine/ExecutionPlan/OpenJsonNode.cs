@@ -440,5 +440,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _conversions = _conversions,
             };
         }
+
+        public override string ToString()
+        {
+            return $"Table Valued Function\r\n[OPENJSON_{(Schema == null ? "DEFAULT" : "EXPLICIT")}]";
+        }
     }
 }

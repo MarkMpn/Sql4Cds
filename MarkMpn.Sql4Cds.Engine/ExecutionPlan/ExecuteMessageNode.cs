@@ -704,5 +704,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             FoldQuery(context, hints);
             return new[] { this };
         }
+
+        public override string ToString()
+        {
+            return $"Table Valued Function\r\n[{MessageName}]";
+        }
     }
 }
