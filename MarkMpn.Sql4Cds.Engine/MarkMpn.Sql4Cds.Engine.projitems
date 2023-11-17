@@ -29,11 +29,13 @@
     <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AdaptiveIndexSpoolNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ISpoolProducerNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\OpenJsonNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ParallelismHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SystemFunctionNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XmlWriterNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XPath2ExpressionContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FetchXml.Extensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)JsonPath.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NodeContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
