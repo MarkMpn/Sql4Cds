@@ -224,6 +224,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 jpath = new JsonPath(path);
                 jsonDoc = JsonDocument.Parse(json.Value).RootElement;
+
+                // Don't allow JSON scalar values, only objects or arrays
+                if (jsonDoc.ValueKind != JsonValueKind.Object && jsonDoc.ValueKind != JsonValueKind.Array)
+                    throw new JsonException("JSON text is not properly formatted. Object or array is required");
+
                 jtoken = jpath.Evaluate(jsonDoc);
             }
             catch (JsonException ex)
