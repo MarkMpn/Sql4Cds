@@ -92,9 +92,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _jsonExpression = Json.Compile(ecc);
             _pathExpression = Path?.Compile(ecc);
 
-            Json.GetType(ecc, out var jsonType);
-            _jsonCollation = (jsonType as SqlDataTypeReferenceWithCollation)?.Collation ?? context.PrimaryDataSource.DefaultCollation;
-
             return this;
         }
 
@@ -105,6 +102,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Schema == null)
             {
+                if (_jsonCollation == null)
+                {
+                    var ecc = new ExpressionCompilationContext(context, null, null);
+                    Json.GetType(ecc, out var jsonType);
+                    _jsonCollation = (jsonType as SqlDataTypeReferenceWithCollation)?.Collation ?? context.PrimaryDataSource.DefaultCollation;
+                }
+
                 columns.Add(PrefixWithAlias("key", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(4000, _keyCollation, CollationLabel.Implicit), false, false));
                 columns.Add(PrefixWithAlias("value", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(Int32.MaxValue, _jsonCollation, CollationLabel.Implicit), true, false));
                 columns.Add(PrefixWithAlias("type", aliases), new ColumnDefinition(DataTypeHelpers.Int, false, false));
@@ -162,10 +166,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             name = name.EscapeIdentifier();
 
-            if (Alias == null)
-                return name;
-
-            var fullName = Alias.EscapeIdentifier() + "." + name;
+            var fullName = Alias == null ? name : (Alias.EscapeIdentifier() + "." + name);
 
             if (aliases != null)
             {
