@@ -103,8 +103,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var minKey = GetMinMaxKey(fetchXmlNode, context, false);
             var maxKey = GetMinMaxKey(fetchXmlNode, context, true);
 
-            if (minKey.IsNull || maxKey.IsNull || minKey == maxKey)
-                throw new QueryExecutionException("Cannot partition query");
+            if (minKey.IsNull || maxKey.IsNull || minKey >= maxKey)
+                throw new PartitionOverflowException();
 
             // Add the filter to the FetchXML to partition the results
             fetchXmlNode.Entity.AddItem(new filter
@@ -127,9 +127,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var kvp in context.ParameterTypes)
                     partitionParameterTypes[kvp.Key] = kvp.Value;
             }
-
-            if (minKey > maxKey)
-                throw new QueryExecutionException("Cannot partition query");
 
             // Split recursively, add up values below & above split value if query returns successfully, or re-split on error
             // Range is > MinValue AND <= MaxValue, so start from just before first record to ensure the first record is counted
@@ -167,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var partitioner = Partitioner.Create(_queue.GetConsumingEnumerable(), EnumerablePartitionerOptions.NoBuffering);
                 Parallel.ForEach(partitioner,
-                    new ParallelOptions { MaxDegreeOfParallelism = maxDop },
+                    new ParallelOptions { MaxDegreeOfParallelism = maxDop, CancellationToken = context.Options.CancellationToken },
                     () =>
                     {
                         var ds = new Dictionary<string, DataSource>
@@ -284,7 +281,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Fail if we get stuck on a particularly dense partition. If there's > 50K records in a 10 second window we probably
             // won't be able to split it successfully
             if (partition.MaxValue.Value < partition.MinValue.Value.AddSeconds(10))
+            {
+                _queue.CompleteAdding();
                 throw new PartitionOverflowException();
+            }
 
             // Start splitting partitions in half. Once we've done that a few times and are still hitting the 50K limit, start
             // pre-emptively splitting into smaller chunks
