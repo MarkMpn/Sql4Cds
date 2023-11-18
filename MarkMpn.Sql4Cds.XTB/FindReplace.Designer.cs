@@ -155,6 +155,7 @@ namespace MarkMpn.Sql4Cds.XTB
             this.replaceToolStripButton.Name = "replaceToolStripButton";
             this.replaceToolStripButton.Size = new System.Drawing.Size(23, 20);
             this.replaceToolStripButton.Text = "Replace Next";
+            this.replaceToolStripButton.ToolTipText = "Replace Next (Alt+A)";
             this.replaceToolStripButton.Click += new System.EventHandler(this.replaceToolStripButton_Click);
             // 
             // replaceAllToolStripButton
@@ -165,6 +166,7 @@ namespace MarkMpn.Sql4Cds.XTB
             this.replaceAllToolStripButton.Name = "replaceAllToolStripButton";
             this.replaceAllToolStripButton.Size = new System.Drawing.Size(23, 20);
             this.replaceAllToolStripButton.Text = "Replace All";
+            this.replaceAllToolStripButton.ToolTipText = "Replace All (Alt+R)";
             this.replaceAllToolStripButton.Click += new System.EventHandler(this.replaceAllToolStripButton_Click);
             // 
             // optionsSpacerToolStripLabel

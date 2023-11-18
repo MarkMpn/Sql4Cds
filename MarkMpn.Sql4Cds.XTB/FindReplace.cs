@@ -132,6 +132,18 @@ namespace MarkMpn.Sql4Cds.XTB
                 return true;
             }
 
+            if (keyData == (Keys.Alt | Keys.R) && ShowReplace)
+            {
+                Replace(false);
+                return true;
+            }
+
+            if (keyData == (Keys.Alt | Keys.A) && ShowReplace)
+            {
+                Replace(true);
+                return true;
+            }
+
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
@@ -176,6 +188,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (match != -1)
                 {
                     _editor.SetSelection(_editor.TargetStart, _editor.TargetEnd);
+                    _editor.ScrollCaret();
                     break;
                 }
                 else if (_editor.TargetStart > 0)
@@ -219,6 +232,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (match != -1)
                 {
                     _editor.SetSelection(_editor.TargetStart, _editor.TargetEnd);
+                    _editor.ScrollCaret();
                     break;
                 }
                 else if (_editor.TargetStart < _editor.TextLength)
@@ -252,7 +266,7 @@ namespace MarkMpn.Sql4Cds.XTB
             Replace(true);
         }
 
-        private void Replace(bool all)
+        public void Replace(bool all)
         {
             AddHistory(findToolStripComboBox);
             AddHistory(replaceToolStripComboBox);
@@ -273,19 +287,27 @@ namespace MarkMpn.Sql4Cds.XTB
             _editor.TargetStart = all ? 0 : _editor.SelectionStart + 1;
             _editor.TargetEnd = _editor.TextLength;
 
+            var replacements = 0;
+            var lastMatch = -1;
+            var lastReplacementLength = 0;
+
             while (true)
             {
                 var match = _editor.SearchInTarget(findToolStripComboBox.Text);
 
                 if (match != -1)
                 {
+                    lastMatch = match;
+
                     if (regexToolStripButton.Checked)
-                        _editor.ReplaceTargetRe(replaceToolStripComboBox.Text);
+                        lastReplacementLength = _editor.ReplaceTargetRe(replaceToolStripComboBox.Text);
                     else
-                        _editor.ReplaceTarget(replaceToolStripComboBox.Text);
+                        lastReplacementLength = _editor.ReplaceTarget(replaceToolStripComboBox.Text);
 
                     if (!all)
                         break;
+
+                    replacements++;
 
                     _editor.TargetStart = _editor.TargetEnd;
                     _editor.TargetEnd = _editor.TextLength;
@@ -301,6 +323,15 @@ namespace MarkMpn.Sql4Cds.XTB
             }
 
             _editor.EndUndoAction();
+
+            if (replacements > 0)
+            {
+                _editor.SetSelection(lastMatch, lastMatch + lastReplacementLength);
+                _editor.ScrollCaret();
+            }
+
+            if (all)
+                MessageBox.Show($"{replacements} occurrence(s) replaced.", "Replace All", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 }
