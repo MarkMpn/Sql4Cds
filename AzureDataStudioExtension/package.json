@@ -352,7 +352,7 @@
     "@types/vscode": "1.71.0",
     "@types/azdata": "1.40.0",
     "del": "^6.1.1",
-    "gulp": "github:gulpjs/gulp#4.0.2",
+    "gulp": "github:gulpjs/gulp#v4.0.2",
     "gulp-json-editor": "^2.5.6",
     "gulp-rename": "^2.0.0",
     "gulp-shell": "^0.8.0",

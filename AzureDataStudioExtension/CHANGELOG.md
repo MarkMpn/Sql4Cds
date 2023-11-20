@@ -1,6 +1,37 @@
 # Change Log
 
-## [v7.6.1)(https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.6.1) - 2023-10-15
+## [v8.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.0) - 2023-11-18
+
+Added Common Table Expression support:
+- Non-recursive CTEs are expanded to subqueries for compatibility with TDS Endpoint
+- Recurve CTEs are converted to hierarchical FetchXML filters where possible
+
+Extended JSON support:
+- `OPENJSON` table-valued function
+- `JSON_QUERY` function
+- `ISJSON` function
+
+Query optimizer improvements:
+- Prefer hash joins over merge joins if sorts cannot be folded
+- Switch FetchXML sorts to custom sorting after adding joins that require custom paging
+- Avoid folding filters to tables in subqueries if the same alias exists in the outer query
+- Do not use a left outer join to implement `NOT IN` queries where the subquery uses an inner join
+
+Added `IGNORE_DUP_KEY` query hint to ignore duplicate key errors on insert
+Added check for multi-currency issues when aggregating non-base currency fields
+Added support for disconnecting instances from Azure Data Studio object explorer
+Added plugin log messages in error message output
+Clearer progress messages for multi-threaded DML operations
+Added autocomplete literal value suggestions for entityname attributes
+
+Fixed use of `UNION` with wildcard columns
+Fixed error in nested loop joins with no records from inner source
+Fixed use of columns from outer queries in join criteria in subqueries
+Fixed time zone mismatch when starting bulk delete jobs
+Fixed setting polymorphic lookup fields using TDS Endpoint
+Fixed aggregates with very dense data distribution
+
+## [v7.6.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v7.6.1) - 2023-10-15
 
 Fixed use of `IN` subqueries when data source cannot be converted to FetchXML
 Fixed use of `LIKE` filters with data containing embedded returns

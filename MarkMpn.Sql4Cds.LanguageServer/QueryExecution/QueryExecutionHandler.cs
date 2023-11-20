@@ -33,7 +33,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         private readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
         private readonly ConcurrentDictionary<string, IDbCommand> _commands;
         private readonly ConcurrentDictionary<string, ManualResetEventSlim> _confirmationEvents;
-        private readonly ConcurrentDictionary<string, bool> _confirmationResults;
+        private readonly ConcurrentDictionary<string, ConfirmationResult> _confirmationResults;
 
         public QueryExecutionHandler(JsonRpc lsp, ConnectionManager connectionManager, TextDocumentManager documentManager)
         {
@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             _resultSets = new ConcurrentDictionary<string, List<ResultSetSummary>>();
             _commands = new ConcurrentDictionary<string, IDbCommand>();
             _confirmationEvents = new ConcurrentDictionary<string, ManualResetEventSlim>();
-            _confirmationResults = new ConcurrentDictionary<string, bool>();
+            _confirmationResults = new ConcurrentDictionary<string, ConfirmationResult>();
         }
 
         public void Initialize(JsonRpc lsp)
@@ -139,6 +139,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             // query/batchComplete (BatchEventParams)
             var startTime = DateTime.UtcNow;
             ResultSetSummary resultSetInProgress = null;
+            var bypassWarnings = false;
 
             var batchSummary = new BatchSummary
             {
@@ -191,7 +192,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             {
                 e.Cancel = false;
 
-                if (e.Count > threshold || e.BypassCustomPluginExecution)
+                if ((e.Count > threshold || e.BypassCustomPluginExecution) && !bypassWarnings)
                 {
                     var msg = $"{operation} will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
                     if (e.BypassCustomPluginExecution)
@@ -202,7 +203,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     _confirmationEvents[request.OwnerUri] = evt;
                     _ = _lsp.NotifyAsync(ConfirmationRequest.Type, new ConfirmationParams { OwnerUri = request.OwnerUri, Msg = msg });
                     evt.Wait();
-                    e.Cancel = !_confirmationResults[request.OwnerUri];
+                    e.Cancel = _confirmationResults[request.OwnerUri] == ConfirmationResult.No;
+                    bypassWarnings = _confirmationResults[request.OwnerUri] == ConfirmationResult.All;
                     _confirmationEvents.Remove(request.OwnerUri, out _);
                     _confirmationResults.Remove(request.OwnerUri, out _);
                 };

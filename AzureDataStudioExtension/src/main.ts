@@ -71,9 +71,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		});
 		languageClient.onNotification("sql4cds/confirmation", (message: {ownerUri: string, msg: string}) => {
 			vscode.window
-				.showInformationMessage(message.msg, "Yes", "No")
+				.showInformationMessage(message.msg, "Yes", "All", "No")
 				.then(answer => {
-					languageClient.sendNotification("sql4cds/confirm", { ownerUri: message.ownerUri, result: answer === "Yes" })
+					languageClient.sendNotification("sql4cds/confirm", { ownerUri: message.ownerUri, result: answer })
 				});
 		});
 		languageClient.onNotification("query/batchComplete", () => {

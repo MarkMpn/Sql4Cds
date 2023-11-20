@@ -6,7 +6,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
     {
         public string OwnerUri { get; set; }
 
-        public bool Result { get; set; }
+        public ConfirmationResult Result { get; set; }
+    }
+
+    public enum ConfirmationResult
+    {
+        No,
+        Yes,
+        All
     }
 
     public class ConfirmationResponse

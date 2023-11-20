@@ -22,6 +22,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private readonly Sql4CdsConnection _con;
         private readonly Sql4CdsCommand _cmd;
         private int _retrievedPages;
+        private bool _suppressWarnings;
 
         public QueryExecutionOptions(Control host, BackgroundWorker worker, Sql4CdsConnection con, Sql4CdsCommand cmd)
         {
@@ -60,7 +61,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private bool ConfirmInsert(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if (e.Count > Settings.Instance.InsertWarnThreshold || e.BypassCustomPluginExecution)
+            if ((e.Count > Settings.Instance.InsertWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
             {
                 var msg = $"Insert will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
@@ -82,7 +83,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private bool ConfirmUpdate(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if (e.Count > Settings.Instance.UpdateWarnThreshold || e.BypassCustomPluginExecution)
+            if ((e.Count > Settings.Instance.UpdateWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
             {
                 var msg = $"Update will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
@@ -104,7 +105,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private bool ConfirmDelete(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if (e.Count > Settings.Instance.DeleteWarnThreshold || e.BypassCustomPluginExecution)
+            if ((e.Count > Settings.Instance.DeleteWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
             {
                 var msg = $"Delete will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
@@ -170,7 +171,7 @@ namespace MarkMpn.Sql4Cds.XTB
             if (_host.InvokeRequired)
                 return (DialogResult)_host.Invoke(new Func<string, DialogResult>(ShowMessageBox), msg);
 
-            return MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            return YesYesToAllNoMessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxIcon.Warning, out _suppressWarnings);
         }
 
         public void Dispose()
