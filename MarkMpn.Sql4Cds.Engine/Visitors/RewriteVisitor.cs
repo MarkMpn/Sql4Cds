@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public RewriteVisitor(IDictionary<ScalarExpression,string> rewrites)
         {
             _mappings = rewrites
-                .GroupBy(kvp => kvp.Key.ToSql(), StringComparer.OrdinalIgnoreCase)
+                .GroupBy(kvp => kvp.Key.ToNormalizedSql(), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
                     g => g.Key,
                     g => (ScalarExpression) g.First().Value.ToColumnReference(),
@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public RewriteVisitor(IDictionary<ScalarExpression,ScalarExpression> rewrites)
         {
             _mappings = rewrites
-                .GroupBy(kvp => kvp.Key.ToSql(), StringComparer.OrdinalIgnoreCase)
+                .GroupBy(kvp => kvp.Key.ToNormalizedSql(), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
                     g => g.Key,
                     g => g.First().Value,
@@ -51,7 +51,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             if (expression == null)
                 return null;
 
-            if (_mappings.TryGetValue(expression.ToSql(), out var column))
+            if (_mappings.TryGetValue(expression.ToNormalizedSql(), out var column))
             {
                 name = (column as ColumnReferenceExpression)?.MultiPartIdentifier?.Identifiers?.Last()?.Value;
                 return column;

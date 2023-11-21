@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     /// </summary>
     class RemoveRecursiveCTETableReferencesVisitor : TSqlConcreteFragmentVisitor
     {
-        private readonly string _name;
+        private string _name;
         private readonly string[] _columnNames;
         private readonly Dictionary<string, string> _outerReferences;
         private BooleanExpression _joinPredicate;
@@ -34,7 +34,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             if (namedTable.SchemaObject.Identifiers.Count != 1)
                 return false;
 
-            return namedTable.SchemaObject.BaseIdentifier.Value.Equals(_name, StringComparison.OrdinalIgnoreCase);
+            if (!namedTable.SchemaObject.BaseIdentifier.Value.Equals(_name, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (namedTable.Alias != null)
+                _name = namedTable.Alias.Value;
+
+            return true;
         }
 
         private InlineDerivedTable CreateInlineDerivedTable()

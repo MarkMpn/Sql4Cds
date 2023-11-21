@@ -1826,7 +1826,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <remarks>
         /// https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-identifiers?view=sql-server-ver16&redirectedfrom=MSDN#rules-for-regular-identifiers
         /// </remarks>
-        private static bool IsValidIdentifier(string identifier)
+        public static bool IsValidIdentifier(this string identifier)
         {
             if (String.IsNullOrEmpty(identifier))
                 return false;
