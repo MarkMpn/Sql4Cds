@@ -235,8 +235,127 @@ namespace MarkMpn.Sql4Cds.XTB
             if (errors.Count != 0)
                 return;
 
-            new Sql160ScriptGenerator().GenerateScript(fragment, out var sql);
-            _editor.Text = sql;
+            var tokens = new Sql160ScriptGenerator().GenerateTokens(fragment);
+
+            // Insert any comments from the original tokens. Ignore whitespace tokens.
+            var targetIndex = 0;
+            var minDstIndex = 0;
+            var matchedTokens = 0;
+
+            for (var srcIndex = 0; srcIndex < fragment.ScriptTokenStream.Count; srcIndex++)
+            {
+                var token = fragment.ScriptTokenStream[srcIndex];
+
+                if (token.TokenType == TSqlTokenType.WhiteSpace)
+                    continue;
+
+                if (token.TokenType == TSqlTokenType.MultilineComment || token.TokenType == TSqlTokenType.SingleLineComment)
+                {
+                    for (var dstIndex = minDstIndex; dstIndex < tokens.Count; dstIndex++)
+                    {
+                        if (matchedTokens == targetIndex)
+                        {
+                            // Also skip over any matching whitespace
+                            var whitespaceCount = 0;
+
+                            while (dstIndex + whitespaceCount < tokens.Count &&
+                                srcIndex - whitespaceCount - 1 >= 0 &&
+                                IsMatchingWhitespace(tokens[dstIndex + whitespaceCount], fragment.ScriptTokenStream[srcIndex - whitespaceCount - 1]))
+                                whitespaceCount++;
+
+                            minDstIndex = CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, dstIndex + whitespaceCount);
+                            break;
+                        }
+
+                        if (tokens[dstIndex].TokenType != TSqlTokenType.SingleLineComment &&
+                            tokens[dstIndex].TokenType != TSqlTokenType.MultilineComment &&
+                            tokens[dstIndex].TokenType != TSqlTokenType.WhiteSpace)
+                        {
+                            matchedTokens++;
+                        }
+                    }
+
+                    if (matchedTokens < targetIndex)
+                        minDstIndex = CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, tokens.Count);
+
+                    continue;
+                }
+
+                targetIndex++;
+            }
+
+            using (var writer = new StringWriter())
+            {
+                foreach (var token in tokens)
+                    writer.Write(token.Text);
+
+                writer.Flush();
+
+                _editor.Text = writer.ToString();
+            }
+        }
+
+        private int CopyComment(IList<TSqlParserToken> src, int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
+        {
+            if (dstIndex >= dst.Count)
+                dst.Add(src[srcIndex]);
+            else
+                dst.Insert(dstIndex, src[srcIndex]);
+
+            // Also add any leading or trailing whitespace
+            var leadingSrcIndex = srcIndex - 1;
+            var leadingDstIndex = dstIndex - 1;
+            var insertPoint = dstIndex;
+
+            while (leadingSrcIndex >= 0 && src[leadingSrcIndex].TokenType == TSqlTokenType.WhiteSpace)
+            {
+                if (IsMatchingWhitespace(dst[leadingDstIndex], src[leadingSrcIndex]))
+                    break;
+
+                dst.Insert(insertPoint, src[leadingSrcIndex]);
+                leadingSrcIndex--;
+                leadingDstIndex--;
+                dstIndex++;
+            }
+
+            var trailingSrcIndex = srcIndex + 1;
+            var trailingDstIndex = dstIndex + 1;
+
+            while (trailingSrcIndex < src.Count && src[trailingSrcIndex].TokenType == TSqlTokenType.WhiteSpace)
+            {
+                if (trailingDstIndex < dst.Count && IsMatchingWhitespace(dst[trailingDstIndex], src[trailingSrcIndex]))
+                    break;
+
+                if (trailingDstIndex >= dst.Count)
+                    dst.Add(src[trailingSrcIndex]);
+                else
+                    dst.Insert(trailingDstIndex, src[trailingSrcIndex]);
+
+                trailingSrcIndex++;
+                trailingDstIndex++;
+            }
+
+            return trailingDstIndex;
+        }
+
+        private bool IsMatchingWhitespace(TSqlParserToken x, TSqlParserToken y)
+        {
+            if (x.TokenType != TSqlTokenType.WhiteSpace)
+                return false;
+
+            if (y.TokenType != TSqlTokenType.WhiteSpace)
+                return false;
+
+            if (x.Text == y.Text)
+                return true;
+
+            if (x.Text == "\n" && y.Text == "\r\n")
+                return true;
+
+            if (x.Text == "\r\n" && y.Text == "\n")
+                return true;
+
+            return false;
         }
 
         private Scintilla CreateEditor()
