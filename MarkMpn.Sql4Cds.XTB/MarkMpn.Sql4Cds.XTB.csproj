@@ -282,7 +282,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="XrmToolBoxPackage">
-      <Version>1.2023.7.65</Version>
+      <Version>1.2023.10.67</Version>
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
