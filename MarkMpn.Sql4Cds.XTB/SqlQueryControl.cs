@@ -238,11 +238,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var tokens = new Sql160ScriptGenerator().GenerateTokens(fragment);
 
             // Insert any comments from the original tokens. Ignore whitespace tokens.
-            var targetIndex = 0;
-            var minDstIndex = 0;
-            var matchedTokens = 0;
-
-            for (var srcIndex = 0; srcIndex < fragment.ScriptTokenStream.Count; srcIndex++)
+            for (int srcIndex = 0, dstIndex = -1; srcIndex < fragment.ScriptTokenStream.Count; srcIndex++)
             {
                 var token = fragment.ScriptTokenStream[srcIndex];
 
@@ -251,37 +247,32 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 if (token.TokenType == TSqlTokenType.MultilineComment || token.TokenType == TSqlTokenType.SingleLineComment)
                 {
-                    for (var dstIndex = minDstIndex; dstIndex < tokens.Count; dstIndex++)
-                    {
-                        if (matchedTokens == targetIndex)
-                        {
-                            // Also skip over any matching whitespace
-                            var whitespaceCount = 0;
+                    // dstIndex currently points to the previously matched token. Move forward one so we insert the comment after that token
+                    dstIndex++;
 
-                            while (dstIndex + whitespaceCount < tokens.Count &&
-                                srcIndex - whitespaceCount - 1 >= 0 &&
-                                IsMatchingWhitespace(tokens[dstIndex + whitespaceCount], fragment.ScriptTokenStream[srcIndex - whitespaceCount - 1]))
-                                whitespaceCount++;
+                    // We may well have added a semicolon at the end of the statement - move after that too
+                    if ((srcIndex == fragment.ScriptTokenStream.Count - 1 || fragment.ScriptTokenStream[srcIndex + 1].TokenType != TSqlTokenType.Semicolon) &&
+                        dstIndex <= tokens.Count - 1 &&
+                        tokens[dstIndex].TokenType == TSqlTokenType.Semicolon)
+                        dstIndex++;
 
-                            minDstIndex = CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, dstIndex + whitespaceCount);
-                            break;
-                        }
+                    // Also skip over any matching whitespace
+                    var whitespaceCount = 0;
 
-                        if (tokens[dstIndex].TokenType != TSqlTokenType.SingleLineComment &&
-                            tokens[dstIndex].TokenType != TSqlTokenType.MultilineComment &&
-                            tokens[dstIndex].TokenType != TSqlTokenType.WhiteSpace)
-                        {
-                            matchedTokens++;
-                        }
-                    }
+                    while (dstIndex + whitespaceCount < tokens.Count &&
+                        srcIndex - whitespaceCount - 1 >= 0 &&
+                        IsMatchingWhitespace(tokens[dstIndex + whitespaceCount], fragment.ScriptTokenStream[srcIndex - whitespaceCount - 1]))
+                        whitespaceCount++;
 
-                    if (matchedTokens < targetIndex)
-                        minDstIndex = CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, tokens.Count);
-
-                    continue;
+                    CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, dstIndex + whitespaceCount);
                 }
+                else
+                {
+                    dstIndex++;
 
-                targetIndex++;
+                    while (dstIndex < tokens.Count && !IsSameType(token, tokens[dstIndex]))
+                        dstIndex++;
+                }
             }
 
             using (var writer = new StringWriter())
@@ -295,7 +286,18 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
-        private int CopyComment(IList<TSqlParserToken> src, int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
+        private bool IsSameType(TSqlParserToken srcToken, TSqlParserToken dstToken)
+        {
+            if (srcToken.TokenType == dstToken.TokenType)
+                return true;
+
+            if (srcToken.TokenType == TSqlTokenType.Variable && dstToken.TokenType == TSqlTokenType.Identifier && dstToken.Text.StartsWith("@"))
+                return true;
+
+            return false;
+        }
+
+        private void CopyComment(IList<TSqlParserToken> src, int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
         {
             if (dstIndex >= dst.Count)
                 dst.Add(src[srcIndex]);
@@ -334,8 +336,6 @@ namespace MarkMpn.Sql4Cds.XTB
                 trailingSrcIndex++;
                 trailingDstIndex++;
             }
-
-            return trailingDstIndex;
         }
 
         private bool IsMatchingWhitespace(TSqlParserToken x, TSqlParserToken y)
