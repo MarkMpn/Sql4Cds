@@ -1378,13 +1378,25 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        private string GetRecordUrl(SqlEntityReference entityReference, out XtbDataSource dataSource)
+        {
+            dataSource = null;
+
+            if (!DataSources.TryGetValue(entityReference.DataSource, out var ds))
+                return null;
+
+            dataSource = (XtbDataSource)ds;
+            return dataSource.ConnectionDetail.GetEntityReferenceUrl(entityReference);
+        }
+
         private void OpenRecord(SqlEntityReference entityReference)
         {
-            if (!DataSources.TryGetValue(entityReference.DataSource, out var dataSource))
+            var url = GetRecordUrl(entityReference, out var dataSource);
+
+            if (url == null)
                 return;
 
-            var url = ((XtbDataSource) dataSource).ConnectionDetail.GetEntityReferenceUrl(entityReference);
-            ((XtbDataSource)dataSource).ConnectionDetail.OpenUrlWithBrowserProfile(new Uri(url));
+            dataSource.ConnectionDetail.OpenUrlWithBrowserProfile(new Uri(url));
         }
 
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
@@ -1514,11 +1526,13 @@ namespace MarkMpn.Sql4Cds.XTB
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
 
             openRecordToolStripMenuItem.Enabled = false;
+            copyRecordUrlToolStripMenuItem.Enabled = false;
             createSELECTStatementToolStripMenuItem.Enabled = false;
 
             if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
             {
                 openRecordToolStripMenuItem.Enabled = true;
+                copyRecordUrlToolStripMenuItem.Enabled = true;
                 createSELECTStatementToolStripMenuItem.Enabled = true;
             }
 
@@ -1531,6 +1545,19 @@ namespace MarkMpn.Sql4Cds.XTB
 
             if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
                 OpenRecord(er);
+        }
+
+        private void copyRecordUrlToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
+            {
+                var url = GetRecordUrl(er, out _);
+
+                if (url != null)
+                    Clipboard.SetText(url);
+            }
         }
 
         private void createSELECTStatementToolStripMenuItem_Click(object sender, EventArgs e)

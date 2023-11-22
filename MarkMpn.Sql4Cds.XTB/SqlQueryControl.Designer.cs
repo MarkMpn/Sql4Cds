@@ -43,6 +43,7 @@
             this.copyWithHeadersToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem1 = new System.Windows.Forms.ToolStripSeparator();
             this.openRecordToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.copyRecordUrlToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.createSELECTStatementToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
@@ -176,9 +177,10 @@
             this.copyWithHeadersToolStripMenuItem,
             this.toolStripMenuItem1,
             this.openRecordToolStripMenuItem,
+            this.copyRecordUrlToolStripMenuItem,
             this.createSELECTStatementToolStripMenuItem});
             this.gridContextMenuStrip.Name = "gridContextMenuStrip";
-            this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 98);
+            this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 142);
             this.gridContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.gridContextMenuStrip_Opening);
             // 
             // copyToolStripMenuItem
@@ -207,6 +209,14 @@
             this.openRecordToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
             this.openRecordToolStripMenuItem.Text = "Open Record";
             this.openRecordToolStripMenuItem.Click += new System.EventHandler(this.openRecordToolStripMenuItem_Click);
+            // 
+            // copyRecordUrlToolStripMenuItem
+            // 
+            this.copyRecordUrlToolStripMenuItem.Enabled = false;
+            this.copyRecordUrlToolStripMenuItem.Name = "copyRecordUrlToolStripMenuItem";
+            this.copyRecordUrlToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
+            this.copyRecordUrlToolStripMenuItem.Text = "Copy Record Url";
+            this.copyRecordUrlToolStripMenuItem.Click += new System.EventHandler(this.copyRecordUrlToolStripMenuItem_Click);
             // 
             // createSELECTStatementToolStripMenuItem
             // 
@@ -378,5 +388,6 @@
         private System.Windows.Forms.ToolStripMenuItem openRecordToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem createSELECTStatementToolStripMenuItem;
         private System.Windows.Forms.Label environmentHighlightLabel;
+        private System.Windows.Forms.ToolStripMenuItem copyRecordUrlToolStripMenuItem;
     }
 }
