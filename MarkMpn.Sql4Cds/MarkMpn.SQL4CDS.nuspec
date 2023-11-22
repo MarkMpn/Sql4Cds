@@ -20,15 +20,37 @@ Supports
 Where possible the queries are converted to FetchXML, allowing you to generate FetchXML queries for
 plugins or integrations by writing familiar SQL and converting it.
 
-Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
+Queries can also run using the preview TDS Endpoint. A wide range of SQL functionality is also built
+in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed use of IN subqueries when data source cannot be converted to FetchXML
-Fixed use of LIKE filters with data containing embedded returns
-Fixed incorrect row count estimates with joins of huge tables
-Fixed left outer join in nested loop when the first record has no matching records from the right source
-Fixed use of partitioned aggregates within a loop
-Avoid errors when using DEBUG_BYPASS_OPTIMIZATION hint
-Avoid using custom paging for IN and EXISTS filters, and where a single child record is guaranteed by the filters
+    <releaseNotes>Added Common Table Expression support:
+- Non-recursive CTEs are expanded to subqueries for compatibility with TDS Endpoint
+- Recurve CTEs are converted to hierarchical FetchXML filters where possible
+
+Extended JSON support:
+- OPENJSON table-valued function
+- JSON_QUERY function
+- ISJSON function
+
+Query optimizer improvements:
+- Prefer hash joins over merge joins if sorts cannot be folded
+- Switch FetchXML sorts to custom sorting after adding joins that require custom paging
+- Avoid folding filters to tables in subqueries if the same alias exists in the outer query
+- Do not use a left outer join to implement `NOT IN` queries where the subquery uses an inner join
+
+Added IGNORE_DUP_KEY query hint to ignore duplicate key errors on insert
+Added check for multi-currency issues when aggregating non-base currency fields
+Clearer progress messages for multi-threaded DML operations
+Added autocomplete literal value suggestions for entityname attributes
+
+Fixed inconsistent display of plugin log messages in error message output
+Fixed use of `UNION` with wildcard columns
+Fixed error in nested loop joins with no records from inner source
+Fixed use of columns from outer queries in join criteria in subqueries
+Fixed time zone mismatch when starting bulk delete jobs
+Fixed setting polymorphic lookup fields using TDS Endpoint
+Fixed aggregates with very dense data distribution
+Preserve comments when formatting query
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
