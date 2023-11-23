@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
                     _ = _lsp.NotifyAsync(Methods.WindowLogMessage, new LogMessageParams
                     {
                         MessageType = MessageType.Warning,
-                        Message = $"Update to v{result.Result.ToString(3)} available from https://markcarrington.dev/sql-4-cds/"
+                        Message = $"Update to v{result.Result.ToString(3)} available from https://github.com/MarkMpn/Sql4Cds/releases/download/v{result.Result.ToString(3)}/azuredatastudio-sql4cds-{result.Result.ToString(3)}.vsix"
                     });
                 }
             }, TaskScheduler.Default);
