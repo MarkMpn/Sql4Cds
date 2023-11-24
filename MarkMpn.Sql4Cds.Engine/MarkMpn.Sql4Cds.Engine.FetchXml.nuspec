@@ -18,8 +18,10 @@
   </metadata>
   <files>
     <file src="AttributeMetadataCache.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\AttributeMetadataCache.cs" />
+    <file src="DatabaseIdentifiers.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\DatabaseIdentifiers.cs" />
     <file src="DisconnectedException.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\DisconnectedException.cs" />
     <file src="FetchXml.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\FetchXml.cs" />
+    <file src="FetchXml.Extensions.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\FetchXml.Extensions.cs" />
     <file src="FetchXml2Sql.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\FetchXml2Sql.cs" />
     <file src="IAttributeMetadataCache.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\IAttributeMetadataCache.cs" />
     <file src="ScriptDom.cs" target="content\App_Packages\MarkMpn.Sql4Cds.Engine\ScriptDom.cs" />

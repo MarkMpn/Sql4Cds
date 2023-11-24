@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public string Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         JobName = $"SQL 4 CDS {GetDisplayName(0, meta)} Bulk Delete Job",
                         QuerySet = new[] { query },
-                        StartDateTime = DateTime.Now,
+                        StartDateTime = DateTime.UtcNow,
                         RecurrencePattern = String.Empty,
                         SendEmailNotification = false,
                         ToRecipients = Array.Empty<Guid>(),
@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     recordsAffected = 1;
                     context.ParameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, "asyncoperation", resp.JobId);
-                    return $"Bulk delete job started";
+                    context.Log("Bulk delete job started");
                 }
             }
             catch (QueryExecutionException ex)

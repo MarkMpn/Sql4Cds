@@ -304,7 +304,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 .SingleOrDefault(p => p.GetCustomAttribute<DictionaryKeyAttribute>() != null);
 
             if (dictionaryKeyProperty != null)
-                return dictionaryKeyProperty.GetValue(item).ToString();
+                return dictionaryKeyProperty.GetValue(item)?.ToString() ?? " ";
 
             return index.ToString().PadLeft((int)Math.Ceiling(Math.Log10(list.Count)), '0');
         }

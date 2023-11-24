@@ -42,6 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine
             DbParameterCollection = new Sql4CdsParameterCollection();
 
             _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
+            _planBuilder.Log = msg => _connection.OnInfoMessage(null, msg);
         }
 
         /// <summary>
@@ -116,6 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 _connection = con;
                 _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
+                _planBuilder.Log = msg => _connection.OnInfoMessage(null, msg);
                 Plan = null;
                 UseTDSEndpointDirectly = false;
             }

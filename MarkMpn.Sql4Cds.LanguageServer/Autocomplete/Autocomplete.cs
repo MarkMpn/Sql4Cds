@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Data8.PowerPlatform.Dataverse.Client.Wsdl;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
@@ -568,13 +569,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                             {
                                 // Check if there are any applicable filter operator functions that match the type of the current attribute
                                 var identifiers = prevPrevWord.Split('.');
+                                var instance = default(AutocompleteDataSource);
+                                var entity = default(EntityMetadata);
                                 var attribute = default(AttributeMetadata);
 
                                 if (identifiers.Length == 2)
                                 {
                                     if (tables.TryGetValue(identifiers[0], out var tableName))
                                     {
-                                        if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var entity))
+                                        if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out instance) && instance.Metadata.TryGetMinimalData(tableName, out entity))
                                         {
                                             attribute = entity.Attributes.SingleOrDefault(a => a.LogicalName.Equals(identifiers[1], StringComparison.OrdinalIgnoreCase));
                                         }
@@ -584,7 +587,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                                 {
                                     foreach (var table in tables.Values)
                                     {
-                                        if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var entity))
+                                        if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out instance) && instance.Metadata.TryGetMinimalData(tableName, out entity))
                                         {
                                             var tableAttribute = entity.Attributes.SingleOrDefault(a => a.LogicalName.Equals(identifiers[0], StringComparison.OrdinalIgnoreCase));
 
@@ -623,8 +626,25 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                                             items.AddRange(typeof(FetchXmlConditionMethods).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.GetParameters()[0].ParameterType == expectedType).Select(m => new FunctionAutocompleteItem(m, currentLength)));
                                     }
 
-                                    if (attribute is EnumAttributeMetadata enumAttr)
+                                    if (attribute is EntityNameAttributeMetadata entityNameAttr)
+                                    {
+                                        var lookupAttr = entity.Attributes.SingleOrDefault(a => a.LogicalName == entityNameAttr.AttributeOf) as LookupAttributeMetadata;
+
+                                        if (lookupAttr?.Targets == null || lookupAttr.Targets.Length == 0)
+                                        {
+                                            // Could be any entity name, show them all
+                                            items.AddRange(instance.Entities.Select(e => new EntityNameAutocompleteItem(e, currentLength)));
+                                        }
+                                        else
+                                        {
+                                            // Can only be one of the allowed entity types
+                                            items.AddRange(instance.Entities.Where(e => lookupAttr.Targets.Contains(e.LogicalName)).Select(e => new EntityNameAutocompleteItem(e, currentLength)));
+                                        }
+                                    }
+                                    else if (attribute is EnumAttributeMetadata enumAttr)
+                                    {
                                         items.AddRange(enumAttr.OptionSet.Options.Select(o => new OptionSetAutocompleteItem(o, currentLength)));
+                                    }
                                 }
                             }
 
@@ -1797,6 +1817,33 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             {
                 get => _option.Label?.UserLocalizedLabel?.Label ?? Text;
                 set => base.ToolTipText = value;
+            }
+        }
+
+        class EntityNameAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly EntityMetadata _entity;
+
+            public EntityNameAutocompleteItem(EntityMetadata entity, int replaceLength) : base(entity.LogicalName, replaceLength, CompletionItemKind.Text)
+            {
+                _entity = entity;
+            }
+
+            public override string ToolTipTitle
+            {
+                get => _entity.DisplayName?.UserLocalizedLabel?.Label ?? _entity.LogicalName;
+                set => base.ToolTipTitle = value;
+            }
+
+            public override string ToolTipText
+            {
+                get => _entity.Description?.UserLocalizedLabel?.Label;
+                set => base.ToolTipText = value;
+            }
+
+            public override string GetTextForReplace()
+            {
+                return "'" + _entity.LogicalName + "'";
             }
         }
 

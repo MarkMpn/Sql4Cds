@@ -19,6 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         private readonly IAttributeMetadataCache _metadata;
         private readonly Dictionary<string, string> _tableNames;
         private readonly HashSet<string> _supportedTables;
+        private readonly Dictionary<string, CommonTableExpression> _ctes;
         private bool? _isEntireBatch;
         private TSqlFragment _root;
 
@@ -30,11 +31,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         /// <param name="isEntireBatch">Indicates if this query is the entire SQL batch, or a single statement within it</param>
         /// <param name="outerTableNames">A mapping of table aliases to table names available from the outer query</param>
         /// <param name="supportedTables">A pre-calculated list of supported tables</param>
-        public TDSEndpointCompatibilityVisitor(IDbConnection con, IAttributeMetadataCache metadata, bool? isEntireBatch = null, Dictionary<string, string> outerTableNames = null, HashSet<string> supportedTables = null)
+        /// <param name="ctes">A mapping of CTE names to their definitions from the outer query</param>
+        public TDSEndpointCompatibilityVisitor(IDbConnection con, IAttributeMetadataCache metadata, bool? isEntireBatch = null, Dictionary<string, string> outerTableNames = null, HashSet<string> supportedTables = null, Dictionary<string, CommonTableExpression> ctes = null)
         {
             _con = con;
             _metadata = metadata;
             _tableNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            _ctes = ctes ?? new Dictionary<string, CommonTableExpression>(StringComparer.OrdinalIgnoreCase);
             _isEntireBatch = isEntireBatch;
 
             if (outerTableNames != null)
@@ -68,6 +71,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public bool IsCompatible { get; private set; }
 
+        public bool RequiresCteRewrite { get; private set; }
+
         public override void Visit(TSqlFragment node)
         {
             if (_root == null)
@@ -93,9 +98,10 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 return;
             }
 
-            if (_supportedTables != null && !_supportedTables.Contains(node.SchemaObject.BaseIdentifier.Value))
+            if (_supportedTables != null && !_supportedTables.Contains(node.SchemaObject.BaseIdentifier.Value) &&
+                (node.SchemaObject.Identifiers.Count != 1 || !_ctes.ContainsKey(node.SchemaObject.BaseIdentifier.Value)))
             {
-                // Table does not exist in TDS endpoint
+                // Table does not exist in TDS endpoint and is not defined as a CTE
                 IsCompatible = false;
                 return;
             }
@@ -121,13 +127,24 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     // Table name not specified. Try to find it in the list of current tables
                     foreach (var table in _tableNames.Values)
                     {
-                        var attribute = TryGetEntity(table)?.Attributes?.SingleOrDefault(a => a.LogicalName.Equals(columnName));
-
-                        if (!AttributeIsSupported(attribute))
+                        if (!GetCTECols(table, out _))
                         {
-                            IsCompatible = false;
-                            return;
+                            var attribute = TryGetEntity(table)?.Attributes?.SingleOrDefault(a => a.LogicalName.Equals(columnName));
+
+                            if (!AttributeIsSupported(attribute))
+                            {
+                                IsCompatible = false;
+                                return;
+                            }
                         }
+                    }
+                }
+                else if (GetCTECols(node.MultiPartIdentifier[0].Value, out var cols))
+                {
+                    if (!cols.Contains(columnName))
+                    {
+                        IsCompatible = false;
+                        return;
                     }
                 }
                 else
@@ -143,6 +160,51 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             }
 
             base.Visit(node);
+        }
+
+        private bool GetCTECols(string cteName, out HashSet<string> cols)
+        {
+            cols = null;
+
+            if (!_ctes.TryGetValue(cteName, out var cte))
+                return false;
+
+            cols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (cte.Columns.Count > 0)
+            {
+                foreach (var col in cte.Columns)
+                    cols.Add(col.Value);
+            }
+            else
+            {
+                var query = cte.QueryExpression;
+
+                while (query is BinaryQueryExpression bin)
+                    query = bin.FirstQueryExpression;
+
+                if (!(query is QuerySpecification spec))
+                    return false;
+
+                // Can't easily work out the column names that will be produced by a SELECT * within a CTE
+                if (spec.SelectElements.OfType<SelectStarExpression>().Any())
+                    return false;
+
+                foreach (var col in spec.SelectElements.OfType<SelectScalarExpression>())
+                {
+                    if (!(col is SelectScalarExpression sse))
+                        return false;
+
+                    if (sse.ColumnName != null)
+                        cols.Add(sse.ColumnName.Value);
+                    else if (sse.Expression is ColumnReferenceExpression cre)
+                        cols.Add(cre.MultiPartIdentifier.Identifiers.Last().Value);
+                    else
+                        return false;
+                }
+            }
+
+            return true;
         }
 
         private EntityMetadata TryGetEntity(string logicalname)
@@ -227,11 +289,14 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, _tableNames, _supportedTables);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, _tableNames, _supportedTables, _ctes);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
                     IsCompatible = false;
+
+                if (subVisitor.RequiresCteRewrite)
+                    RequiresCteRewrite = true;
 
                 return;
             }
@@ -244,11 +309,14 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables, ctes: _ctes);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
                     IsCompatible = false;
+
+                if (subVisitor.RequiresCteRewrite)
+                    RequiresCteRewrite = true;
 
                 return;
             }
@@ -256,21 +324,30 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             base.Visit(node);
         }
 
-        public override void Visit(SelectStatement node)
+        public override void ExplicitVisit(SelectStatement node)
         {
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables, ctes: _ctes);
+                subVisitor._root = node;
+
+                // Visit CTEs first
+                if (node.WithCtesAndXmlNamespaces != null)
+                    node.WithCtesAndXmlNamespaces.Accept(subVisitor);
+
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
                     IsCompatible = false;
 
+                if (subVisitor.RequiresCteRewrite)
+                    RequiresCteRewrite = true;
+
                 return;
             }
 
-            base.Visit(node);
+            base.ExplicitVisit(node);
         }
 
         public override void Visit(QuerySpecification node)
@@ -320,6 +397,24 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             // Can't use IS [NOT] DISTINCT FROM
             IsCompatible = false;
+        }
+
+        public override void Visit(CommonTableExpression node)
+        {
+            var cteValidator = new CteValidatorVisitor();
+            node.Accept(cteValidator);
+
+            if (cteValidator.IsRecursive)
+            {
+                IsCompatible = false;
+            }
+            else
+            {
+                // TDS Endpoint doesn't support CTEs but we can rewrite non-recursive ones as subqueries
+                RequiresCteRewrite = true;
+            }
+
+            _ctes[node.ExpressionName.Value] = node;
         }
     }
 }

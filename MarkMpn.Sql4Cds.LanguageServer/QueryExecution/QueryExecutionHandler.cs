@@ -6,6 +6,7 @@ using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.ServiceModel;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -18,11 +19,9 @@ using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
-using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 {
@@ -34,7 +33,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         private readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
         private readonly ConcurrentDictionary<string, IDbCommand> _commands;
         private readonly ConcurrentDictionary<string, ManualResetEventSlim> _confirmationEvents;
-        private readonly ConcurrentDictionary<string, bool> _confirmationResults;
+        private readonly ConcurrentDictionary<string, ConfirmationResult> _confirmationResults;
 
         public QueryExecutionHandler(JsonRpc lsp, ConnectionManager connectionManager, TextDocumentManager documentManager)
         {
@@ -44,7 +43,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             _resultSets = new ConcurrentDictionary<string, List<ResultSetSummary>>();
             _commands = new ConcurrentDictionary<string, IDbCommand>();
             _confirmationEvents = new ConcurrentDictionary<string, ManualResetEventSlim>();
-            _confirmationResults = new ConcurrentDictionary<string, bool>();
+            _confirmationResults = new ConcurrentDictionary<string, ConfirmationResult>();
         }
 
         public void Initialize(JsonRpc lsp)
@@ -101,7 +100,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     qry += '\n';
                 }
 
-                await Execute(session, request, qry, request.QuerySelection);
+                await ExecuteAsync(session, request, qry, request.QuerySelection);
             });
 
             return new ExecuteRequestResult();
@@ -124,13 +123,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             _ = Task.Run(async () =>
             {
                 var lines = request.Query.Split('\n');
-                await Execute(session, request, request.Query, new SelectionData { StartLine =0, StartColumn = 0, EndLine = lines.Length - 1, EndColumn = lines[lines.Length - 1].Length  });
+                await ExecuteAsync(session, request, request.Query, new SelectionData { StartLine =0, StartColumn = 0, EndLine = lines.Length - 1, EndColumn = lines[lines.Length - 1].Length  });
             });
 
             return new ExecuteRequestResult();
         }
 
-        private async Task Execute(Connection.Session session, ExecuteRequestParamsBase request, string qry, SelectionData selection)
+        private async Task ExecuteAsync(Connection.Session session, ExecuteRequestParamsBase request, string qry, SelectionData selection)
         {
             // query/batchStart (BatchEventParams)
             // query/message (MessagePArams)
@@ -140,6 +139,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             // query/batchComplete (BatchEventParams)
             var startTime = DateTime.UtcNow;
             ResultSetSummary resultSetInProgress = null;
+            var bypassWarnings = false;
 
             var batchSummary = new BatchSummary
             {
@@ -192,7 +192,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             {
                 e.Cancel = false;
 
-                if (e.Count > threshold || e.BypassCustomPluginExecution)
+                if ((e.Count > threshold || e.BypassCustomPluginExecution) && !bypassWarnings)
                 {
                     var msg = $"{operation} will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
                     if (e.BypassCustomPluginExecution)
@@ -203,7 +203,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     _confirmationEvents[request.OwnerUri] = evt;
                     _ = _lsp.NotifyAsync(ConfirmationRequest.Type, new ConfirmationParams { OwnerUri = request.OwnerUri, Msg = msg });
                     evt.Wait();
-                    e.Cancel = !_confirmationResults[request.OwnerUri];
+                    e.Cancel = _confirmationResults[request.OwnerUri] == ConfirmationResult.No;
+                    bypassWarnings = _confirmationResults[request.OwnerUri] == ConfirmationResult.All;
                     _confirmationEvents.Remove(request.OwnerUri, out _);
                     _confirmationResults.Remove(request.OwnerUri, out _);
                 };
@@ -400,7 +401,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     {
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
-                        Message = ex.Message,
+                        Message = GetErrorMessage(ex),
                         IsError = true
                     }
                 });
@@ -505,6 +506,54 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         batchSummary
                     }
             });
+        }
+
+        private string GetErrorMessage(Exception error)
+        {
+            string msg;
+
+            if (error is AggregateException aggregateException)
+                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
+            else
+                msg = error.Message;
+
+            while (error.InnerException != null)
+            {
+                if (error.InnerException.Message != error.Message)
+                    msg += "\r\n" + error.InnerException.Message;
+
+                error = error.InnerException;
+            }
+
+            if (error is FaultException<OrganizationServiceFault> faultEx)
+            {
+                var fault = faultEx.Detail;
+
+                if (fault.Message != error.Message)
+                    msg += "\r\n" + fault.Message;
+
+                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
+                    msg += "\r\nError from plugin: " + plugin;
+
+                if (!String.IsNullOrEmpty(fault.TraceText))
+                    msg += "\r\nTrace log: " + fault.TraceText;
+
+                while (fault.InnerFault != null)
+                {
+                    if (fault.InnerFault.Message != fault.Message)
+                        msg += "\r\n" + fault.InnerFault.Message;
+
+                    fault = fault.InnerFault;
+
+                    if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out plugin))
+                        msg += "\r\nError from plugin: " + plugin;
+
+                    if (!String.IsNullOrEmpty(fault.TraceText))
+                        msg += "\r\nTrace log: " + fault.TraceText;
+                }
+            }
+
+            return msg;
         }
 
         private string GetDisplayName(int count, EntityMetadata meta)
@@ -676,6 +725,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 converted.Type = "languageConstructCatchAll";
             else if (converted.Type == "xmlWriter")
                 converted.Type = "udx";
+            else if (converted.Type == "adaptiveIndexSpool")
+                converted.Type = "indexSpool";
+            else if (converted.Type == "openJson")
+                converted.Type = "tableValuedFunction";
+            else if (converted.Type == "systemFunction")
+                converted.Type = "tableValuedFunction";
 
             // Get the filtered list of properties
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);

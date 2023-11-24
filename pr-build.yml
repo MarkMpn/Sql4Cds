@@ -57,11 +57,13 @@ steps:
 - task: NodeTool@0
   displayName: Install Node.js
   inputs:
-    versionSpec: '18.x'
+    versionSpec: '20.x'
 
 - script: |
     call npm --no-git-tag-version version $(GitVersion.SemVer)
     call npm i -g vsce
+    call git config --global url."https://github".insteadOf ssh://git@github
+    call git config --global url."https://github.com/".insteadOf git@github.com:
     call yarn install
     call gulp build
   displayName: Build ADS extension

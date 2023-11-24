@@ -8,6 +8,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
+using System.Xml;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -62,13 +63,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
         {
-            var context = new NodeExecutionContext(_connection.DataSources, _options, parameterTypes, parameterValues);
+            IRootExecutionPlanNode logNode = null;
+            var context = new NodeExecutionContext(_connection.DataSources, _options, parameterTypes, parameterValues, msg => _connection.OnInfoMessage(logNode, msg));
 
             try
             {
                 while (_instructionPointer < _command.Plan.Length && !_options.CancellationToken.IsCancellationRequested)
                 {
                     var node = _command.Plan[_instructionPointer];
+                    logNode = node;
 
                     if (node is IDataReaderExecutionPlanNode dataSetNode)
                     {
@@ -90,10 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else if (node is IDmlQueryExecutionPlanNode dmlNode)
                     {
                         dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
-                        var msg = dmlNode.Execute(context, out var recordsAffected);
-
-                        if (!String.IsNullOrEmpty(msg))
-                            _connection.OnInfoMessage(dmlNode, msg);
+                        dmlNode.Execute(context, out var recordsAffected);
 
                         _command.OnStatementCompleted(dmlNode, recordsAffected);
 

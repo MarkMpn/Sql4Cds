@@ -165,6 +165,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Add the mappings to the FetchXML to produce the columns with the expected names, and hide all other possible columns
             var originalAlias = fetchXml.Alias.EscapeIdentifier();
             fetchXml.Alias = Alias;
+            fetchXml.ColumnMappings.Clear();
 
             var escapedAlias = Alias.EscapeIdentifier();
 
@@ -192,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Map the base names to the alias names
             var sourceSchema = Source.GetSchema(context);
             var schema = new ColumnList();
-            var aliases = new Dictionary<string, IReadOnlyList<string>>();
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = (string)null;
             var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var escapedAlias = Alias.EscapeIdentifier();
@@ -300,7 +301,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
 
             clone.Source.Parent = clone;
-            clone.ColumnSet.AddRange(ColumnSet);
+
+            foreach (var col in ColumnSet)
+            {
+                clone.ColumnSet.Add(new SelectColumn
+                {
+                    AllColumns = col.AllColumns,
+                    OutputColumn = col.OutputColumn,
+                    SourceColumn = col.SourceColumn,
+                    SourceExpression = col.SourceExpression,
+                });
+            }
 
             return clone;
         }

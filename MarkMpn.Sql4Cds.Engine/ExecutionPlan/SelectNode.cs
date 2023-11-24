@@ -122,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             foreach (var link in fetchXml.Entity.GetLinkEntities())
                             {
-                                if (link.SemiJoin)
+                                if (link.SemiJoin || fetchXml.HiddenAliases.Contains(link.alias))
                                     continue;
 
                                 if (fetchXml.HiddenAliases.Contains(link.alias))

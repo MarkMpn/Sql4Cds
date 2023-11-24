@@ -110,6 +110,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return Alias + "." + columnName;
         }
+
+        public override string ToString()
+        {
+            return $"Table Valued Function\r\n[{SystemFunction}]";
+        }
     }
 
     enum SystemFunction

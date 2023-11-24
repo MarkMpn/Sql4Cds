@@ -17,12 +17,13 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class ExecutionPlanOptimizer
     {
-        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, bool compileConditions)
+        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, bool compileConditions, Action<string> log)
         {
             DataSources = dataSources;
             Options = options;
             ParameterTypes = parameterTypes;
             CompileConditions = compileConditions;
+            Log = log;
         }
 
         public IDictionary<string, DataSource> DataSources { get; }
@@ -32,6 +33,8 @@ namespace MarkMpn.Sql4Cds.Engine
         public IDictionary<string, DataTypeReference> ParameterTypes { get; }
 
         public bool CompileConditions { get; }
+
+        public Action<string> Log { get; }
 
         /// <summary>
         /// Optimizes an execution plan
@@ -49,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 hints.Add(new ConditionalNode.DoNotCompileConditionsHint());
             }
 
-            var context = new NodeCompilationContext(DataSources, Options, ParameterTypes);
+            var context = new NodeCompilationContext(DataSources, Options, ParameterTypes, Log);
 
             // Move any additional operators down to the FetchXml
             var bypassOptimization = hints != null && hints.OfType<UseHintList>().Any(list => list.Hints.Any(h => h.Value.Equals("DEBUG_BYPASS_OPTIMIZATION", StringComparison.OrdinalIgnoreCase)));

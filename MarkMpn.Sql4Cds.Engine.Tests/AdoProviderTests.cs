@@ -1325,17 +1325,6 @@ FOR XML PATH";
         }
 
         [TestMethod]
-        public void JsonValueNull()
-        {
-            using (var con = new Sql4CdsConnection(_localDataSource))
-            using (var cmd = con.CreateCommand())
-            {
-                cmd.CommandText = "SELECT JSON_VALUE('{ \"changedAttributes\": [ { \"logicalName\": \"column1\", \"oldValue\": null, \"newValue\": \"\" } ] }', '$.changedAttributes[0].oldValue')";
-                Assert.AreEqual(DBNull.Value, cmd.ExecuteScalar());
-            }
-        }
-
-        [TestMethod]
         public void VariantType()
         {
             using (var con = new Sql4CdsConnection(_localDataSource))

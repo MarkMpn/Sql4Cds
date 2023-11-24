@@ -5,6 +5,7 @@ using System.Linq;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -53,6 +54,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Insert")]
         public override bool ContinueOnError { get; set; }
 
+        [Category("Insert")]
+        [DisplayName("Ignore Duplicate Key")]
+        [Description("Ignores any duplicate key errors encountered. Errors will be logged but the query will complete.")]
+        public bool IgnoreDuplicateKey { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             foreach (var col in ColumnMappings.Values)
@@ -64,7 +70,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override string Execute(NodeExecutionContext context, out int recordsAffected)
+        public override IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            IgnoreDuplicateKey = GetIgnoreDuplicateKey(context, hints);
+
+            return base.FoldQuery(context, hints);
+        }
+
+        private bool GetIgnoreDuplicateKey(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            var ignoreDupKey = GetIgnoreDuplicateKeyHint(queryHints);
+
+            if (!ignoreDupKey && LogicalName == "listmember")
+            {
+                ignoreDupKey = true;
+                context.Log("Duplicate entries will be silently ignored for listmember inserts");
+            }
+
+            return ignoreDupKey;
+        }
+
+        private bool GetIgnoreDuplicateKeyHint(IList<OptimizerHint> queryHints)
+        {
+            if (queryHints == null)
+                return false;
+
+            var ignoreDupKey = queryHints
+                .OfType<UseHintList>()
+                .Where(hint => hint.Hints.Any(s => s.Value.Equals("IGNORE_DUP_KEY", StringComparison.OrdinalIgnoreCase)))
+                .Any();
+
+            return ignoreDupKey;
+        }
+
+        public override void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -101,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    return ExecuteDmlOperation(
+                    ExecuteDmlOperation(
                         dataSource,
                         context.Options,
                         entities,
@@ -113,8 +152,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressLowercase = "inserting",
                             CompletedLowercase = "inserted"
                         },
+                        context,
                         out recordsAffected,
-                        context.ParameterValues,
                         LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, context.ParameterValues))
                         );
                 }
@@ -197,6 +236,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return new CreateRequest { Target = insert };
+        }
+
+        protected override bool FilterErrors(NodeExecutionContext context, OrganizationRequest request, OrganizationServiceFault fault)
+        {
+            if (IgnoreDuplicateKey)
+            {
+                if (fault.ErrorCode == -2147220937 || fault.ErrorCode == -2147088238 || fault.ErrorCode == 409)
+                {
+                    var logMessage = "Ignoring duplicate key error";
+
+                    if (fault.ErrorCode == -2147088238)
+                    {
+                        // Duplicate alternate key. The duplicated values are available in the fault details
+                        if (fault.ErrorDetails.TryGetValue("DuplicateAttributes", out var value) &&
+                            value is string duplicateAttributes)
+                        {
+                            var xml = new XmlDocument();
+                            xml.LoadXml(duplicateAttributes);
+
+                            logMessage += $". The duplicate values were ({String.Join(", ", xml.SelectNodes("/DuplicateAttributes/*").OfType<XmlElement>().Select(attr => attr.InnerText))})";
+                        }
+                    }
+                    else
+                    {
+                        // Duplicate primary key.
+                        if (request is AssociateRequest associate)
+                            logMessage += $". The duplicate values were ({associate.Target.Id}, {associate.RelatedEntities[0].Id})";
+                        else if (request is CreateRequest create)
+                            logMessage += $". The duplicate values were ({create.Target.Id})";
+                    }
+
+                    context.Log(logMessage);
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void SetIdentity(OrganizationResponse response, IDictionary<string, object> parameterValues)
@@ -313,6 +389,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
+                IgnoreDuplicateKey = IgnoreDuplicateKey,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };

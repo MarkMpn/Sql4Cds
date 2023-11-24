@@ -77,15 +77,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns><c>true</c> if the column name exists, or <c>false</c> otherwise</returns>
         public bool ContainsColumn(string column, out string normalized)
         {
+            if (Aliases.TryGetValue(column, out var names))
+            {
+                if (names.Count > 1)
+                {
+                    normalized = null;
+                    return false;
+                }
+
+                if (names.Count == 1)
+                {
+                    normalized = names[0];
+                    return true;
+                }
+            }
+
             if (Schema.TryGetValue(column, out _))
             {
                 normalized = Schema.Keys.Single(k => k.Equals(column, StringComparison.OrdinalIgnoreCase));
-                return true;
-            }
-
-            if (Aliases.TryGetValue(column, out var names) && names.Count == 1)
-            {
-                normalized = names[0];
                 return true;
             }
 

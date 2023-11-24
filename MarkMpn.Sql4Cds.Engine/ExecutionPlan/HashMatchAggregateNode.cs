@@ -21,6 +21,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class HashMatchAggregateNode : BaseAggregateNode
     {
+        class MultiCurrencyAggregateException : ApplicationException
+        {
+            public MultiCurrencyAggregateException(string message) : base(message)
+            {
+            }
+        }
+
         private bool _folded;
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
@@ -124,6 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Check if all the aggregates & groupings can be done in FetchXML. Can only convert them if they can ALL
                 // be handled - if any one needs to be calculated manually, we need to calculate them all.
                 var canUseFetchXmlAggregate = true;
+                var addMultiCurrencyCheck = false;
 
                 // Also track if we can partition the query for larger source data sets. We can't partition DISTINCT aggregates,
                 // and need to transform AVG(field) to SUM(field) / COUNT(field)
@@ -467,6 +475,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if ((attr is LookupAttributeMetadata || attr is UniqueIdentifierAttributeMetadata || attr?.IsPrimaryId == true) && (aggregateType == FetchXml.AggregateType.min || aggregateType == FetchXml.AggregateType.max))
                             canUseFetchXmlAggregate = false;
 
+                        // Can't do do aggregation on money values in multi-currency orgs
+                        if (attr is MoneyAttributeMetadata money && money.IsBaseCurrency == false)
+                            addMultiCurrencyCheck = true;
+
                         var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _, out _);
 
                         if (attribute.name != attr?.LogicalName)
@@ -496,6 +508,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return nonFetchXmlAggregate;
 
                 IDataExecutionPlanNodeInternal firstTry = fetchXml;
+
+                if (addMultiCurrencyCheck)
+                {
+                    var currencyCheckFetchXml = new FetchXmlScan
+                    {
+                        DataSource = fetchXml.DataSource,
+                        Alias = context.GetExpressionName(),
+                        FetchXml = new FetchXml.FetchType
+                        {
+                            top = "2",
+                            Items = new object[]
+                            {
+                                new FetchEntityType
+                                {
+                                    name = "transactioncurrency",
+                                    Items = new object[]
+                                    {
+                                        new FetchAttributeType
+                                        {
+                                            name = "transactioncurrencyid"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    var currencyCount = new StreamAggregateNode
+                    {
+                        Source = currencyCheckFetchXml,
+                        Aggregates =
+                        {
+                            [context.GetExpressionName()] = new Aggregate
+                            {
+                                AggregateType = AggregateType.CountStar
+                            }
+                        }
+                    };
+                    var singleCurrencyAssert = new AssertNode
+                    {
+                        Source = currencyCount,
+                        Assertion = e => ((SqlInt32)e[currencyCount.Aggregates.Single().Key]).Value == 1,
+                        ErrorMessage = "Multiple currencies found - aggregating non-base currency values is not supported in FetchXML",
+                        ExceptionConstructor = msg => new MultiCurrencyAggregateException(msg)
+                    };
+                    firstTry = new NestedLoopNode
+                    {
+                        LeftSource = singleCurrencyAssert,
+                        RightSource = firstTry,
+                        JoinType = QualifiedJoinType.Inner
+                    };
+                }
 
                 // If the main aggregate query fails due to having over 50K records, check if we can retry with partitioning. We
                 // need a createdon field to be available for this to work.
@@ -630,7 +693,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     TrySource = firstTry,
                     CatchSource = nonFetchXmlAggregate,
-                    ExceptionFilter = ex => (ex is QueryExecutionException qee && (qee.InnerException is PartitionedAggregateNode.PartitionOverflowException || qee.InnerException is FetchXmlScan.InvalidPagingException)) || (GetOrganizationServiceFault(ex, out var fault) && (IsAggregateQueryRetryable(fault) || IsCompositeAddressPluginBug(fault)))
+                    ExceptionFilter = ex => (ex is QueryExecutionException qee && (qee.InnerException is PartitionedAggregateNode.PartitionOverflowException || qee.InnerException is FetchXmlScan.InvalidPagingException || qee.InnerException is MultiCurrencyAggregateException)) || (GetOrganizationServiceFault(ex, out var fault) && (IsAggregateQueryRetryable(fault) || IsCompositeAddressPluginBug(fault)))
                 };
 
                 firstTry.Parent = tryCatch;

@@ -390,5 +390,19 @@ namespace MarkMpn.Sql4Cds.Tests
 
             CollectionAssert.IsSubsetOf(new[] { "@i", "@x", "@@ROWCOUNT", "@@IDENTITY", "@@SERVERNAME", "@@VERSION" }, suggestions);
         }
+
+        [TestMethod]
+        public void SuggestVariablesWithoutFrom()
+        {
+            var sql = @"
+                DECLARE @i int
+                DECLARE @x varchar
+
+                SELECT ";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.IsSubsetOf(new[] { "@i", "@x", "@@ROWCOUNT", "@@IDENTITY", "@@SERVERNAME", "@@VERSION" }, suggestions);
+        }
     }
 }

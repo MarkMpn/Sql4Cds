@@ -20,6 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private ExpressionCompilationContext _staticContext;
         private NodeCompilationContext _nodeContext;
+        private Dictionary<string, AliasNode> _cteSubplans;
 
         public ExecutionPlanBuilder(IEnumerable<DataSource> dataSources, IQueryExecutionOptions options)
         {
@@ -47,6 +48,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public bool EstimatedPlanOnly { get; set; }
 
+        /// <summary>
+        /// A callback function to log messages
+        /// </summary>
+        public Action<string> Log { get; set; }
+
         private DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
 
         /// <summary>
@@ -62,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // affecting the original collection until the query is actually run
             var parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
             _staticContext = new ExpressionCompilationContext(DataSources, Options, parameterTypes, null, null);
-            _nodeContext = new NodeCompilationContext(DataSources, Options, parameterTypes);
+            _nodeContext = new NodeCompilationContext(DataSources, Options, parameterTypes, Log);
 
             if (parameters != null)
             {
@@ -97,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata);
                     fragment.Accept(tdsEndpointCompatibilityVisitor);
 
-                    if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                    if (tdsEndpointCompatibilityVisitor.IsCompatible && !tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
                     {
                         useTDSEndpointDirectly = true;
                         var sqlNode = new SqlNode
@@ -124,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
             script.Accept(new ExplicitCollationVisitor());
-            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, parameterTypes, !EstimatedPlanOnly);
+            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, parameterTypes, !EstimatedPlanOnly, _nodeContext.Log);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -166,7 +172,220 @@ namespace MarkMpn.Sql4Cds.Engine
             var originalSql = statement.ToSql();
 
             IRootExecutionPlanNodeInternal[] plans;
-            var hints = statement is StatementWithCtesAndXmlNamespaces stmtWithCtes ? stmtWithCtes.OptimizerHints : null;
+            IList<OptimizerHint> hints = null;
+            _cteSubplans = new Dictionary<string, AliasNode>(StringComparer.OrdinalIgnoreCase);
+
+            if (statement is StatementWithCtesAndXmlNamespaces stmtWithCtes)
+            {
+                hints = stmtWithCtes.OptimizerHints;
+
+                if (stmtWithCtes.WithCtesAndXmlNamespaces != null)
+                {
+                    foreach (var cte in stmtWithCtes.WithCtesAndXmlNamespaces.CommonTableExpressions)
+                    {
+                        if (_cteSubplans.ContainsKey(cte.ExpressionName.Value))
+                            throw new NotSupportedQueryFragmentException($"A CTE with the name '{cte.ExpressionName.Value}' has already been declared.", cte.ExpressionName);
+
+                        var cteValidator = new CteValidatorVisitor();
+                        cte.Accept(cteValidator);
+
+                        // Start by converting the anchor query to a subquery
+                        var plan = ConvertSelectStatement(cteValidator.AnchorQuery, hints, null, null, _nodeContext);
+
+                        // Apply column aliases
+                        if (cte.Columns.Count > 0)
+                        {
+                            plan.ExpandWildcardColumns(_nodeContext);
+
+                            if (cte.Columns.Count < plan.ColumnSet.Count)
+                                throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has more columns than were specified in the column list.", cte);
+
+                            if (cte.Columns.Count > plan.ColumnSet.Count)
+                                throw new NotSupportedQueryFragmentException($"'{cteValidator.Name}' has fewer columns than were specified in the column list.", cte);
+
+                            for (var i = 0; i < cte.Columns.Count; i++)
+                                plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
+                        }
+
+                        for (var i = 0; i < plan.ColumnSet.Count; i++)
+                        {
+                            if (plan.ColumnSet[i].OutputColumn == null)
+                                throw new NotSupportedQueryFragmentException($"No column name was specified for column {i+1} of '{cteValidator.Name}'", cte);
+                        }
+
+                        var anchorQuery = new AliasNode(plan, cte.ExpressionName, _nodeContext);
+                        _cteSubplans.Add(cte.ExpressionName.Value, anchorQuery);
+
+                        if (cteValidator.RecursiveQueries.Count > 0)
+                        {
+                            anchorQuery = (AliasNode)anchorQuery.Clone();
+                            var ctePlan = anchorQuery.Source;
+                            var anchorSchema = anchorQuery.GetSchema(_nodeContext);
+
+                            // Add a ComputeScalar node to add the initial recursion depth (0)
+                            var recursionDepthField = _nodeContext.GetExpressionName();
+                            var initialRecursionDepthComputeScalar = new ComputeScalarNode
+                            {
+                                Source = ctePlan,
+                                Columns =
+                                {
+                                    [recursionDepthField] = new IntegerLiteral { Value = "0" }
+                                }
+                            };
+
+                            // Add a ConcatenateNode to combine the anchor results with the recursion results
+                            var recurseConcat = new ConcatenateNode
+                            {
+                                Sources = { initialRecursionDepthComputeScalar },
+                            };
+
+                            foreach (var col in anchorQuery.ColumnSet)
+                            {
+                                var concatCol = new ConcatenateColumn
+                                {
+                                    SourceColumns = { col.SourceColumn },
+                                    OutputColumn = col.OutputColumn
+                                };
+
+                                recurseConcat.ColumnSet.Add(concatCol);
+
+                                col.SourceColumn = col.OutputColumn;
+                            }
+
+                            recurseConcat.ColumnSet.Add(new ConcatenateColumn
+                            {
+                                SourceColumns = { recursionDepthField },
+                                OutputColumn = recursionDepthField
+                            });
+
+                            // Add an IndexSpool node in stack mode to enable the recursion
+                            var recurseIndexStack = new IndexSpoolNode
+                            {
+                                Source = recurseConcat,
+                                WithStack = true
+                            };
+
+                            // Pull the same records into the recursive loop
+                            var recurseTableSpool = new TableSpoolNode
+                            {
+                                Producer = recurseIndexStack,
+                                SpoolType = SpoolType.Lazy
+                            };
+
+                            // Increment the depth
+                            var incrementedDepthField = _nodeContext.GetExpressionName();
+                            var incrementRecursionDepthComputeScalar = new ComputeScalarNode
+                            {
+                                Source = recurseTableSpool,
+                                Columns =
+                                {
+                                    [incrementedDepthField] = new BinaryExpression
+                                    {
+                                        FirstExpression = recursionDepthField.ToColumnReference(),
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        SecondExpression = new IntegerLiteral { Value = "1" }
+                                    }
+                                }
+                            };
+
+                            // Use a nested loop to pass through the records to the recusive queries
+                            var recurseLoop = new NestedLoopNode
+                            {
+                                LeftSource = incrementRecursionDepthComputeScalar,
+                                JoinType = QualifiedJoinType.Inner,
+                                OuterReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            };
+
+                            // Capture all CTE fields in the outer references
+                            foreach (var col in anchorSchema.Schema)
+                                recurseLoop.OuterReferences[col.Key.SplitMultiPartIdentifier().Last().EscapeIdentifier()] = "@" + _nodeContext.GetExpressionName();
+
+                            if (cteValidator.RecursiveQueries.Count > 1)
+                            {
+                                // Combine the results of each recursive query with a concat node
+                                var concat = new ConcatenateNode();
+                                recurseLoop.RightSource = concat;
+
+                                foreach (var qry in cteValidator.RecursiveQueries)
+                                {
+                                    var rightSource = ConvertRecursiveCTEQuery(qry, anchorSchema, cteValidator, recurseLoop.OuterReferences);
+                                    concat.Sources.Add(rightSource.Source);
+
+                                    if (concat.Sources.Count == 1)
+                                    {
+                                        for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                        {
+                                            var col = rightSource.ColumnSet[i];
+                                            var expr = _nodeContext.GetExpressionName();
+                                            concat.ColumnSet.Add(new ConcatenateColumn { OutputColumn = expr });
+                                            recurseLoop.DefinedValues.Add(expr, expr);
+                                            recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
+                                        }
+                                    }
+
+                                    for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                        concat.ColumnSet[i].SourceColumns.Add(rightSource.ColumnSet[i].SourceColumn);
+                                }
+                            }
+                            else
+                            {
+                                var rightSource = ConvertRecursiveCTEQuery(cteValidator.RecursiveQueries[0], anchorSchema, cteValidator, recurseLoop.OuterReferences);
+                                recurseLoop.RightSource = rightSource.Source;
+
+                                for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                {
+                                    var col = rightSource.ColumnSet[i];
+                                    var expr = _nodeContext.GetExpressionName();
+
+                                    recurseLoop.DefinedValues.Add(expr, col.SourceColumn);
+                                    recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
+                                }
+                            }
+
+                            // Ensure we don't get stuck in an infinite loop
+                            var maxRecursion = stmtWithCtes.OptimizerHints
+                                .OfType<LiteralOptimizerHint>()
+                                .Where(hint => hint.HintKind == OptimizerHintKind.MaxRecursion)
+                                .FirstOrDefault()
+                                ?.Value
+                                ?.Value
+                                ?? "100";
+
+                            if (!Int32.TryParse(maxRecursion, out var max) || max < 0)
+                                throw new NotSupportedQueryFragmentException("Invalid MAXRECURSION hint", stmtWithCtes.OptimizerHints
+                                .OfType<LiteralOptimizerHint>()
+                                .Where(hint => hint.HintKind == OptimizerHintKind.MaxRecursion)
+                                .First());
+
+                            if (max > 0)
+                            {
+                                var assert = new AssertNode
+                                {
+                                    Source = recurseLoop,
+                                    Assertion = e =>
+                                    {
+                                        var depth = e.GetAttributeValue<SqlInt32>(incrementedDepthField);
+                                        return depth.Value < max;
+                                    },
+                                    ErrorMessage = "Recursion depth exceeded"
+                                };
+
+                                // Combine the recursion results into the main results
+                                recurseConcat.Sources.Add(assert);
+                            }
+                            else
+                            {
+                                recurseConcat.Sources.Add(recurseLoop);
+                            }
+
+                            recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
+
+                            anchorQuery.Source = recurseIndexStack;
+                            _cteSubplans[cte.ExpressionName.Value] = anchorQuery;
+                        }
+                    }
+                }
+            }
 
             if (statement is SelectStatement select)
                 plans = new[] { ConvertSelectStatement(select) };
@@ -222,6 +441,24 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 queries.AddRange(optimized);
             }
+        }
+
+        private SelectNode ConvertRecursiveCTEQuery(QueryExpression queryExpression, INodeSchema anchorSchema, CteValidatorVisitor cteValidator, Dictionary<string, string> outerReferences)
+        {
+            // Convert the query using the anchor query as a subquery to check for ambiguous column names
+            ConvertSelectStatement(queryExpression.Clone(), null, null, null, _nodeContext);
+
+            // Remove recursive references from the FROM clause, moving join predicates to the WHERE clause
+            // If the recursive reference was in an unqualified join, replace it with (SELECT @Expr1, @Expr2) AS cte (field1, field2)
+            // Otherwise, remove it entirely and replace column references with variables
+            var cteReplacer = new RemoveRecursiveCTETableReferencesVisitor(cteValidator.Name, anchorSchema.Schema.Keys.ToArray(), outerReferences);
+            queryExpression.Accept(cteReplacer);
+
+            // Convert the modified query.
+            var childContext = new NodeCompilationContext(_nodeContext, outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[cteValidator.Name.EscapeIdentifier() + "." + kvp.Key.EscapeIdentifier()].Type, StringComparer.OrdinalIgnoreCase));
+            var converted = ConvertSelectStatement(queryExpression, null, null, null, childContext);
+            converted.ExpandWildcardColumns(childContext);
+            return converted;
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertExecuteStatement(ExecuteStatement execute)
@@ -1652,6 +1889,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (tdsEndpointCompatibilityVisitor.IsCompatible && hintCompatibilityVisitor.TdsCompatible)
                     {
+                        if (tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
+                            select.Accept(new ReplaceCtesWithSubqueriesVisitor());
+
                         select.ScriptTokenStream = null;
                         var sql = new SqlNode
                         {
@@ -1678,9 +1918,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (select.On != null)
                 throw new NotSupportedQueryFragmentException("Unsupported ON clause", select.On);
-
-            if (select.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException("Unsupported CTE clause", select.WithCtesAndXmlNamespaces);
 
             var variableAssignments = new List<string>();
             SelectElement firstNonSetSelectElement = null;
@@ -1807,6 +2044,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 concat.Sources.Add(left.Source);
 
+                left.ExpandWildcardColumns(context);
+
                 foreach (var col in left.ColumnSet)
                 {
                     concat.ColumnSet.Add(new ConcatenateColumn
@@ -1819,6 +2058,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             concat.Sources.Add(right.Source);
+
+            right.ExpandWildcardColumns(context);
 
             if (concat.ColumnSet.Count != right.ColumnSet.Count)
                 throw new NotSupportedQueryFragmentException("UNION must have the same number of columns in each query", binary);
@@ -1872,7 +2113,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
-            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
+            var node = querySpec.FromClause == null || querySpec.FromClause.TableReferences.Count == 0 ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
             var logicalSchema = node.GetSchema(context);
 
             node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
@@ -2069,7 +2310,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         // We need the inner list to be distinct to avoid creating duplicates during the join
-                        var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters));
+                        var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
                         if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                         {
                             innerQuery.Source = new DistinctNode
@@ -2168,7 +2409,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var innerContext = new NodeCompilationContext(context, parameters);
                 var references = new Dictionary<string, string>();
                 var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-                var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters));
+                var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
                 var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
 
                 // Create the join
@@ -3102,7 +3343,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         if (EstimateRowsOut(node, context) > 1)
                         {
-                            var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy };
+                            var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy, IsPerformanceSpool = true };
                             loopRightSource = spool;
                         }
                     }
@@ -3213,8 +3454,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (outerKey == null)
                 return false;
 
-            var outerSchema = node.GetSchema(new NodeCompilationContext(DataSources, Options, null));
-            var innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null));
+            var outerSchema = node.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
+            var innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
 
             if (!outerSchema.ContainsColumn(outerKey, out outerKey) ||
                 !innerSchema.ContainsColumn(innerKey, out innerKey))
@@ -3287,7 +3528,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (semiJoin)
             {
                 // Regenerate the schema after changing the alias
-                innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null));
+                innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
 
                 if (innerSchema.PrimaryKey != rightAttribute.GetColumnName() && !(merge.RightSource is DistinctNode))
                 {
@@ -3380,7 +3621,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 var spool = new TableSpoolNode
                 {
                     Source = lastCorrelatedStep.Source,
-                    SpoolType = SpoolType.Lazy
+                    SpoolType = SpoolType.Lazy,
+                    IsPerformanceSpool = true
                 };
 
                 lastCorrelatedStep.Source = spool;
@@ -3459,6 +3701,16 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (reference is NamedTableReference table)
             {
+                if (table.SchemaObject.Identifiers.Count == 1 && _cteSubplans.TryGetValue(table.SchemaObject.BaseIdentifier.Value, out var cteSubplan))
+                {
+                    var aliasNode = (AliasNode)cteSubplan.Clone();
+
+                    if (table.Alias != null)
+                        aliasNode.Alias = table.Alias.Value;
+
+                    return aliasNode;
+                }
+
                 var dataSource = SelectDataSource(table.SchemaObject);
                 var entityName = table.SchemaObject.BaseIdentifier.Value;
 
@@ -3595,6 +3847,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 var rhsSchema = rhs.GetSchema(context);
                 var fixedValueColumns = GetFixedValueColumnsFromWhereClause(query, lhsSchema, rhsSchema);
 
+                // Capture any references to data from an outer query
+                // Use a temporary NestedLoopNode to include the full schema available within this query so far to ensure columns are
+                // used from this query in preference to the outer query.
+                CaptureOuterReferences(outerSchema, new NestedLoopNode { LeftSource = lhs, RightSource = rhs }, join.SearchCondition, context, outerReferences);
+
                 var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                 join.SearchCondition.Accept(joinConditionVisitor);
 
@@ -3696,7 +3953,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // Spool the inner table so the results can be reused by the nested loop
-                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Eager };
+                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Eager, IsPerformanceSpool = true };
 
                     joinNode = new NestedLoopNode
                     {
@@ -3828,6 +4085,48 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     throw new NotSupportedQueryFragmentException("Invalid function name", tvf);
                 }
+
+                if (source == null)
+                    return execute;
+
+                // If we've got any subquery parameters we need to use a loop to pass them to the function
+                var loop = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = execute,
+                    JoinType = QualifiedJoinType.Inner,
+                    OuterReferences = scalarSubqueryReferences,
+                    OutputLeftSchema = false,
+                };
+
+                return loop;
+            }
+
+            if (reference is OpenJsonTableReference openJson)
+            {
+                // Capture any references to data from an outer query
+                CaptureOuterReferences(outerSchema, null, openJson, context, outerReferences);
+
+                // Convert any scalar subqueries in the parameters to its own execution plan, and capture the references from those plans
+                // as parameters to be passed to the function
+                IDataExecutionPlanNodeInternal source = new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } };
+                var computeScalar = new ComputeScalarNode { Source = source };
+
+                ConvertScalarSubqueries(openJson.Variable, hints, ref source, computeScalar, context, openJson);
+
+                if (openJson.RowPattern != null)
+                    ConvertScalarSubqueries(openJson.RowPattern, hints, ref source, computeScalar, context, openJson);
+
+                if (source is ConstantScanNode)
+                    source = null;
+                else if (computeScalar.Columns.Count > 0)
+                    source = computeScalar;
+
+                var scalarSubquerySchema = source?.GetSchema(context);
+                var scalarSubqueryReferences = new Dictionary<string, string>();
+                CaptureOuterReferences(scalarSubquerySchema, null, openJson, context, scalarSubqueryReferences);
+
+                var execute = new OpenJsonNode(openJson, context);
 
                 if (source == null)
                     return execute;

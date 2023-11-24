@@ -21,14 +21,17 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="dataSources">The data sources that are available to the query</param>
         /// <param name="options">The options that the query will be executed with</param>
         /// <param name="parameterTypes">The names and types of the parameters that are available to the query</param>
+        /// <param name="log">A callback function to log messages</param>
         public NodeCompilationContext(
             IDictionary<string, DataSource> dataSources,
             IQueryExecutionOptions options,
-            IDictionary<string, DataTypeReference> parameterTypes)
+            IDictionary<string, DataTypeReference> parameterTypes,
+            Action<string> log)
         {
             DataSources = dataSources;
             Options = options;
             ParameterTypes = parameterTypes;
+            Log = log ?? (msg => { });
         }
 
         /// <summary>
@@ -43,6 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine
             DataSources = parentContext.DataSources;
             Options = parentContext.Options;
             ParameterTypes = parameterTypes;
+            Log = parentContext.Log;
             _parentContext = parentContext;
         }
 
@@ -65,6 +69,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the details of the primary data source
         /// </summary>
         public DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
+
+        /// <summary>
+        /// A callback function to log messages
+        /// </summary>
+        public Action<string> Log { get; }
 
         /// <summary>
         /// Generates a unique name for an expression
@@ -91,12 +100,14 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="options">The options that the query is being executed with</param>
         /// <param name="parameterTypes">The names and types of the parameters that are available to the query</param>
         /// <param name="parameterValues">The current value of each parameter</param>
+        /// <param name="log">A callback function to log messages</param>
         public NodeExecutionContext(
             IDictionary<string, DataSource> dataSources,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
-            IDictionary<string, object> parameterValues)
-            : base(dataSources, options, parameterTypes)
+            IDictionary<string, object> parameterValues,
+            Action<string> log)
+            : base(dataSources, options, parameterTypes, log)
         {
             ParameterValues = parameterValues;
         }
@@ -126,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, DataTypeReference> parameterTypes,
             INodeSchema schema,
             INodeSchema nonAggregateSchema)
-            : base(dataSources, options, parameterTypes)
+            : base(dataSources, options, parameterTypes, null)
         {
             Schema = schema;
             NonAggregateSchema = nonAggregateSchema;
@@ -142,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine
             NodeCompilationContext nodeContext,
             INodeSchema schema,
             INodeSchema nonAggregateSchema)
-            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes)
+            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.Log)
         {
             Schema = schema;
             NonAggregateSchema = nonAggregateSchema;
@@ -179,8 +190,9 @@ namespace MarkMpn.Sql4Cds.Engine
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
             IDictionary<string, object> parameterValues,
+            Action<string> log,
             Entity entity)
-            : base(dataSources, options, parameterTypes, parameterValues)
+            : base(dataSources, options, parameterTypes, parameterValues, log)
         {
             Entity = entity;
         }
@@ -195,7 +207,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// representing each row as it is processed.
         /// </remarks>
         public ExpressionExecutionContext(NodeExecutionContext nodeContext)
-            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.ParameterValues)
+            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.ParameterValues, nodeContext.Log)
         {
             Entity = null;
         }
@@ -213,7 +225,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// representing each row as it is processed.
         /// </remarks>
         public ExpressionExecutionContext(ExpressionCompilationContext compilationContext)
-            : base(compilationContext.DataSources, compilationContext.Options, compilationContext.ParameterTypes, null)
+            : base(compilationContext.DataSources, compilationContext.Options, compilationContext.ParameterTypes, null, null)
         {
             Entity = null;
         }

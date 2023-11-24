@@ -1,7 +1,9 @@
-﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 
@@ -29,6 +31,36 @@ namespace MarkMpn.Sql4Cds.Engine
 
             new Sql160ScriptGenerator().GenerateScript(fragment, out var sql);
             return sql;
+        }
+
+        /// <summary>
+        /// Converts a <see cref="TSqlFragment"/> to the corresponding SQL string in a standardised way
+        /// </summary>
+        /// <param name="fragment">The SQL DOM fragment to convert</param>
+        /// <returns>The SQL string that the fragment can be parsed from</returns>
+        public static string ToNormalizedSql(this TSqlFragment fragment)
+        {
+            var tokens = new Sql160ScriptGenerator().GenerateTokens(fragment);
+
+            using (var writer = new StringWriter())
+            {
+                foreach (var token in tokens)
+                {
+                    if (token.TokenType == TSqlTokenType.Identifier)
+                    {
+                        var value = Identifier.DecodeIdentifier(token.Text, out var quoteType);
+
+                        if (quoteType != QuoteType.NotQuoted && value.IsValidIdentifier())
+                            token.Text = value;
+                    }
+
+                    writer.Write(token.Text);
+                }
+
+                writer.Flush();
+
+                return writer.ToString();
+            }
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -62,8 +63,9 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             if (VersionChecker.Result.IsCompleted && !VersionChecker.Result.IsFaulted && VersionChecker.Result.Result > currentVersion)
             {
+                var ssmsVersion = Process.GetCurrentProcess().MainModule.FileVersionInfo.ProductMajorPart;
                 AddStringToErrors(" An updated version of SQL 4 CDS is available", true);
-                AddStringToMessages($" Update to v{VersionChecker.Result.Result.ToString(3)} available from https://markcarrington.dev/sql-4-cds/");
+                AddStringToMessages($" Update to v{VersionChecker.Result.Result.ToString(3)} available from https://github.com/MarkMpn/Sql4Cds/releases/download/v{VersionChecker.Result.Result.ToString(3)}/MarkMpn.Sql4Cds.SSMS.{ssmsVersion}.Setup.msi");
                 AddStringToMessages("");
             }
         }

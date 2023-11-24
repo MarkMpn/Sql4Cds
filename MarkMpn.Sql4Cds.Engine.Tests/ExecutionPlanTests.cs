@@ -128,6 +128,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "ownerid",
                 "owneridname",
                 "owneridtype",
+                "parentaccountid",
+                "parentaccountidname",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover"
@@ -1995,7 +1997,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var filter = AssertNode<FilterNode>(top.Source);
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
-            var schema = constant.GetSchema(new NodeCompilationContext(_dataSources, this, null));
+            var schema = constant.GetSchema(new NodeCompilationContext(_dataSources, this, null, null));
             Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"].Type.ToNetType(out _));
             Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"].Type.ToNetType(out _));
         }
@@ -3271,7 +3273,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
             
-            var result = select.Execute(new NodeExecutionContext(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>()), CommandBehavior.Default);
+            var result = select.Execute(new NodeExecutionContext(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(result);
 
@@ -3720,7 +3722,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3730,7 +3732,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3774,7 +3776,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3784,7 +3786,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3832,7 +3834,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3842,7 +3844,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3866,7 +3868,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3876,7 +3878,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3958,7 +3960,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3968,7 +3970,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -3992,7 +3994,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4002,7 +4004,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
                 }
             }
         }
@@ -6423,6 +6425,68 @@ AND    contactid NOT IN (SELECT DISTINCT primarycontactid FROM account WHERE emp
             {
                 _supportedJoins.Remove(JoinOperator.Any);
             }
+        }
+
+        [TestMethod]
+        public void FoldFilterToCorrectTableAlias()
+        {
+            // The same table alias can be used in the main query and in a query-derived table. Ensure filters are
+            // folded to the correct one.
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+SELECT *
+FROM (SELECT name FROM account AS a INNER JOIN contact AS c ON a.primarycontactid = c.contactid) AS q
+INNER JOIN contact AS c ON q.name = c.fullname
+WHERE c.firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            var leftFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            var rightFetch = AssertNode<FetchXmlScan>(join.RightSource);
+
+            AssertFetchXml(leftFetch, @"
+                    <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                        <entity name='contact'>
+                            <all-attributes />
+                            <filter>
+                                <condition attribute='fullname' operator='not-null' />
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                        </entity>
+                    </fetch>");
+
+            AssertFetchXml(rightFetch, @"
+                    <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                        <entity name='account'>
+                            <attribute name='name' />
+                            <link-entity name='contact' from='contactid' to='primarycontactid' link-type='inner' alias='c'>
+                            </link-entity>
+                            <filter>
+                                <condition attribute='name' operator='not-null' />
+                            </filter>
+                        </entity>
+                    </fetch>");
+        }
+
+        [TestMethod]
+        public void IgnoreDupKeyHint()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"INSERT INTO account (accountid, name) VALUES ('{CD503427-E785-40D8-AD0E-FBDF4918D298}', 'Data8') OPTION (USE HINT ('IGNORE_DUP_KEY'))";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var insert = AssertNode<InsertNode>(plans[0]);
+            Assert.IsTrue(insert.IgnoreDuplicateKey);
         }
     }
 }

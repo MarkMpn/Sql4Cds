@@ -693,16 +693,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return node;
         }
 
-        public string Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             recordsAffected = Execute(context).Count();
-            return "Executed " + MessageName;
+            context.Log("Executed " + MessageName);
         }
 
         IRootExecutionPlanNodeInternal[] IRootExecutionPlanNodeInternal.FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             FoldQuery(context, hints);
             return new[] { this };
+        }
+
+        public override string ToString()
+        {
+            return $"Table Valued Function\r\n[{MessageName}]";
         }
     }
 }

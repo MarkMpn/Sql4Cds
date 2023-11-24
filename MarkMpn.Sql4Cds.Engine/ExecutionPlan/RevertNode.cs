@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public string Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -78,7 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException("Unexpected organization service type") { Node = this };
 
                     recordsAffected = -1;
-                    return "Reverted impersonation";
+                    context.Log("Reverted impersonation");
                 }
             }
             catch (QueryExecutionException ex)

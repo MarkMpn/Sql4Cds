@@ -112,6 +112,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return merged;
         }
 
+        protected void FoldDefinedValues(INodeSchema rightSchema)
+        {
+            foreach (var kvp in DefinedValues.ToList())
+            {
+                if (!rightSchema.ContainsColumn(kvp.Value, out var innerColumn))
+                    throw new NotSupportedQueryFragmentException($"Unknown defined column '{kvp.Value}'");
+
+                if (innerColumn != kvp.Value)
+                    DefinedValues[kvp.Key] = innerColumn;
+            }
+        }
+
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return LeftSource;
@@ -172,7 +184,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             foreach (var definedValue in DefinedValues)
-                schema[definedValue.Key] = innerSchema.Schema[definedValue.Value];
+            {
+                innerSchema.ContainsColumn(definedValue.Value, out var innerColumn);
+                schema[definedValue.Key] = innerSchema.Schema[innerColumn];
+            }
 
             _lastLeftSchema = outerSchema;
             _lastRightSchema = innerSchema;

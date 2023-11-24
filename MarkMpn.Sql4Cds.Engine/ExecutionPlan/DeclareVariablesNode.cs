@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public string Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -57,7 +57,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             recordsAffected = -1;
-            return null;
         }
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)

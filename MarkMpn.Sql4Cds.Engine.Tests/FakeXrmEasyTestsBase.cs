@@ -117,6 +117,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetColumnNumber(_context);
             SetColumnNumber(_context2);
+
+            SetRelationships(_context);
+            SetRelationships(_context2);
         }
 
         private void SetPrimaryNameAttributes(XrmFakedContext context)
@@ -159,6 +162,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 1);
                     var primaryContactId = (LookupAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "primarycontactid");
                     primaryContactId.Targets = new[] { "contact" };
+                    var parentAccountId = (LookupAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "parentaccountid");
+                    parentAccountId.Targets = new[] { "account" };
                     context.SetEntityMetadata(entity);
                 }
 
@@ -239,6 +244,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 foreach (var attr in entity.Attributes)
                     typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.ColumnNumber)).SetValue(attr, index++);
+
+                context.SetEntityMetadata(entity);
+            }
+        }
+
+        private void SetRelationships(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.OneToManyRelationships == null)
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.OneToManyRelationships)).SetValue(entity, Array.Empty<OneToManyRelationshipMetadata>());
+
+                if (entity.ManyToOneRelationships == null)
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ManyToOneRelationships)).SetValue(entity, Array.Empty<OneToManyRelationshipMetadata>());
+
+                if (entity.LogicalName == "account")
+                {
+                    // Add parentaccountid relationship
+                    var relationship = new OneToManyRelationshipMetadata
+                    {
+                        SchemaName = "account_parentaccount",
+                        ReferencedEntity = "account",
+                        ReferencedAttribute = "accountid",
+                        ReferencingEntity = "account",
+                        ReferencingAttribute = "parentaccountid",
+                        IsHierarchical = true
+                    };
+
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.OneToManyRelationships)).SetValue(entity, entity.OneToManyRelationships.Concat(new[] { relationship }).ToArray());
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ManyToOneRelationships)).SetValue(entity, entity.ManyToOneRelationships.Concat(new[] { relationship }).ToArray());
+                }
 
                 context.SetEntityMetadata(entity);
             }

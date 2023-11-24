@@ -1185,7 +1185,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
                     AddSchemaAttribute(schema, aliases, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
@@ -1249,14 +1249,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (FoldFilterToIndexSpool(context, out var indexSpool))
             {
+                NormalizeFilters();
                 Parent = indexSpool;
-                return indexSpool;
+                return indexSpool.FoldQuery(context, hints);
             }
 
             return this;
         }
 
-        private bool FoldFilterToIndexSpool(NodeCompilationContext context, out IndexSpoolNode indexSpool)
+        private bool FoldFilterToIndexSpool(NodeCompilationContext context, out IDataExecutionPlanNodeInternal indexSpool)
         {
             if (Entity.Items == null)
             {
@@ -1288,15 +1289,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var loop = parent as NestedLoopNode;
 
-                if (loop != null && prev == loop.RightSource)
+                if (loop != null && prev == loop.RightSource && loop.OuterReferences.Any(kvp => kvp.Value.Equals(variableCondition.value, StringComparison.OrdinalIgnoreCase)))
                 {
                     var rowCount = loop.LeftSource.EstimateRowsOut(context);
 
-                    if (rowCount.Value >= 100 && loop.OuterReferences.Any(kvp => kvp.Value.Equals(variableCondition.value, StringComparison.OrdinalIgnoreCase)))
+                    if (rowCount.Value >= 100)
                     {
                         indexSpool = new IndexSpoolNode
                         {
                             Source = this,
+                            KeyColumn = (variableCondition.entityname ?? Alias) + "." + variableCondition.attribute,
+                            SeekValue = variableCondition.value
+                        };
+
+                        foreach (var filter in Entity.Items.OfType<filter>())
+                            filter.Items = filter.Items.Except(new[] { variableCondition }).ToArray();
+
+                        return true;
+                    }
+                    else if (loop.LeftSource is ComputeScalarNode leftComputeScalar &&
+                        leftComputeScalar.Source is TableSpoolNode leftSpool &&
+                        leftSpool.Producer != null)
+                    {
+                        // In the recursive part of a CTE. We might only be being called for one record at a time, but that might happen
+                        // lots of times. Add an adaptive spool in to avoid excessive calls
+                        var clone = (FetchXmlScan)Clone();
+
+                        indexSpool = new AdaptiveIndexSpoolNode
+                        {
+                            UnspooledSource = clone,
+                            SpooledSource = this,
                             KeyColumn = (variableCondition.entityname ?? Alias) + "." + variableCondition.attribute,
                             SeekValue = variableCondition.value
                         };
@@ -1682,14 +1704,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     continue;
 
-                var mapping = ColumnMappings.SingleOrDefault(map => map.OutputColumn == normalizedCol);
+                var mapping = ColumnMappings.SingleOrDefault(map => map.OutputColumn == normalizedCol || map.OutputColumn == parts[0] && map.AllColumns);
 
-                if (mapping != null)
+                if (mapping != null && mapping.AllColumns)
+                    normalizedCol = (mapping.SourceColumn ?? parts[0]).EscapeIdentifier() + "." + parts[1].EscapeIdentifier();
+                else if (mapping != null)
                     normalizedCol = mapping.SourceColumn;
+                else if (HiddenAliases.Contains(parts[0], StringComparer.OrdinalIgnoreCase))
+                    continue;
 
                 var attr = AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out var linkEntity);
 
-                if (mapping != null && attr != null)
+                if (mapping != null && !mapping.AllColumns && attr != null)
                 {
                     if (attr.name != parts[1] && IsValidAlias(parts[1]))
                         attr.alias = parts[1];

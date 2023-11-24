@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public override bool ContinueOnError { get; set; }
 
-        public override string Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -63,7 +63,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             recordsAffected = -1;
-            return null;
         }
 
         /// <summary>

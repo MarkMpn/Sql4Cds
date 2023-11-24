@@ -27,11 +27,15 @@
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AdaptiveIndexSpoolNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ISpoolProducerNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\OpenJsonNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ParallelismHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SystemFunctionNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XmlWriterNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XPath2ExpressionContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FetchXml.Extensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)JsonPath.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NodeContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
@@ -119,6 +123,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)SqlDateTypes.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlVariant.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)StateTransitionLoader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\CteValidatorVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ExplicitCollationVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\JoinConditionVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetadataExtensions.cs" />
@@ -140,6 +145,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\OptimizerHintValidatingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ParameterlessCollectingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RefactorNotIsNullVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\RemoveRecursiveCTETableReferencesVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplaceCtesWithSubqueriesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />

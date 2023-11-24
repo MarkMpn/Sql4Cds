@@ -49,7 +49,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
         public void Disconnect(string ownerUri)
         {
-            _connectedDataSource.TryRemove(ownerUri, out _);
+            if (_connectedDataSource.TryRemove(ownerUri, out var dataSourceName) &&
+                !_connectedDataSource.Any(kvp => kvp.Value == dataSourceName))
+                _dataSources.TryRemove(dataSourceName, out _);
+
             _connections.TryRemove(ownerUri, out _);
         }
 

@@ -129,8 +129,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="context">The context in which the node is being executed</param>
         /// <param name="recordsAffected">The number of records that were affected by the query</param>
-        /// <returns>A log message to display</returns>
-        public abstract string Execute(NodeExecutionContext context, out int recordsAffected);
+        public abstract void Execute(NodeExecutionContext context, out int recordsAffected);
 
         /// <summary>
         /// Indicates if some errors returned by the server can be silently ignored
@@ -440,10 +439,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 var sourceTargetColumnName = mappings[destAttributeName + "type"];
                                 var sourceTargetType = schema.Schema[sourceTargetColumnName].Type;
-                                var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
+
                                 targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
-                                targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
-                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                                targetExpr = Expression.Convert(targetExpr, sourceTargetType.ToNetType(out _));
+
+                                if (targetExpr.Type == typeof(SqlInt32))
+                                {
+                                    // Using TDS Endpoint, ___type fields are returned as ObjectTypeCode values, not logical names
+                                    targetExpr = Expr.Call(() => ObjectTypeCodeToLogicalName(Expr.Arg<SqlInt32>(), Expr.Arg<IAttributeMetadataCache>()), targetExpr, Expression.Constant(dataSource.Metadata));
+                                }
+                                else
+                                {
+                                    // Normally we want to specify the target type as a logical name
+                                    var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                                }
                             }
 
                             convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, DataTypeHelpers.UniqueIdentifier);
@@ -509,6 +520,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return attributeAccessors;
         }
 
+        private static string ObjectTypeCodeToLogicalName(SqlInt32 otc, IAttributeMetadataCache attributeMetadataCache)
+        {
+            if (otc.IsNull)
+                throw new QueryExecutionException("Cannot convert null ObjectTypeCode to EntityReference");
+
+            return attributeMetadataCache[otc.Value].LogicalName;
+        }
+
         /// <summary>
         /// Provides values to include in log messages
         /// </summary>
@@ -539,11 +558,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="meta">The metadata of the entity that will be affected</param>
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
-        /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
+        /// <param name="log">A callback function to be executed when a log message is generated</param>
+        protected void ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, NodeExecutionContext context, out int recordsAffected, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
+            var errorCount = 0;
+            var threadCount = 0;
 
 #if NETCOREAPP
             var svc = dataSource.Connection as ServiceClient;
@@ -580,6 +601,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (!useAffinityCookie && service is CrmServiceClient crmService)
                                 crmService.EnableAffinityCookie = false;
 #endif
+                            Interlocked.Increment(ref threadCount);
 
                             return new { Service = service, EMR = default(ExecuteMultipleRequest) };
                         },
@@ -600,7 +622,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);
                                 var progress = (double)newCount / entities.Count;
-                                options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
+
+                                if (threadCount < 2)
+                                    options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
+                                else
+                                    options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount - threadCount + 1:N0}-{newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0}, {threadCount:N0} threads)...");
 
                                 try
                                 {
@@ -611,13 +637,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
                                 catch (FaultException<OrganizationServiceFault> ex)
                                 {
-                                    if (FilterErrors(ex.Detail))
+                                    if (FilterErrors(context, request, ex.Detail))
                                     {
                                         if (ContinueOnError)
                                             fault = fault ?? ex.Detail;
                                         else
                                             throw;
                                     }
+
+                                    Interlocked.Increment(ref errorCount);
                                 }
                             }
                             else
@@ -643,7 +671,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                 if (threadLocalState.EMR.Requests.Count == BatchSize)
                                 {
-                                    ProcessBatch(threadLocalState.EMR, ref count, ref inProgressCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler, ref fault);
+                                    ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, ref fault);
 
                                     threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
                                 }
@@ -654,7 +682,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         (threadLocalState) =>
                         {
                             if (threadLocalState.EMR != null)
-                                ProcessBatch(threadLocalState.EMR, ref count, ref inProgressCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler, ref fault);
+                                ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, ref fault);
+
+                            Interlocked.Decrement(ref threadCount);
 
                             if (threadLocalState.Service != dataSource.Connection && threadLocalState.Service is IDisposable disposableClient)
                                 disposableClient.Dispose();
@@ -683,8 +713,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             recordsAffected = count;
-            parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
-            return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
+            context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)count;
+            context.Log($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}");
         }
 
         protected class BulkApiErrorDetail
@@ -694,11 +724,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public int StatusCode { get; set; }
         }
 
-        private void ProcessBatch(ExecuteMultipleRequest req, ref int count, ref int inProgressCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, Action<OrganizationResponse> responseHandler, ref OrganizationServiceFault fault)
+        private void ProcessBatch(ExecuteMultipleRequest req, int threadCount, ref int count, ref int inProgressCount, ref int errorCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, NodeExecutionContext context, Action<OrganizationResponse> responseHandler, ref OrganizationServiceFault fault)
         {
             var newCount = Interlocked.Add(ref inProgressCount, req.Requests.Count);
             var progress = (double)newCount / entities.Count;
-            options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - req.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+            var threadCountMessage = threadCount < 2 ? "" : $" ({threadCount:N0} threads)";
+            options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {count + errorCount + 1:N0} - {newCount:N0} of {entities.Count:N0}{threadCountMessage}...");
             var resp = ExecuteMultiple(dataSource, org, meta, req);
 
             if (responseHandler != null)
@@ -715,8 +746,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToList();
 
             Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
+            Interlocked.Add(ref errorCount, errorResponses.Count);
 
-            var error = errorResponses.FirstOrDefault(item => FilterErrors(item.Fault));
+            var error = errorResponses.FirstOrDefault(item => FilterErrors(context, req.Requests[item.RequestIndex], item.Fault));
 
             if (error != null)
             {
@@ -727,7 +759,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected virtual bool FilterErrors(OrganizationServiceFault fault)
+        protected virtual bool FilterErrors(NodeExecutionContext context, OrganizationRequest request, OrganizationServiceFault fault)
         {
             return true;
         }

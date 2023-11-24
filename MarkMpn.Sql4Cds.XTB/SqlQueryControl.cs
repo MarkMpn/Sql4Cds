@@ -235,8 +235,127 @@ namespace MarkMpn.Sql4Cds.XTB
             if (errors.Count != 0)
                 return;
 
-            new Sql160ScriptGenerator().GenerateScript(fragment, out var sql);
-            _editor.Text = sql;
+            var tokens = new Sql160ScriptGenerator().GenerateTokens(fragment);
+
+            // Insert any comments from the original tokens. Ignore whitespace tokens.
+            for (int srcIndex = 0, dstIndex = -1; srcIndex < fragment.ScriptTokenStream.Count; srcIndex++)
+            {
+                var token = fragment.ScriptTokenStream[srcIndex];
+
+                if (token.TokenType == TSqlTokenType.WhiteSpace)
+                    continue;
+
+                if (token.TokenType == TSqlTokenType.MultilineComment || token.TokenType == TSqlTokenType.SingleLineComment)
+                {
+                    // dstIndex currently points to the previously matched token. Move forward one so we insert the comment after that token
+                    dstIndex++;
+
+                    // We may well have added a semicolon at the end of the statement - move after that too
+                    if ((srcIndex == fragment.ScriptTokenStream.Count - 1 || fragment.ScriptTokenStream[srcIndex + 1].TokenType != TSqlTokenType.Semicolon) &&
+                        dstIndex <= tokens.Count - 1 &&
+                        tokens[dstIndex].TokenType == TSqlTokenType.Semicolon)
+                        dstIndex++;
+
+                    // Also skip over any matching whitespace
+                    var whitespaceCount = 0;
+
+                    while (dstIndex + whitespaceCount < tokens.Count &&
+                        srcIndex - whitespaceCount - 1 >= 0 &&
+                        IsMatchingWhitespace(tokens[dstIndex + whitespaceCount], fragment.ScriptTokenStream[srcIndex - whitespaceCount - 1]))
+                        whitespaceCount++;
+
+                    CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, dstIndex + whitespaceCount);
+                }
+                else
+                {
+                    dstIndex++;
+
+                    while (dstIndex < tokens.Count && !IsSameType(token, tokens[dstIndex]))
+                        dstIndex++;
+                }
+            }
+
+            using (var writer = new StringWriter())
+            {
+                foreach (var token in tokens)
+                    writer.Write(token.Text);
+
+                writer.Flush();
+
+                _editor.Text = writer.ToString();
+            }
+        }
+
+        private bool IsSameType(TSqlParserToken srcToken, TSqlParserToken dstToken)
+        {
+            if (srcToken.TokenType == dstToken.TokenType)
+                return true;
+
+            if (srcToken.TokenType == TSqlTokenType.Variable && dstToken.TokenType == TSqlTokenType.Identifier && dstToken.Text.StartsWith("@"))
+                return true;
+
+            return false;
+        }
+
+        private void CopyComment(IList<TSqlParserToken> src, int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
+        {
+            if (dstIndex >= dst.Count)
+                dst.Add(src[srcIndex]);
+            else
+                dst.Insert(dstIndex, src[srcIndex]);
+
+            // Also add any leading or trailing whitespace
+            var leadingSrcIndex = srcIndex - 1;
+            var leadingDstIndex = dstIndex - 1;
+            var insertPoint = dstIndex;
+
+            while (leadingSrcIndex >= 0 && src[leadingSrcIndex].TokenType == TSqlTokenType.WhiteSpace)
+            {
+                if (IsMatchingWhitespace(dst[leadingDstIndex], src[leadingSrcIndex]))
+                    break;
+
+                dst.Insert(insertPoint, src[leadingSrcIndex]);
+                leadingSrcIndex--;
+                leadingDstIndex--;
+                dstIndex++;
+            }
+
+            var trailingSrcIndex = srcIndex + 1;
+            var trailingDstIndex = dstIndex + 1;
+
+            while (trailingSrcIndex < src.Count && src[trailingSrcIndex].TokenType == TSqlTokenType.WhiteSpace)
+            {
+                if (trailingDstIndex < dst.Count && IsMatchingWhitespace(dst[trailingDstIndex], src[trailingSrcIndex]))
+                    break;
+
+                if (trailingDstIndex >= dst.Count)
+                    dst.Add(src[trailingSrcIndex]);
+                else
+                    dst.Insert(trailingDstIndex, src[trailingSrcIndex]);
+
+                trailingSrcIndex++;
+                trailingDstIndex++;
+            }
+        }
+
+        private bool IsMatchingWhitespace(TSqlParserToken x, TSqlParserToken y)
+        {
+            if (x.TokenType != TSqlTokenType.WhiteSpace)
+                return false;
+
+            if (y.TokenType != TSqlTokenType.WhiteSpace)
+                return false;
+
+            if (x.Text == y.Text)
+                return true;
+
+            if (x.Text == "\n" && y.Text == "\r\n")
+                return true;
+
+            if (x.Text == "\r\n" && y.Text == "\n")
+                return true;
+
+            return false;
         }
 
         private Scintilla CreateEditor()
@@ -829,19 +948,25 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (fault.Message != error.Message)
                     msg += "\r\n" + fault.Message;
 
+                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
+                    msg += "\r\nError from plugin: " + plugin;
+
+                if (!String.IsNullOrEmpty(fault.TraceText))
+                    msg += "\r\nTrace log: " + fault.TraceText;
+
                 while (fault.InnerFault != null)
                 {
                     if (fault.InnerFault.Message != fault.Message)
                         msg += "\r\n" + fault.InnerFault.Message;
 
                     fault = fault.InnerFault;
+
+                    if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out plugin))
+                        msg += "\r\nError from plugin: " + plugin;
+
+                    if (!String.IsNullOrEmpty(fault.TraceText))
+                        msg += "\r\nTrace log: " + fault.TraceText;
                 }
-
-                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
-                    msg += "\r\nError from plugin: " + plugin;
-
-                if (!String.IsNullOrEmpty(fault.TraceText))
-                    msg += "\r\nTrace log: " + fault.TraceText;
             }
 
             return msg;
@@ -1206,7 +1331,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             else if (msg != null)
             {
-                AddMessage(query.Index, query.Length, msg, false);
+                AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, false);
             }
             else if (args.IncludeFetchXml)
             {
@@ -1253,13 +1378,25 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        private string GetRecordUrl(SqlEntityReference entityReference, out XtbDataSource dataSource)
+        {
+            dataSource = null;
+
+            if (!DataSources.TryGetValue(entityReference.DataSource, out var ds))
+                return null;
+
+            dataSource = (XtbDataSource)ds;
+            return dataSource.ConnectionDetail.GetEntityReferenceUrl(entityReference);
+        }
+
         private void OpenRecord(SqlEntityReference entityReference)
         {
-            if (!DataSources.TryGetValue(entityReference.DataSource, out var dataSource))
+            var url = GetRecordUrl(entityReference, out var dataSource);
+
+            if (url == null)
                 return;
 
-            var url = ((XtbDataSource) dataSource).ConnectionDetail.GetEntityReferenceUrl(entityReference);
-            ((XtbDataSource)dataSource).ConnectionDetail.OpenUrlWithBrowserProfile(new Uri(url));
+            dataSource.ConnectionDetail.OpenUrlWithBrowserProfile(new Uri(url));
         }
 
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
@@ -1389,11 +1526,13 @@ namespace MarkMpn.Sql4Cds.XTB
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
 
             openRecordToolStripMenuItem.Enabled = false;
+            copyRecordUrlToolStripMenuItem.Enabled = false;
             createSELECTStatementToolStripMenuItem.Enabled = false;
 
             if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
             {
                 openRecordToolStripMenuItem.Enabled = true;
+                copyRecordUrlToolStripMenuItem.Enabled = true;
                 createSELECTStatementToolStripMenuItem.Enabled = true;
             }
 
@@ -1406,6 +1545,19 @@ namespace MarkMpn.Sql4Cds.XTB
 
             if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
                 OpenRecord(er);
+        }
+
+        private void copyRecordUrlToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
+            {
+                var url = GetRecordUrl(er, out _);
+
+                if (url != null)
+                    Clipboard.SetText(url);
+            }
         }
 
         private void createSELECTStatementToolStripMenuItem_Click(object sender, EventArgs e)

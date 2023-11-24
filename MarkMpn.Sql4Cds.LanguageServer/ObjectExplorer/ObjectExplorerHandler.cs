@@ -29,6 +29,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             lsp.AddHandler(CreateSessionRequest.Type, HandleCreateSession);
             lsp.AddHandler(ExpandRequest.Type, HandleExpand);
             lsp.AddHandler(RefreshRequest.Type, HandleRefresh);
+            lsp.AddHandler(CloseSessionRequest.Type, HandleCloseSession);
         }
 
         public CreateSessionResponse HandleCreateSession(ConnectionDetails request)
@@ -59,6 +60,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             });
 
             return new CreateSessionResponse { SessionId = session.SessionId };
+        }
+
+        public CloseSessionResponse HandleCloseSession(CloseSessionParams request)
+        {
+            _connectionManager.Disconnect(request.SessionId);
+
+            _ = _lsp.NotifyAsync(SessionDisconnectedNotification.Type, new SessionDisconnectedParameters
+            {
+                SessionId = request.SessionId,
+                Success = true,
+                ErrorMessage = null
+            });
+
+            return new CloseSessionResponse
+            {
+                SessionId = request.SessionId,
+                Success = true
+            };
         }
 
         public bool HandleExpand(ExpandParams request)

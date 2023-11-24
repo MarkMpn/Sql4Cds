@@ -10,10 +10,10 @@
   <Import Project="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems" Label="Shared" />
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.ApplicationInsights" Version="2.20.0" />
+    <PackageReference Include="Microsoft.ApplicationInsights" Version="2.21.0" />
     <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.1.9" />
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="161.8834.0" />
-    <PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.5" />
     <PackageReference Include="XPath2.Extensions" Version="1.1.3" />
   </ItemGroup>
 
