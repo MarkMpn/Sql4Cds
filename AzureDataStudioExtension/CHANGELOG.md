@@ -1,6 +1,6 @@
 # Change Log
 
-## [v8.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.0) - 2023-11-18
+## [v8.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.0) - 2023-11-25
 
 Added Common Table Expression support:
 - Non-recursive CTEs are expanded to subqueries for compatibility with TDS Endpoint
