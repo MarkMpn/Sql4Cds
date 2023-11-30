@@ -24,6 +24,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Label")]
         public string Label { get; set; }
 
+        [Browsable(false)]
+        internal LabelStatement Statement { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
@@ -35,7 +38,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 Index = Index,
                 Length = Length,
-                Label = Label
+                Label = Label,
+                Statement = Statement
             };
         }
 

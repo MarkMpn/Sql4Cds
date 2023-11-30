@@ -52,13 +52,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var parent = Parent;
 
-            while (parent != null && (!(parent is ConditionalNode c) || c.Type != ConditionalNodeType.While))
+            while (parent != null && (!(parent is UnparsedConditionalNode c) || c.Type != ConditionalNodeType.While))
                 parent = parent.Parent;
 
             if (parent == null)
                 return new[] { this };
 
-            var loopNode = (ConditionalNode)parent;
+            var loopNode = (UnparsedConditionalNode)parent;
 
             var statements = new List<IRootExecutionPlanNodeInternal>();
 
@@ -67,10 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 statements.AddRange(
                     new GoToNode
                     {
-                        Label = loopNode.TrueLabel,
-                        Condition = loopNode.Condition,
-                        Source = loopNode.Source,
-                        SourceColumn = loopNode.SourceColumn
+                        Label = loopNode.LoopStartLabel
                     }.FoldQuery(context, hints));
             }
 

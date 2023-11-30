@@ -43,10 +43,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IRootExecutionPlanNodeInternal[] FalseStatements { get; set; }
 
-        internal string TrueLabel { get; private set; }
-
-        internal string FalseLabel { get; private set; }
-
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (Source != null)
@@ -69,9 +65,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            TrueLabel = Guid.NewGuid().ToString();
-            FalseLabel = Guid.NewGuid().ToString();
-
             Source = Source?.FoldQuery(context, hints);
 
             TrueStatements = TrueStatements
@@ -82,63 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ?.SelectMany(s => s.FoldQuery(context, hints))
                 ?.ToArray();
 
-            if (hints != null && hints.OfType<DoNotCompileConditionsHint>().Any())
-                return new[] { this };
-
-            var statements = new List<IRootExecutionPlanNodeInternal>();
-
-            statements.AddRange(
-                new GoToNode
-                {
-                    Label = TrueLabel,
-                    Condition = Condition,
-                    Source = Source,
-                    SourceColumn = SourceColumn
-                }.FoldQuery(context, hints));
-
-            statements.AddRange(
-                new GoToNode
-                {
-                    Label = FalseLabel
-                }.FoldQuery(context, hints));
-
-            statements.Add(new GotoLabelNode { Label = TrueLabel });
-
-            statements.AddRange(TrueStatements);
-
-            if (FalseStatements == null)
-            {
-                if (Type == ConditionalNodeType.While)
-                {
-                    statements.AddRange(
-                        new GoToNode
-                        {
-                            Label = TrueLabel,
-                            Condition = Condition,
-                            Source = Source,
-                            SourceColumn = SourceColumn
-                        }.FoldQuery(context, hints));
-                }
-
-                statements.Add(new GotoLabelNode { Label = FalseLabel });
-            }
-            else
-            {
-                var endLabel = Guid.NewGuid().ToString();
-                statements.AddRange(
-                    new GoToNode
-                    {
-                        Label = endLabel
-                    }.FoldQuery(context, hints));
-
-                statements.Add(new GotoLabelNode { Label = FalseLabel });
-
-                statements.AddRange(FalseStatements);
-
-                statements.Add(new GotoLabelNode { Label = endLabel });
-            }
-
-            return statements.ToArray();
+            return new[] { this };
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

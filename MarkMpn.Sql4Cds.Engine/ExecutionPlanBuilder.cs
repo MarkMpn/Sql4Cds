@@ -136,16 +136,25 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var batch in script.Batches)
             {
                 foreach (var statement in batch.Statements)
-                    ConvertStatement(statement, optimizer, queries);
+                    queries.AddRange(ConvertStatement(statement, optimizer));
             }
 
             // Ensure GOTOs only reference valid labels
-            var labels = new HashSet<string>(GetLabels(queries).Select(n => n.Label), StringComparer.OrdinalIgnoreCase);
+            var labels = GetLabels(queries)
+                .GroupBy(l => l.Label, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
             foreach (var gotoNode in queries.OfType<GoToNode>())
             {
-                if (!labels.Contains(gotoNode.Label))
-                    throw new NotSupportedQueryFragmentException($"A GOTO statement references the label '{gotoNode.Label}' but the label has not been declared.");
+                if (!labels.ContainsKey(gotoNode.Label))
+                    throw new NotSupportedQueryFragmentException($"A GOTO statement references the label '{gotoNode.Label}' but the label has not been declared.", gotoNode.Statement);
+            }
+
+            // Ensure all labels are unique
+            foreach (var kvp in labels)
+            {
+                if (kvp.Value.Count > 1)
+                    throw new NotSupportedQueryFragmentException("The label has already been declared. Label names must be unique within a query batch or stored procedure.", kvp.Value[1].Statement);
             }
 
             if (EstimatedPlanOnly)
@@ -157,16 +166,52 @@ namespace MarkMpn.Sql4Cds.Engine
             return queries.ToArray();
         }
 
-        private void ConvertStatement(TSqlStatement statement, ExecutionPlanOptimizer optimizer, List<IRootExecutionPlanNodeInternal> queries)
+        private IRootExecutionPlanNodeInternal[] ConvertStatement(TSqlStatement statement, ExecutionPlanOptimizer optimizer)
         {
             if (statement is BeginEndBlockStatement block)
             {
-                foreach (var stmt in block.StatementList.Statements)
-                    ConvertStatement(stmt, optimizer, queries);
-
-                return;
+                return block.StatementList.Statements
+                    .SelectMany(stmt => ConvertStatement(stmt, optimizer))
+                    .ToArray();
+            }
+            else if (statement is LabelStatement label)
+            {
+                return new[] { ConvertLabelStatement(label) };
+            }
+            else if (statement is GoToStatement gotoStmt)
+            {
+                return new[] { ConvertGoToStatement(gotoStmt) };
+            }
+            else if (!EstimatedPlanOnly && statement is IfStatement ifStmt)
+            {
+                var converted = ConvertIfStatement(ifStmt, optimizer, false);
+                SetParent(converted);
+                return converted.FoldQuery(_nodeContext, null);
+            }
+            else if (!EstimatedPlanOnly && statement is WhileStatement whileStmt)
+            {
+                var converted = ConvertWhileStatement(whileStmt, optimizer, false);
+                SetParent(converted);
+                return converted.FoldQuery(_nodeContext, null);
+            }
+            else if (statement is BreakStatement breakStmt)
+            {
+                return new[] { ConvertBreakStatement(breakStmt) };
+            }
+            else if (statement is ContinueStatement continueStmt)
+            {
+                return new[] { ConvertContinueStatement(continueStmt) };
+            }
+            else if (!EstimatedPlanOnly)
+            {
+                return new[] { new UnparsedStatementNode { Statement = statement, Compiler = this, Optimizer = optimizer } };
             }
 
+            return ConvertStatementInternal(statement, optimizer);
+        }
+
+        internal IRootExecutionPlanNodeInternal[] ConvertStatementInternal(TSqlStatement statement, ExecutionPlanOptimizer optimizer)
+        {
             var index = statement.StartOffset;
             var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
             var originalSql = statement.ToSql();
@@ -404,25 +449,19 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (statement is SetVariableStatement set)
                 plans = new[] { ConvertSetVariableStatement(set) };
             else if (statement is IfStatement ifStmt)
-                plans = new[] { ConvertIfStatement(ifStmt, optimizer) };
+                plans = new[] { ConvertIfStatement(ifStmt, optimizer, true) };
             else if (statement is WhileStatement whileStmt)
-                plans = new[] { ConvertWhileStatement(whileStmt, optimizer) };
+                plans = new[] { ConvertWhileStatement(whileStmt, optimizer, true) };
             else if (statement is PrintStatement print)
                 plans = new[] { ConvertPrintStatement(print, optimizer) };
-            else if (statement is LabelStatement label)
-                plans = new[] { ConvertLabelStatement(label, queries) };
-            else if (statement is GoToStatement gotoStmt)
-                plans = new[] { ConvertGoToStatement(gotoStmt) };
-            else if (statement is BreakStatement breakStmt)
-                plans = new[] { ConvertBreakStatement(breakStmt) };
-            else if (statement is ContinueStatement continueStmt)
-                plans = new[] { ConvertContinueStatement(continueStmt) };
             else if (statement is WaitForStatement waitFor)
                 plans = new[] { ConvertWaitForStatement(waitFor) };
             else if (statement is ExecuteStatement execute)
                 plans = ConvertExecuteStatement(execute);
             else
                 throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
+
+            var output = new List<IRootExecutionPlanNodeInternal>();
 
             foreach (var plan in plans)
             {
@@ -439,8 +478,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 }
 
-                queries.AddRange(optimized);
+                output.AddRange(optimized);
             }
+
+            return output.ToArray();
         }
 
         private SelectNode ConvertRecursiveCTEQuery(QueryExpression queryExpression, INodeSchema anchorSchema, CteValidatorVisitor cteValidator, Dictionary<string, string> outerReferences)
@@ -617,16 +658,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNodeInternal ConvertGoToStatement(GoToStatement gotoStmt)
         {
-            return new GoToNode { Label = gotoStmt.LabelName.Value };
+            return new GoToNode { Label = gotoStmt.LabelName.Value, Statement = gotoStmt };
         }
 
-        private IRootExecutionPlanNodeInternal ConvertLabelStatement(LabelStatement label, List<IRootExecutionPlanNodeInternal> queries)
+        private IRootExecutionPlanNodeInternal ConvertLabelStatement(LabelStatement label)
         {
-            // Check this label hasn't already been defined
-            if (GetLabels(queries).Any(l => l.Label.Equals(label.Value, StringComparison.OrdinalIgnoreCase)))
-                throw new NotSupportedQueryFragmentException("The label has already been declared. Label names must be unique within a query batch or stored procedure.", label);
-
-            return new GotoLabelNode { Label = label.Value.TrimEnd(':') };
+            return new GotoLabelNode { Label = label.Value.TrimEnd(':'), Statement = label };
         }
 
         private IEnumerable<GotoLabelNode> GetLabels(IEnumerable<IRootExecutionPlanNodeInternal> queries)
@@ -664,64 +701,41 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IRootExecutionPlanNodeInternal ConvertIfWhileStatement(ConditionalNodeType type, BooleanExpression predicate, TSqlStatement trueStatement, TSqlStatement falseStatement, ExecutionPlanOptimizer optimizer)
+        private IRootExecutionPlanNodeInternal ConvertIfWhileStatement(TSqlStatement statement, ConditionalNodeType type, BooleanExpression predicate, TSqlStatement trueStatement, TSqlStatement falseStatement, ExecutionPlanOptimizer optimizer, bool optimize)
         {
-            // Check if the predicate is a simple expression or requires a query
-            var subqueryVisitor = new ScalarSubqueryVisitor();
-            predicate.Accept(subqueryVisitor);
-            IDataExecutionPlanNodeInternal predicateSource = null;
-            string sourceCol = null;
-
-            if (subqueryVisitor.Subqueries.Count == 0)
+            if (!optimize)
             {
-                // Check the predicate for errors
-                predicate.GetType(_staticContext, out _);
-            }
-            else
-            {
-                // Convert predicate to query - IF EXISTS(qry) => SELECT CASE WHEN EXISTS(qry) THEN 1 ELSE 0 END
-                var select = new QuerySpecification
+                var unparsed = new UnparsedConditionalNode
                 {
-                    SelectElements =
-                    {
-                        new SelectScalarExpression
-                        {
-                            Expression = new SearchedCaseExpression
-                            {
-                                WhenClauses =
-                                {
-                                    new SearchedWhenClause
-                                    {
-                                        WhenExpression = predicate,
-                                        ThenExpression = new IntegerLiteral { Value = "1" }
-                                    }
-                                },
-                                ElseExpression = new IntegerLiteral { Value = "0" }
-                            }
-                        }
-                    }
+                    Compiler = this,
+                    Optimizer = optimizer,
+                    Predicate = predicate,
+                    Statement = statement,
+                    Type = type,
                 };
 
-                var selectQry = ConvertSelectQuerySpec(select, Array.Empty<OptimizerHint>(), null, null, _nodeContext);
-                predicateSource = selectQry.Source;
-                sourceCol = selectQry.ColumnSet[0].SourceColumn;
+                if (trueStatement != null)
+                    unparsed.TrueStatements.AddRange(ConvertStatement(trueStatement, optimizer));
+
+                if (falseStatement != null)
+                    unparsed.FalseStatements.AddRange(ConvertStatement(falseStatement, optimizer));
+
+                return unparsed;
             }
+
+            ConvertPredicateQuery(predicate, out var predicateSource, out var sourceCol);
 
             // Convert the true & false branches
-            var trueQueries = new List<IRootExecutionPlanNodeInternal>();
-            ConvertStatement(trueStatement, optimizer, trueQueries);
+            var trueQueries = ConvertStatement(trueStatement, optimizer);
 
-            List<IRootExecutionPlanNodeInternal> falseQueries = null;
+            IRootExecutionPlanNodeInternal[] falseQueries = null;
 
             if (falseStatement != null)
-            {
-                falseQueries = new List<IRootExecutionPlanNodeInternal>();
-                ConvertStatement(falseStatement, optimizer, falseQueries);
-            }
+                falseQueries = ConvertStatement(falseStatement, optimizer);
 
             return new ConditionalNode
             {
-                Condition = subqueryVisitor.Subqueries.Count == 0 ? predicate.Clone() : null,
+                Condition = predicateSource == null ? predicate.Clone() : null,
                 Source = predicateSource,
                 SourceColumn = sourceCol,
                 TrueStatements = trueQueries.ToArray(),
@@ -730,14 +744,59 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IRootExecutionPlanNodeInternal ConvertWhileStatement(WhileStatement whileStmt, ExecutionPlanOptimizer optimizer)
+        internal bool ConvertPredicateQuery(BooleanExpression predicate, out IDataExecutionPlanNodeInternal predicateSource, out string sourceCol)
         {
-            return ConvertIfWhileStatement(ConditionalNodeType.While, whileStmt.Predicate, whileStmt.Statement, null, optimizer);
+            predicateSource = null;
+            sourceCol = null;
+
+            // Check if the predicate is a simple expression or requires a query
+            var subqueryVisitor = new ScalarSubqueryVisitor();
+            predicate.Accept(subqueryVisitor);
+            
+            if (subqueryVisitor.Subqueries.Count == 0)
+            {
+                // Check the predicate for errors
+                predicate.GetType(_staticContext, out _);
+                return false;
+            }
+            
+            // Convert predicate to query - IF EXISTS(qry) => SELECT CASE WHEN EXISTS(qry) THEN 1 ELSE 0 END
+            var select = new QuerySpecification
+            {
+                SelectElements =
+                {
+                    new SelectScalarExpression
+                    {
+                        Expression = new SearchedCaseExpression
+                        {
+                            WhenClauses =
+                            {
+                                new SearchedWhenClause
+                                {
+                                    WhenExpression = predicate,
+                                    ThenExpression = new IntegerLiteral { Value = "1" }
+                                }
+                            },
+                            ElseExpression = new IntegerLiteral { Value = "0" }
+                        }
+                    }
+                }
+            };
+
+            var selectQry = ConvertSelectQuerySpec(select, Array.Empty<OptimizerHint>(), null, null, _nodeContext);
+            predicateSource = selectQry.Source;
+            sourceCol = selectQry.ColumnSet[0].SourceColumn;
+            return true;
         }
 
-        private IRootExecutionPlanNodeInternal ConvertIfStatement(IfStatement ifStmt, ExecutionPlanOptimizer optimizer)
+        private IRootExecutionPlanNodeInternal ConvertWhileStatement(WhileStatement whileStmt, ExecutionPlanOptimizer optimizer, bool optimize)
         {
-            return ConvertIfWhileStatement(ConditionalNodeType.If, ifStmt.Predicate, ifStmt.ThenStatement, ifStmt.ElseStatement, optimizer);
+            return ConvertIfWhileStatement(whileStmt, ConditionalNodeType.While, whileStmt.Predicate, whileStmt.Statement, null, optimizer, optimize);
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertIfStatement(IfStatement ifStmt, ExecutionPlanOptimizer optimizer, bool optimize)
+        {
+            return ConvertIfWhileStatement(ifStmt, ConditionalNodeType.If, ifStmt.Predicate, ifStmt.ThenStatement, ifStmt.ElseStatement, optimizer, optimize);
         }
 
         private IRootExecutionPlanNodeInternal ConvertSetVariableStatement(SetVariableStatement set)

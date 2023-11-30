@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// This property returns a value based on the state of the command when it was executed or
         /// when <see cref="Prepare"/> was called.
         /// </remarks>
-        public IRootExecutionPlanNode[] Plan { get; private set; }
+        public IRootExecutionPlanNode[] Plan { get; internal set; }
 
         /// <summary>
         /// Indicates if this command can be executed directly against the TDS Endpoint

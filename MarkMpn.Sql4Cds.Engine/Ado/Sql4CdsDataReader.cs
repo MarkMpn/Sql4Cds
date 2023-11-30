@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly CommandBehavior _behavior;
         private readonly Dictionary<string, DataTypeReference> _parameterTypes;
         private readonly Dictionary<string, object> _parameterValues;
-        private readonly Dictionary<string, int> _labelIndexes;
+        private Dictionary<string, int> _labelIndexes;
         private int _recordsAffected;
         private int _instructionPointer;
         private IDataReaderExecutionPlanNode _readerQuery;
@@ -50,16 +50,27 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var paramValue in _connection.GlobalVariableValues)
                 _parameterValues[paramValue.Key] = paramValue.Value;
 
-            _labelIndexes = command.Plan
-                .Select((node, index) => new { node, index })
-                .Where(n => n.node is GotoLabelNode)
-                .ToDictionary(n => ((GotoLabelNode)n.node).Label, n => n.index);
-
             if (!NextResult())
                 Close();
         }
 
         internal Dictionary<string, object> ParameterValues => _parameterValues;
+
+        private Dictionary<string, int> LabelIndexes
+        {
+            get
+            {
+                if (_labelIndexes != null)
+                    return _labelIndexes;
+
+                _labelIndexes = _command.Plan
+                    .Select((node, index) => new { node, index })
+                    .Where(n => n.node is GotoLabelNode)
+                    .ToDictionary(n => ((GotoLabelNode)n.node).Label, n => n.index);
+
+                return _labelIndexes;
+            }
+        }
 
         private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
         {
@@ -71,6 +82,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 while (_instructionPointer < _command.Plan.Length && !_options.CancellationToken.IsCancellationRequested)
                 {
                     var node = _command.Plan[_instructionPointer];
+
+                    if (node is IJitStatement unparsed)
+                    {
+                        var converted = unparsed.Compile();
+                        var newPlan = new IRootExecutionPlanNodeInternal[_command.Plan.Length - 1 + converted.Length];
+                        Array.Copy(_command.Plan, 0, newPlan, 0, _instructionPointer);
+                        Array.Copy(converted, 0, newPlan, _instructionPointer, converted.Length);
+                        Array.Copy(_command.Plan, _instructionPointer + 1, newPlan, _instructionPointer + converted.Length, _command.Plan.Length - _instructionPointer - 1);
+                        _command.Plan = newPlan;
+                        node = _command.Plan[_instructionPointer];
+                        _labelIndexes = null;
+                    }
+
                     logNode = node;
 
                     if (node is IDataReaderExecutionPlanNode dataSetNode)
@@ -114,7 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             _command.OnStatementCompleted(cond, -1);
 
                         if (label != null)
-                            _instructionPointer = _labelIndexes[label];
+                            _instructionPointer = LabelIndexes[label];
                     }
                     else if (node is GotoLabelNode)
                     {
