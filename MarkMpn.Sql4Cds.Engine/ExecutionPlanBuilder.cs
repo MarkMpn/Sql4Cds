@@ -1111,7 +1111,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check all target columns are valid for create
             foreach (var col in targetColumns)
             {
-                var colName = col.GetColumnName();
+                var colName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
 
                 // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
                 // entityid in listmember has an associated entitytypecode attribute
@@ -1172,7 +1172,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // Source is TDS endpoint so can't validate the columns, assume they are correct
                 for (var i = 0; i < targetColumns.Count; i++)
-                    node.ColumnMappings[targetColumns[i].GetColumnName()] = i.ToString();
+                    node.ColumnMappings[targetColumns[i].MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant()] = i.ToString();
             }
             else
             {
@@ -1184,7 +1184,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     string targetName;
                     DataTypeReference targetType;
 
-                    var colName = targetColumns[i].GetColumnName();
+                    var colName = targetColumns[i].MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
                     if (virtualTypeAttributes.Contains(colName))
                     {
                         targetName = colName;
@@ -1218,7 +1218,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // If any of the insert columns are a polymorphic lookup field, make sure we've got a value for the associated type field too
             foreach (var col in targetColumns)
             {
-                var targetAttrName = col.GetColumnName();
+                var targetAttrName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
 
                 if (attributeNames.Contains(targetAttrName))
                 {
