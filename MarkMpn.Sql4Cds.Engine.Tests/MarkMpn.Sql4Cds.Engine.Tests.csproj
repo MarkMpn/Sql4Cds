@@ -94,6 +94,8 @@
     <Compile Include="OptionsWrapper.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />
     <Compile Include="AdoProviderTests.cs" />
+    <Compile Include="RetrieveAllOptionSetsHandler.cs" />
+    <Compile Include="RetrieveMetadataChangesHandler.cs" />
     <Compile Include="SetStateMessageExecutor.cs" />
     <Compile Include="SampleMessageExecutor.cs" />
     <Compile Include="Sql2FetchXmlTests.cs" />
