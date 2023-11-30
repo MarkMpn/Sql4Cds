@@ -470,8 +470,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        // Convert to destination SQL type
-                        expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+                        if (!sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference) ||
+                            !(attr is LookupAttributeMetadata partyListAttr) ||
+                            partyListAttr.AttributeType != AttributeTypeCode.PartyList)
+                        {
+                            // Convert to destination SQL type - don't do this if we're converting from an EntityReference to a PartyList so
+                            // we don't lose the entity name during the conversion via a string
+                            expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+                        }
 
                         // Convert to final .NET SDK type
                         convertedExpr = SqlTypeConverter.Convert(expr, destType);
