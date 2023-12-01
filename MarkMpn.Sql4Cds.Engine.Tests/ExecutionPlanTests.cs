@@ -6488,5 +6488,32 @@ WHERE c.firstname = 'Mark'";
             var insert = AssertNode<InsertNode>(plans[0]);
             Assert.IsTrue(insert.IgnoreDuplicateKey);
         }
+
+        [TestMethod]
+        public void GroupByWithoutAggregateUsesDistinct()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name
+                FROM
+                    account
+                GROUP BY name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+        }
     }
 }

@@ -126,6 +126,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return rename;
             }
 
+            // If we're doing a GROUP BY without any aggregates, this is equivalent to a DISTINCT
+            if (Aggregates.Count == 0)
+            {
+                var schema = Source.GetSchema(context);
+
+                var distinct = new DistinctNode { Source = Source };
+
+                foreach (var grouping in GroupBy)
+                {
+                    schema.ContainsColumn(grouping.GetColumnName(), out var colName);
+                    distinct.Columns.Add(colName);
+                }
+
+                return distinct.FoldQuery(context, hints);
+            }
+
             if (Source is FetchXmlScan || Source is ComputeScalarNode computeScalar && computeScalar.Source is FetchXmlScan)
             {
                 // Check if all the aggregates & groupings can be done in FetchXML. Can only convert them if they can ALL
