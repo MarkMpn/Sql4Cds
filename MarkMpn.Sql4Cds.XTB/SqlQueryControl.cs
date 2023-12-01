@@ -78,7 +78,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private ToolStripControlHost _progressHost;
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
-        private readonly Sql4CdsConnection _connection;
+        private Sql4CdsConnection _connection;
         private FindReplace _findReplace;
         private bool _ctrlK;
 
@@ -116,12 +116,7 @@ namespace MarkMpn.Sql4Cds.XTB
             splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
             Icon = _sqlIcon;
 
-            _connection = new Sql4CdsConnection(DataSources);
-            _connection.ApplicationName = "XrmToolBox";
-            _connection.InfoMessage += (s, msg) =>
-            {
-                Execute(() => ShowResult(msg.Statement, null, null, msg.Message, null));
-            };
+            Connect();
 
             ChangeConnection(con);
         }
@@ -160,6 +155,8 @@ namespace MarkMpn.Sql4Cds.XTB
 
         internal void ChangeConnection(ConnectionDetail con)
         {
+            Connect();
+
             _con = con;
 
             if (con != null)
@@ -192,6 +189,22 @@ namespace MarkMpn.Sql4Cds.XTB
 
             SyncUsername();
             SyncTitle();
+        }
+
+        private void Connect()
+        {
+            if (_connection != null)
+                return;
+
+            if (DataSources.Count == 0)
+                return;
+
+            _connection = new Sql4CdsConnection(DataSources);
+            _connection.ApplicationName = "XrmToolBox";
+            _connection.InfoMessage += (s, msg) =>
+            {
+                Execute(() => ShowResult(msg.Statement, null, null, msg.Message, null));
+            };
         }
 
         protected override string GetTitle()
