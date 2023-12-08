@@ -71,6 +71,7 @@
   <ItemGroup>
     <Compile Include="AutocompleteTests.cs" />
     <Compile Include="FakeXrmEasyTestsBase.cs" />
+    <Compile Include="FormatterTests.cs" />
     <Compile Include="Metadata\Account.cs" />
     <Compile Include="Metadata\Contact.cs" />
     <Compile Include="Metadata\New_CustomEntity.cs" />
