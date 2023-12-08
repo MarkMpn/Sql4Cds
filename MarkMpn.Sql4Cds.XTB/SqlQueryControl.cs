@@ -6,10 +6,13 @@ using System.Data;
 using System.Data.SqlTypes;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.ServiceModel;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Web;
 using System.Windows.Forms;
 using AutocompleteMenuNS;
 using MarkMpn.Sql4Cds.Controls;
@@ -81,6 +84,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private Sql4CdsConnection _connection;
         private FindReplace _findReplace;
         private bool _ctrlK;
+        private Font _linkFont;
 
         static SqlQueryControl()
         {
@@ -804,7 +808,7 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
 
-            var content = grid.GetClipboardContent();
+            var content = CopyGrid(grid);
 
             if (content != null)
                 Clipboard.SetDataObject(content);
@@ -815,7 +819,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText;
 
-            var content = grid.GetClipboardContent();
+            var content = CopyGrid(grid);
 
             if (content != null)
                 Clipboard.SetDataObject(content);
@@ -1165,82 +1169,14 @@ namespace MarkMpn.Sql4Cds.XTB
                         DataPropertyName = col.ColumnName,
                         HeaderText = col.Caption,
                         ValueType = col.DataType,
-                        FillWeight = 1
+                        FillWeight = 1,
                     });
                 }
 
-                var linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
+                if (_linkFont == null)
+                    _linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
 
-                grid.CellFormatting += (s, e) =>
-                {
-                    if (e.Value is DBNull || (e.Value is INullable nullable && nullable.IsNull))
-                    {
-                        e.Value = "NULL";
-                        e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
-                        e.FormattingApplied = true;
-                    }
-                    else if (e.Value is bool b)
-                    {
-                        e.Value = b ? "1" : "0";
-                        e.FormattingApplied = true;
-                    }
-                    else if (e.Value is DateTime dt)
-                    {
-                        var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                        var type = (string)schema["DataTypeName"];
-
-                        if (type == "date")
-                        {
-                            if (Settings.Instance.LocalFormatDates)
-                                e.Value = dt.ToShortDateString();
-                            else
-                                e.Value = dt.ToString("yyyy-MM-dd");
-
-                            e.FormattingApplied = true;
-                        }
-                        else if (type == "smalldatetime")
-                        {
-                            if (Settings.Instance.LocalFormatDates)
-                                e.Value = dt.ToShortDateString() + " " + dt.ToString("HH:mm");
-                            else
-                                e.Value = dt.ToString("yyyy-MM-dd HH:mm");
-
-                            e.FormattingApplied = true;
-                        }
-                        else if (!Settings.Instance.LocalFormatDates)
-                        {
-                            var scale = (short)schema["NumericScale"];
-                            e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', scale))));
-                            e.FormattingApplied = true;
-                        }
-                    }
-                    else if (e.Value is TimeSpan ts && !Settings.Instance.LocalFormatDates)
-                    {
-                        var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                        var scale = (short)schema["NumericScale"];
-                        e.Value = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
-                        e.FormattingApplied = true;
-                    }
-                    else if (e.Value is decimal dec)
-                    {
-                        var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                        var scale = (short)schema["NumericScale"];
-                        e.Value = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
-                        e.FormattingApplied = true;
-                    }
-                    else if (e.Value is SqlEntityReference)
-                    {
-                        e.CellStyle.ForeColor = SystemColors.HotTrack;
-                        e.CellStyle.Font = linkFont;
-                    }
-                    else if (e.Value is SqlXml xml)
-                    {
-                        e.CellStyle.ForeColor = SystemColors.HotTrack;
-                        e.CellStyle.Font = linkFont;
-                        e.Value = xml.Value;
-                        e.FormattingApplied = true;
-                    }
-                };
+                grid.CellFormatting += FormatCell;
 
                 var specialPaintingChars = new[] { '\r', '\n', '\t' };
                 grid.CellPainting += (s, e) =>
@@ -1374,6 +1310,90 @@ namespace MarkMpn.Sql4Cds.XTB
                 plan.Controls.Add(fetchLabel);
 
                 AddExecutionPlan(plan);
+            }
+        }
+
+        private void FormatCell(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            var results = (DataTable)grid.DataSource;
+
+            if (e.Value is DBNull || (e.Value is INullable nullable && nullable.IsNull))
+            {
+                e.Value = "NULL";
+
+                if (e.CellStyle != null)
+                    e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
+                
+                e.FormattingApplied = true;
+            }
+            else if (e.Value is bool b)
+            {
+                e.Value = b ? "1" : "0";
+                e.FormattingApplied = true;
+            }
+            else if (e.Value is DateTime dt)
+            {
+                var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
+                var type = (string)schema["DataTypeName"];
+
+                if (type == "date")
+                {
+                    if (Settings.Instance.LocalFormatDates)
+                        e.Value = dt.ToShortDateString();
+                    else
+                        e.Value = dt.ToString("yyyy-MM-dd");
+
+                    e.FormattingApplied = true;
+                }
+                else if (type == "smalldatetime")
+                {
+                    if (Settings.Instance.LocalFormatDates)
+                        e.Value = dt.ToShortDateString() + " " + dt.ToString("HH:mm");
+                    else
+                        e.Value = dt.ToString("yyyy-MM-dd HH:mm");
+
+                    e.FormattingApplied = true;
+                }
+                else if (!Settings.Instance.LocalFormatDates)
+                {
+                    var scale = (short)schema["NumericScale"];
+                    e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', scale))));
+                    e.FormattingApplied = true;
+                }
+            }
+            else if (e.Value is TimeSpan ts && !Settings.Instance.LocalFormatDates)
+            {
+                var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
+                var scale = (short)schema["NumericScale"];
+                e.Value = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
+                e.FormattingApplied = true;
+            }
+            else if (e.Value is decimal dec)
+            {
+                var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
+                var scale = (short)schema["NumericScale"];
+                e.Value = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
+                e.FormattingApplied = true;
+            }
+            else if (e.Value is SqlEntityReference)
+            {
+                if (e.CellStyle != null)
+                {
+                    e.CellStyle.ForeColor = SystemColors.HotTrack;
+                    e.CellStyle.Font = _linkFont;
+                }
+            }
+            else if (e.Value is SqlXml xml)
+            {
+                if (e.CellStyle != null)
+                {
+                    e.CellStyle.ForeColor = SystemColors.HotTrack;
+                    e.CellStyle.Font = _linkFont;
+                }
+
+                e.Value = xml.Value;
+                e.FormattingApplied = true;
             }
         }
 
@@ -1594,11 +1614,41 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        class CellCoordinate : IComparable<CellCoordinate>, IEquatable<CellCoordinate>
+        {
+            public int RowIndex { get; set; }
+            public int ColumnIndex { get; set; }
+
+            public int CompareTo(CellCoordinate other)
+            {
+                var result = RowIndex.CompareTo(other.RowIndex);
+
+                if (result != 0)
+                    return result;
+
+                return ColumnIndex.CompareTo(other.ColumnIndex);
+            }
+
+            public bool Equals(CellCoordinate other)
+            {
+                return RowIndex == other.RowIndex && ColumnIndex == other.ColumnIndex;
+            }
+        }
+
         protected override bool ProcessCmdKey(ref System.Windows.Forms.Message msg, Keys keyData)
         {
             if (keyData == (Keys.Control | Keys.K))
             {
                 _ctrlK = true;
+                return true;
+            }
+            else if (keyData == (Keys.Control | Keys.C) && GetFocusedControl(this) is DataGridView grid && grid.DataSource is DataTable table)
+            {
+                var data = CopyGrid(grid);
+
+                if (data != null)
+                    Clipboard.SetDataObject(data);
+
                 return true;
             }
             else if (_ctrlK)
@@ -1641,6 +1691,215 @@ namespace MarkMpn.Sql4Cds.XTB
             }
 
             return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private DataObject CopyGrid(DataGridView grid)
+        {
+            if (!(grid.DataSource is DataTable table) ||
+                grid.SortedColumn != null)
+            {
+                // The data source should be a data table. If not, use the default logic
+                return grid.GetClipboardContent();
+            }
+            else
+            {
+                // The standard ways for getting the selection are very slow for large data sets as the DataGridView copies a lot of
+                // settings on each property access and spends a lot of time setting up formatting etc. that we don't care about for
+                // accessing the raw data. Use reflection to access the internal state of the grid instead. This is made up of two
+                // parts - selectedBandIndexes is a list of row indexes for rows that are completely selected, and individualSelectedCells
+                // are the additional cells that are selected not as part of a full row. Combine these to work out if each individual
+                // cell is selected
+                var allSelected = grid.AreAllCellsSelected(true);
+                var selectedRows = allSelected ? null : (IEnumerable)grid.GetType().GetField("selectedBandIndexes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(grid);
+                var rowIndexes = selectedRows
+                    ?.Cast<int>()
+                    ?.ToList();
+                rowIndexes?.Sort();
+                var individualSelectedCells = allSelected ? null : (IEnumerable)grid.GetType().GetField("individualSelectedCells", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(grid);
+                var cellCoords = individualSelectedCells
+                    ?.Cast<DataGridViewCell>()
+                    ?.Select(c => new CellCoordinate { RowIndex = c.RowIndex, ColumnIndex = c.ColumnIndex })
+                    ?.ToList();
+                cellCoords?.Sort();
+
+                // Work out the min and max column and row indexes for the bounds of the selection
+                var minRow = allSelected ? 0 : Math.Min(cellCoords == null || cellCoords.Count == 0 ? Int32.MaxValue : cellCoords.Min(c => c.RowIndex), rowIndexes == null || rowIndexes.Count == 0 ? Int32.MaxValue : rowIndexes[0]);
+                var maxRow = allSelected ? table.Rows.Count - 1 : Math.Max(cellCoords == null || cellCoords.Count == 0 ? Int32.MinValue : cellCoords.Max(c => c.RowIndex), rowIndexes == null || rowIndexes.Count == 0 ? Int32.MinValue : rowIndexes[rowIndexes.Count - 1]);
+                var minCol = allSelected || rowIndexes.Count > 0 ? 0 : cellCoords == null || cellCoords.Count == 0 ? Int32.MaxValue : cellCoords.Min(c => c.ColumnIndex);
+                var maxCol = allSelected || rowIndexes.Count > 0 ? table.Columns.Count - 1 : cellCoords == null || cellCoords.Count == 0 ? Int32.MinValue : cellCoords.Max(c => c.ColumnIndex);
+
+                // If nothing is selected, exit early
+                if (minRow > maxRow || minCol > maxCol)
+                    return null;
+
+                // Build up the data in three different formats for pasting into different apps
+                var txt = new StringBuilder();
+                var csv = new StringBuilder();
+                var html = new StringBuilder();
+                var specialCsvChars = new[] { '"', ',', '\r', '\n' };
+
+                html.Append("<TABLE>");
+                var firstRow = true;
+
+                if (grid.ClipboardCopyMode == DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText)
+                {
+                    // Add the column headers
+                    html.Append("<TR>");
+
+                    for (var col = minCol; col <= maxCol; col++)
+                    {
+                        if (col > minCol)
+                        {
+                            txt.Append('\t');
+                            csv.Append(',');
+                        }
+
+                        html.Append("<TH>");
+
+                        var isSelected = allSelected;
+                        if (!isSelected)
+                            isSelected = rowIndexes.Count > 0;
+                        if (!isSelected)
+                            isSelected = cellCoords.Any(c => c.ColumnIndex == col);
+
+                        if (isSelected)
+                        {
+                            var str = grid.Columns[col].HeaderText;
+                            txt.Append(str.Replace('\t', ' '));
+
+                            var requiresCsvEncoding = str.IndexOfAny(specialCsvChars) != -1;
+
+                            if (requiresCsvEncoding)
+                            {
+                                csv.Append('"');
+                                csv.Append(str.Replace("\"", "\"\""));
+                                csv.Append('"');
+                            }
+                            else
+                            {
+                                csv.Append(str);
+                            }
+
+                            html.Append(HttpUtility.HtmlEncode(str));
+                        }
+
+                        html.Append("</TH>");
+                    }
+
+                    html.Append("</TR>");
+                    firstRow = false;
+                }
+
+                for (var i = minRow; i <= maxRow; i++)
+                {
+                    var row = table.Rows[i];
+                    html.Append("<TR>");
+
+                    for (var j = minCol; j <= maxCol; j++)
+                    {
+                        if (j == minCol && !firstRow)
+                        {
+                            txt.Append(Environment.NewLine);
+                            csv.Append(Environment.NewLine);
+                        }
+                        else if (j > minCol)
+                        {
+                            txt.Append('\t');
+                            csv.Append(',');
+                        }
+
+                        html.Append("<TD>");
+
+                        var isSelected = allSelected;
+                        if (!isSelected)
+                            isSelected = rowIndexes.BinarySearch(i) >= 0;
+                        if (!isSelected)
+                            isSelected = cellCoords.BinarySearch(new CellCoordinate { RowIndex = i, ColumnIndex = j }) >= 0;
+
+                        if (isSelected)
+                        {
+                            var args = new DataGridViewCellFormattingEventArgs(j, i, row[j], typeof(string), null);
+                            FormatCell(grid, args);
+
+                            var str = args.Value.ToString();
+
+                            // Copying a single cell - don't replace any special characters, just extract the raw text
+                            if (minCol == maxCol && minRow == maxRow)
+                                txt.Append(str);
+                            else
+                                txt.Append(str.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '));
+
+                            var requiresCsvEncoding = str.IndexOfAny(specialCsvChars) != -1;
+
+                            if (requiresCsvEncoding)
+                            {
+                                csv.Append('"');
+                                csv.Append(str.Replace("\"", "\"\""));
+                                csv.Append('"');
+                            }
+                            else
+                            {
+                                csv.Append(str);
+                            }
+
+                            var isLink = false;
+
+                            if (row[j] is SqlEntityReference entityReference && !entityReference.IsNull)
+                            {
+                                var url = GetRecordUrl(entityReference, out _);
+                                html.Append($"<A HREF=\"{url}\">");
+                                isLink = true;
+                            }
+
+                            html.Append(HttpUtility.HtmlEncode(str));
+
+                            if (isLink)
+                                html.Append("</A>");
+                        }
+
+                        html.Append("</TD>");
+                    }
+
+                    html.Append("</TR>");
+                    firstRow = false;
+                }
+
+                html.Append("</TABLE>");
+
+                // Add the magic header for copying HTML
+                var htmlBytes = Encoding.UTF8.GetByteCount(html.ToString());
+                var header = "Version:1.0\r\nStartHTML:aaaaaaaaa\r\nEndHTML:bbbbbbbbb\r\nStartFragment:ccccccccc\r\nEndFragment:ddddddddd\r\n";
+                var fragmentHeader = "<HTML>\r\n<BODY>\r\n<!--StartFragment-->";
+                var trailer = "\r\n<!--EndFragment-->\r\n</BODY>\r\n</HTML>";
+
+                header = header.Replace("aaaaaaaaa", header.Length.ToString("000000000", CultureInfo.InvariantCulture));
+                header = header.Replace("bbbbbbbbb", (header.Length + fragmentHeader.Length + htmlBytes + trailer.Length).ToString("000000000", CultureInfo.InvariantCulture));
+                header = header.Replace("ccccccccc", (header.Length + fragmentHeader.Length).ToString("000000000", CultureInfo.InvariantCulture));
+                header = header.Replace("ddddddddd", (header.Length + fragmentHeader.Length + htmlBytes).ToString("000000000", CultureInfo.InvariantCulture));
+
+                html.Insert(0, fragmentHeader);
+                html.Insert(0, header);
+                html.Append(trailer);
+
+                var data = new DataObject();
+                data.SetText(txt.ToString(), TextDataFormat.Text);
+                data.SetText(txt.ToString(), TextDataFormat.UnicodeText);
+                data.SetText(csv.ToString(), TextDataFormat.CommaSeparatedValue);
+                data.SetText(html.ToString(), TextDataFormat.Html);
+
+                return data;
+            }
+        }
+
+        public static Control GetFocusedControl(Control control)
+        {
+            var container = control as IContainerControl;
+            while (container != null)
+            {
+                control = container.ActiveControl;
+                container = control as IContainerControl;
+            }
+            return control;
         }
     }
 }
