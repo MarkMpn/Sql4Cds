@@ -6731,5 +6731,41 @@ WHERE c.firstname = 'Mark'";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void FilterOnCrossApply()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+select name, n from account
+cross apply (select name + '' as n) x
+where n = 'a'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("n = 'a'", filter.Filter.ToSql());
+            var loop = AssertNode<NestedLoopNode>(filter.Source);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["account.name"]);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var alias = AssertNode<AliasNode>(loop.RightSource);
+            Assert.AreEqual("x", alias.Alias);
+            Assert.AreEqual("Expr2", alias.ColumnSet.Single().SourceColumn);
+            Assert.AreEqual("n", alias.ColumnSet.Single().OutputColumn);
+            var computeScalar = AssertNode<ComputeScalarNode>(alias.Source);
+            Assert.AreEqual("@Expr1 + ''", computeScalar.Columns["Expr2"].ToSql());
+            var constantScan = AssertNode<ConstantScanNode>(computeScalar.Source);
+            Assert.AreEqual(1, constantScan.Values.Count);
+        }
     }
 }
