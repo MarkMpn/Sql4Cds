@@ -3611,7 +3611,7 @@ namespace MarkMpn.Sql4Cds.Engine
         
         private void InsertCorrelatedSubquerySpool(ISingleSourceExecutionPlanNode node, IDataExecutionPlanNode outerSource, IList<OptimizerHint> hints, NodeCompilationContext context, string[] outerReferences)
         {
-            if (hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
+            if (hints != null && hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
                 return;
 
             // Look for a simple case where there is a reference to the outer table in a filter node. Extract the minimal
