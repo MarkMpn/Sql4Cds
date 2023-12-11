@@ -565,10 +565,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Prefix all attributes of the main entity with the expected alias
             var escapedAlias = Alias.EscapeIdentifier();
             foreach (var attribute in entity.Attributes.Where(attr => !attr.Key.Contains('.') && !(attr.Value is AliasedValue)).ToList())
-                entity[$"{escapedAlias}.{attribute.Key}"] = attribute.Value;
+                entity[$"{escapedAlias}.{attribute.Key.EscapeIdentifier()}"] = attribute.Value;
 
             // Only prefix aliased values if they're not aggregates
-            PrefixAliasedScalarAttributes(entity, Entity.Items, Alias);
+            PrefixAliasedScalarAttributes(entity, Entity.Items, escapedAlias);
 
             // Convert aliased values to the underlying value
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
@@ -599,11 +599,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Expose the type and name of lookup values
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
             {
-                if (!entity.Contains(attribute.Key + "type"))
-                    entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
+                var typeSuffix = AddSuffix(attribute.Key, "type");
+                var nameSuffix = AddSuffix(attribute.Key, "name");
 
-                if (!entity.Contains(attribute.Key + "name"))
-                    entity[attribute.Key + "name"] = ((EntityReference)attribute.Value).Name;
+                if (!entity.Contains(typeSuffix))
+                    entity[typeSuffix] = ((EntityReference)attribute.Value).LogicalName;
+
+                if (!entity.Contains(nameSuffix))
+                    entity[nameSuffix] = ((EntityReference)attribute.Value).Name;
             }
 
             // Convert values to SQL types
@@ -655,11 +658,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var value = entity.GetAttributeValue<AliasedValue>(attr.alias);
 
                 if (value != null)
-                    entity[$"{alias}.{attr.alias}"] = value;
+                    entity[$"{alias}.{attr.alias.EscapeIdentifier()}"] = value;
             }
 
             foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-                PrefixAliasedScalarAttributes(entity, linkEntity.Items, linkEntity.alias);
+                PrefixAliasedScalarAttributes(entity, linkEntity.Items, linkEntity.alias.EscapeIdentifier());
         }
 
         private Dictionary<string, List<ParameterizedCondition>> FindParameterizedConditions()
@@ -984,8 +987,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (attrMetadata.AttributeOf != null)
                         continue;
 
-                    var fullName = $"{alias}.{attrMetadata.LogicalName}";
-                    var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName;
+                    var fullName = $"{alias}.{attrMetadata.LogicalName.EscapeIdentifier()}";
+                    var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName.EscapeIdentifier();
                     var attrType = attrMetadata.GetAttributeSqlType(dataSource, false);
                     AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, attrMetadata, innerJoin);
                 }
@@ -1027,19 +1030,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         if (!FetchXml.aggregate || attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true && !attribute.dategroupingSpecified)
                         {
-                            fullName = $"{alias}.{attribute.alias}";
-                            attrAlias = attribute.alias;
+                            fullName = $"{alias}.{attribute.alias.EscapeIdentifier()}";
+                            attrAlias = attribute.alias.EscapeIdentifier();
                         }
                         else
                         {
-                            fullName = attribute.alias;
+                            fullName = attribute.alias.EscapeIdentifier();
                             attrAlias = null;
                         }
                     }
                     else
                     {
-                        fullName = $"{alias}.{attribute.name}";
-                        attrAlias = attribute.name;
+                        fullName = $"{alias}.{attribute.name.EscapeIdentifier()}";
+                        attrAlias = attribute.name.EscapeIdentifier();
                     }
 
                     if (requireTablePrefix)
@@ -1059,10 +1062,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             continue;
 
                         var attrType = attrMetadata.GetAttributeSqlType(dataSource, false);
-                        var attrName = requireTablePrefix ? null : attrMetadata.LogicalName;
+                        var attrName = attrMetadata.LogicalName.EscapeIdentifier();
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(dataSource, schema, aliases, fullName, attrName, attrType, attrMetadata, innerJoin);
+                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, attrMetadata, innerJoin);
                     }
                 }
 
@@ -1076,15 +1079,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a.alias.Equals(sort.alias, StringComparison.OrdinalIgnoreCase));
 
                         if (!FetchXml.aggregate || attribute != null && attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
-                            fullName = $"{alias}.{attribute.alias}";
+                            fullName = $"{alias}.{attribute.alias.EscapeIdentifier()}";
                         else
-                            fullName = attribute.alias;
+                            fullName = attribute.alias.EscapeIdentifier();
 
                         attributeName = attribute.name;
                     }
                     else
                     {
-                        fullName = $"{alias}.{sort.attribute}";
+                        fullName = $"{alias}.{sort.attribute.EscapeIdentifier()}";
                         attributeName = sort.attribute;
                     }
 
@@ -1092,7 +1095,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var attrMeta = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
 
                     if (attrMeta is LookupAttributeMetadata || attrMeta is EnumAttributeMetadata || attrMeta is BooleanAttributeMetadata)
-                        fullName += "name";
+                        fullName = AddSuffix(fullName, "name");
 
                     sortOrder.Add(fullName);
                 }
@@ -1109,13 +1112,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (linkEntity.from != childMeta.PrimaryIdAttribute)
                         {
                             if (linkEntity.linktype == "inner")
-                                primaryKey = $"{linkEntity.alias}.{childMeta.PrimaryIdAttribute}";
+                                primaryKey = $"{linkEntity.alias}.{childMeta.PrimaryIdAttribute.EscapeIdentifier()}";
                             else
                                 primaryKey = null;
                         }
                     }
 
-                    AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner", requireTablePrefix || linkEntity.RequireTablePrefix);
+                    AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, linkEntity.name, linkEntity.alias.EscapeIdentifier(), linkEntity.Items, innerJoin && linkEntity.linktype == "inner", requireTablePrefix || linkEntity.RequireTablePrefix);
                 }
 
                 if (innerJoin)
@@ -1154,7 +1157,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid || cond.@operator == @operator.neq || cond.@operator == @operator.neuserid)
                     continue;
 
-                var fullname = (cond.entityname ?? alias) + "." + (cond.alias ?? cond.attribute);
+                var fullname = (cond.entityname?.EscapeIdentifier() ?? alias) + "." + (cond.alias ?? cond.attribute).EscapeIdentifier();
 
                 if (new NodeSchema(primaryKey: null, schema: schema, aliases: aliases, sortOrder: null).ContainsColumn(fullname, out fullname))
                     schema[fullname] = schema[fullname].NotNull();
@@ -1179,16 +1182,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "name"), (attrMetadata.LogicalName + "name").EscapeIdentifier(), DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
             else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "name"), (attrMetadata.LogicalName + "name").EscapeIdentifier(), DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "name"), (attrMetadata.LogicalName + "name").EscapeIdentifier(), DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, aliases, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                    AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "type"), (attrMetadata.LogicalName + "type").EscapeIdentifier(), DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull); ;
             }
         }
 
@@ -1212,6 +1215,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (!simpleColumnNameAliases.Contains(fullName))
                 ((List<string>)simpleColumnNameAliases).Add(fullName);
+        }
+
+        private string AddSuffix(string name, string suffix)
+        {
+            var parts = name.SplitMultiPartIdentifier();
+            parts[parts.Length - 1] += suffix;
+            return String.Join(".", parts.Select(p => p.EscapeIdentifier()));
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)

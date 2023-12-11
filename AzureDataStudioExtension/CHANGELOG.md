@@ -1,5 +1,15 @@
 # Change Log
 
+## [v8.0.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.1) - 2023-12-13
+
+Fixed escaping column names for `SELECT` and `INSERT` commands
+Improved setting a partylist attribute based on an EntityReference value
+Fixed sorting results for `UNION`
+Fold `DISTNCT` to data source for `UNION`
+Fold groupings without aggregates to `DISTINCT`
+Fixed folding filters through nested loops with outer references
+Fixed use of recursive CTE references within subquery
+
 ## [v8.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.0) - 2023-11-25
 
 Added Common Table Expression support:

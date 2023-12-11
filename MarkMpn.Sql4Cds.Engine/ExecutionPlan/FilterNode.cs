@@ -1119,19 +1119,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
             // CTEs or other query-derived tables can contain a table with the same alias as a table in the main query. Identify these and prefer using the table
             // from the outer query.
-            var ignoreAliasesByNode = GetIgnoreAliasesByNode();
+            var ignoreAliasesByNode = GetIgnoreAliasesByNode(context);
 
-            foreach (var source in GetFoldableSources(Source))
+            foreach (var sourceAndContext in GetFoldableSources(Source, context))
             {
-                var schema = source.GetSchema(context);
+                var source = sourceAndContext.Key;
+                var foldableContext = sourceAndContext.Value;
+                var schema = source.GetSchema(foldableContext);
 
                 if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
                 {
-                    if (!context.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                    if (!foldableContext.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(context, dataSource.Metadata, Filter, schema, null, ignoreAliasesByNode[fetchXml], fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
+                    Filter = ExtractFetchXMLFilters(foldableContext, dataSource.Metadata, Filter, schema, null, ignoreAliasesByNode[fetchXml], fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
@@ -1156,7 +1158,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (source is MetadataQueryNode meta)
                 {
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to the metadata query
-                    Filter = ExtractMetadataFilters(context, Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter);
+                    Filter = ExtractMetadataFilters(foldableContext, Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter);
 
                     meta.Query.AddFilter(entityFilter);
 
@@ -1210,7 +1212,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 Source = concat.Sources[i],
                                 Filter = ReplaceColumnNames(concatFilter, concat.ColumnSet.ToDictionary(col => (ScalarExpression)col.OutputColumn.ToColumnReference(), col => col.SourceColumns[i]))
                             };
-                            concat.Sources[i] = concatFilterNode.FoldQuery(context, hints);
+                            concat.Sources[i] = concatFilterNode.FoldQuery(foldableContext, hints);
                         }
 
                         foldedFilters = true;
@@ -1224,9 +1226,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
-        private Dictionary<FetchXmlScan,HashSet<string>> GetIgnoreAliasesByNode()
+        private Dictionary<FetchXmlScan,HashSet<string>> GetIgnoreAliasesByNode(NodeCompilationContext context)
         {
-            var fetchXmlSources = GetFoldableSources(Source)
+            var fetchXmlSources = GetFoldableSources(Source, context)
+                .Select(sourceAndContext => sourceAndContext.Key)
                 .OfType<FetchXmlScan>()
                 .ToList();
 
@@ -1317,14 +1320,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        private IEnumerable<IDataExecutionPlanNodeInternal> GetFoldableSources(IDataExecutionPlanNodeInternal source)
+        private IEnumerable<KeyValuePair<IDataExecutionPlanNodeInternal,NodeCompilationContext>> GetFoldableSources(IDataExecutionPlanNodeInternal source, NodeCompilationContext context)
         {
             if (source is FetchXmlScan ||
                 source is MetadataQueryNode ||
                 source is AliasNode ||
                 source is ConcatenateNode)
             {
-                yield return source;
+                yield return new KeyValuePair<IDataExecutionPlanNodeInternal, NodeCompilationContext>(source, context);
                 yield break;
             }
 
@@ -1332,13 +1335,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.LeftOuter)
                 {
-                    foreach (var subSource in GetFoldableSources(join.LeftSource))
+                    foreach (var subSource in GetFoldableSources(join.LeftSource, context))
                         yield return subSource;
                 }
 
                 if (join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.RightOuter)
                 {
-                    foreach (var subSource in GetFoldableSources(join.RightSource))
+                    var childContext = context;
+
+                    if (join is NestedLoopNode loop && loop.OuterReferences.Count > 0)
+                    {
+                        var leftSchema = join.LeftSource.GetSchema(context);
+                        var innerParameterTypes = context.ParameterTypes
+                            .Concat(loop.OuterReferences.Select(or => new KeyValuePair<string,DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type)))
+                            .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+
+                        childContext = new NodeCompilationContext(context, innerParameterTypes);
+                    }
+
+                    foreach (var subSource in GetFoldableSources(join.RightSource, childContext))
                         yield return subSource;
                 }
 
@@ -1353,7 +1368,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var subSource in source.GetSources().OfType<IDataExecutionPlanNodeInternal>())
             {
-                foreach (var foldableSubSource in GetFoldableSources(subSource))
+                foreach (var foldableSubSource in GetFoldableSources(subSource, context))
                     yield return foldableSubSource;
             }
         }

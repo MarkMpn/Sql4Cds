@@ -1465,6 +1465,187 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void Union()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT name FROM account
+                UNION
+                SELECT fullname FROM contact";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("name", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr1", select.ColumnSet[0].SourceColumn);
+            var distinct = AssertNode<DistinctNode>(select.Source);
+            Assert.AreEqual("Expr1", distinct.Columns.Single());
+            var concat = AssertNode<ConcatenateNode>(distinct.Source);
+            Assert.AreEqual(2, concat.Sources.Count);
+            Assert.AreEqual("Expr1", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("account.name", concat.ColumnSet[0].SourceColumns[0]);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
+            var accountFetch = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            AssertFetchXml(accountFetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            AssertFetchXml(contactFetch, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <order attribute='fullname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UnionSort()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT name FROM account
+                UNION
+                SELECT fullname FROM contact
+                ORDER BY name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("name", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr1", select.ColumnSet[0].SourceColumn);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("Expr1", sort.Sorts.Single().ToSql());
+            var distinct = AssertNode<DistinctNode>(sort.Source);
+            Assert.AreEqual("Expr1", distinct.Columns.Single());
+            var concat = AssertNode<ConcatenateNode>(distinct.Source);
+            Assert.AreEqual(2, concat.Sources.Count);
+            Assert.AreEqual("Expr1", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("account.name", concat.ColumnSet[0].SourceColumns[0]);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
+            var accountFetch = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            AssertFetchXml(accountFetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            AssertFetchXml(contactFetch, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <order attribute='fullname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UnionSortOnAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT name AS n FROM account
+                UNION
+                SELECT fullname FROM contact
+                ORDER BY n";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("n", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr1", select.ColumnSet[0].SourceColumn);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("Expr1", sort.Sorts.Single().ToSql());
+            var distinct = AssertNode<DistinctNode>(sort.Source);
+            Assert.AreEqual("Expr1", distinct.Columns.Single());
+            var concat = AssertNode<ConcatenateNode>(distinct.Source);
+            Assert.AreEqual(2, concat.Sources.Count);
+            Assert.AreEqual("Expr1", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("account.name", concat.ColumnSet[0].SourceColumns[0]);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
+            var accountFetch = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            AssertFetchXml(accountFetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            AssertFetchXml(contactFetch, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <order attribute='fullname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UnionSortOnAliasedColumnsOriginalName()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT name AS n FROM account
+                UNION
+                SELECT fullname FROM contact
+                ORDER BY name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("n", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr1", select.ColumnSet[0].SourceColumn);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("Expr1", sort.Sorts.Single().ToSql());
+            var distinct = AssertNode<DistinctNode>(sort.Source);
+            Assert.AreEqual("Expr1", distinct.Columns.Single());
+            var concat = AssertNode<ConcatenateNode>(distinct.Source);
+            Assert.AreEqual(2, concat.Sources.Count);
+            Assert.AreEqual("Expr1", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("account.name", concat.ColumnSet[0].SourceColumns[0]);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
+            var accountFetch = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            AssertFetchXml(accountFetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            AssertFetchXml(contactFetch, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <order attribute='fullname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void UnionAll()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
@@ -3640,6 +3821,41 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void OrderByAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT name AS companyname FROM account ORDER BY companyname";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet.Single().SourceColumn);
+            Assert.AreEqual("companyname", select.ColumnSet.Single().OutputColumn);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void OrderByAliasCantUseExpression()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT name AS companyname FROM account ORDER BY companyname + ''";
+
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -6487,6 +6703,69 @@ WHERE c.firstname = 'Mark'";
 
             var insert = AssertNode<InsertNode>(plans[0]);
             Assert.IsTrue(insert.IgnoreDuplicateKey);
+        }
+
+        [TestMethod]
+        public void GroupByWithoutAggregateUsesDistinct()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    name
+                FROM
+                    account
+                GROUP BY name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnCrossApply()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+select name, n from account
+cross apply (select name + '' as n) x
+where n = 'a'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("n = 'a'", filter.Filter.ToSql());
+            var loop = AssertNode<NestedLoopNode>(filter.Source);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["account.name"]);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var alias = AssertNode<AliasNode>(loop.RightSource);
+            Assert.AreEqual("x", alias.Alias);
+            Assert.AreEqual("Expr2", alias.ColumnSet.Single().SourceColumn);
+            Assert.AreEqual("n", alias.ColumnSet.Single().OutputColumn);
+            var computeScalar = AssertNode<ComputeScalarNode>(alias.Source);
+            Assert.AreEqual("@Expr1 + ''", computeScalar.Columns["Expr2"].ToSql());
+            var constantScan = AssertNode<ConstantScanNode>(computeScalar.Source);
+            Assert.AreEqual(1, constantScan.Values.Count);
         }
     }
 }

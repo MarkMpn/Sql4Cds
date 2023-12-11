@@ -1111,7 +1111,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check all target columns are valid for create
             foreach (var col in targetColumns)
             {
-                var colName = col.GetColumnName();
+                var colName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
 
                 // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
                 // entityid in listmember has an associated entitytypecode attribute
@@ -1172,7 +1172,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // Source is TDS endpoint so can't validate the columns, assume they are correct
                 for (var i = 0; i < targetColumns.Count; i++)
-                    node.ColumnMappings[targetColumns[i].GetColumnName()] = i.ToString();
+                    node.ColumnMappings[targetColumns[i].MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant()] = i.ToString();
             }
             else
             {
@@ -1184,7 +1184,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     string targetName;
                     DataTypeReference targetType;
 
-                    var colName = targetColumns[i].GetColumnName();
+                    var colName = targetColumns[i].MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
                     if (virtualTypeAttributes.Contains(colName))
                     {
                         targetName = colName;
@@ -1218,7 +1218,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // If any of the insert columns are a polymorphic lookup field, make sure we've got a value for the associated type field too
             foreach (var col in targetColumns)
             {
-                var targetAttrName = col.GetColumnName();
+                var targetAttrName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
 
                 if (attributeNames.Contains(targetAttrName))
                 {
@@ -2079,7 +2079,53 @@ namespace MarkMpn.Sql4Cds.Engine
                 node = distinct;
             }
 
-            node = ConvertOrderByClause(node, hints, binary.OrderByClause, concat.ColumnSet.Select(col => new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = col.OutputColumn } } } }).ToArray(), binary, context, outerSchema, outerReferences, null);
+            // Aliases to be used for sorting are:
+            // * Column aliases defined in the first query
+            // * Source column names from the first query
+            // So the query
+            //
+            // SELECT col1 AS x, col2 + '' AS y FROM table1
+            // UNION
+            // SELECT col3, col4 FROM table2
+            //
+            // can sort by col1, x and y
+            var leftSchema = left.Source.GetSchema(context);
+            var aliases = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < left.ColumnSet.Count; i++)
+            {
+                if (!String.IsNullOrEmpty(left.ColumnSet[i].OutputColumn))
+                {
+                    if (!aliases.TryGetValue(left.ColumnSet[i].OutputColumn, out var aliasedCols))
+                    {
+                        aliasedCols = new List<string>();
+                        aliases.Add(left.ColumnSet[i].OutputColumn, aliasedCols);
+                    }
+
+                    aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                }
+
+                var leftSourceCol = leftSchema.Schema[left.ColumnSet[i].SourceColumn];
+
+                if (leftSourceCol.IsVisible)
+                {
+                    var sourceColParts = left.ColumnSet[i].SourceColumn.SplitMultiPartIdentifier();
+                    var sourceColName = sourceColParts.Last();
+
+                    if (!sourceColName.Equals(left.ColumnSet[i].OutputColumn, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!aliases.TryGetValue(sourceColName, out var aliasedCols))
+                        {
+                            aliasedCols = new List<string>();
+                            aliases.Add(sourceColName, aliasedCols);
+                        }
+
+                        aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                    }
+                }
+            }
+
+            node = ConvertOrderByClause(node, hints, binary.OrderByClause, concat.ColumnSet.Select(col => col.OutputColumn.ToColumnReference()).ToArray(), aliases, binary, context, outerSchema, outerReferences, null);
             node = ConvertOffsetClause(node, binary.OffsetClause, context);
 
             var select = new SelectNode { Source = node, LogicalSourceSchema = concat.GetSchema(context) };
@@ -2157,7 +2203,23 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
-            node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), querySpec, context, outerSchema, outerReferences, nonAggregateSchema);
+            var aliases = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in selectNode.ColumnSet)
+            {
+                if (String.IsNullOrEmpty(col.OutputColumn))
+                    continue;
+
+                if (!aliases.TryGetValue(col.OutputColumn, out var aliasedCols))
+                {
+                    aliasedCols = new List<string>();
+                    aliases.Add(col.OutputColumn, aliasedCols);
+                }
+
+                aliasedCols.Add(col.SourceColumn);
+            }
+
+            node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), aliases, querySpec, context, outerSchema, outerReferences, nonAggregateSchema);
 
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
@@ -2952,7 +3014,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IDataExecutionPlanNodeInternal ConvertOrderByClause(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, Dictionary<string, string> outerReferences, INodeSchema nonAggregateSchema)
+        private IDataExecutionPlanNodeInternal ConvertOrderByClause(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, OrderByClause orderByClause, ScalarExpression[] selectList, Dictionary<string,List<string>> aliases, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, Dictionary<string, string> outerReferences, INodeSchema nonAggregateSchema)
         {
             if (orderByClause == null)
                 return source;
@@ -2965,21 +3027,19 @@ namespace MarkMpn.Sql4Cds.Engine
             var schema = source.GetSchema(context);
             var sort = new SortNode { Source = source };
 
-            // Sorts can use aliases from the SELECT clause
-            if (query is QuerySpecification querySpec)
+            // Sorts can use aliases from the SELECT clause, but only as the entire sort expression, not a calculation.
+            // Aliases must not be duplicated
+            foreach (var order in orderByClause.OrderByElements)
             {
-                var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
-
-                foreach (var select in querySpec.SelectElements.OfType<SelectScalarExpression>())
+                if (order.Expression is ColumnReferenceExpression orderByCol &&
+                    aliases.TryGetValue(orderByCol.GetColumnName(), out var aliasedCols))
                 {
-                    if (select.ColumnName == null)
-                        continue;
+                    if (aliasedCols.Count > 1)
+                        throw new NotSupportedQueryFragmentException("Ambiguous column name", order.Expression);
 
-                    rewrites[select.ColumnName.Value.ToColumnReference()] = select.Expression;
+                    order.Expression = aliasedCols[0].ToColumnReference();
+                    order.ScriptTokenStream = null;
                 }
-
-                if (rewrites.Any())
-                    orderByClause.Accept(new RewriteVisitor(rewrites));
             }
 
             // Check if any of the order expressions need pre-calculation
@@ -3551,7 +3611,7 @@ namespace MarkMpn.Sql4Cds.Engine
         
         private void InsertCorrelatedSubquerySpool(ISingleSourceExecutionPlanNode node, IDataExecutionPlanNode outerSource, IList<OptimizerHint> hints, NodeCompilationContext context, string[] outerReferences)
         {
-            if (hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
+            if (hints != null && hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
                 return;
 
             // Look for a simple case where there is a reference to the outer table in a filter node. Extract the minimal
