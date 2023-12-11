@@ -165,6 +165,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (IsPerformanceSpool && hints != null && hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
                 return Source;
 
+            if (Source is ConstantScanNode)
+                return Source;
+
             Source.Parent = this;
             return this;
         }

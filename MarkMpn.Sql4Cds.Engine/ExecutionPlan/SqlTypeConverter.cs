@@ -518,6 +518,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 );
             }
 
+            if (expr.Type == typeof(SqlEntityReference) && to == typeof(EntityCollection))
+                expr = Expr.Call(() => CreateEntityCollection(Expr.Arg<SqlEntityReference>()), expr);
+
             if (expr.Type == typeof(SqlString) && to == typeof(EntityCollection))
                 expr = Expr.Call(() => ParseEntityCollection(Expr.Arg<SqlString>()), expr);
 
@@ -738,6 +741,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new SqlString(value.Value.Substring(0, maxLength), value.LCID, value.SqlCompareOptions);
         }
 
+        private static EntityCollection CreateEntityCollection(SqlEntityReference value)
+        {
+            if (value.IsNull)
+                return null;
+
+            return new EntityCollection(new[]
+            {
+                new Entity("activityparty")
+                {
+                    ["partyid"] = (EntityReference)value
+                }
+            })
+            {
+                EntityName = "activityparty"
+            };
+        }
+
         private static EntityCollection ParseEntityCollection(SqlString value)
         {
             if (value.IsNull)
@@ -763,7 +783,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 })
                 .ToList();
 
-            return new EntityCollection(entities);
+            return new EntityCollection(entities) { EntityName = "activityparty" };
         }
 
         private static OptionSetValueCollection ParseOptionSetValueCollection(SqlString value)

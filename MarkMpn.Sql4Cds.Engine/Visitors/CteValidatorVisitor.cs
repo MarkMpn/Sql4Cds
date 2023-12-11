@@ -17,6 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         private FunctionCall _scalarAggregate;
         private ScalarSubquery _subquery;
         private QualifiedJoin _outerJoin;
+        private int _nestedQueryDepth;
 
         public string Name { get; private set; }
 
@@ -83,69 +84,83 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void ExplicitVisit(QueryParenthesisExpression node)
         {
+            _nestedQueryDepth++;
+
             base.ExplicitVisit(node);
 
-            if (!IsRecursive)
-                AnchorQuery = node;
-            else
-                RecursiveQueries.Add(node);
+            _nestedQueryDepth--;
+
+            if (_nestedQueryDepth == 0)
+            {
+                if (!IsRecursive)
+                    AnchorQuery = node;
+                else
+                    RecursiveQueries.Add(node);
+            }
         }
 
         public override void ExplicitVisit(QuerySpecification node)
         {
+            _nestedQueryDepth++;
+
             _scalarAggregate = null;
             _subquery = null;
             _outerJoin = null;
 
             base.ExplicitVisit(node);
 
-            // The following clauses can't be used in the CTE_query_definition:
-            // ORDER BY (except when a TOP clause is specified)
-            if (node.OrderByClause != null && node.TopRowFilter == null)
-                throw new NotSupportedQueryFragmentException("The ORDER BY clause is invalid in views, inline functions, derived tables, subqueries, and common table expressions, unless TOP, OFFSET or FOR XML is also specified", node.OrderByClause);
+            _nestedQueryDepth--;
 
-            // FOR BROWSE
-            if (node.ForClause is BrowseForClause)
-                throw new NotSupportedQueryFragmentException("The FOR BROWSE clause is no longer supported in views", node.ForClause);
-
-            if (IsRecursive)
+            if (_nestedQueryDepth == 0)
             {
-                // The following items aren't allowed in the CTE_query_definition of a recursive member:
-                // SELECT DISTINCT
-                if (node.UniqueRowFilter == UniqueRowFilter.Distinct)
-                    throw new NotSupportedQueryFragmentException($"DISTINCT operator is not allowed in the recursive part of a recursive common table expression '{Name}'.", node);
+                // The following clauses can't be used in the CTE_query_definition:
+                // ORDER BY (except when a TOP clause is specified)
+                if (node.OrderByClause != null && node.TopRowFilter == null)
+                    throw new NotSupportedQueryFragmentException("The ORDER BY clause is invalid in views, inline functions, derived tables, subqueries, and common table expressions, unless TOP, OFFSET or FOR XML is also specified", node.OrderByClause);
 
-                // GROUP BY
-                if (node.GroupByClause != null)
-                    throw new NotSupportedQueryFragmentException($"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", node.GroupByClause);
+                // FOR BROWSE
+                if (node.ForClause is BrowseForClause)
+                    throw new NotSupportedQueryFragmentException("The FOR BROWSE clause is no longer supported in views", node.ForClause);
 
-                // TODO: PIVOT
+                if (IsRecursive)
+                {
+                    // The following items aren't allowed in the CTE_query_definition of a recursive member:
+                    // SELECT DISTINCT
+                    if (node.UniqueRowFilter == UniqueRowFilter.Distinct)
+                        throw new NotSupportedQueryFragmentException($"DISTINCT operator is not allowed in the recursive part of a recursive common table expression '{Name}'.", node);
 
-                // HAVING
-                if (node.HavingClause != null)
-                    throw new NotSupportedQueryFragmentException($"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", node.HavingClause);
+                    // GROUP BY
+                    if (node.GroupByClause != null)
+                        throw new NotSupportedQueryFragmentException($"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", node.GroupByClause);
 
-                // Scalar aggregation
-                if (_scalarAggregate != null)
-                    throw new NotSupportedQueryFragmentException($"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", _scalarAggregate);
+                    // TODO: PIVOT
 
-                // TOP
-                if (node.TopRowFilter != null || node.OffsetClause != null)
-                    throw new NotSupportedQueryFragmentException($"The TOP or OFFSET operator is not allowed in the recursive part of a recursive common table expression '{Name}'", (TSqlFragment)node.TopRowFilter ?? node.OffsetClause);
+                    // HAVING
+                    if (node.HavingClause != null)
+                        throw new NotSupportedQueryFragmentException($"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", node.HavingClause);
 
-                // LEFT, RIGHT, OUTER JOIN (INNER JOIN is allowed)
-                if (_outerJoin != null)
-                    throw new NotSupportedQueryFragmentException($"Outer join is not allowed in the recursive part of a recursive common table expression '{Name}'", _outerJoin);
+                    // Scalar aggregation
+                    if (_scalarAggregate != null)
+                        throw new NotSupportedQueryFragmentException($"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", _scalarAggregate);
 
-                // Subqueries
-                if (_subquery != null)
-                    throw new NotSupportedQueryFragmentException("Recursive references are not allowed in subqueries", _subquery);
+                    // TOP
+                    if (node.TopRowFilter != null || node.OffsetClause != null)
+                        throw new NotSupportedQueryFragmentException($"The TOP or OFFSET operator is not allowed in the recursive part of a recursive common table expression '{Name}'", (TSqlFragment)node.TopRowFilter ?? node.OffsetClause);
+
+                    // LEFT, RIGHT, OUTER JOIN (INNER JOIN is allowed)
+                    if (_outerJoin != null)
+                        throw new NotSupportedQueryFragmentException($"Outer join is not allowed in the recursive part of a recursive common table expression '{Name}'", _outerJoin);
+
+                    // Subqueries
+                    if (_subquery != null)
+                        throw new NotSupportedQueryFragmentException("Recursive references are not allowed in subqueries", _subquery);
+                }
+
+                if (!IsRecursive)
+                    AnchorQuery = node;
+                else
+                    RecursiveQueries.Add(node);
             }
-
-            if (!IsRecursive)
-                AnchorQuery = node;
-            else
-                RecursiveQueries.Add(node);
         }
 
         public override void Visit(SelectStatement node)

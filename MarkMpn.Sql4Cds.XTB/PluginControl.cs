@@ -582,7 +582,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
 
             tscbConnection.Enabled = !query.Busy;
-            tscbConnection.Text = query.Connection.ConnectionName;
+            tscbConnection.Text = query.Connection?.ConnectionName;
             tsbExecute.Enabled = query.Connection != null && !query.Busy;
             tsbPreviewFetchXml.Enabled = query.Connection != null && !query.Busy;
             tsbConvertToFetchXMLSplitButton.Enabled = query.Connection != null && !query.Busy;
