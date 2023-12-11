@@ -121,6 +121,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema = Source.GetSchema(context);
             }
 
+            if (Source is ConcatenateNode concat)
+            {
+                // We can try to DISTINCT the sources going into the concat node to reduce the amount of data being retrieved
+                // Only worth doing this if that DistinctNode can be folded into its sources, as we've still got to distinct
+                // the results of the concat in this node too
+                for (var i = 0; i < concat.Sources.Count; i++)
+                {
+                    var sourceDistinct = new DistinctNode { Source = concat.Sources[i] };
+                    var canFold = true;
+
+                    foreach (var col in Columns)
+                    {
+                        var concatCol = concat.ColumnSet.SingleOrDefault(c => c.OutputColumn == col);
+
+                        if (concatCol == null)
+                        {
+                            canFold = false;
+                            break;
+                        }
+
+                        sourceDistinct.Columns.Add(concatCol.SourceColumns[i]);
+                    }
+
+                    if (canFold)
+                    {
+                        // Fold the DISTINCT operation into the source. If it can't be folded, leave the original source
+                        // as-is rather than inserting the additional DistinctNode here.
+                        sourceDistinct.FoldQuery(context, hints);
+                    }
+                }
+            }
+
             // If the data is already sorted by all the distinct columns we can use a stream aggregate instead.
             // We don't mind what order the columns are sorted in though, so long as the distinct columns form a
             // prefix of the sort order.
