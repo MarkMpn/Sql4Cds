@@ -11,6 +11,7 @@ using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
@@ -67,32 +68,38 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.InitializeMetadata(Assembly.GetExecutingAssembly());
             _context.CallerId = new EntityReference("systemuser", Guid.NewGuid());
             _context.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
+            _context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
             _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
             _context.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service = _context.GetOrganizationService();
             _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
+            _context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource.Metadata));
 
             _context2 = new XrmFakedContext();
             _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
             _context2.CallerId = _context.CallerId;
             _context2.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
+            _context2.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
             _context2.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
             _context2.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service2 = _context2.GetOrganizationService();
             _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
+            _context2.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource2.Metadata));
 
             _context3 = new XrmFakedContext();
             _context3.InitializeMetadata(Assembly.GetExecutingAssembly());
             _context3.CallerId = _context.CallerId;
             _context3.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
+            _context3.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
             _context3.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
             _context3.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service3 = _context3.GetOrganizationService();
             Collation.TryParse("French_CI_AI", out var frenchCIAI);
             _dataSource3 = new DataSource { Name = "french", Connection = _service3, Metadata = new AttributeMetadataCache(_service3), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = frenchCIAI };
+            _context3.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource3.Metadata));
 
             _dataSources = new[] { _dataSource, _dataSource2, _dataSource3 }.ToDictionary(ds => ds.Name);
             _localDataSource = new Dictionary<string, DataSource>

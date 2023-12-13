@@ -2,6 +2,7 @@
 
 ## [v8.0.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.1) - 2023-12-13
 
+Generate the execution plan for each statement in a batch only when necessary, to allow initial statements to succeed regardless of errors in later statements
 Fixed escaping column names for `SELECT` and `INSERT` commands
 Improved setting a partylist attribute based on an EntityReference value
 Fixed sorting results for `UNION`

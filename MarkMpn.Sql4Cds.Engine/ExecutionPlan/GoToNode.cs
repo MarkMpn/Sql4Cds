@@ -41,6 +41,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public string SourceColumn { get; set; }
 
+        [Browsable(false)]
+        public TSqlStatement Statement { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (Source != null)
@@ -58,7 +61,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Condition = Condition,
                 Source = (IDataExecutionPlanNodeInternal)Source?.Clone(),
                 SourceColumn = SourceColumn,
-                Label = Label
+                Label = Label,
+                Statement = Statement
             };
         }
 

@@ -38,4 +38,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The node that should be used in place of this node</returns>
         IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints);
     }
+
+    internal interface IJitStatement : IRootExecutionPlanNodeInternal
+    {
+        /// <summary>
+        /// Compiles the node just before it is to be executed
+        /// </summary>
+        /// <returns></returns>
+        IRootExecutionPlanNodeInternal[] Compile();
+    }
 }

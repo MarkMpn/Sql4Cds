@@ -1503,5 +1503,21 @@ EXEC SetState @id, 1, 2";
                 }
             }
         }
+
+        [TestMethod]
+        public void CheckForMissingTable()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+IF EXISTS(SELECT * FROM metadata.entity WHERE logicalname = 'missing')
+    SELECT * FROM missing
+ELSE
+    SELECT 0";
+                
+                Assert.AreEqual(0, cmd.ExecuteScalar());
+            }
+        }
     }
 }
