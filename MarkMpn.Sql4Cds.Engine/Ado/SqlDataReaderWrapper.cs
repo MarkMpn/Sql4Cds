@@ -17,18 +17,16 @@ namespace MarkMpn.Sql4Cds.Engine
         private SqlDataReader _sqlDataReader;
         private readonly SqlNode _node;
 
-        public SqlDataReaderWrapper(Sql4CdsConnection connection, Sql4CdsCommand command, SqlConnection sqlConnection, SqlCommand sqlCommand, string dataSource)
+        public SqlDataReaderWrapper(Sql4CdsConnection connection, Sql4CdsCommand command, SqlConnection sqlConnection, SqlCommand sqlCommand, string dataSource, SqlNode node)
         {
             _connection = connection;
             _sqlConnection = sqlConnection;
             _sqlCommand = sqlCommand;
             _sqlDataReader = sqlCommand.ExecuteReader();
-            _node = new SqlNode { Sql = sqlCommand.CommandText, DataSource = dataSource };
+            _node = node;
 
             foreach (SqlParameter parameter in sqlCommand.Parameters)
                 _node.Parameters.Add(parameter.ParameterName);
-
-            command.OnStatementCompleted(_node, -1);
         }
 
         public IRootExecutionPlanNode CurrentResultQuery => _node;

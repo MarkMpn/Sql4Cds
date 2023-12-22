@@ -7,7 +7,7 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     public class InfoMessageEventArgs : EventArgs
     {
-        public InfoMessageEventArgs(IRootExecutionPlanNode node, string message)
+        public InfoMessageEventArgs(IRootExecutionPlanNode node, Sql4CdsError message)
         {
             Statement = node;
             Message = message;
@@ -15,6 +15,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public IRootExecutionPlanNode Statement { get; }
 
-        public string Message { get; }
+        public Sql4CdsError Message { get; }
     }
 }

@@ -94,14 +94,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public event EventHandler<StatementCompletedEventArgs> StatementCompleted;
 
-        internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected)
+        internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected, string message)
         {
             _connection.TelemetryClient.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = node.GetType().Name, ["Source"] = _connection.ApplicationName });
 
             var handler = StatementCompleted;
 
             if (handler != null)
-                handler(this, new StatementCompletedEventArgs(node, recordsAffected));
+                handler(this, new StatementCompletedEventArgs(node, recordsAffected, message));
         }
         
         protected override DbConnection DbConnection
@@ -254,7 +254,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
                     cmd.CommandText = SqlNode.ApplyCommandBehavior(CommandText, behavior, _connection.Options);
-                    cmd.StatementCompleted += (_, e) => _connection.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
+                    var node = new SqlNode { Sql = cmd.CommandText, DataSource = _connection.Database };
+                    cmd.StatementCompleted += (_, e) =>
+                    {
+                        _connection.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
+                        OnStatementCompleted(node, e.RecordCount, $"({e.RecordCount} row(s) affected)");
+                    };
 
                     if (Parameters.Count > 0)
                     {
@@ -281,7 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     }
 
-                    return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database);
+                    return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database, node);
                 }
 
                 _cancelledManually = false;

@@ -117,9 +117,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     else if (node is IDmlQueryExecutionPlanNode dmlNode)
                     {
                         dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
-                        dmlNode.Execute(context, out var recordsAffected);
+                        dmlNode.Execute(context, out var recordsAffected, out var message);
 
-                        _command.OnStatementCompleted(dmlNode, recordsAffected);
+                        _command.OnStatementCompleted(dmlNode, recordsAffected, message);
 
                         if (recordsAffected != -1)
                         {
@@ -135,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var label = cond.Execute(context);
 
                         if (cond.GetSources().Any())
-                            _command.OnStatementCompleted(cond, -1);
+                            _command.OnStatementCompleted(cond, -1, null);
 
                         if (label != null)
                             _instructionPointer = LabelIndexes[label];
@@ -165,7 +165,11 @@ namespace MarkMpn.Sql4Cds.Engine
             catch (Exception ex)
             {
                 _error = true;
-                throw new Sql4CdsException(ex.Message, ex);
+
+                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Error != null)
+                    context.Log(sqlEx.Error);
+                else
+                    throw new Sql4CdsException(ex.Message, ex);
             }
             finally
             {
@@ -174,7 +178,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (_options.CancellationToken.IsCancellationRequested)
-                throw new Sql4CdsException(_command.CancelledManually ? "Query was cancelled by user" : "Query timed out");
+                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, null, 0, _command.CancelledManually ? "Query was cancelled by user" : "Query timed out"));
 
             return false;
         }
@@ -444,8 +448,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                _connection.OnInfoMessage(_readerQuery, $"({_rows} row{(_rows == 1 ? "" : "s")} affected)");
-                _command.OnStatementCompleted(_readerQuery, -1);
+                _command.OnStatementCompleted(_readerQuery, _rows, $"({_rows} row(s) affected)");
 
                 _reader.Close();
                 _reader = null;

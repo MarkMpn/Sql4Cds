@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!ignoreDupKey && LogicalName == "listmember")
             {
                 ignoreDupKey = true;
-                context.Log("Duplicate entries will be silently ignored for listmember inserts");
+                context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.DataSources[DataSource].Name, 0, "Duplicate entries will be silently ignored for listmember inserts"));
             }
 
             return ignoreDupKey;
@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return ignoreDupKey;
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -154,6 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         },
                         context,
                         out recordsAffected,
+                        out message,
                         LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, context.ParameterValues))
                         );
                 }
@@ -267,7 +268,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             logMessage += $". The duplicate values were ({create.Target.Id})";
                     }
 
-                    context.Log(logMessage);
+                    context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.DataSources[DataSource].Name, 0, logMessage));
                     return false;
                 }
             }
@@ -391,7 +392,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 MaxDOP = MaxDOP,
                 IgnoreDuplicateKey = IgnoreDuplicateKey,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
-                Sql = Sql
+                Sql = Sql,
+                LineNumber = LineNumber,
             };
 
             foreach (var kvp in ColumnMappings)

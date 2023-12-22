@@ -2,6 +2,7 @@
 using System.Activities.Expressions;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
 using System.Data.SqlTypes;
 using System.Diagnostics;
 using System.Globalization;
@@ -282,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 cmd.Parameters.Add(new Sql4CdsParameter("@param1", 1));
 
                 var log = "";
-                con.InfoMessage += (s, e) => log += e.Message;
+                con.InfoMessage += (s, e) => log += e.Message.Message;
 
                 cmd.ExecuteNonQuery();
 
@@ -1515,8 +1516,33 @@ IF EXISTS(SELECT * FROM metadata.entity WHERE logicalname = 'missing')
     SELECT * FROM missing
 ELSE
     SELECT 0";
-                
+
                 Assert.AreEqual(0, cmd.ExecuteScalar());
+            }
+        }
+
+        [TestMethod]
+        public void Throw()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "THROW 51000, 'The record does not exist.', 1;";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    var error = ex.Errors.Single();
+
+                    Assert.AreEqual(51000, error.Number);
+                    Assert.AreEqual(16, error.Class);
+                    Assert.AreEqual(1, error.State);
+                    Assert.AreEqual(1, error.LineNumber);
+                }
             }
         }
     }

@@ -19,6 +19,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsCommand.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsConnection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsDataReader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsError.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameterCollection.cs" />

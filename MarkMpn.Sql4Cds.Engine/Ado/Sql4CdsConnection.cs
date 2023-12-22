@@ -142,7 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var svc = new ServiceClient(connectionString);
 
             if (!svc.IsReady)
-                throw new Sql4CdsException(svc.LastError);
+                throw new Sql4CdsException(svc.LastError, svc.LastException);
 #else
             var svc = new CrmServiceClient(connectionString);
 
@@ -168,12 +168,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public event EventHandler<InfoMessageEventArgs> InfoMessage;
 
-        internal void OnInfoMessage(IRootExecutionPlanNode node, string message)
+        internal void OnInfoMessage(IRootExecutionPlanNode node, Sql4CdsError message)
         {
-            var handler = InfoMessage;
+            if (message.Class <= 10)
+            {
+                var handler = InfoMessage;
 
-            if (handler != null)
-                handler(this, new InfoMessageEventArgs(node, message));
+                if (handler != null)
+                    handler(this, new InfoMessageEventArgs(node, message));
+            }
+            else
+            {
+                throw new Sql4CdsException(message);
+            }
         }
 
         internal IDictionary<string, DataSource> DataSources => _dataSources;
@@ -400,7 +407,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public override void ChangeDatabase(string databaseName)
         {
             if (!_dataSources.ContainsKey(databaseName))
-                throw new Sql4CdsException("Database is not in the list of connected databases");
+                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, databaseName, 0, "Database is not in the list of connected databases"));
 
             _options.PrimaryDataSource = databaseName;
         }

@@ -8,7 +8,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// Indicates that there was an error parsing the SQL query
     /// </summary>
     [Serializable]
-    public class QueryParseException : NotSupportedException
+    public class QueryParseException : NotSupportedException, ISql4CdsErrorException
     {
         /// <summary>
         /// Creates a new <see cref="QueryParseException"/>
@@ -39,5 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the error encountered during parsing
         /// </summary>
         public ParseError Error { get; }
+
+        Sql4CdsError ISql4CdsErrorException.Error => new Sql4CdsError(11, Error.Line, Error.Number, null, null, 0, Error.Message);
     }
 }

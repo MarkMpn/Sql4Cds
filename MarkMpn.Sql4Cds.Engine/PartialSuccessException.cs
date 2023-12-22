@@ -6,8 +6,10 @@ namespace MarkMpn.Sql4Cds.Engine
     /// An exception thrown when a query has partially completed, to expose the results available so far
     /// </summary>
     [Serializable]
-    public class PartialSuccessException : Exception
+    public class PartialSuccessException : Exception, ISql4CdsErrorException
     {
+        private readonly Sql4CdsError _error;
+
         /// <summary>
         /// Creates a new <see cref="PartialSuccessException"/>
         /// </summary>
@@ -36,6 +38,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Creates a new <see cref="PartialSuccessException"/>
         /// </summary>
+        /// <param name="error">The error that caused the exception</param>
+        /// <param name="innerException">The original exception</param>
+        public PartialSuccessException(Sql4CdsError error, Exception innerException) : this(error.Message, innerException)
+        {
+            _error = error;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="PartialSuccessException"/>
+        /// </summary>
         /// <param name="result">The results available up to the point of the error</param>
         /// <param name="ex">The details of the error that stopped the query</param>
         public PartialSuccessException(object result, Exception ex) : base("Query partially succeeded", ex)
@@ -52,5 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The results of the query up to the point of the error
         /// </summary>
         public object Result { get; }
+
+        public Sql4CdsError Error => _error;
     }
 }

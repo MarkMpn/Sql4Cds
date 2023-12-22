@@ -9,8 +9,10 @@ namespace MarkMpn.Sql4Cds.Engine
     /// Indicates that a fragment of a SQL query cannot be converted to a FetchXML query
     /// </summary>
     [Serializable]
-    public class NotSupportedQueryFragmentException : NotSupportedException
+    public class NotSupportedQueryFragmentException : NotSupportedException, ISql4CdsErrorException
     {
+        private readonly Sql4CdsError _error;
+
         /// <summary>
         /// Creates a new <see cref="NotSupportedQueryFragmentException"/>
         /// </summary>
@@ -20,6 +22,16 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             Error = message;
             Fragment = fragment;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NotSupportedQueryFragmentException"/>
+        /// </summary>
+        /// <param name="error">The error to return</param>
+        /// <param name="fragment">The fragment of the query that caused the error</param>
+        public NotSupportedQueryFragmentException(Sql4CdsError error, TSqlFragment fragment) : this(error.Message, fragment)
+        {
+            _error = error;
         }
 
         public NotSupportedQueryFragmentException()
@@ -52,5 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns or sets an optional suggestion to resolve the error
         /// </summary>
         public string Suggestion { get; set; }
+
+        Sql4CdsError ISql4CdsErrorException.Error => _error;
     }
 }

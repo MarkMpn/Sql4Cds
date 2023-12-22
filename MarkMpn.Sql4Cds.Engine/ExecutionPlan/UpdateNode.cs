@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return continueOnError;
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -406,7 +406,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "updated"
                         },
                         context,
-                        out recordsAffected);
+                        out recordsAffected,
+                        out message);
                 }
             }
             catch (QueryExecutionException ex)

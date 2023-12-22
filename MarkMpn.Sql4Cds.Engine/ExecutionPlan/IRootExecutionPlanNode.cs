@@ -26,6 +26,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The length of the query that was converted
         /// </summary>
         int Length { get; set; }
+
+        /// <summary>
+        /// The line number of the start of the statement
+        /// </summary>
+        int LineNumber { get; set; }
     }
 
     internal interface IRootExecutionPlanNodeInternal : IRootExecutionPlanNode, IExecutionPlanNodeInternal

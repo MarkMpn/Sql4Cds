@@ -51,7 +51,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -91,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException("Unexpected organization service type");
 
                     recordsAffected = -1;
-                    context.Log($"Impersonated user {userId}");
+                    message = $"Impersonated user {userId}";
                 }
             }
             catch (QueryExecutionException ex)

@@ -106,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SecondaryIdSource = secondaryIdSourceRenamed;
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -185,7 +185,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "deleted"
                         },
                         context,
-                        out recordsAffected);
+                        out recordsAffected,
+                        out message);
                 }
             }
             catch (QueryExecutionException ex)

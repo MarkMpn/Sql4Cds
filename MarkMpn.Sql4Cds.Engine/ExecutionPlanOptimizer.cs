@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class ExecutionPlanOptimizer
     {
-        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, bool compileConditions, Action<string> log)
+        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, bool compileConditions, Action<Sql4CdsError> log)
         {
             DataSources = dataSources;
             Options = options;
@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool CompileConditions { get; }
 
-        public Action<string> Log { get; }
+        public Action<Sql4CdsError> Log { get; }
 
         /// <summary>
         /// Optimizes an execution plan

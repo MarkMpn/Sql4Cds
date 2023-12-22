@@ -37,6 +37,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int Length { get; set; }
 
         /// <summary>
+        /// The number of the first line of the statement
+        /// </summary>
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
+        /// <summary>
         /// The instance that this node will be executed against
         /// </summary>
         [Category("Data Source")]
@@ -478,6 +484,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new ExecuteMessageNode
             {
+                Sql = Sql,
+                Index = Index,
+                Length = Length,
+                LineNumber = LineNumber,
                 DataSource = DataSource,
                 MessageName = MessageName,
                 EntityResponseParameter = EntityResponseParameter,
@@ -693,10 +703,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return node;
         }
 
-        public void Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             recordsAffected = Execute(context).Count();
-            context.Log("Executed " + MessageName);
+            message = "Executed " + MessageName;
         }
 
         IRootExecutionPlanNodeInternal[] IRootExecutionPlanNodeInternal.FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)

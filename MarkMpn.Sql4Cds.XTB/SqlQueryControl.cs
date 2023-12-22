@@ -207,7 +207,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _connection.ApplicationName = "XrmToolBox";
             _connection.InfoMessage += (s, msg) =>
             {
-                Execute(() => ShowResult(msg.Statement, null, null, msg.Message, null));
+                Execute(() => ShowResult(msg.Statement, null, null, msg.Message.Message, null));
             };
         }
 
@@ -738,8 +738,17 @@ namespace MarkMpn.Sql4Cds.XTB
                 var messageSuffix = "";
                 IRootExecutionPlanNode plan = null;
 
-                if (error is Sql4CdsException sql4CdsException && sql4CdsException.InnerException != null)
-                    error = sql4CdsException.InnerException;
+                if (error is Sql4CdsException sql4CdsException)
+                {
+                    if (sql4CdsException.Errors != null)
+                    {
+                        foreach (var sql4CdsError in sql4CdsException.Errors)
+                            AddMessage(index, length, $"Msg {sql4CdsError.Number}, Level {sql4CdsError.Class}, State {sql4CdsError.State}, Line {sql4CdsError.LineNumber}", true);
+                    }
+
+                    if (sql4CdsException.InnerException != null)
+                        error = sql4CdsException.InnerException;
+                }
 
                 if (error is QueryException queryException)
                 {
@@ -954,6 +963,9 @@ namespace MarkMpn.Sql4Cds.XTB
                     cmd.StatementCompleted += (s, stmt) =>
                     {
                         Execute(() => ShowResult(stmt.Statement, args, null, null, null));
+
+                        if (stmt.Message != null)
+                            Execute(() => ShowResult(stmt.Statement, args, null, stmt.Message, null));
 
                         if (stmt.Statement is IImpersonateRevertExecutionPlanNode)
                             Execute(() => SyncUsername());

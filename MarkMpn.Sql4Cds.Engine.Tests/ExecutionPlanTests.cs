@@ -3948,7 +3948,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4002,7 +4002,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4060,7 +4060,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4094,7 +4094,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4186,7 +4186,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4220,7 +4220,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }

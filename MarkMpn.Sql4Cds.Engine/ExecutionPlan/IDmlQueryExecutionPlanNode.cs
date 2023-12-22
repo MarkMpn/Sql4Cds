@@ -18,6 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="context">The context in which the node is being executed</param>
         /// <param name="recordsAffected">The number of records that were affected by the query</param>
-        void Execute(NodeExecutionContext context, out int recordsAffected);
+        /// <param name="message">A progress message to display</param>
+        void Execute(NodeExecutionContext context, out int recordsAffected, out string message);
     }
 }

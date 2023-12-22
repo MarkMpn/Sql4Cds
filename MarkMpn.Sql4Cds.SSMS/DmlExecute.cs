@@ -135,6 +135,9 @@ namespace MarkMpn.Sql4Cds.SSMS
                         if (tabPage != null)
                             ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource, true);
 
+                        if (stmt.Message != null)
+                            sqlScriptEditorControl.Results.AddStringToMessages(stmt.Message + "\r\n\r\n");
+
                         resultFlag |= 1; // Success
                     };
 

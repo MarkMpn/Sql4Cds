@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
@@ -18,6 +19,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int Index { get; set; }
 
         public int Length { get; set; }
+
+        public int LineNumber { get; set; }
 
         public IExecutionPlanNode Parent { get; set; }
 
@@ -43,7 +46,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Optimizer = Optimizer,
                 Sql = Sql,
                 Index = Index,
-                Length = Length
+                Length = Length,
+                LineNumber = LineNumber,
             };
         }
 

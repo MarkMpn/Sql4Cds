@@ -6,6 +6,7 @@ using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.ServiceModel;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -163,7 +164,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     {
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
-                        Message = msg.Message
+                        Message = msg.Message.Message
                     }
                 });
             });
@@ -264,6 +265,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     _commands[request.OwnerUri] = cmd;
 
                     cmd.CommandText = qry;
+
+                    cmd.StatementCompleted += (_, stmt) =>
+                    {
+                        if (stmt.Message != null)
+                        {
+                            _ = _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
+                            {
+                                OwnerUri = request.OwnerUri,
+                                Message = new ResultMessage
+                                {
+                                    BatchId = batchSummary.Id,
+                                    Time = DateTime.UtcNow.ToString("o"),
+                                    Message = stmt.Message
+                                }
+                            });
+                        }
+                    };
 
                     if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
                     {
@@ -394,6 +412,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             }
             catch (Exception ex)
             {
+                if (ex is Sql4CdsException sql4CdsException && sql4CdsException.Errors != null)
+                {
+                    foreach (var sql4CdsError in sql4CdsException.Errors)
+                    {
+                        await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
+                        {
+                            OwnerUri = request.OwnerUri,
+                            Message = new ResultMessage
+                            {
+                                BatchId = batchSummary.Id,
+                                Time = DateTime.UtcNow.ToString("o"),
+                                Message = $"Msg {sql4CdsError.Number}, Level {sql4CdsError.Class}, State {sql4CdsError.State}, Line {sql4CdsError.LineNumber}",
+                                IsError = true
+                            }
+                        });
+                    }
+                }
+
                 await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
                 {
                     OwnerUri = request.OwnerUri,

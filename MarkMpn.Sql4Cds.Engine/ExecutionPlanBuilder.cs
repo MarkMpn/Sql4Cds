@@ -51,7 +51,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// A callback function to log messages
         /// </summary>
-        public Action<string> Log { get; set; }
+        public Action<Sql4CdsError> Log { get; set; }
 
         private DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
 
@@ -212,6 +212,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal IRootExecutionPlanNodeInternal[] ConvertStatementInternal(TSqlStatement statement, ExecutionPlanOptimizer optimizer)
         {
+            var lineNumber = statement.StartLine;
             var index = statement.StartOffset;
             var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
             var originalSql = statement.ToSql();
@@ -471,11 +472,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var qry in optimized)
                 {
                     if (qry.Sql == null)
-                    {
                         qry.Sql = originalSql;
-                        qry.Index = index;
-                        qry.Length = length;
-                    }
+
+                    qry.LineNumber = lineNumber;
+                    qry.Index = index;
+                    qry.Length = length;
                 }
 
                 output.AddRange(optimized);

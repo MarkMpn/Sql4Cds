@@ -82,6 +82,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
+        /// <summary>
+        /// The number of the first line of the statement
+        /// </summary>
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
         [Browsable(false)]
         public IExecutionPlanNodeInternal Source { get; set; }
 
@@ -129,7 +135,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="context">The context in which the node is being executed</param>
         /// <param name="recordsAffected">The number of records that were affected by the query</param>
-        public abstract void Execute(NodeExecutionContext context, out int recordsAffected);
+        /// <param name="message">A progress message to display</param>
+        public abstract void Execute(NodeExecutionContext context, out int recordsAffected, out string message);
 
         /// <summary>
         /// Indicates if some errors returned by the server can be silently ignored
@@ -564,8 +571,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="meta">The metadata of the entity that will be affected</param>
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
-        /// <param name="log">A callback function to be executed when a log message is generated</param>
-        protected void ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, NodeExecutionContext context, out int recordsAffected, Action<OrganizationResponse> responseHandler = null)
+        /// <param name="context">The context in which the node is being executed</param>
+        /// <param name="recordsAffected">The number of records affected by the operation</param>
+        /// <param name="message">A human-readable message to show the number of records affected</param>
+        /// <param name="responseHandler">An optional parameter to handle the response messages from the server</param>
+        protected void ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, NodeExecutionContext context, out int recordsAffected, out string message, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -719,8 +729,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             recordsAffected = count;
+            message = $"({count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase})";
             context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)count;
-            context.Log($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}");
         }
 
         protected class BulkApiErrorDetail

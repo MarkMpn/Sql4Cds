@@ -7,14 +7,17 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     public class StatementCompletedEventArgs
     {
-        public StatementCompletedEventArgs(IRootExecutionPlanNode node, int recordsAffected)
+        public StatementCompletedEventArgs(IRootExecutionPlanNode node, int recordsAffected, string message)
         {
             Statement = node;
             RecordsAffected = recordsAffected;
+            Message = message;
         }
 
         public IRootExecutionPlanNode Statement { get; }
 
         public int RecordsAffected { get; }
+
+        public string Message { get; }
     }
 }
