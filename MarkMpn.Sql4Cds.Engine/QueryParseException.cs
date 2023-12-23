@@ -40,6 +40,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public ParseError Error { get; }
 
-        Sql4CdsError ISql4CdsErrorException.Error => new Sql4CdsError(11, Error.Line, Error.Number, null, null, 0, Error.Message);
+        Sql4CdsError ISql4CdsErrorException.Error => new Sql4CdsError(15, Error.Line, Error.Number, null, null, 1, Error.Message);
     }
 }

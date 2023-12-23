@@ -742,8 +742,14 @@ namespace MarkMpn.Sql4Cds.XTB
                 {
                     if (sql4CdsException.Errors != null)
                     {
+                        var lines = _params.Sql.Split('\n');
+
                         foreach (var sql4CdsError in sql4CdsException.Errors)
-                            AddMessage(index, length, $"Msg {sql4CdsError.Number}, Level {sql4CdsError.Class}, State {sql4CdsError.State}, Line {sql4CdsError.LineNumber}", true);
+                        {
+                            var errorIndex = lines.Take(sql4CdsError.LineNumber - 1).Sum(l => l.Length + 1) + _params.Offset;
+                            var errorLength = lines[sql4CdsError.LineNumber - 1].Length;
+                            AddMessage(errorIndex, errorLength, $"Msg {sql4CdsError.Number}, Level {sql4CdsError.Class}, State {sql4CdsError.State}, Line {sql4CdsError.LineNumber + _editor.LineFromPosition(_params.Offset)}", MessageType.ErrorPrefix);
+                        }
                     }
 
                     if (sql4CdsException.InnerException != null)
@@ -783,21 +789,21 @@ namespace MarkMpn.Sql4Cds.XTB
                 }
                 else if (error is QueryParseException parseErr)
                 {
-                    _editor.IndicatorFillRange(_params.Offset + parseErr.Error.Offset, 1);
                     index = _params.Offset + parseErr.Error.Offset;
-                    length = 0;
+                    length = new Regex("\\b").Matches(_params.Sql.Substring(parseErr.Error.Offset)).Cast<Match>().Skip(1).FirstOrDefault()?.Index ?? 0;
+                    _editor.IndicatorFillRange(_params.Offset + parseErr.Error.Offset, length);
                 }
                 else if (error is PartialSuccessException partialSuccess)
                 {
                     if (partialSuccess.Result is string msg)
-                        AddMessage(index, length, msg, false);
+                        AddMessage(index, length, msg, MessageType.Info);
 
                     error = partialSuccess.InnerException;
                 }
 
                 _log(e.Error.ToString());
 
-                AddMessage(index, length, GetErrorMessage(error) + messageSuffix, true);
+                AddMessage(index, length, GetErrorMessage(error) + messageSuffix, MessageType.Error);
 
                 tabControl.SelectedTab = messagesTabPage;
             }
@@ -805,6 +811,8 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 tabControl.SelectedTab = fetchXmlTabPage;
             }
+
+            AddMessage(-1, -1, $"Completion time: {DateTimeOffset.Now:O}", MessageType.Info);
 
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
@@ -872,14 +880,14 @@ namespace MarkMpn.Sql4Cds.XTB
             return msg;
         }
 
-        private void AddMessage(int index, int length, string message, bool error)
+        private void AddMessage(int index, int length, string message, MessageType messageType)
         {
             var scintilla = (Scintilla)messagesTabPage.Controls[0];
             var line = scintilla.Lines.Count - 1;
             scintilla.ReadOnly = false;
-            scintilla.Text += message + "\r\n\r\n";
+            scintilla.AppendText(message + (messageType == MessageType.ErrorPrefix ? "\r\n" : "\r\n\r\n"));
             scintilla.StartStyling(scintilla.Text.Length - message.Length - 4);
-            scintilla.SetStyling(message.Length, error ? 1 : 2);
+            scintilla.SetStyling(message.Length, messageType == MessageType.Info ? 2 : 1);
             scintilla.ReadOnly = true;
 
             if (index != -1)
@@ -889,6 +897,13 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        enum MessageType
+        {
+            Info,
+            Error,
+            ErrorPrefix,
+        }
+
         private void NavigateToMessage(object sender, DoubleClickEventArgs e)
         {
             if (_messageLocations.TryGetValue(e.Line, out var textRange))
@@ -896,6 +911,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _editor.SelectionStart = textRange.Index;
                 _editor.SelectionEnd = textRange.Index + textRange.Length;
                 _editor.Focus();
+                _editor.ScrollCaret();
             }
         }
 
@@ -1166,7 +1182,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             else if (msg != null)
             {
-                AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, false);
+                AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, MessageType.Info);
             }
             else if (args.IncludeFetchXml)
             {

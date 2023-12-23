@@ -17,6 +17,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal Sql4CdsException(string message, Exception innerException) : base(message, innerException)
         {
+            if (innerException is ISql4CdsErrorException ex && ex.Error != null)
+                Errors = new List<Sql4CdsError> { ex.Error };
         }
 
         public IReadOnlyList<Sql4CdsError> Errors { get; }

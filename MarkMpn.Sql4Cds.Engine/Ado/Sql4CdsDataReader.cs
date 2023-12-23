@@ -448,7 +448,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                _command.OnStatementCompleted(_readerQuery, _rows, $"({_rows} row(s) affected)");
+                _command.OnStatementCompleted(_readerQuery, _rows, $"({_rows} {(_rows == 1 ? "row" : "rows")} affected)");
 
                 _reader.Close();
                 _reader = null;

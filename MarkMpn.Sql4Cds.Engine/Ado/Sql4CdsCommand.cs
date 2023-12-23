@@ -219,7 +219,11 @@ namespace MarkMpn.Sql4Cds.Engine
             catch (Exception ex)
             {
                 _connection.TelemetryClient.TrackException(ex, new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName });
-                throw;
+
+                if (ex is Sql4CdsException)
+                    throw;
+
+                throw new Sql4CdsException(ex.Message, ex);
             }
         }
 
@@ -258,7 +262,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     cmd.StatementCompleted += (_, e) =>
                     {
                         _connection.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
-                        OnStatementCompleted(node, e.RecordCount, $"({e.RecordCount} row(s) affected)");
+                        OnStatementCompleted(node, e.RecordCount, $"({e.RecordCount} {(e.RecordCount == 1 ? "row" : "rows")} affected)");
                     };
 
                     if (Parameters.Count > 0)
