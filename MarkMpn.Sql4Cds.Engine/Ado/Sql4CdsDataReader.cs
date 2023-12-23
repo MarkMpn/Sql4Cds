@@ -157,8 +157,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     _instructionPointer++;
                 }
             }
-            catch (Sql4CdsException)
+            catch (Sql4CdsException ex)
             {
+                SetErrorLineNumbers(ex, _command.Plan[_instructionPointer]);
                 _error = true;
                 throw;
             }
@@ -167,9 +168,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 _error = true;
 
                 if (ex is ISql4CdsErrorException sqlEx && sqlEx.Error != null)
+                {
                     context.Log(sqlEx.Error);
+                }
                 else
-                    throw new Sql4CdsException(ex.Message, ex);
+                {
+                    var sqlErr = new Sql4CdsException(ex.Message, ex);
+                    SetErrorLineNumbers(sqlErr, _command.Plan[_instructionPointer]);
+                    throw sqlErr;
+                }
             }
             finally
             {
@@ -181,6 +188,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, null, 0, _command.CancelledManually ? "Query was cancelled by user" : "Query timed out"));
 
             return false;
+        }
+
+        private void SetErrorLineNumbers(Sql4CdsException ex, IRootExecutionPlanNode node)
+        {
+            if (ex.Errors != null)
+            {
+                foreach (var err in ex.Errors)
+                {
+                    if (err.LineNumber == -1)
+                        err.LineNumber = node.LineNumber;
+                }
+            }
         }
 
         public override object this[int ordinal]
@@ -433,13 +452,28 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 read = _reader.Read();
             }
-            catch
+            catch (Exception ex)
             {
                 _error = true;
                 _reader.Close();
                 _reader = null;
+
+                var sqlErr = ex as Sql4CdsException;
+                var rethrow = true;
+
+                if (sqlErr == null)
+                {
+                    sqlErr = new Sql4CdsException(ex.Message, ex);
+                    rethrow = false;
+                }
+
+                SetErrorLineNumbers(sqlErr, _readerQuery);
                 _readerQuery = null;
-                throw;
+
+                if (rethrow)
+                    throw;
+                else
+                    throw sqlErr;
             }
 
             if (read)

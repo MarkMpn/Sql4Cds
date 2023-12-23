@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public byte Class { get; }
 
         /// <inheritdoc cref="System.Data.SqlClient.SqlError.LineNumber"/>
-        public int LineNumber { get; }
+        public int LineNumber { get; internal set; }
 
         /// <inheritdoc cref="System.Data.SqlClient.SqlError.Number"/>
         public int Number { get; }
