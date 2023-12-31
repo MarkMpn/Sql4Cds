@@ -16,12 +16,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public QueryExecutionException(string message) : base(message)
         {
+            _error = new Sql4CdsError(16, 10337, message);
         }
 
         public QueryExecutionException(string message, Exception innerException) : base(message, innerException)
         {
             if (innerException is ISql4CdsErrorException ex)
                 _error = ex.Error;
+            else
+                _error = new Sql4CdsError(16, 10337, message);
         }
 
         public QueryExecutionException(Sql4CdsError error) : this(error.Message)

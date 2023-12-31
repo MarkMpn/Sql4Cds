@@ -71,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
-                        throw new QueryExecutionException("Property does not exist");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 13608, "Property cannot be found on the speicified JSON path"));
                 }
 
                 switch (jtoken.Value.ValueKind)
@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (jsonPath.Mode == JsonPathMode.Lax)
                             return SqlString.Null;
                         else
-                            throw new QueryExecutionException("Not a scalar value");
+                            throw new QueryExecutionException(new Sql4CdsError(16, 13623, "Scalar value cannot be found in the speicified JSON path"));
 
                     case JsonValueKind.Null:
                         return SqlString.Null;
@@ -94,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
-                        throw new QueryExecutionException("Value too long");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 13625, "String value in the specified JSON path would be truncated"));
                 }
 
                 return new SqlString(value, json.LCID, json.SqlCompareOptions);
@@ -130,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
-                        throw new QueryExecutionException("Property does not exist");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 13608, "Property cannot be found on the specified JSON path"));
                 }
 
                 switch (jtoken.Value.ValueKind)
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (jsonPath.Mode == JsonPathMode.Lax)
                             return SqlString.Null;
                         else
-                            throw new QueryExecutionException("Not a scalar value");
+                            throw new QueryExecutionException(new Sql4CdsError(16, 13624, "Object or array cannot be found in the specified JSON path"));
                 }
             }
             catch (Newtonsoft.Json.JsonException ex)
@@ -695,7 +695,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="format">Format pattern</param>
         /// <param name="culture">Optional argument specifying a culture</param>
         /// <returns></returns>
-        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture, ExpressionExecutionContext context)
+        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture, [SourceType] DataTypeReference type, ExpressionExecutionContext context)
             where T : INullable
         {
             if (value.IsNull)
@@ -704,7 +704,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var valueProp = typeof(T).GetProperty("Value");
 
             if (!typeof(IFormattable).IsAssignableFrom(valueProp.PropertyType))
-                throw new QueryExecutionException("Invalid type for FORMAT function");
+                throw new QueryExecutionException(new Sql4CdsError(16, 8116, $"Argument data type {type.ToSql()} is invalid for argument 1 of format function"));
 
             var innerValue = (IFormattable)valueProp.GetValue(value);
             return Format(innerValue, format, culture, context);

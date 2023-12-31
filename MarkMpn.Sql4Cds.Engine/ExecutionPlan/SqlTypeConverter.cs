@@ -650,12 +650,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
                                 valueOnTruncate = "*";
                             else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
-                                exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption);
+                                exceptionOnTruncate = new QueryExecutionException(new Sql4CdsError(16, 8115, "Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption));
                         }
                         else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
                             (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
                         {
-                            exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption);
+                            exceptionOnTruncate = new QueryExecutionException(new Sql4CdsError(16, 8115, "Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption));
                         }
 
                         expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Exception>()),
@@ -995,7 +995,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
 
                 default:
-                    throw new QueryExecutionException($"{style.Value} is not a valid style number when converting from datetime to a character string");
+                    throw new QueryExecutionException(new Sql4CdsError(16, 281, $"{style.Value} is not a valid style number when converting from datetime to a character string"));
             }
 
             if (!date && String.IsNullOrEmpty(timeFormatString) ||
@@ -1120,7 +1120,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return variant.Value;
 
             if (!CanChangeTypeExplicit(variant.BaseType, targetType))
-                throw new QueryExecutionException($"No type conversion available from {variant.BaseType.ToSql()} to {targetType.ToSql()}");
+                throw new QueryExecutionException(new Sql4CdsError(16, 529, $"No type conversion available from {variant.BaseType.ToSql()} to {targetType.ToSql()}"));
 
             var conversion = GetConversion(variant.BaseType, targetType, style.IsNull ? (int?)null : style.Value);
             return conversion(variant.Value);

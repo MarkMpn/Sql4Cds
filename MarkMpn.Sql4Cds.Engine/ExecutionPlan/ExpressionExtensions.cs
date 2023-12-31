@@ -1715,7 +1715,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Regex[] GetContainsWords(string pattern, bool compile)
         {
             if (!_containsParser.IsMatch(pattern))
-                throw new QueryExecutionException("Invalid CONTAINS pattern. Only simple \"word OR word OR word\" patterns are currently supported");
+                throw new QueryExecutionException(new Sql4CdsError(15, 40133, "Invalid CONTAINS pattern. Only simple \"word OR word OR word\" patterns are currently supported"));
 
             var options = RegexOptions.IgnoreCase;
             if (compile)

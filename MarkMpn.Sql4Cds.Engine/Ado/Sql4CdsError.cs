@@ -20,6 +20,10 @@ namespace MarkMpn.Sql4Cds.Engine
             Message = message;
         }
 
+        internal Sql4CdsError(byte @class, int number, string message) : this(@class, -1, number, null, null, 1, message)
+        {
+        }
+
         /// <inheritdoc cref="System.Data.SqlClient.SqlError.Class"/>
         public byte Class { get; }
 

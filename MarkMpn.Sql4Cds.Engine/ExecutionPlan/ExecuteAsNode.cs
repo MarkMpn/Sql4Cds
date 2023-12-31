@@ -65,10 +65,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var entities = GetDmlSourceEntities(context, out var schema);
 
                     if (entities.Count == 0)
-                        throw new QueryExecutionException("Cannot find user to impersonate");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, "Cannot find user to impersonate"));
 
                     if (entities.Count > 1)
-                        throw new QueryExecutionException("Ambiguous user");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, "Ambiguous user"));
 
                     // Precompile mappings with type conversions
                     var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
