@@ -169,6 +169,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (ex is ISql4CdsErrorException sqlEx && sqlEx.Error != null)
                 {
+                    if (sqlEx.Error.LineNumber == -1)
+                        sqlEx.Error.LineNumber = _command.Plan[_instructionPointer].LineNumber;
+
                     context.Log(sqlEx.Error);
                 }
                 else
