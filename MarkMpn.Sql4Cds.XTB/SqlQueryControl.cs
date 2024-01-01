@@ -748,7 +748,25 @@ namespace MarkMpn.Sql4Cds.XTB
                         {
                             var errorIndex = lines.Take(sql4CdsError.LineNumber - 1).Sum(l => l.Length + 1) + _params.Offset;
                             var errorLength = lines[sql4CdsError.LineNumber - 1].Length;
-                            AddMessage(errorIndex, errorLength, $"Msg {sql4CdsError.Number}, Level {sql4CdsError.Class}, State {sql4CdsError.State}, Line {sql4CdsError.LineNumber + _editor.LineFromPosition(_params.Offset)}", MessageType.ErrorPrefix);
+
+                            var parts = new List<string>
+                            {
+                                $"Msg {sql4CdsError.Number}",
+                                $"Level {sql4CdsError.Class}",
+                                $"State {sql4CdsError.State}"
+                            };
+
+                            if (sql4CdsError.Procedure != null)
+                            {
+                                parts.Add($"Procedure {sql4CdsError.Procedure}");
+                                parts.Add($"Line 0 [Batch Start Line {sql4CdsError.LineNumber + _editor.LineFromPosition(_params.Offset)}]");
+                            }
+                            else
+                            {
+                                parts.Add($"Line {sql4CdsError.LineNumber + _editor.LineFromPosition(_params.Offset)}");
+                            }
+
+                            AddMessage(errorIndex, errorLength, String.Join(", ", parts), MessageType.ErrorPrefix);
                         }
                     }
 

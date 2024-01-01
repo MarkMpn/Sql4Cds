@@ -416,6 +416,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 {
                     foreach (var sql4CdsError in sql4CdsException.Errors)
                     {
+                        var parts = new List<string>
+                        {
+                            $"Msg {sql4CdsError.Number}",
+                            $"Level {sql4CdsError.Class}",
+                            $"State {sql4CdsError.State}"
+                        };
+
+                        if (sql4CdsError.Procedure != null)
+                        {
+                            parts.Add($"Procedure {sql4CdsError.Procedure}");
+                            parts.Add($"Line 0 [Batch Start Line {sql4CdsError.LineNumber}]");
+                        }
+                        else
+                        {
+                            parts.Add($"Line {sql4CdsError.LineNumber}");
+                        }
+
                         await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
                         {
                             OwnerUri = request.OwnerUri,
@@ -423,7 +440,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                             {
                                 BatchId = batchSummary.Id,
                                 Time = DateTime.UtcNow.ToString("o"),
-                                Message = $"Msg {sql4CdsError.Number}, Level {sql4CdsError.Class}, State {sql4CdsError.State}, Line {sql4CdsError.LineNumber}",
+                                Message = String.Join(", ", parts),
                                 IsError = true
                             }
                         });
