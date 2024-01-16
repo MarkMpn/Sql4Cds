@@ -126,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     continue;
                 }
 
-                throw new NotSupportedQueryFragmentException("Unknown hint", hint);
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10715, $"'{hint.Value}' is not a valid hint", hint));
             }
 
             foreach (var hint in toRemove)
@@ -152,7 +152,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 return false;
 
             if (!Int32.TryParse(hint.Value.Substring(prefix.Length), out _))
-                throw new NotSupportedQueryFragmentException($"Whole number must be specified for {prefix}n hint", hint);
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10715, $"'{hint.Value}' is not a valid hint", hint)) { Suggestion = $"Whole number must be specified for {prefix}n hint" };
 
             return true;
         }

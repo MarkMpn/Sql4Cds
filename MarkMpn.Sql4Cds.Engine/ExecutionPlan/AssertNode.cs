@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         public AssertNode()
         {
-            ExceptionConstructor = msg => new ApplicationException(msg);
+            ExceptionConstructor = msg => new QueryExecutionException(new Sql4CdsError(Severity, ErrorNumber, ErrorMessage));
         }
 
         /// <summary>
@@ -38,6 +38,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The error message that is generated if any record in the source fails to meet the assertion")]
         [DisplayName("Error Message")]
         public string ErrorMessage { get; set; }
+
+        public byte Severity { get; set; }
+
+        public int ErrorNumber { get; set; }
+
+        public string Suggestion { get; set; }
 
         /// <summary>
         /// The type of exception to throw when the <see cref="Assertion"/> returns <c>false</c>
@@ -90,6 +96,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 Assertion = Assertion,
                 ErrorMessage = ErrorMessage,
+                Severity = Severity,
+                ErrorNumber = ErrorNumber,
+                Suggestion = Suggestion,
                 ExceptionConstructor = ExceptionConstructor
             };
 

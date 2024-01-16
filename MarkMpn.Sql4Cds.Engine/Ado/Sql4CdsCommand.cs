@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine
             set
             {
                 if (value != null)
-                    throw new ArgumentOutOfRangeException("Transactions are not supported");
+                    throw new Sql4CdsException(new Sql4CdsError(16, 40517, "Transactions are not supported"));
             }
         }
 

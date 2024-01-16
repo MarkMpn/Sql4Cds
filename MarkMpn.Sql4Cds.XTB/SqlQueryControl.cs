@@ -749,6 +749,14 @@ namespace MarkMpn.Sql4Cds.XTB
                             var errorIndex = lines.Take(sql4CdsError.LineNumber - 1).Sum(l => l.Length + 1) + _params.Offset;
                             var errorLength = lines[sql4CdsError.LineNumber - 1].Length;
 
+                            if (sql4CdsError.Fragment != null)
+                            {
+                                errorIndex = _params.Offset + sql4CdsError.Fragment.StartOffset;
+                                errorLength = sql4CdsError.Fragment.FragmentLength;
+                            }
+
+                            _editor.IndicatorFillRange(errorIndex, errorLength);
+
                             var parts = new List<string>
                             {
                                 $"Msg {sql4CdsError.Number}",
@@ -767,6 +775,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             }
 
                             AddMessage(errorIndex, errorLength, String.Join(", ", parts), MessageType.ErrorPrefix);
+                            AddMessage(errorIndex, errorLength, sql4CdsError.Message, MessageType.Error);
                         }
                     }
 
@@ -856,6 +865,8 @@ namespace MarkMpn.Sql4Cds.XTB
 
             if (error is AggregateException aggregateException)
                 msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
+            else if (error is Sql4CdsException sqlException && sqlException.Errors.Count > 0 && sqlException.Errors.Any(err => err.Message == sqlException.Message))
+                msg = "";
             else
                 msg = error.Message;
 

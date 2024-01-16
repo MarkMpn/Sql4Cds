@@ -124,7 +124,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var collation = context.PrimaryDataSource.DefaultCollation;
 
                         if (col.ColumnDefinition.Collation != null && !Collation.TryParse(col.ColumnDefinition.Collation.Value, out collation))
-                            throw new NotSupportedQueryFragmentException("Invalid collation", col.ColumnDefinition.Collation);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 448, $"Invalid collation '{col.ColumnDefinition.Collation.Value}'", col.ColumnDefinition.Collation));
 
                         type = new SqlDataTypeReferenceWithCollation
                         {
@@ -144,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             nvarcharType.Parameters.Count != 1 ||
                             !(nvarcharType.Parameters[0] is MaxLiteral))
                         {
-                            throw new NotSupportedQueryFragmentException("AS JSON option can be specified only for column of nvarchar(max) type in WITH clause", col.ColumnDefinition.DataType);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 13618, "AS JSON option can be specified only for column of nvarchar(max) type in WITH clause", col.ColumnDefinition.DataType));
                         }
                     }
 

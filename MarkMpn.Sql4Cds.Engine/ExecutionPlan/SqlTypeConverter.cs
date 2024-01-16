@@ -581,7 +581,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var sourceType = expr.Type;
 
             if (!CanChangeTypeExplicit(from, to))
-                throw new NotSupportedQueryFragmentException($"No type conversion available from {from.ToSql()} to {to.ToSql()}", convert);
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 529, $"Explicit conversion from data type {from.ToSql()} to {to.ToSql()} is not allowed", convert));
 
             // Special cases for styles
             if (style == null)
@@ -595,7 +595,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (!CanChangeTypeImplicit(styleType, DataTypeHelpers.Int))
-                throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType.ToSql()} to {DataTypeHelpers.Int.ToSql()}", convert.Style);
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8116, $"Argument data type {styleType.ToSql()} is invalid for argument 3 of convert function", convert.Style));
 
             // Special case for conversion to sql_variant
             if (to.IsSameAs(DataTypeHelpers.Variant))
@@ -639,7 +639,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (toSqlType.Parameters[0].LiteralType == LiteralType.Integer && Int32.TryParse(toSqlType.Parameters[0].Value, out var maxLength))
                     {
                         if (maxLength < 1)
-                            throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", toSqlType);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1001, "Length or precision specification 0 is invalid", toSqlType));
 
                         // Truncate the value to the specified length, but some special cases
                         string valueOnTruncate = null;
@@ -666,12 +666,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else if (toSqlType.Parameters[0].LiteralType != LiteralType.Max)
                     {
-                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
+                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
                     }
                 }
                 else if (toSqlType.Parameters.Count > 1)
                 {
-                    throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
                 }
 
                 if (targetCollation != null)
@@ -684,21 +684,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (toSqlType.Parameters.Count > 0)
                 {
                     if (!Int32.TryParse(toSqlType.Parameters[0].Value, out var precision))
-                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
+                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
 
                     if (precision < 1)
-                        throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", toSqlType);
+                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1001, "Length or precision specification 0 is invalid", toSqlType));
 
                     var scale = 0;
 
                     if (toSqlType.Parameters.Count > 1)
                     {
                         if (!Int32.TryParse(toSqlType.Parameters[1].Value, out scale))
-                            throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
                     }
 
                     if (toSqlType.Parameters.Count > 2)
-                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
+                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
 
                     expr = Expr.Call(() => SqlDecimal.ConvertToPrecScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>()),
                         expr,

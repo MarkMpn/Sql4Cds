@@ -56,7 +56,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
 
                 if (expectedError)
                 {
-                    Assert.ThrowsException<QueryExecutionException>(() => cmd.ExecuteScalar());
+                    Assert.ThrowsException<Sql4CdsException>(() => cmd.ExecuteScalar());
                 }
                 else
                 {
@@ -135,7 +135,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
 
                 if (expectedError)
                 {
-                    Assert.ThrowsException<QueryExecutionException>(() => cmd.ExecuteScalar());
+                    Assert.ThrowsException<Sql4CdsException>(() => cmd.ExecuteScalar());
                 }
                 else
                 {

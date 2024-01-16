@@ -407,7 +407,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public override void ChangeDatabase(string databaseName)
         {
             if (!_dataSources.ContainsKey(databaseName))
-                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, databaseName, 0, "Database is not in the list of connected databases"));
+                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, databaseName, 0, "Database is not in the list of connected databases", null));
 
             _options.PrimaryDataSource = databaseName;
         }
@@ -422,7 +422,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         protected override DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
         {
-            throw new NotSupportedException("Transactions are not supported");
+            throw new Sql4CdsException(new Sql4CdsError(16, 40517, "Transactions are not supported"));
         }
 
         protected override DbCommand CreateDbCommand()

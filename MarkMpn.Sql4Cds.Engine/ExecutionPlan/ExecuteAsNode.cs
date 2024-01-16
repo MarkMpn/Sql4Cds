@@ -43,6 +43,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public override bool ContinueOnError { get; set; }
 
+        [Browsable(false)]
+        public string Username { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(UserIdSource))
@@ -65,10 +68,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var entities = GetDmlSourceEntities(context, out var schema);
 
                     if (entities.Count == 0)
-                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, "Cannot find user to impersonate"));
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Cannot execute as the database principal because the principal \"{Username}\" does not exist, this type of principal cannot be impersonated, or you do not have permission."));
 
                     if (entities.Count > 1)
-                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, "Ambiguous user"));
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Ambiguous user \"{Username}\""));
 
                     // Precompile mappings with type conversions
                     var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
@@ -131,7 +134,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 MaxDOP = MaxDOP,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql,
-                UserIdSource = UserIdSource
+                UserIdSource = UserIdSource,
+                Username = Username,
             };
 
             clone.Source.Parent = clone;

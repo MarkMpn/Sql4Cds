@@ -33,7 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .FirstOrDefault();
 
             if (duplicateColumn != null)
-                throw new NotSupportedQueryFragmentException($"The column '{duplicateColumn.Key}' was specified multiple times", identifier);
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8156, $"The column '{duplicateColumn.Key}' was specified multiple times", identifier));
 
             // Ensure each column has an output name
             foreach (var col in ColumnSet)

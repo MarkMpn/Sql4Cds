@@ -18,18 +18,36 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="message">The error message to display</param>
         /// <param name="fragment">The fragment of the query that caused the error</param>
-        public NotSupportedQueryFragmentException(string message, TSqlFragment fragment) : base(fragment == null ? message : (message + ": " + fragment.ToSql()))
+        public NotSupportedQueryFragmentException(string message, TSqlFragment fragment) : this(message, fragment, null)
         {
-            Error = message;
             Fragment = fragment;
         }
 
         /// <summary>
         /// Creates a new <see cref="NotSupportedQueryFragmentException"/>
         /// </summary>
-        /// <param name="error">The error to return</param>
+        /// <param name="message">The error message to display</param>
         /// <param name="fragment">The fragment of the query that caused the error</param>
-        public NotSupportedQueryFragmentException(Sql4CdsError error, TSqlFragment fragment) : this(error.Message, fragment)
+        /// <param name="innerException">The original exception</param>
+        public NotSupportedQueryFragmentException(string message, TSqlFragment fragment, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NotSupportedQueryFragmentException"/>
+        /// </summary>
+        /// <param name="error">The error to return</param>
+        public NotSupportedQueryFragmentException(Sql4CdsError error) : this(error.Message)
+        {
+            _error = error;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NotSupportedQueryFragmentException"/>
+        /// </summary>
+        /// <param name="error">The error to return</param>
+        /// <param name="innerException">The original exception</param>
+        public NotSupportedQueryFragmentException(Sql4CdsError error, Exception innerException) : this(error.Message, error.Fragment, innerException)
         {
             _error = error;
         }
@@ -49,11 +67,6 @@ namespace MarkMpn.Sql4Cds.Engine
         protected NotSupportedQueryFragmentException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
-
-        /// <summary>
-        /// The error message to display
-        /// </summary>
-        public string Error { get; set; }
 
         /// <summary>
         /// The fragment of the query that caused the error

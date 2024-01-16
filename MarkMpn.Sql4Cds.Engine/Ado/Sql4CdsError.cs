@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -9,7 +10,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public class Sql4CdsError
     {
-        internal Sql4CdsError(byte @class, int lineNumber, int number, string procedure, string server, byte state, string message)
+        internal Sql4CdsError(byte @class, int lineNumber, int number, string procedure, string server, byte state, string message, TSqlFragment fragment = null)
         {
             Class = @class;
             LineNumber = lineNumber;
@@ -18,9 +19,10 @@ namespace MarkMpn.Sql4Cds.Engine
             Server = server;
             State = state;
             Message = message;
+            Fragment = fragment;
         }
 
-        internal Sql4CdsError(byte @class, int number, string message) : this(@class, -1, number, null, null, 1, message)
+        internal Sql4CdsError(byte @class, int number, string message, TSqlFragment fragment = null) : this(@class, -1, number, null, null, 1, message, fragment)
         {
         }
 
@@ -44,6 +46,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
         /// <inheritdoc cref="System.Data.SqlClient.SqlError.Message"/>
         public string Message { get; }
+
+        /// <summary>
+        /// Returns the <see cref="TSqlFragment"/> that caused the error
+        /// </summary>
+        public TSqlFragment Fragment { get; }
     }
 
     /// <summary>

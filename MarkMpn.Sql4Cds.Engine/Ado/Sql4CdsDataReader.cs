@@ -188,7 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (_options.CancellationToken.IsCancellationRequested)
-                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, null, 0, _command.CancelledManually ? "Query was cancelled by user" : "Query timed out"));
+                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, null, 0, _command.CancelledManually ? "Query was cancelled by user" : "Query timed out", null));
 
             return false;
         }
