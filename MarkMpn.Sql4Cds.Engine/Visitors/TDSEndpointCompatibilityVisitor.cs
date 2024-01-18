@@ -266,10 +266,23 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             IsCompatible = false;
         }
 
+        public override void Visit(ThrowStatement node)
+        {
+            // Can't use THROW statement
+            IsCompatible = false;
+        }
+
+        public override void Visit(RaiseErrorStatement node)
+        {
+            // Can't use RAISERROR statement
+            IsCompatible = false;
+        }
+
         public override void Visit(GlobalVariableExpression node)
         {
             if (node.Name.Equals("@@IDENTITY", StringComparison.OrdinalIgnoreCase) ||
-                node.Name.Equals("@@SERVERNAME", StringComparison.OrdinalIgnoreCase))
+                node.Name.Equals("@@SERVERNAME", StringComparison.OrdinalIgnoreCase) ||
+                node.Name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase))
             {
                 IsCompatible = false;
                 return;

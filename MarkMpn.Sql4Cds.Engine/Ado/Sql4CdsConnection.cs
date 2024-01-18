@@ -72,13 +72,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 ["@@ROWCOUNT"] = DataTypeHelpers.Int,
                 ["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
                 ["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
+                ["@@ERROR"] = DataTypeHelpers.Int,
             };
             _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {
                 ["@@IDENTITY"] = SqlEntityReference.Null,
                 ["@@ROWCOUNT"] = (SqlInt32)0,
                 ["@@SERVERNAME"] = GetServerName(_dataSources[_options.PrimaryDataSource]),
-                ["@@VERSION"] = GetVersion(_dataSources[_options.PrimaryDataSource])
+                ["@@VERSION"] = GetVersion(_dataSources[_options.PrimaryDataSource]),
+                ["@@ERROR"] = (SqlInt32)0,
             };
 
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));

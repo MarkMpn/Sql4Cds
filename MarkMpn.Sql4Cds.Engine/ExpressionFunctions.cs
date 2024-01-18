@@ -1116,6 +1116,56 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return false;
         }
+
+        public static SqlInt32 Error_Severity(ExpressionExecutionContext context)
+        {
+            if (context.Error == null)
+                return SqlInt32.Null;
+
+            return context.Error.Class;
+        }
+
+        public static SqlInt32 Error_State(ExpressionExecutionContext context)
+        {
+            if (context.Error == null)
+                return SqlInt32.Null;
+
+            return context.Error.State;
+        }
+
+        public static SqlInt32 Error_Number(ExpressionExecutionContext context)
+        {
+            if (context.Error == null)
+                return SqlInt32.Null;
+
+            return context.Error.Number;
+        }
+
+        [MaxLength(4000)]
+        public static SqlString Error_Message(ExpressionExecutionContext context)
+        {
+            if (context.Error == null)
+                return SqlString.Null;
+
+            return context.PrimaryDataSource.DefaultCollation.ToSqlString(context.Error.Message);
+        }
+
+        public static SqlInt32 Error_Line(ExpressionExecutionContext context)
+        {
+            if (context.Error == null)
+                return SqlInt32.Null;
+
+            return context.Error.LineNumber;
+        }
+
+        [MaxLength(128)]
+        public static SqlString Error_Procedure(ExpressionExecutionContext context)
+        {
+            if (context.Error == null || context.Error.Procedure == null)
+                return SqlString.Null;
+
+            return context.PrimaryDataSource.DefaultCollation.ToSqlString(context.Error.Procedure);
+        }
     }
 
     /// <summary>

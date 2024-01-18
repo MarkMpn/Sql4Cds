@@ -6767,5 +6767,29 @@ where n = 'a'";
             var constantScan = AssertNode<ConstantScanNode>(computeScalar.Source);
             Assert.AreEqual(1, constantScan.Values.Count);
         }
+
+        [TestMethod]
+        public void GotoCantMoveIntoTryBlock()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+GOTO label1
+BEGIN TRY
+    label1:
+END TRY
+BEGIN CATCH
+END CATCH";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(1026, ((ISql4CdsErrorException)ex).Error.Number);
+            }
+        }
     }
 }

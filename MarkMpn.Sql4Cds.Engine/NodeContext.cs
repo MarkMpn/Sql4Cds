@@ -116,6 +116,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the current value of each parameter
         /// </summary>
         public IDictionary<string, object> ParameterValues { get; }
+
+        public Sql4CdsError Error { get; set; }
     }
 
     /// <summary>
@@ -210,6 +212,7 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.ParameterValues, nodeContext.Log)
         {
             Entity = null;
+            Error = nodeContext.Error;
         }
 
         /// <summary>

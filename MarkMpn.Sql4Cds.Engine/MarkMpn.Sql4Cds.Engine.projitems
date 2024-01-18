@@ -29,6 +29,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AdaptiveIndexSpoolNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RaiseErrorNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ThrowNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TryCatchBlockNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\UnparsedGoToNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ISpoolProducerNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\OpenJsonNode.cs" />

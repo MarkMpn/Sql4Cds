@@ -1,4 +1,5 @@
 ﻿using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
@@ -84,6 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine
             parameterTypes["@@ROWCOUNT"] = DataTypeHelpers.Int;
             parameterTypes["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
             parameterTypes["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
+            parameterTypes["@@ERROR"] = DataTypeHelpers.Int;
 
             var queries = new List<IRootExecutionPlanNodeInternal>();
 
@@ -160,6 +162,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 132, $"The label '{kvp.Key}' has already been declared. Label names must be unique within a query batch or stored procedure", kvp.Value[1].Statement));
             }
 
+            // Ensure GOTOs don't enter a TRY or CATCH block
+            foreach (var gotoNode in queries.OfType<GoToNode>())
+            {
+                var label = labels[gotoNode.Label][0];
+
+                if (!TryCatchPath(gotoNode, queries).StartsWith(TryCatchPath(label, queries)))
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1026, "GOTO cannot be used to jump into a TRY or CATCH scope", gotoNode.Statement));
+            }
+
             if (EstimatedPlanOnly)
             {
                 foreach (var node in queries)
@@ -167,6 +178,31 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return queries.ToArray();
+        }
+
+        private string TryCatchPath(IRootExecutionPlanNodeInternal node, List<IRootExecutionPlanNodeInternal> queries)
+        {
+            var path = new Stack<string>();
+
+            for (var i = 0; i < queries.Count; i++)
+            {
+                if (queries[i] == node)
+                    break;
+
+                if (queries[i] is BeginTryNode)
+                    path.Push("try-" + i);
+                else if (queries[i] is EndTryNode)
+                    path.Pop();
+                else if (queries[i] is BeginCatchNode)
+                    path.Push("catch-" + i);
+                else if (queries[i] is EndCatchNode)
+                    path.Pop();
+            }
+
+            if (path.Count == 0)
+                return "/";
+
+            return "/" + String.Join("/", path.Reverse()) + "/";
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertStatement(TSqlStatement statement, ExecutionPlanOptimizer optimizer)
@@ -234,12 +270,30 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 return new[] { ConvertContinueStatement(continueStmt) };
             }
+            else if (statement is TryCatchStatement tryCatch)
+            {
+                return ConvertTryCatchStatement(tryCatch, optimizer);
+            }
             else if (!EstimatedPlanOnly)
             {
                 return new[] { new UnparsedStatementNode { Statement = statement, Compiler = this, Optimizer = optimizer } };
             }
 
             return null;
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertTryCatchStatement(TryCatchStatement tryCatch, ExecutionPlanOptimizer optimizer)
+        {
+            var nodes = new List<IRootExecutionPlanNodeInternal>();
+
+            nodes.Add(new BeginTryNode());
+            nodes.AddRange(tryCatch.TryStatements.Statements.SelectMany(s => ConvertStatement(s, optimizer)));
+            nodes.Add(new EndTryNode());
+            nodes.Add(new BeginCatchNode());
+            nodes.AddRange(tryCatch.CatchStatements.Statements.SelectMany(s => ConvertStatement(s, optimizer)));
+            nodes.Add(new EndCatchNode());
+
+            return nodes.ToArray();
         }
 
         internal IRootExecutionPlanNodeInternal[] ConvertStatementInternal(TSqlStatement statement, ExecutionPlanOptimizer optimizer)
@@ -493,6 +547,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = new[] { ConvertWaitForStatement(waitFor) };
             else if (statement is ExecuteStatement execute)
                 plans = ConvertExecuteStatement(execute);
+            else if (statement is ThrowStatement @throw)
+                plans = ConvertThrowStatement(@throw);
+            else if (statement is RaiseErrorStatement raiserror)
+                plans = ConvertRaiseErrorStatement(raiserror);
             else
                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported statement", statement));
 
@@ -535,6 +593,103 @@ namespace MarkMpn.Sql4Cds.Engine
             var converted = ConvertSelectStatement(queryExpression, null, null, null, childContext);
             converted.ExpandWildcardColumns(childContext);
             return converted;
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertThrowStatement(ThrowStatement @throw)
+        {
+            var ecc = new ExpressionCompilationContext(_nodeContext, null, null);
+
+            if (@throw.ErrorNumber != null)
+            {
+                @throw.ErrorNumber.GetType(ecc, out var type);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(type, DataTypeHelpers.Int))
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with int", @throw.ErrorNumber));
+            }
+
+            if (@throw.Message != null)
+            {
+                @throw.Message.GetType(ecc, out var type);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(type, DataTypeHelpers.NVarChar(2048, _nodeContext.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)))
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with nvarchar", @throw.Message));
+            }
+
+            if (@throw.State != null)
+            {
+                @throw.State.GetType(ecc, out var type);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(type, DataTypeHelpers.Int))
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with int", @throw.State));
+            }
+
+            return new[]
+            {
+                new ThrowNode
+                {
+                    ErrorNumber = @throw.ErrorNumber,
+                    ErrorMessage = @throw.Message,
+                    State = @throw.State
+                }
+            };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertRaiseErrorStatement(RaiseErrorStatement raiserror)
+        {
+            var ecc = new ExpressionCompilationContext(_nodeContext, null, null);
+            raiserror.FirstParameter.GetType(ecc, out var msgType);
+
+            // T-SQL supports using integer values for RAISERROR but we don't have sys.messages available so require a string
+            if (!(msgType is SqlDataTypeReference msgSqlType) || !msgSqlType.SqlDataTypeOption.IsStringType())
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Only user-defined error messages are supported", raiserror.FirstParameter));
+
+            // Severity and State must be integers
+            raiserror.SecondParameter.GetType(ecc, out var severityType);
+
+            if (!SqlTypeConverter.CanChangeTypeImplicit(severityType, DataTypeHelpers.Int))
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: int is incompatible with {severityType.ToSql()}", raiserror.SecondParameter));
+
+            raiserror.ThirdParameter.GetType(ecc, out var stateType);
+
+            if (!SqlTypeConverter.CanChangeTypeImplicit(stateType, DataTypeHelpers.Int))
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: int is incompatible with {stateType.ToSql()}", raiserror.ThirdParameter));
+
+            // Can't support more than 20 parameters
+            if (raiserror.OptionalParameters.Count > 20)
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2747, "Too many substitution parameters for RAISERROR. Cannot exceed 20 substitution parameters", raiserror.OptionalParameters[20]));
+
+            // All parameters must be tinyint, smallint, int, char, varchar, nchar, nvarchar, binary, or varbinary.
+            var allowedParamTypes = new[]
+            {
+                SqlDataTypeOption.TinyInt,
+                SqlDataTypeOption.SmallInt,
+                SqlDataTypeOption.Int,
+                SqlDataTypeOption.Char,
+                SqlDataTypeOption.VarChar,
+                SqlDataTypeOption.NChar,
+                SqlDataTypeOption.NVarChar,
+                SqlDataTypeOption.Binary,
+                SqlDataTypeOption.VarBinary
+            };
+
+            for (var i = 0; i < raiserror.OptionalParameters.Count; i++)
+            {
+                raiserror.OptionalParameters[i].GetType(ecc, out var paramType);
+
+                if (!(paramType is SqlDataTypeReference paramSqlType) || !allowedParamTypes.Contains(paramSqlType.SqlDataTypeOption))
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2748, $"Cannot specify {paramType.ToSql()} data type (parameter {i+4}) as a substitution parameter", raiserror.OptionalParameters[i]));
+            }
+
+            if (raiserror.RaiseErrorOptions.HasFlag(RaiseErrorOptions.Log))
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2778, "Only System Administrator can specify WITH LOG option for RAISERROR command"));
+
+            return new[]
+            {
+                new RaiseErrorNode
+                {
+                    ErrorMessage = raiserror.FirstParameter,
+                    Severity = raiserror.SecondParameter,
+                    State = raiserror.ThirdParameter,
+                    Parameters = raiserror.OptionalParameters.ToArray()
+                }
+            };
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertExecuteStatement(ExecuteStatement execute)

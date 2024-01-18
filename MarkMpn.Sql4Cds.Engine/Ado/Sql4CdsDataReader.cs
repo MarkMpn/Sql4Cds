@@ -32,6 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _rows;
         private int _resultSetsReturned;
         private bool _closed;
+        private Stack<Sql4CdsError> _errorDetails;
         
         public Sql4CdsDataReader(Sql4CdsCommand command, IQueryExecutionOptions options, CommandBehavior behavior)
         {
@@ -49,6 +50,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var paramValue in _connection.GlobalVariableValues)
                 _parameterValues[paramValue.Key] = paramValue.Value;
+
+            _errorDetails = new Stack<Sql4CdsError>();
 
             if (!NextResult())
                 Close();
@@ -72,10 +75,45 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        private bool ExecuteWithExceptionHandling(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
+        {
+            while (true)
+            {
+                try
+                {
+                    return Execute(parameterTypes, parameterValues);
+                }
+                catch (Sql4CdsException ex)
+                {
+                    parameterValues["@@ERROR"] = (SqlInt32)ex.Number;
+
+                    // If we are in a TRY block, store the exception information in the context and move to the CATCH block
+                    var caught = false;
+
+                    while (_instructionPointer < _command.Plan.Length && !_options.CancellationToken.IsCancellationRequested)
+                    {
+                        if (_command.Plan[_instructionPointer] is BeginCatchNode)
+                        {
+                            caught = true;
+                            break;
+                        }
+
+                        _instructionPointer++;
+                    }
+
+                    if (!caught)
+                        throw;
+
+                    _errorDetails.Push(ex.Errors[0]);
+                }
+            }
+        }
+
         private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
         {
             IRootExecutionPlanNode logNode = null;
             var context = new NodeExecutionContext(_connection.DataSources, _options, parameterTypes, parameterValues, msg => _connection.OnInfoMessage(logNode, msg));
+            context.Error = _errorDetails.FirstOrDefault();
 
             try
             {
@@ -120,6 +158,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         dmlNode.Execute(context, out var recordsAffected, out var message);
 
                         _command.OnStatementCompleted(dmlNode, recordsAffected, message);
+                        parameterValues["@@ERROR"] = (SqlInt32)0;
 
                         if (recordsAffected != -1)
                         {
@@ -138,11 +177,79 @@ namespace MarkMpn.Sql4Cds.Engine
                             _command.OnStatementCompleted(cond, -1, null);
 
                         if (label != null)
-                            _instructionPointer = LabelIndexes[label];
+                        {
+                            // Move to the label. If we leave a CATCH block, remove the error
+                            var catchDepth = 0;
+
+                            var targetIndex = LabelIndexes[label];
+
+                            while (targetIndex < _instructionPointer)
+                            {
+                                _instructionPointer--;
+
+                                if (_command.Plan[_instructionPointer] is BeginCatchNode)
+                                    catchDepth--;
+                                else if (_command.Plan[_instructionPointer] is EndCatchNode)
+                                    catchDepth++;
+                            }
+
+                            while (targetIndex > _instructionPointer)
+                            {
+                                _instructionPointer++;
+
+                                if (_command.Plan[_instructionPointer] is EndCatchNode)
+                                    catchDepth--;
+                                else if (_command.Plan[_instructionPointer] is BeginCatchNode)
+                                    catchDepth++;
+                            }
+
+                            while (catchDepth < 0)
+                            {
+                                _errorDetails.Pop();
+                                catchDepth++;
+                            }
+
+                            context.Error = _errorDetails.FirstOrDefault();
+                        }
                     }
                     else if (node is GotoLabelNode)
                     {
                         // NOOP
+                    }
+                    else if (node is BeginTryNode)
+                    {
+                        // TODO
+                    }
+                    else if (node is EndTryNode)
+                    {
+                        // Got to the end of the TRY block without error - skip the CATCH block
+                        var catchDepth = 0;
+                        _instructionPointer++;
+
+                        while (_instructionPointer < _command.Plan.Length)
+                        {
+                            if (_command.Plan[_instructionPointer] is BeginCatchNode)
+                                catchDepth++;
+                            else if (_command.Plan[_instructionPointer] is EndCatchNode)
+                                catchDepth--;
+
+                            if (catchDepth == 0)
+                                break;
+                        }
+
+                        // Remove error information from context
+                        _errorDetails.Pop();
+                        context.Error = _errorDetails.FirstOrDefault();
+                    }
+                    else if (node is BeginCatchNode)
+                    {
+                        // NOOP
+                    }
+                    else if (node is EndCatchNode)
+                    {
+                        // Remove error information from context
+                        _errorDetails.Pop();
+                        context.Error = _errorDetails.FirstOrDefault();
                     }
                     else
                     {
@@ -441,7 +548,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override bool NextResult()
         {
-            return Execute(_parameterTypes, _parameterValues);
+            return ExecuteWithExceptionHandling(_parameterTypes, _parameterValues);
         }
 
         public override bool Read()
@@ -470,6 +577,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     rethrow = false;
                 }
 
+                ParameterValues["@@ERROR"] = (SqlInt32)sqlErr.Number;
                 SetErrorLineNumbers(sqlErr, _readerQuery);
                 _readerQuery = null;
 
@@ -486,6 +594,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else
             {
                 _command.OnStatementCompleted(_readerQuery, _rows, $"({_rows} {(_rows == 1 ? "row" : "rows")} affected)");
+                ParameterValues["@@ERROR"] = (SqlInt32)0;
 
                 _reader.Close();
                 _reader = null;
@@ -536,7 +645,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 }
 
-                if (dataTypeNameCol != -1 && cloneRow[dataTypeNameCol] is string s && s == typeof(SqlEntityReference).FullName)
+                if (dataTypeNameCol != -1 && cloneRow[dataTypeNameCol] is string s && s == nameof(DataTypeHelpers.EntityReference))
                     cloneRow[dataTypeNameCol] = "uniqueidentifier";
             }
 

@@ -1542,6 +1542,186 @@ ELSE
                     Assert.AreEqual(16, error.Class);
                     Assert.AreEqual(1, error.State);
                     Assert.AreEqual(1, error.LineNumber);
+                    Assert.AreEqual("The record does not exist.", error.Message);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Catch()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    THROW 51000, 'Test', 1;
+END TRY
+BEGIN CATCH
+    SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+END CATCH";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51000, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(3, reader.GetInt32(4));
+                    Assert.AreEqual("Test", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void RaiseError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    RAISERROR('Custom message %s', 16, 1, 'test')
+END TRY
+BEGIN CATCH
+    SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+END CATCH";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(50000, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(3, reader.GetInt32(4));
+                    Assert.AreEqual("Custom message test", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void NestedCatch()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    THROW 51000, 'Test', 1;
+END TRY
+BEGIN CATCH
+    BEGIN TRY
+        THROW 51001, 'Test2', 2;
+    END TRY
+    BEGIN CATCH
+        SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+    END CATCH
+    SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+END CATCH
+SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51001, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(7, reader.GetInt32(4));
+                    Assert.AreEqual("Test2", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51000, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(3, reader.GetInt32(4));
+                    Assert.AreEqual("Test", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                    Assert.IsTrue(reader.IsDBNull(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.IsTrue(reader.IsDBNull(5));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsFalse(reader.NextResult());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void GotoOutOfCatchBlockClearsError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    THROW 51000, 'Test', 1;
+END TRY
+BEGIN CATCH
+    BEGIN TRY
+        THROW 51001, 'Test2', 2;
+    END TRY
+    BEGIN CATCH
+        GOTO label1
+    END CATCH
+    label1:
+    SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+    GOTO label2
+END CATCH
+label2:
+SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51001, reader.GetInt32(0));
+                    Assert.AreEqual(51000, reader.GetInt32(1));
+                    Assert.AreEqual(16, reader.GetInt32(2));
+                    Assert.AreEqual(1, reader.GetInt32(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.AreEqual(3, reader.GetInt32(5));
+                    Assert.AreEqual("Test", reader.GetString(6));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(0, reader.GetInt32(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                    Assert.IsTrue(reader.IsDBNull(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.IsTrue(reader.IsDBNull(5));
+                    Assert.IsTrue(reader.IsDBNull(6));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsFalse(reader.NextResult());
                 }
             }
         }
