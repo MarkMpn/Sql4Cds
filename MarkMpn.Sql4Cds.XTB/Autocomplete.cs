@@ -888,6 +888,7 @@ namespace MarkMpn.Sql4Cds.XTB
             list.Add(new VariableAutocompleteItem("@@ROWCOUNT", currentWord.Length));
             list.Add(new VariableAutocompleteItem("@@SERVERNAME", currentWord.Length));
             list.Add(new VariableAutocompleteItem("@@VERSION", currentWord.Length));
+            list.Add(new VariableAutocompleteItem("@@ERROR", currentWord.Length));
 
             // Find any other variable declarations in the preceding SQL
             var regex = new System.Text.RegularExpressions.Regex(@"\bdeclare\s+(@[a-z0-9_]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
