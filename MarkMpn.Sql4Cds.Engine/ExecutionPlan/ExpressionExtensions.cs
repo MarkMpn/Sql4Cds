@@ -802,7 +802,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var paramType = parameters[i].ParameterType;
 
-                if (i == parameters.Length - 1 && paramTypes.Length >= parameters.Length && paramType.IsArray)
+                if (i == parameters.Length - 1 && paramTypes.Length >= parameters.Length - hiddenParams && paramType.IsArray)
                     paramType = paramType.GetElementType();
 
                 var paramIndex = i;
@@ -810,22 +810,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (func.CallTarget != null)
                     paramIndex--;
 
-                if (paramTypes.Length < parameters.Length && paramType == typeof(ExpressionExecutionContext))
+                if (paramType == typeof(ExpressionExecutionContext))
                 {
-                    var paramsWithOptions = new Expression[paramExpressions.Length + 1];
-                    paramExpressions.CopyTo(paramsWithOptions, 0);
-                    paramsWithOptions[paramExpressions.Length] = contextParam;
-                    paramExpressions = paramsWithOptions;
+                    var paramsWithOptions = new List<Expression>(paramExpressions);
+                    paramsWithOptions.Insert(i, contextParam);
+                    paramExpressions = paramsWithOptions.ToArray();
                     hiddenParams++;
                     continue;
                 }
 
-                if (paramTypes.Length < parameters.Length && paramType == typeof(INodeSchema))
+                if (paramType == typeof(INodeSchema))
                 {
-                    var paramsWithOptions = new Expression[paramExpressions.Length + 1];
-                    paramExpressions.CopyTo(paramsWithOptions, 0);
-                    paramsWithOptions[paramExpressions.Length] = Expression.Constant(context.Schema);
-                    paramExpressions = paramsWithOptions;
+                    var paramsWithOptions = new List<Expression>(paramExpressions);
+                    paramsWithOptions.Insert(i, Expression.Constant(context.Schema));
+                    paramExpressions = paramsWithOptions.ToArray();
                     hiddenParams++;
                     continue;
                 }
@@ -878,7 +876,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
                 }
 
-                if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType(primaryDataSource)))
+                if (paramType != typeof(INullable) && !SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i - hiddenParams], paramType.ToSqlType(primaryDataSource)))
                     throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {paramTypes[i].ToSql()} is incompatible with {paramType.ToSqlType(primaryDataSource).ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]));
             }
 
@@ -886,8 +884,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var paramType = parameters.Last().ParameterType.GetElementType();
 
-                if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType(primaryDataSource)))
+                if (paramType != typeof(INullable) && !SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType(primaryDataSource)))
                     throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {paramTypes[i].ToSql()} is incompatible with {paramType.ToSqlType(primaryDataSource).ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]));
+            }
+
+            if (parameters.Length > 0 && parameters.Last().ParameterType.IsArray)
+            {
+                var arrayType = parameters.Last().ParameterType.GetElementType();
+                var arrayMembers = new List<Expression>();
+
+                for (var i = parameters.Length - 1; i < paramExpressions.Length; i++)
+                {
+                    if (arrayType == typeof(INullable))
+                        arrayMembers.Add(Expression.Convert(paramExpressions[i], typeof(INullable)));
+                    else
+                        arrayMembers.Add(SqlTypeConverter.Convert(paramExpressions[i], arrayType));
+                }
+
+                var arrayParam = Expression.NewArrayInit(arrayType, arrayMembers);
+                paramExpressions = paramExpressions.Take(parameters.Length - 1).Concat(new[] { arrayParam }).ToArray();
             }
 
             if (sqlType == null)

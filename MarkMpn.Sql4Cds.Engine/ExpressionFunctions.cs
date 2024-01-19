@@ -1166,6 +1166,151 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return context.PrimaryDataSource.DefaultCollation.ToSqlString(context.Error.Procedure);
         }
+
+        [MaxLength(2048)]
+        public static SqlString FormatMessage(SqlString message, ExpressionExecutionContext context, params INullable[] parameters)
+        {
+            if (message.IsNull)
+                return SqlString.Null;
+
+            var regex = new Regex("%(?<flag>[-+0# ])?(?<width>([0-9]+|\\*))?(\\.(?<precision>([0-9]+|\\*)))?(?<size>h|l)?(?<type>[diosuxX]|I64d)");
+            var paramIndex = 0;
+
+            T GetValue<T>()
+            {
+                if (paramIndex >= parameters.Length)
+                    throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
+
+                if (!(parameters[paramIndex] is T val))
+                    throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
+
+                paramIndex++;
+                return val;
+            }
+
+            var msg = regex.Replace(message.Value, match =>
+            {
+                var flag = match.Groups["flag"].Success ? match.Groups["flag"].Value : string.Empty;
+                var width = match.Groups["width"].Success ? match.Groups["width"].Value : null;
+                var precision = match.Groups["precision"].Success ? match.Groups["precision"].Value : null;
+                var size = match.Groups["size"].Success ? match.Groups["size"].Value : null;
+                var type = match.Groups["type"].Value;
+
+                if (width == "*")
+                    width = GetValue<SqlInt32>().Value.ToString();
+
+                if (precision == "*")
+                    precision = GetValue<SqlInt32>().Value.ToString();
+
+                string formatted;
+
+                var formatString = "0";
+
+                if (flag.Contains("0") && width != null)
+                    formatString = formatString.PadLeft(Int32.Parse(width), '0');
+
+                if (precision != null)
+                    formatString = formatString.PadLeft(Int32.Parse(precision), '0');
+
+                var negativeFormatString = formatString == "0" ? "0" : formatString.Substring(0, formatString.Length - 1);
+
+                if (flag.Contains("+"))
+                    formatString = "+" + formatString + ";-" + negativeFormatString;
+                else if (flag.Contains(" "))
+                    formatString = " " + formatString + ";-" + negativeFormatString;
+                else
+                    formatString = formatString + ";-" + negativeFormatString;
+
+                switch (type)
+                {
+                    case "d":
+                    case "i":
+                    case "o":
+                    case "u":
+                    case "x":
+                    case "X":
+                        var intValue = GetValue<SqlInt32>();
+
+                        if (intValue.IsNull)
+                            return "(null)";
+
+                        if (type == "d" || type == "i")
+                        {
+                            formatted = intValue.Value.ToString(formatString);
+                        }
+                        else if (type == "o")
+                        {
+                            formatted = Convert.ToString(intValue.Value, 8);
+
+                            if (flag.Contains("#") && intValue.Value != 0)
+                                formatted = "0" + formatted;
+
+                            if (precision != null)
+                                formatted = formatted.PadLeft(Int32.Parse(precision), '0');
+                        }
+                        else if (type == "u")
+                        {
+                            formatted = ((uint)intValue.Value).ToString();
+
+                            if (precision != null)
+                                formatted = formatted.PadLeft(Int32.Parse(precision), '0');
+                        }
+                        else if (type == "x" || type == "X")
+                        {
+                            formatted = ((uint)intValue.Value).ToString(type);
+
+                            if (precision != null)
+                                formatted = formatted.PadLeft(Int32.Parse(precision), '0');
+
+                            if (flag.Contains("#"))
+                                formatted = "0" + type + formatted;
+                        }
+                        else
+                        {
+                            throw new QueryExecutionException(new Sql4CdsError(16, 2787, $"Invalid format specification: '{match.Value}'"));
+                        }
+                        break;
+
+                    case "I64d":
+                        var bigintValue = GetValue<SqlDecimal>();
+
+                        if (bigintValue.IsNull)
+                            return "(null)";
+
+                        formatted = ((long)bigintValue.Value).ToString(formatString);
+                        break;
+
+                    case "s":
+                        var strValue = GetValue<SqlString>();
+
+                        if (strValue.IsNull)
+                            return "(null)";
+
+                        formatted = strValue.Value;
+
+                        if (precision != null && formatted.Length > Int32.Parse(precision))
+                            formatted = formatted.Substring(Int32.Parse(precision));
+                        break;
+
+                    default:
+                        throw new QueryExecutionException(new Sql4CdsError(16, 2787, $"Invalid format specification: '{match.Value}'"));
+                }
+
+                if (width != null && formatted.Length < Int32.Parse(width))
+                {
+                    if (flag.Contains("-"))
+                        formatted = formatted.PadRight(Int32.Parse(width));
+                    else if (flag.Contains("0"))
+                        formatted = formatted.PadLeft(Int32.Parse(width), '0');
+                    else
+                        formatted = formatted.PadLeft(Int32.Parse(width));
+                }
+
+                return formatted;
+            });
+
+            return context.PrimaryDataSource.DefaultCollation.ToSqlString(msg);
+        }
     }
 
     /// <summary>
