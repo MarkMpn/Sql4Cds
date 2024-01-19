@@ -274,12 +274,19 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 _error = true;
 
-                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Error != null)
+                if (ex is ISql4CdsErrorException sqlEx)
                 {
-                    if (sqlEx.Error.LineNumber == -1)
-                        sqlEx.Error.LineNumber = _command.Plan[_instructionPointer].LineNumber;
+                    foreach (var err in sqlEx.Errors)
+                    {
+                        if (err.LineNumber == -1)
+                            err.LineNumber = _command.Plan[_instructionPointer].LineNumber;
+                    }
 
-                    context.Log(sqlEx.Error);
+                    if (sqlEx.Errors.Any(err => err.Class > 10))
+                        throw new Sql4CdsException(ex.Message, ex);
+
+                    foreach (var err in sqlEx.Errors)
+                        context.Log(err);
                 }
                 else
                 {

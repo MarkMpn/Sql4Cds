@@ -6788,7 +6788,7 @@ END CATCH";
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.AreEqual(1026, ((ISql4CdsErrorException)ex).Error.Number);
+                Assert.AreEqual(1026, ex.Errors.Single().Number);
             }
         }
     }

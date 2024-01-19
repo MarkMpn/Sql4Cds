@@ -717,16 +717,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (ex is AggregateException agg && agg.InnerExceptions.Count == 1)
                     ex = agg.InnerException;
 
-                if (count == 0)
-                {
+                if (count > 0)
+                    context.Log(new Sql4CdsError(1, 0, $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}"));
+
                     if (ex == originalEx)
                         throw;
                     else
                         throw ex;
                 }
-
-                throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}", ex);
-            }
 
             recordsAffected = count;
             message = $"({count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase})";
@@ -761,7 +759,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(r => r.Fault != null)
                 .ToList();
 
-            Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
+            Interlocked.Add(ref count, resp.Responses.Count - errorResponses.Count);
             Interlocked.Add(ref errorCount, errorResponses.Count);
 
             var error = errorResponses.FirstOrDefault(item => FilterErrors(context, req.Requests[item.RequestIndex], item.Fault));

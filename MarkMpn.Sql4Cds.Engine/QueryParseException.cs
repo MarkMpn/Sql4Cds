@@ -1,5 +1,6 @@
 ﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
+using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -17,6 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public QueryParseException(ParseError error) : base(error.Message)
         {
             Error = error;
+            Errors = new[] { new Sql4CdsError(15, Error.Line, Error.Number, null, null, 1, Error.Message, null) };
         }
 
         public QueryParseException()
@@ -40,6 +42,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public ParseError Error { get; }
 
-        Sql4CdsError ISql4CdsErrorException.Error => new Sql4CdsError(15, Error.Line, Error.Number, null, null, 1, Error.Message, null);
+        public IReadOnlyList<Sql4CdsError> Errors { get; }
     }
 }

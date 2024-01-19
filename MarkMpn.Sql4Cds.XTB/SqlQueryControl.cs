@@ -737,8 +737,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 var length = 0;
                 var messageSuffix = "";
                 IRootExecutionPlanNode plan = null;
+                var sql4CdsException = error as Sql4CdsException;
 
-                if (error is Sql4CdsException sql4CdsException)
+                if (sql4CdsException != null)
                 {
                     if (sql4CdsException.Errors != null)
                     {
@@ -820,17 +821,10 @@ namespace MarkMpn.Sql4Cds.XTB
                     length = new Regex("\\b").Matches(_params.Sql.Substring(parseErr.Error.Offset)).Cast<Match>().Skip(1).FirstOrDefault()?.Index ?? 0;
                     _editor.IndicatorFillRange(_params.Offset + parseErr.Error.Offset, length);
                 }
-                else if (error is PartialSuccessException partialSuccess)
-                {
-                    if (partialSuccess.Result is string msg)
-                        AddMessage(index, length, msg, MessageType.Info);
-
-                    error = partialSuccess.InnerException;
-                }
 
                 _log(e.Error.ToString());
 
-                AddMessage(index, length, GetErrorMessage(error) + messageSuffix, MessageType.Error);
+                AddMessage(index, length, GetErrorMessage(error, sql4CdsException) + messageSuffix, MessageType.Error);
 
                 tabControl.SelectedTab = messagesTabPage;
             }
@@ -859,21 +853,26 @@ namespace MarkMpn.Sql4Cds.XTB
             return null;
         }
 
-        private string GetErrorMessage(Exception error)
+        private string GetErrorMessage(Exception error, Sql4CdsException rootException)
         {
             string msg;
 
             if (error is AggregateException aggregateException)
-                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
-            else if (error is Sql4CdsException sqlException && sqlException.Errors.Count > 0 && sqlException.Errors.Any(err => err.Message == sqlException.Message))
+                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex, rootException)).Where(m => !String.IsNullOrEmpty(m)));
+            else if (rootException != null && rootException.Errors.Any(err => err.Message == error.Message))
                 msg = "";
             else
                 msg = error.Message;
 
             while (error.InnerException != null)
             {
-                if (error.InnerException.Message != error.Message)
-                    msg += "\r\n" + error.InnerException.Message;
+                if (rootException == null || !rootException.Errors.Any(err => err.Message == error.InnerException.Message))
+                {
+                    if (!String.IsNullOrEmpty(msg))
+                        msg += "\r\n";
+
+                    msg += error.InnerException.Message;
+                }
 
                 error = error.InnerException;
             }
@@ -882,7 +881,7 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 var fault = faultEx.Detail;
 
-                if (fault.Message != error.Message)
+                if (rootException == null || !rootException.Errors.Any(err => err.Message == error.Message))
                     msg += "\r\n" + fault.Message;
 
                 if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
@@ -911,11 +910,14 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private void AddMessage(int index, int length, string message, MessageType messageType)
         {
+            message = message.Trim();
+
             var scintilla = (Scintilla)messagesTabPage.Controls[0];
             var line = scintilla.Lines.Count - 1;
+            var stylingStart = scintilla.Text.Length;
             scintilla.ReadOnly = false;
             scintilla.AppendText(message + (messageType == MessageType.ErrorPrefix ? "\r\n" : "\r\n\r\n"));
-            scintilla.StartStyling(scintilla.Text.Length - message.Length - 4);
+            scintilla.StartStyling(stylingStart);
             scintilla.SetStyling(message.Length, messageType == MessageType.Info ? 2 : 1);
             scintilla.ReadOnly = true;
 

@@ -137,7 +137,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)MetadataQueryExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetaMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NotSupportedQueryFragmentException.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)PartialSuccessException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)QueryParseException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlEntityReference.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TableSizeCache.cs" />

@@ -128,6 +128,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                     con.InfoMessage += (s, msg) =>
                     {
                         sqlScriptEditorControl.Results.AddStringToMessages(msg.Message + "\r\n\r\n");
+                        resultFlag |= 1; // Success
                     };
 
                     cmd.StatementCompleted += (s, stmt) =>
@@ -168,20 +169,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         }
                         catch (Exception ex)
                         {
-                            var error = ex;
-
-                            if (ex is PartialSuccessException partial)
-                            {
-                                error = partial.InnerException;
-
-                                if (partial.Result is string msg)
-                                {
-                                    sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
-                                    resultFlag |= 1; // Success
-                                }
-                            }
-
-                            AddException(sqlScriptEditorControl, textSpan, error);
+                            AddException(sqlScriptEditorControl, textSpan, ex);
                             resultFlag |= 2; // Failure
                         }
 

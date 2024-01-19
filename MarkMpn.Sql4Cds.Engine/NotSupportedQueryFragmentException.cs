@@ -1,5 +1,6 @@
 ﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
 
@@ -11,8 +12,6 @@ namespace MarkMpn.Sql4Cds.Engine
     [Serializable]
     public class NotSupportedQueryFragmentException : NotSupportedException, ISql4CdsErrorException
     {
-        private readonly Sql4CdsError _error;
-
         /// <summary>
         /// Creates a new <see cref="NotSupportedQueryFragmentException"/>
         /// </summary>
@@ -39,7 +38,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="error">The error to return</param>
         public NotSupportedQueryFragmentException(Sql4CdsError error) : this(error.Message)
         {
-            _error = error;
+            Errors = new[] { error };
         }
 
         /// <summary>
@@ -49,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="innerException">The original exception</param>
         public NotSupportedQueryFragmentException(Sql4CdsError error, Exception innerException) : this(error.Message, error.Fragment, innerException)
         {
-            _error = error;
+            Errors = new[] { error };
         }
 
         public NotSupportedQueryFragmentException()
@@ -78,6 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public string Suggestion { get; set; }
 
-        Sql4CdsError ISql4CdsErrorException.Error => _error;
+        /// <inheritdoc cref="ISql4CdsErrorException.Errors"/>
+        public IReadOnlyList<Sql4CdsError> Errors { get; }
     }
 }

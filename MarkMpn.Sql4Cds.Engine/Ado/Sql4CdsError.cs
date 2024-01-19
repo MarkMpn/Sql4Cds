@@ -59,8 +59,8 @@ namespace MarkMpn.Sql4Cds.Engine
     interface ISql4CdsErrorException
     {
         /// <summary>
-        /// The <see cref="Sql4CdsError"/> to report back to the user
+        /// The <see cref="Sql4CdsError"/>s to report back to the user
         /// </summary>
-        Sql4CdsError Error { get; }
+        IReadOnlyList<Sql4CdsError> Errors { get; }
     }
 }

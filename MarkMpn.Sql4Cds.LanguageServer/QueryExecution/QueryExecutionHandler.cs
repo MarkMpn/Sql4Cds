@@ -412,7 +412,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             }
             catch (Exception ex)
             {
-                if (ex is Sql4CdsException sql4CdsException && sql4CdsException.Errors != null)
+                var sql4CdsException = ex as Sql4CdsException;
+
+                if (sql4CdsException?.Errors != null)
                 {
                     foreach (var sql4CdsError in sql4CdsException.Errors)
                     {
@@ -454,7 +456,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     {
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
-                        Message = GetErrorMessage(ex),
+                        Message = GetErrorMessage(ex, sql4CdsException),
                         IsError = true
                     }
                 });
@@ -556,17 +558,19 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 OwnerUri = request.OwnerUri,
                 BatchSummaries = new[]
                 {
-                        batchSummary
-                    }
+                    batchSummary
+                }
             });
         }
 
-        private string GetErrorMessage(Exception error)
+        private string GetErrorMessage(Exception error, Sql4CdsException rootException)
         {
             string msg;
 
             if (error is AggregateException aggregateException)
-                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
+                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex, rootException)).Where(m => !String.IsNullOrEmpty(m)));
+            else if (rootException != null && rootException.Message == error.Message)
+                msg = "";
             else
                 msg = error.Message;
 
