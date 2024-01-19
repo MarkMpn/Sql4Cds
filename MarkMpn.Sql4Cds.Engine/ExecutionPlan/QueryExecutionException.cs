@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         errors.AddRange(innerSqlEx.Errors);
                     else if (innerEx is FaultException<OrganizationServiceFault> innerFaultEx)
                         errors.Add(new Sql4CdsError(16, FaultCodeToSqlError(innerFaultEx.Detail.ErrorCode), innerFaultEx.Message));
-            else
+                    else
                         errors.Add(new Sql4CdsError(16, 10337, innerEx.Message));
                 }
 
@@ -67,5 +67,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IExecutionPlanNode Node { get; set; }
 
         public IReadOnlyList<Sql4CdsError> Errors { get; }
+
+        private static int FaultCodeToSqlError(int faultCode)
+        {
+            switch (faultCode)
+            {
+                case -2147204288: return 8152;
+                case -2147217098: return 8115;
+                case -2147204304:
+                case -2146892679:
+                case -2147204324:
+                case -2146892644:
+                case -2146892643:
+                case -2147158398:
+                case -2147204305:
+                case -2147086331:
+                case -2147187710:
+                case -2147204326:
+                case -2147182263:
+                case -2147220309:
+                case -2147220948:
+                case -2147213282:
+                case -2147086332:
+                case -2147187954: return 547;
+                case -2147220937: return 2627;
+
+                default: return 10337;
+            }
+        }
     }
 }
