@@ -178,6 +178,30 @@ namespace MarkMpn.Sql4Cds.XTB
 
             [Description("Returns the base data type and other information about a sql_variant value")]
             public abstract object sql_variant_property(object expression, string property);
+
+            [Description("Returns the severity value of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_severity();
+
+            [Description("Returns the state number of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_state();
+
+            [Description("Returns the error number of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_number();
+
+            [Description("Returns the message text of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract string error_message();
+
+            [Description("Returns the line number of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_line();
+
+            [Description("Returns the name of the stored procedure of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract string error_procedure();
+
+            [Description("Constructs a message from a provided string")]
+            public abstract string formatmessage(string message, object[] parameters);
+
+            [Description("Generates an error message and initiates error processing for the session")]
+            public abstract void raiserror(string msg_str, int severity, int state, object[] parameters);
         }
     }
 }
