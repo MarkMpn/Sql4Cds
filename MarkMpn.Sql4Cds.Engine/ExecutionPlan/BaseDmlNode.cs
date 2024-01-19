@@ -347,6 +347,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 value = new SqlTime(ts);
                             }
+                            else if (value is DBNull)
+                            {
+                                var sqlType = (DataTypeReference)dataTable.Columns[i].ExtendedProperties["SqlType"];
+                                value = SqlTypeConverter.GetNullValue(sqlType.ToNetType(out _));
+                            }
 
                             entity[dataTable.Columns[i].ColumnName] = value;
                             entity[i.ToString()] = value;
@@ -720,11 +725,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (count > 0)
                     context.Log(new Sql4CdsError(1, 0, $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}"));
 
-                    if (ex == originalEx)
-                        throw;
-                    else
-                        throw ex;
-                }
+                if (ex == originalEx)
+                    throw;
+                else
+                    throw ex;
+            }
 
             recordsAffected = count;
             message = $"({count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase})";
