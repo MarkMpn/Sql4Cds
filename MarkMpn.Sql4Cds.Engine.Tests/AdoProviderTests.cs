@@ -1725,5 +1725,30 @@ SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE
                 }
             }
         }
+
+        [DataTestMethod]
+        [DataRow("SELECT FORMATMESSAGE('Signed int %i, %d %i, %d, %+i, %+d, %+i, %+d', 5, -5, 50, -50, -11, -11, 11, 11)", "Signed int 5, -5 50, -50, -11, -11, +11, +11")]
+        [DataRow("SELECT FORMATMESSAGE('Signed int with up to 3 leading zeros %03i', 5)", "Signed int with up to 3 leading zeros 005")]
+        [DataRow("SELECT FORMATMESSAGE('Signed int with up to 20 leading zeros %020i', 5)", "Signed int with up to 20 leading zeros 00000000000000000005")]
+        [DataRow("SELECT FORMATMESSAGE('Signed int with leading zero 0 %020i', -55)", "Signed int with leading zero 0 -0000000000000000055")]
+        [DataRow("SELECT FORMATMESSAGE('Bigint %I64d', 3000000000)", "Bigint 3000000000")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned int %u, %u', 50, -50)", "Unsigned int 50, 4294967246")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned octal %o, %o', 50, -50)", "Unsigned octal 62, 37777777716")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned hexadecimal %x, %X, %X, %X, %x', 11, 11, -11, 50, -50)", "Unsigned hexadecimal b, B, FFFFFFF5, 32, ffffffce")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned octal with prefix: %#o, %#o', 50, -50)", "Unsigned octal with prefix: 062, 037777777716")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned hexadecimal with prefix: %#x, %#X, %#X, %X, %x', 11, 11, -11, 50, -50)", "Unsigned hexadecimal with prefix: 0xb, 0XB, 0XFFFFFFF5, 32, ffffffce")]
+        [DataRow("SELECT FORMATMESSAGE('Hello %s!', 'TEST')", "Hello TEST!")]
+        [DataRow("SELECT FORMATMESSAGE('Hello %20s!', 'TEST')", "Hello                 TEST!")]
+        [DataRow("SELECT FORMATMESSAGE('Hello %-20s!', 'TEST')", "Hello TEST                !")]
+        public void FormatMessage(string query, string expected)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = query;
+                var actual = (string)cmd.ExecuteScalar();
+                Assert.AreEqual(expected, actual);
+            }
+        }
     }
 }
