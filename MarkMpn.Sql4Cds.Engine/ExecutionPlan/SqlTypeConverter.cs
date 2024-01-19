@@ -567,7 +567,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="styleType">An optional parameter defining the type of the <paramref name="style"/> expression</param>
         /// <param name="convert">An optional parameter containing the SQL CONVERT() function call to report any errors against</param>
         /// <returns>An expression to generate values of the required type</returns>
-        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, ConvertCall convert = null)
+        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, ConvertCall convert = null, bool throwOnTruncate = false)
         {
             if (from.IsSameAs(to))
                 return expr;
@@ -656,6 +656,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
                         {
                             exceptionOnTruncate = new QueryExecutionException(new Sql4CdsError(16, 8115, "Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption));
+                        }
+                        else if (throwOnTruncate)
+                        {
+                            exceptionOnTruncate = new QueryExecutionException(new Sql4CdsError(16, 8152, "String or binary data would be truncated"));
                         }
 
                         expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Exception>()),
