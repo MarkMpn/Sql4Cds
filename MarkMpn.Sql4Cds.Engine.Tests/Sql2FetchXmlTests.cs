@@ -1986,7 +1986,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ImplicitTypeConversionComparison()
         {
-            var query = "SELECT * FROM account WHERE turnover / 2 > 10";
+            var query = "SELECT accountid FROM account WHERE turnover / 2 > 10";
 
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
             var queries = planBuilder.Build(query, null, out _);
