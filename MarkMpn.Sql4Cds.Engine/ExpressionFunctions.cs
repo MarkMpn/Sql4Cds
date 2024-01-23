@@ -885,10 +885,18 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (result == null)
                 sqlValue = SqlTypeConverter.GetNullValue(targetNetType);
+            else if (result is INullable)
+                sqlValue = (INullable)result;
             else if (result is Base64BinaryValue bin)
                 sqlValue = new SqlBinary(bin.BinaryValue);
+            else if (result is string s)
+                sqlValue = context.PrimaryDataSource.DefaultCollation.ToSqlString(s);
+            else if (result is double d)
+                sqlValue = (SqlDouble)d;
+            else if (result is XPath2NodeIterator nodeIterator)
+                sqlValue = context.PrimaryDataSource.DefaultCollation.ToSqlString(nodeIterator.Single().Value);
             else
-                throw new NotSupportedException("Unhandled return type " + result.GetType().FullName);
+                throw new QueryExecutionException(new Sql4CdsError(16, 40517, $"Unsupported XPath return type '{result.GetType().Name}'"));
 
             if (sqlValue.GetType() != targetNetType)
                 sqlValue = (INullable) SqlTypeConverter.ChangeType(sqlValue, targetNetType);

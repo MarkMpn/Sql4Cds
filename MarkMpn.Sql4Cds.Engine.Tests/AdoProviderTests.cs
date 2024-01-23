@@ -1142,6 +1142,35 @@ SELECT @x.query('/ROOT/a')";
         }
 
         [TestMethod]
+        public void XmlValue()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"DECLARE @myDoc XML  
+DECLARE @ProdID INT  
+SET @myDoc = '<Root>  
+<ProductDescription ProductID=""1"" ProductName=""Road Bike"">  
+<Features>
+  <Warranty>1 year parts and labor</Warranty>
+  <Maintenance>3 year parts and labor extended maintenance is available </Maintenance>
+</Features>
+</ProductDescription>
+</Root>'  
+
+
+SET @ProdID = @myDoc.value('/Root/ProductDescription/@ProductID', 'int')
+SELECT @ProdID";
+
+                var actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(1, actual);
+            }
+        }
+
+        [TestMethod]
         public void Base64()
         {
             using (var con = new Sql4CdsConnection(_dataSources))
