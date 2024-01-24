@@ -6,6 +6,7 @@ using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.ServiceModel;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -163,7 +164,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     {
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
-                        Message = msg.Message
+                        Message = msg.Message.Message
                     }
                 });
             });
@@ -264,6 +265,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     _commands[request.OwnerUri] = cmd;
 
                     cmd.CommandText = qry;
+
+                    cmd.StatementCompleted += (_, stmt) =>
+                    {
+                        if (stmt.Message != null)
+                        {
+                            _ = _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
+                            {
+                                OwnerUri = request.OwnerUri,
+                                Message = new ResultMessage
+                                {
+                                    BatchId = batchSummary.Id,
+                                    Time = DateTime.UtcNow.ToString("o"),
+                                    Message = stmt.Message
+                                }
+                            });
+                        }
+                    };
 
                     if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
                     {
@@ -394,6 +412,43 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             }
             catch (Exception ex)
             {
+                var sql4CdsException = ex as Sql4CdsException;
+
+                if (sql4CdsException?.Errors != null)
+                {
+                    foreach (var sql4CdsError in sql4CdsException.Errors)
+                    {
+                        var parts = new List<string>
+                        {
+                            $"Msg {sql4CdsError.Number}",
+                            $"Level {sql4CdsError.Class}",
+                            $"State {sql4CdsError.State}"
+                        };
+
+                        if (sql4CdsError.Procedure != null)
+                        {
+                            parts.Add($"Procedure {sql4CdsError.Procedure}");
+                            parts.Add($"Line 0 [Batch Start Line {sql4CdsError.LineNumber}]");
+                        }
+                        else
+                        {
+                            parts.Add($"Line {sql4CdsError.LineNumber}");
+                        }
+
+                        await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
+                        {
+                            OwnerUri = request.OwnerUri,
+                            Message = new ResultMessage
+                            {
+                                BatchId = batchSummary.Id,
+                                Time = DateTime.UtcNow.ToString("o"),
+                                Message = String.Join(", ", parts),
+                                IsError = true
+                            }
+                        });
+                    }
+                }
+
                 await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
                 {
                     OwnerUri = request.OwnerUri,
@@ -401,7 +456,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     {
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
-                        Message = GetErrorMessage(ex),
+                        Message = GetErrorMessage(ex, sql4CdsException),
                         IsError = true
                     }
                 });
@@ -503,17 +558,19 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 OwnerUri = request.OwnerUri,
                 BatchSummaries = new[]
                 {
-                        batchSummary
-                    }
+                    batchSummary
+                }
             });
         }
 
-        private string GetErrorMessage(Exception error)
+        private string GetErrorMessage(Exception error, Sql4CdsException rootException)
         {
             string msg;
 
             if (error is AggregateException aggregateException)
-                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
+                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex, rootException)).Where(m => !String.IsNullOrEmpty(m)));
+            else if (rootException != null && rootException.Message == error.Message)
+                msg = "";
             else
                 msg = error.Message;
 

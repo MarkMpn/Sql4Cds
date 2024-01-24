@@ -6,12 +6,8 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class GotoLabelNode : BaseNode, IRootExecutionPlanNodeInternal
+    abstract class TryCatchNodeBase : BaseNode, IRootExecutionPlanNodeInternal
     {
-        public override int ExecutionCount => 0;
-
-        public override TimeSpan Duration => TimeSpan.Zero;
-
         [Browsable(false)]
         public string Sql { get; set; }
 
@@ -24,28 +20,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int LineNumber { get; set; }
 
-        [Category("Label")]
-        public string Label { get; set; }
+        public override int ExecutionCount => 0;
 
-        [Browsable(false)]
-        internal LabelStatement Statement { get; set; }
+        public override TimeSpan Duration => TimeSpan.Zero;
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        public object Clone()
-        {
-            return new GotoLabelNode
-            {
-                Sql = Sql,
-                Index = Index,
-                Length = Length,
-                LineNumber = LineNumber,
-                Label = Label,
-                Statement = Statement
-            };
-        }
+        public abstract object Clone();
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
@@ -56,10 +39,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Array.Empty<IExecutionPlanNode>();
         }
+    }
 
-        public override string ToString()
+    class BeginTryNode : TryCatchNodeBase
+    {
+        public override object Clone()
         {
-            return "LABEL\r\n" + Label;
+            return new BeginTryNode();
+        }
+    }
+
+    class EndTryNode : TryCatchNodeBase
+    {
+        public override object Clone()
+        {
+            return new EndTryNode();
+        }
+    }
+
+    class BeginCatchNode : TryCatchNodeBase
+    {
+        public override object Clone()
+        {
+            return new BeginCatchNode();
+        }
+    }
+
+    class EndCatchNode : TryCatchNodeBase
+    {
+        public override object Clone()
+        {
+            return new EndCatchNode();
         }
     }
 }

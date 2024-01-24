@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -47,6 +48,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
+        /// <summary>
+        /// The number of the first line of the statement
+        /// </summary>
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
         public override int ExecutionCount => _executionCount;
 
         public override TimeSpan Duration => _timer.Duration;
@@ -55,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public void Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -66,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_timeExpr == null)
                         _timeExpr = Time.Compile(new ExpressionCompilationContext(context, null, null));
 
-                    var time = (SqlTime) _timeExpr(new ExpressionExecutionContext(context));
+                    var time = (INullable) _timeExpr(new ExpressionExecutionContext(context));
 
                     if (time.IsNull)
                     {
@@ -74,7 +81,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        var delay = time.Value;
+                        TimeSpan delay;
+
+                        if (time is SqlInt32 sqlInt32)
+                        {
+                            delay = TimeSpan.FromSeconds(sqlInt32.Value);
+                        }
+                        else if (time is SqlInt16 sqlInt16)
+                        {
+                            delay = TimeSpan.FromSeconds(sqlInt16.Value);
+                        }
+                        else if (time is SqlDateTime sqlDateTime)
+                        {
+                            delay = sqlDateTime.Value.TimeOfDay;
+                        }
+                        else if (time is SqlDateTime2 sqlDateTime2)
+                        {
+                            delay = sqlDateTime2.Value.TimeOfDay;
+                        }
+                        else if (time is SqlDateTimeOffset sqlDateTimeOffset)
+                        {
+                            delay = sqlDateTimeOffset.Value.ToLocalTime().TimeOfDay;
+                        }
+                        else if (time is SqlString sqlString)
+                        {
+                            if (!TimeSpan.TryParseExact(sqlString.Value, new[] { @"hh\:mm", @"hh\:mm\:ss", @"hh\:mm\:ss.fff", @"hh\:mm.fff" }, null, out delay))
+                                throw new QueryExecutionException(new Sql4CdsError(15, 148, $"Incorrect time syntax in time string '{sqlString.Value}' used with WAITFOR"));
+                        }
+                        else
+                        {
+                            Time.GetType(new ExpressionCompilationContext(context, null, null), out var type);
+                            throw new QueryExecutionException(new Sql4CdsError(16, 9815, $"Waitfor delay and waitfor time cannot be of type {type.ToSql()}"));
+                        }
 
                         if (WaitType == WaitForOption.Time)
                         {
@@ -89,6 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     recordsAffected = -1;
+                    message = null;
                 }
             }
             catch (QueryExecutionException ex)
@@ -128,7 +167,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 WaitType = WaitType,
                 Sql = Sql,
                 Index = Index,
-                Length = Length
+                Length = Length,
+                LineNumber = LineNumber,
             };
         }
     }

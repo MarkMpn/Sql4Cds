@@ -25,6 +25,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int Length { get; set; }
 
         [Browsable(false)]
+        public int LineNumber { get; set; }
+
+        [Browsable(false)]
         public ConditionalNodeType Type { get; set; }
 
         [Category("Conditional")]
@@ -110,6 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 Index = Index,
                 Length = Length,
+                LineNumber = LineNumber,
                 Type = Type,
                 Condition = Condition,
                 Source = (IDataExecutionPlanNodeInternal) Source?.Clone(),

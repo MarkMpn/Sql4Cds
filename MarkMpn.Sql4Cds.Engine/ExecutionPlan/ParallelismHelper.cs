@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (maxDopHint != null)
             {
                 if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 0)
-                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value, or 0 to use recommended value", maxDopHint);
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "MAXDOP requires a positive integer value, or 0 to use recommended value", maxDopHint));
 
                 if (value > 0)
                     return value;

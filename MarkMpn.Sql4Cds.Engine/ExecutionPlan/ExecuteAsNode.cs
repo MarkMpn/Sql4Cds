@@ -43,6 +43,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public override bool ContinueOnError { get; set; }
 
+        [Browsable(false)]
+        public string Username { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(UserIdSource))
@@ -51,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -65,10 +68,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var entities = GetDmlSourceEntities(context, out var schema);
 
                     if (entities.Count == 0)
-                        throw new QueryExecutionException("Cannot find user to impersonate");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Cannot execute as the database principal because the principal \"{Username}\" does not exist, this type of principal cannot be impersonated, or you do not have permission."));
 
                     if (entities.Count > 1)
-                        throw new QueryExecutionException("Ambiguous user");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Ambiguous user \"{Username}\""));
 
                     // Precompile mappings with type conversions
                     var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
@@ -91,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException("Unexpected organization service type");
 
                     recordsAffected = -1;
-                    context.Log($"Impersonated user {userId}");
+                    message = $"Impersonated user {userId}";
                 }
             }
             catch (QueryExecutionException ex)
@@ -131,7 +134,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 MaxDOP = MaxDOP,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql,
-                UserIdSource = UserIdSource
+                UserIdSource = UserIdSource,
+                Username = Username,
             };
 
             clone.Source.Parent = clone;

@@ -874,7 +874,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _);
+            ((UpdateNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _, out _);
 
             Assert.AreEqual("Carrington", _context.Data["contact"][guid]["firstname"]);
         }
@@ -906,7 +906,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _);
+            ((UpdateNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _, out _);
 
             Assert.AreEqual("Hello Carrington", _context.Data["contact"][guid]["firstname"]);
         }
@@ -942,7 +942,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _);
+            ((UpdateNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _, out _);
 
             Assert.AreEqual("--CDS--", _context.Data["contact"][guid]["firstname"]);
         }
@@ -1701,7 +1701,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            update.Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _);
+            update.Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), out _, out _);
 
             Assert.AreEqual(new EntityReference("contact", contact1), _context.Data["account"][account1].GetAttributeValue<EntityReference>("primarycontactid"));
             Assert.AreEqual(new EntityReference("contact", contact2), _context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));
@@ -1986,7 +1986,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ImplicitTypeConversionComparison()
         {
-            var query = "SELECT * FROM account WHERE turnover / 2 > 10";
+            var query = "SELECT accountid FROM account WHERE turnover / 2 > 10";
 
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
             var queries = planBuilder.Build(query, null, out _);
@@ -2218,7 +2218,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.AreEqual("Target table name is ambiguous", ex.Error);
+                Assert.AreEqual("The table 'account' is ambiguous", ex.Message);
             }
         }
 

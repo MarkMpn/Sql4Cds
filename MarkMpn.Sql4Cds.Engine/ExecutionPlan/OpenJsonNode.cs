@@ -124,7 +124,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var collation = context.PrimaryDataSource.DefaultCollation;
 
                         if (col.ColumnDefinition.Collation != null && !Collation.TryParse(col.ColumnDefinition.Collation.Value, out collation))
-                            throw new NotSupportedQueryFragmentException("Invalid collation", col.ColumnDefinition.Collation);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 448, $"Invalid collation '{col.ColumnDefinition.Collation.Value}'", col.ColumnDefinition.Collation));
 
                         type = new SqlDataTypeReferenceWithCollation
                         {
@@ -144,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             nvarcharType.Parameters.Count != 1 ||
                             !(nvarcharType.Parameters[0] is MaxLiteral))
                         {
-                            throw new NotSupportedQueryFragmentException("AS JSON option can be specified only for column of nvarchar(max) type in WITH clause", col.ColumnDefinition.DataType);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 13618, "AS JSON option can be specified only for column of nvarchar(max) type in WITH clause", col.ColumnDefinition.DataType));
                         }
                     }
 
@@ -234,7 +234,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             catch (JsonException ex)
             {
-                throw new QueryExecutionException(ex.Message, ex);
+                throw new QueryExecutionException(new Sql4CdsError(16, 13609, ex.Message), ex);
             }
 
             if (jtoken == null)
@@ -242,7 +242,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (jpath.Mode == JsonPathMode.Lax)
                     yield break;
                 else
-                    throw new QueryExecutionException("Property does not exist");
+                    throw new QueryExecutionException(new Sql4CdsError(16, 13608, "Property does not exist"));
             }
 
             var schema = GetSchema(context);
@@ -315,7 +315,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (jpath.Mode == JsonPathMode.Lax)
                     yield break;
                 else
-                    throw new QueryExecutionException("Not an object or array");
+                    throw new QueryExecutionException(new Sql4CdsError(16, 13611, "Value referenced by JSON path is not an array or object and cannot be opened with OPENJSON"));
             }
         }
 
@@ -353,7 +353,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (mapping == null || mapping.Mode == JsonPathMode.Lax)
                         stringValue = null;
                     else
-                        throw new QueryExecutionException("Object or array cannot be found in the specified JSON path");
+                        throw new QueryExecutionException(new Sql4CdsError(16, 13608, "Object or array cannot be found in the specified JSON path"));
                 }
                 else
                 {
@@ -362,9 +362,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (mapping == null || mapping.Mode == JsonPathMode.Lax)
                             stringValue = null;
                         else if (value == null)
-                            throw new QueryExecutionException("Property cannot be found on the specified JSON path");
+                            throw new QueryExecutionException(new Sql4CdsError(16, 13608, "Property cannot be found on the specified JSON path"));
                         else
-                            throw new QueryExecutionException("Object or array cannot be found in the specified JSON path");
+                            throw new QueryExecutionException(new Sql4CdsError(16, 13624, "Object or array cannot be found in the specified JSON path"));
                     }
                     else
                     {

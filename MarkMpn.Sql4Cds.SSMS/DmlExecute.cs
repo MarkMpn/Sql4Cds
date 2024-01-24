@@ -128,12 +128,16 @@ namespace MarkMpn.Sql4Cds.SSMS
                     con.InfoMessage += (s, msg) =>
                     {
                         sqlScriptEditorControl.Results.AddStringToMessages(msg.Message + "\r\n\r\n");
+                        resultFlag |= 1; // Success
                     };
 
                     cmd.StatementCompleted += (s, stmt) =>
                     {
                         if (tabPage != null)
                             ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource, true);
+
+                        if (stmt.Message != null)
+                            sqlScriptEditorControl.Results.AddStringToMessages(stmt.Message + "\r\n\r\n");
 
                         resultFlag |= 1; // Success
                     };
@@ -165,20 +169,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         }
                         catch (Exception ex)
                         {
-                            var error = ex;
-
-                            if (ex is PartialSuccessException partial)
-                            {
-                                error = partial.InnerException;
-
-                                if (partial.Result is string msg)
-                                {
-                                    sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
-                                    resultFlag |= 1; // Success
-                                }
-                            }
-
-                            AddException(sqlScriptEditorControl, textSpan, error);
+                            AddException(sqlScriptEditorControl, textSpan, ex);
                             resultFlag |= 2; // Failure
                         }
 
@@ -484,6 +475,34 @@ namespace MarkMpn.Sql4Cds.SSMS
                 line = err.Fragment.StartLine;
             else if (ex is QueryParseException parse)
                 line = parse.Error.Line;
+
+            if (ex is Sql4CdsException sql4CdsException && sql4CdsException.Errors != null)
+            {
+                foreach (var sql4CdsError in sql4CdsException.Errors)
+                {
+                    var parts = new List<string>
+                                    {
+                                        $"Msg {sql4CdsError.Number}",
+                                        $"Level {sql4CdsError.Class}",
+                                        $"State {sql4CdsError.State}"
+                                    };
+
+                    if (sql4CdsError.Procedure != null)
+                    {
+                        parts.Add($"Procedure {sql4CdsError.Procedure}");
+                        parts.Add($"Line 0 [Batch Start Line {sql4CdsError.LineNumber}]");
+                    }
+                    else
+                    {
+                        parts.Add($"Line {sql4CdsError.LineNumber}");
+                    }
+
+                    if (line != 0)
+                        sqlScriptEditorControl.Results.AddStringToErrors(String.Join(", ", parts), line, textSpan, true);
+                    else
+                        sqlScriptEditorControl.Results.AddStringToErrors(String.Join(", ", parts), true);
+                }
+            }
 
             if (line != 0)
                 sqlScriptEditorControl.Results.AddStringToErrors(ex.Message, line, textSpan, true);

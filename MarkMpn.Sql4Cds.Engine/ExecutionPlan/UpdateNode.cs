@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return continueOnError;
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -234,10 +234,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     e2New = e2Prev;
 
                                 if (e1New == null)
-                                    throw new QueryExecutionException($"Cannot set {entity1IntersectAttribute} to NULL");
+                                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot set {entity1IntersectAttribute} to NULL"));
 
                                 if (e2New == null)
-                                    throw new QueryExecutionException($"Cannot set {entity2IntersectAttribute} to NULL");
+                                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot set {entity2IntersectAttribute} to NULL"));
 
                                 if (meta.LogicalName == "listmember")
                                 {
@@ -406,7 +406,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "updated"
                         },
                         context,
-                        out recordsAffected);
+                        out recordsAffected,
+                        out message);
                 }
             }
             catch (QueryExecutionException ex)
@@ -628,6 +629,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
                             });
                         }
+
+                        return multipleResp;
+                    }
+                    else if (req.Requests.Count == 1)
+                    {
+                        // We only have one request so the error must have come from that
+                        var multipleResp = new ExecuteMultipleResponse
+                        {
+                            ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                        };
+
+                        multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                        {
+                            RequestIndex = 0,
+                            Response = null,
+                            Fault = ex.Detail
+                        });
 
                         return multipleResp;
                     }

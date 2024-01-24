@@ -251,7 +251,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (type is XmlDataTypeReference)
                     return Int32.MaxValue;
                 else
-                    throw new NotSupportedQueryFragmentException("Unsupported data type reference", type);
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2715, $"Cannot find data type {type.ToSql()}", type));
             }
 
             switch (dataType.SqlDataTypeOption)

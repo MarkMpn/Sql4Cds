@@ -26,7 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, DataSource> dataSources,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
-            Action<string> log)
+            Action<Sql4CdsError> log)
         {
             DataSources = dataSources;
             Options = options;
@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// A callback function to log messages
         /// </summary>
-        public Action<string> Log { get; }
+        public Action<Sql4CdsError> Log { get; }
 
         /// <summary>
         /// Generates a unique name for an expression
@@ -106,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
             IDictionary<string, object> parameterValues,
-            Action<string> log)
+            Action<Sql4CdsError> log)
             : base(dataSources, options, parameterTypes, log)
         {
             ParameterValues = parameterValues;
@@ -116,6 +116,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the current value of each parameter
         /// </summary>
         public IDictionary<string, object> ParameterValues { get; }
+
+        public Sql4CdsError Error { get; set; }
     }
 
     /// <summary>
@@ -190,7 +192,7 @@ namespace MarkMpn.Sql4Cds.Engine
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
             IDictionary<string, object> parameterValues,
-            Action<string> log,
+            Action<Sql4CdsError> log,
             Entity entity)
             : base(dataSources, options, parameterTypes, parameterValues, log)
         {
@@ -210,6 +212,7 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.ParameterValues, nodeContext.Log)
         {
             Entity = null;
+            Error = nodeContext.Error;
         }
 
         /// <summary>

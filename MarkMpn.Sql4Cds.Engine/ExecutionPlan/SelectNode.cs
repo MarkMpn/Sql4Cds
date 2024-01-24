@@ -51,6 +51,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
         public override TimeSpan Duration => _timer.Duration;
 
         public override int ExecutionCount => _executionCount;
@@ -338,7 +341,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LogicalSourceSchema = LogicalSourceSchema,
                 Sql = Sql,
                 Index = Index,
-                Length = Length
+                Length = Length,
+                LineNumber = LineNumber,
             };
 
             clone.ColumnSet.AddRange(ColumnSet);

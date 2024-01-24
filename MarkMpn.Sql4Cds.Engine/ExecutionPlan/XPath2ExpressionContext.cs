@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var xpathContext = (XPath2ExpressionContext)ctx;
                 var colName = (string)args[0];
                 if (!xpathContext.Schema.ContainsColumn(colName, out var normalizedColName))
-                    throw new QueryExecutionException("Missing column " + colName);
+                    throw new QueryExecutionException(new Sql4CdsError(16, 207, $"Invalid column name '{colName}'"));
 
                 var value = (INullable)xpathContext.ExpressionExecutionContext.Entity[normalizedColName];
                 return SqlTypeConverter.SqlToNetType(value);
@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var xpathContext = (XPath2ExpressionContext)ctx;
                 var varName = (string)args[0];
                 if (!xpathContext.ExpressionExecutionContext.ParameterValues.TryGetValue(varName, out var value))
-                    throw new QueryExecutionException("Missing variable " + varName);
+                    throw new QueryExecutionException(new Sql4CdsError(16, 9501, $"Unable to resolve sql:variable({varName}). The variable must be declared as a scalar TSQL variable"));
                 return value;
             });
         }

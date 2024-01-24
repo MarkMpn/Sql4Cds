@@ -2,6 +2,7 @@
 using System.Activities.Expressions;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
 using System.Data.SqlTypes;
 using System.Diagnostics;
 using System.Globalization;
@@ -282,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 cmd.Parameters.Add(new Sql4CdsParameter("@param1", 1));
 
                 var log = "";
-                con.InfoMessage += (s, e) => log += e.Message;
+                con.InfoMessage += (s, e) => log += e.Message.Message;
 
                 cmd.ExecuteNonQuery();
 
@@ -1141,6 +1142,35 @@ SELECT @x.query('/ROOT/a')";
         }
 
         [TestMethod]
+        public void XmlValue()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"DECLARE @myDoc XML  
+DECLARE @ProdID INT  
+SET @myDoc = '<Root>  
+<ProductDescription ProductID=""1"" ProductName=""Road Bike"">  
+<Features>
+  <Warranty>1 year parts and labor</Warranty>
+  <Maintenance>3 year parts and labor extended maintenance is available </Maintenance>
+</Features>
+</ProductDescription>
+</Root>'  
+
+
+SET @ProdID = @myDoc.value('/Root/ProductDescription/@ProductID', 'int')
+SELECT @ProdID";
+
+                var actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(1, actual);
+            }
+        }
+
+        [TestMethod]
         public void Base64()
         {
             using (var con = new Sql4CdsConnection(_dataSources))
@@ -1515,8 +1545,238 @@ IF EXISTS(SELECT * FROM metadata.entity WHERE logicalname = 'missing')
     SELECT * FROM missing
 ELSE
     SELECT 0";
-                
+
                 Assert.AreEqual(0, cmd.ExecuteScalar());
+            }
+        }
+
+        [TestMethod]
+        public void Throw()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "THROW 51000, 'The record does not exist.', 1;";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    var error = ex.Errors.Single();
+
+                    Assert.AreEqual(51000, error.Number);
+                    Assert.AreEqual(16, error.Class);
+                    Assert.AreEqual(1, error.State);
+                    Assert.AreEqual(1, error.LineNumber);
+                    Assert.AreEqual("The record does not exist.", error.Message);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Catch()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    THROW 51000, 'Test', 1;
+END TRY
+BEGIN CATCH
+    SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+END CATCH";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51000, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(3, reader.GetInt32(4));
+                    Assert.AreEqual("Test", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void RaiseError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    RAISERROR('Custom message %s', 16, 1, 'test')
+END TRY
+BEGIN CATCH
+    SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+END CATCH";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(50000, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(3, reader.GetInt32(4));
+                    Assert.AreEqual("Custom message test", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void NestedCatch()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    THROW 51000, 'Test', 1;
+END TRY
+BEGIN CATCH
+    BEGIN TRY
+        THROW 51001, 'Test2', 2;
+    END TRY
+    BEGIN CATCH
+        SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+    END CATCH
+    SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+END CATCH
+SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51001, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(2, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(7, reader.GetInt32(4));
+                    Assert.AreEqual("Test2", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51000, reader.GetInt32(0));
+                    Assert.AreEqual(16, reader.GetInt32(1));
+                    Assert.AreEqual(1, reader.GetInt32(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.AreEqual(3, reader.GetInt32(4));
+                    Assert.AreEqual("Test", reader.GetString(5));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                    Assert.IsTrue(reader.IsDBNull(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.IsTrue(reader.IsDBNull(5));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsFalse(reader.NextResult());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void GotoOutOfCatchBlockClearsError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    THROW 51000, 'Test', 1;
+END TRY
+BEGIN CATCH
+    BEGIN TRY
+        THROW 51001, 'Test2', 2;
+    END TRY
+    BEGIN CATCH
+        GOTO label1
+    END CATCH
+    label1:
+    SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()
+    GOTO label2
+END CATCH
+label2:
+SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE()";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(51001, reader.GetInt32(0));
+                    Assert.AreEqual(51000, reader.GetInt32(1));
+                    Assert.AreEqual(16, reader.GetInt32(2));
+                    Assert.AreEqual(1, reader.GetInt32(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.AreEqual(3, reader.GetInt32(5));
+                    Assert.AreEqual("Test", reader.GetString(6));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+
+                    Assert.AreEqual(0, reader.GetInt32(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                    Assert.IsTrue(reader.IsDBNull(2));
+                    Assert.IsTrue(reader.IsDBNull(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.IsTrue(reader.IsDBNull(5));
+                    Assert.IsTrue(reader.IsDBNull(6));
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsFalse(reader.NextResult());
+                }
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("SELECT FORMATMESSAGE('Signed int %i, %d %i, %d, %+i, %+d, %+i, %+d', 5, -5, 50, -50, -11, -11, 11, 11)", "Signed int 5, -5 50, -50, -11, -11, +11, +11")]
+        [DataRow("SELECT FORMATMESSAGE('Signed int with up to 3 leading zeros %03i', 5)", "Signed int with up to 3 leading zeros 005")]
+        [DataRow("SELECT FORMATMESSAGE('Signed int with up to 20 leading zeros %020i', 5)", "Signed int with up to 20 leading zeros 00000000000000000005")]
+        [DataRow("SELECT FORMATMESSAGE('Signed int with leading zero 0 %020i', -55)", "Signed int with leading zero 0 -0000000000000000055")]
+        [DataRow("SELECT FORMATMESSAGE('Bigint %I64d', 3000000000)", "Bigint 3000000000")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned int %u, %u', 50, -50)", "Unsigned int 50, 4294967246")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned octal %o, %o', 50, -50)", "Unsigned octal 62, 37777777716")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned hexadecimal %x, %X, %X, %X, %x', 11, 11, -11, 50, -50)", "Unsigned hexadecimal b, B, FFFFFFF5, 32, ffffffce")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned octal with prefix: %#o, %#o', 50, -50)", "Unsigned octal with prefix: 062, 037777777716")]
+        [DataRow("SELECT FORMATMESSAGE('Unsigned hexadecimal with prefix: %#x, %#X, %#X, %X, %x', 11, 11, -11, 50, -50)", "Unsigned hexadecimal with prefix: 0xb, 0XB, 0XFFFFFFF5, 32, ffffffce")]
+        [DataRow("SELECT FORMATMESSAGE('Hello %s!', 'TEST')", "Hello TEST!")]
+        [DataRow("SELECT FORMATMESSAGE('Hello %20s!', 'TEST')", "Hello                 TEST!")]
+        [DataRow("SELECT FORMATMESSAGE('Hello %-20s!', 'TEST')", "Hello TEST                !")]
+        public void FormatMessage(string query, string expected)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = query;
+                var actual = (string)cmd.ExecuteScalar();
+                Assert.AreEqual(expected, actual);
             }
         }
     }

@@ -28,6 +28,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
         [Category("GoTo")]
         public string Label { get; set; }
 
@@ -58,6 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 Index = Index,
                 Length = Length,
+                LineNumber = LineNumber,
                 Condition = Condition,
                 Source = (IDataExecutionPlanNodeInternal)Source?.Clone(),
                 SourceColumn = SourceColumn,

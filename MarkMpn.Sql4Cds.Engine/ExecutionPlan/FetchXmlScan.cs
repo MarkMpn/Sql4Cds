@@ -990,7 +990,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var fullName = $"{alias}.{attrMetadata.LogicalName.EscapeIdentifier()}";
                     var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName.EscapeIdentifier();
                     var attrType = attrMetadata.GetAttributeSqlType(dataSource, false);
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, meta, attrMetadata, innerJoin);
                 }
             }
 
@@ -1048,7 +1048,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (requireTablePrefix)
                         attrAlias = null;
 
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, meta, attrMetadata, innerJoin);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -1065,7 +1065,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName.EscapeIdentifier();
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, attrMetadata, innerJoin);
+                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, meta, attrMetadata, innerJoin);
                     }
                 }
 
@@ -1167,9 +1167,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullFilters(schema, aliases, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, EntityMetadata entityMetadata, AttributeMetadata attrMetadata, bool innerJoin)
         {
-            var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
+            var notNull = innerJoin && (attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute || attrMetadata.LogicalName == "createdon" || (attrMetadata.EntityLogicalName != "systemuser" && (attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby")));
 
             // Add the logical attribute
             AddSchemaAttribute(schema, aliases, fullName, simpleName, type, notNull);
@@ -1426,12 +1426,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             if (pageSizeHints.Count > 1)
-                throw new NotSupportedQueryFragmentException("Duplicate page size hint", pageSizeHints[1]);
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 2042, "Conflicting FETCHXML_PAGE_SIZE optimizer hints specified", pageSizeHints[1]));
 
             var pageSize = Int32.Parse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length));
 
             if (pageSize < 1 || pageSize > 5000)
-                throw new NotSupportedQueryFragmentException("Invalid page size, must be between 1 and 5000", pageSizeHints[0]);
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 304, $"'{pageSize}' is out of range for FETCHXML_PAGE_SIZE option, must be between 1 and 5000", pageSizeHints[0]));
 
             FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
         }

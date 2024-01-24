@@ -19,6 +19,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsCommand.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsConnection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsDataReader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsError.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameterCollection.cs" />
@@ -28,6 +29,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AdaptiveIndexSpoolNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RaiseErrorNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ThrowNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TryCatchBlockNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\UnparsedGoToNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ISpoolProducerNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\OpenJsonNode.cs" />
@@ -133,7 +137,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)MetadataQueryExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetaMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NotSupportedQueryFragmentException.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)PartialSuccessException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)QueryParseException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlEntityReference.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TableSizeCache.cs" />

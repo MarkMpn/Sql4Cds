@@ -251,6 +251,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var column = _columnSet[i];
                 var sqlType = _schema.Schema[_columnSet[i].SourceColumn].Type;
+                var nullable = _schema.Schema[_columnSet[i].SourceColumn].IsNullable;
+                var key = _schema.PrimaryKey == _columnSet[i].SourceColumn;
+                var expression = _schema.Schema[_columnSet[i].SourceColumn].IsCalculated;
+                var aliased = _columnSet[i].OutputColumn != null && !_columnSet[i].SourceColumn.SplitMultiPartIdentifier().Last().Equals(_columnSet[i].OutputColumn.SplitMultiPartIdentifier().Last(), StringComparison.OrdinalIgnoreCase);
                 var providerType = sqlType.ToNetType(out _);
                 var type = providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml) ? providerType : providerType == typeof(SqlVariant) ? typeof(object) : SqlTypeConverter.SqlToNetType(providerType);
                 var size = sqlType.GetSize();
@@ -267,18 +271,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     size,                 // ColumnSize
                     precision,            // NumericPrecision
                     scale,                // NumericScale
-                    false,                // IsUnique
-                    false,                // IsKey
+                    key,                  // IsUnique
+                    key,                  // IsKey
                     DBNull.Value,         // BaseServerName
                     DBNull.Value,         // BaseCatalogName
                     DBNull.Value,         // BaseColumnName
                     DBNull.Value,         // BaseSchemaName
                     DBNull.Value,         // BaseTableName
                     type,                 // DataType
-                    true,                 // AllowDBNull
+                    nullable,             // AllowDBNull
                     providerType,         // ProviderType
-                    false,                // IsAliased
-                    false,                // IsExpression
+                    aliased,              // IsAliased
+                    expression,           // IsExpression
                     false,                // IsIdentity
                     false,                // IsAutoIncrement
                     false,                // IsRowVersion

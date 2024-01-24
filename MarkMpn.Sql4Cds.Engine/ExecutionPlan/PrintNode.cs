@@ -27,6 +27,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
         [Category("Print")]
         [Description("The value to print")]
         public ScalarExpression Expression { get; set; }
@@ -43,21 +46,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _expression = _expression,
                 Index = Index,
                 Length = Length,
-                Sql = Sql
+                Sql = Sql,
+                LineNumber = LineNumber,
             };
         }
 
-        public void Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
             recordsAffected = -1;
+            message = null;
 
             using (_timer.Run())
             {
                 var value = (SqlString)_expression(new ExpressionExecutionContext(context));
 
                 if (!value.IsNull)
-                    context.Log(value.Value);
+                    context.Log(new Sql4CdsError(0, LineNumber, 0, null, null, 0, value.Value, null));
             }
         }
 

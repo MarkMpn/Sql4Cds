@@ -207,7 +207,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _connection.ApplicationName = "XrmToolBox";
             _connection.InfoMessage += (s, msg) =>
             {
-                Execute(() => ShowResult(msg.Statement, null, null, msg.Message, null));
+                Execute(() => ShowResult(msg.Statement, null, null, msg.Message.Message, null));
             };
         }
 
@@ -737,9 +737,52 @@ namespace MarkMpn.Sql4Cds.XTB
                 var length = 0;
                 var messageSuffix = "";
                 IRootExecutionPlanNode plan = null;
+                var sql4CdsException = error as Sql4CdsException;
 
-                if (error is Sql4CdsException sql4CdsException && sql4CdsException.InnerException != null)
-                    error = sql4CdsException.InnerException;
+                if (sql4CdsException != null)
+                {
+                    if (sql4CdsException.Errors != null)
+                    {
+                        var lines = _params.Sql.Split('\n');
+
+                        foreach (var sql4CdsError in sql4CdsException.Errors)
+                        {
+                            var errorIndex = lines.Take(sql4CdsError.LineNumber - 1).Sum(l => l.Length + 1) + _params.Offset;
+                            var errorLength = lines[sql4CdsError.LineNumber - 1].Length;
+
+                            if (sql4CdsError.Fragment != null)
+                            {
+                                errorIndex = _params.Offset + sql4CdsError.Fragment.StartOffset;
+                                errorLength = sql4CdsError.Fragment.FragmentLength;
+                            }
+
+                            _editor.IndicatorFillRange(errorIndex, errorLength);
+
+                            var parts = new List<string>
+                            {
+                                $"Msg {sql4CdsError.Number}",
+                                $"Level {sql4CdsError.Class}",
+                                $"State {sql4CdsError.State}"
+                            };
+
+                            if (sql4CdsError.Procedure != null)
+                            {
+                                parts.Add($"Procedure {sql4CdsError.Procedure}");
+                                parts.Add($"Line 0 [Batch Start Line {sql4CdsError.LineNumber + _editor.LineFromPosition(_params.Offset)}]");
+                            }
+                            else
+                            {
+                                parts.Add($"Line {sql4CdsError.LineNumber + _editor.LineFromPosition(_params.Offset)}");
+                            }
+
+                            AddMessage(errorIndex, errorLength, String.Join(", ", parts), MessageType.ErrorPrefix);
+                            AddMessage(errorIndex, errorLength, sql4CdsError.Message, MessageType.Error);
+                        }
+                    }
+
+                    if (sql4CdsException.InnerException != null)
+                        error = sql4CdsException.InnerException;
+                }
 
                 if (error is QueryException queryException)
                 {
@@ -774,21 +817,14 @@ namespace MarkMpn.Sql4Cds.XTB
                 }
                 else if (error is QueryParseException parseErr)
                 {
-                    _editor.IndicatorFillRange(_params.Offset + parseErr.Error.Offset, 1);
                     index = _params.Offset + parseErr.Error.Offset;
-                    length = 0;
-                }
-                else if (error is PartialSuccessException partialSuccess)
-                {
-                    if (partialSuccess.Result is string msg)
-                        AddMessage(index, length, msg, false);
-
-                    error = partialSuccess.InnerException;
+                    length = new Regex("\\b").Matches(_params.Sql.Substring(parseErr.Error.Offset)).Cast<Match>().Skip(1).FirstOrDefault()?.Index ?? 0;
+                    _editor.IndicatorFillRange(_params.Offset + parseErr.Error.Offset, length);
                 }
 
                 _log(e.Error.ToString());
 
-                AddMessage(index, length, GetErrorMessage(error) + messageSuffix, true);
+                AddMessage(index, length, GetErrorMessage(error, sql4CdsException) + messageSuffix, MessageType.Error);
 
                 tabControl.SelectedTab = messagesTabPage;
             }
@@ -796,6 +832,8 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 tabControl.SelectedTab = fetchXmlTabPage;
             }
+
+            AddMessage(-1, -1, $"Completion time: {DateTimeOffset.Now:O}", MessageType.Info);
 
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
@@ -815,19 +853,26 @@ namespace MarkMpn.Sql4Cds.XTB
             return null;
         }
 
-        private string GetErrorMessage(Exception error)
+        private string GetErrorMessage(Exception error, Sql4CdsException rootException)
         {
             string msg;
 
             if (error is AggregateException aggregateException)
-                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
+                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex, rootException)).Where(m => !String.IsNullOrEmpty(m)));
+            else if (rootException != null && rootException.Errors.Any(err => err.Message == error.Message))
+                msg = "";
             else
                 msg = error.Message;
 
             while (error.InnerException != null)
             {
-                if (error.InnerException.Message != error.Message)
-                    msg += "\r\n" + error.InnerException.Message;
+                if (rootException == null || !rootException.Errors.Any(err => err.Message == error.InnerException.Message))
+                {
+                    if (!String.IsNullOrEmpty(msg))
+                        msg += "\r\n";
+
+                    msg += error.InnerException.Message;
+                }
 
                 error = error.InnerException;
             }
@@ -836,7 +881,7 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 var fault = faultEx.Detail;
 
-                if (fault.Message != error.Message)
+                if (rootException == null || !rootException.Errors.Any(err => err.Message == error.Message))
                     msg += "\r\n" + fault.Message;
 
                 if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
@@ -863,14 +908,17 @@ namespace MarkMpn.Sql4Cds.XTB
             return msg;
         }
 
-        private void AddMessage(int index, int length, string message, bool error)
+        private void AddMessage(int index, int length, string message, MessageType messageType)
         {
+            message = message.Trim();
+
             var scintilla = (Scintilla)messagesTabPage.Controls[0];
             var line = scintilla.Lines.Count - 1;
+            var stylingStart = scintilla.Text.Length;
             scintilla.ReadOnly = false;
-            scintilla.Text += message + "\r\n\r\n";
-            scintilla.StartStyling(scintilla.Text.Length - message.Length - 4);
-            scintilla.SetStyling(message.Length, error ? 1 : 2);
+            scintilla.AppendText(message + (messageType == MessageType.ErrorPrefix ? "\r\n" : "\r\n\r\n"));
+            scintilla.StartStyling(stylingStart);
+            scintilla.SetStyling(message.Length, messageType == MessageType.Info ? 2 : 1);
             scintilla.ReadOnly = true;
 
             if (index != -1)
@@ -880,6 +928,13 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        enum MessageType
+        {
+            Info,
+            Error,
+            ErrorPrefix,
+        }
+
         private void NavigateToMessage(object sender, DoubleClickEventArgs e)
         {
             if (_messageLocations.TryGetValue(e.Line, out var textRange))
@@ -887,6 +942,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _editor.SelectionStart = textRange.Index;
                 _editor.SelectionEnd = textRange.Index + textRange.Length;
                 _editor.Focus();
+                _editor.ScrollCaret();
             }
         }
 
@@ -955,6 +1011,9 @@ namespace MarkMpn.Sql4Cds.XTB
                     {
                         Execute(() => ShowResult(stmt.Statement, args, null, null, null));
 
+                        if (stmt.Message != null)
+                            Execute(() => ShowResult(stmt.Statement, args, null, stmt.Message, null));
+
                         if (stmt.Statement is IImpersonateRevertExecutionPlanNode)
                             Execute(() => SyncUsername());
                     };
@@ -980,7 +1039,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 constraintError = true;
                                 foreach (DataRow row in dataTable.Rows)
                                 {
-                                    if (row.RowError != null)
+                                    if (row.HasErrors && row.RowError != null)
                                         throw new ConstraintException(row.RowError, ex);
                                 }
 
@@ -1154,7 +1213,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             else if (msg != null)
             {
-                AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, false);
+                AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, MessageType.Info);
             }
             else if (args.IncludeFetchXml)
             {

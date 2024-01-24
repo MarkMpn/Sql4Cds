@@ -72,13 +72,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 ["@@ROWCOUNT"] = DataTypeHelpers.Int,
                 ["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
                 ["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
+                ["@@ERROR"] = DataTypeHelpers.Int,
             };
             _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {
                 ["@@IDENTITY"] = SqlEntityReference.Null,
                 ["@@ROWCOUNT"] = (SqlInt32)0,
                 ["@@SERVERNAME"] = GetServerName(_dataSources[_options.PrimaryDataSource]),
-                ["@@VERSION"] = GetVersion(_dataSources[_options.PrimaryDataSource])
+                ["@@VERSION"] = GetVersion(_dataSources[_options.PrimaryDataSource]),
+                ["@@ERROR"] = (SqlInt32)0,
             };
 
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
@@ -142,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var svc = new ServiceClient(connectionString);
 
             if (!svc.IsReady)
-                throw new Sql4CdsException(svc.LastError);
+                throw new Sql4CdsException(svc.LastError, svc.LastException);
 #else
             var svc = new CrmServiceClient(connectionString);
 
@@ -168,12 +170,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public event EventHandler<InfoMessageEventArgs> InfoMessage;
 
-        internal void OnInfoMessage(IRootExecutionPlanNode node, string message)
+        internal void OnInfoMessage(IRootExecutionPlanNode node, Sql4CdsError message)
         {
-            var handler = InfoMessage;
+            if (message.Class <= 10)
+            {
+                var handler = InfoMessage;
 
-            if (handler != null)
-                handler(this, new InfoMessageEventArgs(node, message));
+                if (handler != null)
+                    handler(this, new InfoMessageEventArgs(node, message));
+            }
+            else
+            {
+                throw new Sql4CdsException(message);
+            }
         }
 
         internal IDictionary<string, DataSource> DataSources => _dataSources;
@@ -400,7 +409,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public override void ChangeDatabase(string databaseName)
         {
             if (!_dataSources.ContainsKey(databaseName))
-                throw new Sql4CdsException("Database is not in the list of connected databases");
+                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, databaseName, 0, "Database is not in the list of connected databases", null));
 
             _options.PrimaryDataSource = databaseName;
         }
@@ -415,7 +424,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         protected override DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
         {
-            throw new NotSupportedException("Transactions are not supported");
+            throw new Sql4CdsException(new Sql4CdsError(16, 40517, "Transactions are not supported"));
         }
 
         protected override DbCommand CreateDbCommand()

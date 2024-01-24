@@ -31,6 +31,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
         public override int ExecutionCount => _executionCount;
 
         public override TimeSpan Duration => _timer.Duration;
@@ -43,7 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public void Execute(NodeExecutionContext context, out int recordsAffected)
+        public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -57,6 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             recordsAffected = -1;
+            message = null;
         }
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
@@ -75,7 +79,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 Sql = Sql,
                 Index = Index,
-                Length = Length
+                Length = Length,
+                LineNumber = LineNumber,
             };
 
             foreach (var kvp in Variables)

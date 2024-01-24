@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!ignoreDupKey && LogicalName == "listmember")
             {
                 ignoreDupKey = true;
-                context.Log("Duplicate entries will be silently ignored for listmember inserts");
+                context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.DataSources[DataSource].Name, 0, "Duplicate entries will be silently ignored for listmember inserts"));
             }
 
             return ignoreDupKey;
@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return ignoreDupKey;
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -154,6 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         },
                         context,
                         out recordsAffected,
+                        out message,
                         LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, context.ParameterValues))
                         );
                 }
@@ -180,10 +181,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var entityId = (Guid?)attributeAccessors["entityid"](entity);
 
                 if (listId == null)
-                    throw new QueryExecutionException("Cannot insert value NULL into listmember.listid");
+                    throw new QueryExecutionException(new Sql4CdsError(16, 515, "Cannot insert value NULL into listmember.listid"));
 
                 if (entityId == null)
-                    throw new QueryExecutionException("Cannot insert value NULL into listmember.entityid");
+                    throw new QueryExecutionException(new Sql4CdsError(16, 515, "Cannot insert value NULL into listmember.entityid"));
 
                 return new AddMemberListRequest
                 {
@@ -202,10 +203,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var e2 = (Guid?)attributeAccessors[relationship.Entity2IntersectAttribute](entity);
 
                 if (e1 == null)
-                    throw new QueryExecutionException($"Cannot insert value NULL into {relationship.Entity1IntersectAttribute}");
+                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot insert value NULL into {relationship.Entity1IntersectAttribute}"));
 
                 if (e2 == null)
-                    throw new QueryExecutionException($"Cannot insert value NULL into {relationship.Entity2IntersectAttribute}");
+                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot insert value NULL into {relationship.Entity2IntersectAttribute}"));
 
                 return new AssociateRequest
                 {
@@ -267,7 +268,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             logMessage += $". The duplicate values were ({create.Target.Id})";
                     }
 
-                    context.Log(logMessage);
+                    context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.DataSources[DataSource].Name, 0, logMessage));
                     return false;
                 }
             }
@@ -362,6 +363,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         return multipleResp;
                     }
+                    else if (req.Requests.Count == 1)
+                    {
+                        // We only have one request so the error must have come from that
+                        var multipleResp = new ExecuteMultipleResponse
+                        {
+                            ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                        };
+
+                        multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                        {
+                            RequestIndex = 0,
+                            Response = null,
+                            Fault = ex.Detail
+                        });
+
+                        return multipleResp;
+                    }
                     else
                     {
                         // We can't get the individual errors, so fall back to ExecuteMultiple
@@ -391,7 +409,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 MaxDOP = MaxDOP,
                 IgnoreDuplicateKey = IgnoreDuplicateKey,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
-                Sql = Sql
+                Sql = Sql,
+                LineNumber = LineNumber,
             };
 
             foreach (var kvp in ColumnMappings)

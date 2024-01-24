@@ -48,6 +48,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int Length { get; set; }
 
         [Browsable(false)]
+        public int LineNumber { get; set; }
+
+        [Browsable(false)]
         public HashSet<string> Parameters { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
@@ -230,6 +233,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 Index = Index,
                 Length = Length,
+                LineNumber = LineNumber,
                 Parameters = Parameters
             };
         }

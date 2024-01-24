@@ -106,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SecondaryIdSource = secondaryIdSourceRenamed;
         }
 
-        public override void Execute(NodeExecutionContext context, out int recordsAffected)
+        public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
             _executionCount++;
 
@@ -185,7 +185,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "deleted"
                         },
                         context,
-                        out recordsAffected);
+                        out recordsAffected,
+                        out message);
                 }
             }
             catch (QueryExecutionException ex)
@@ -325,6 +326,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
                             });
                         }
+
+                        return multipleResp;
+                    }
+                    else if (req.Requests.Count == 1)
+                    {
+                        // We only have one request so the error must have come from that
+                        var multipleResp = new ExecuteMultipleResponse
+                        {
+                            ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                        };
+
+                        multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                        {
+                            RequestIndex = 0,
+                            Response = null,
+                            Fault = ex.Detail
+                        });
 
                         return multipleResp;
                     }

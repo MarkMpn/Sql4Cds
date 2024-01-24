@@ -358,7 +358,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     default:
-                        throw new NotSupportedQueryFragmentException("Unsupported comparison type", comparison);
+                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported comparison type", comparison));
                 }
 
                 ValueExpression[] values = null;
@@ -384,22 +384,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Check for unsupported SQL DOM elements within the function call
                         if (func.CallTarget != null)
-                            throw new NotSupportedQueryFragmentException("Unsupported function call target", func);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function call target", func));
 
                         if (func.Collation != null)
-                            throw new NotSupportedQueryFragmentException("Unsupported function collation", func);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function collation", func));
 
                         if (func.OverClause != null)
-                            throw new NotSupportedQueryFragmentException("Unsupported function OVER clause", func);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function OVER clause", func));
 
                         if (func.UniqueRowFilter != UniqueRowFilter.NotSpecified)
-                            throw new NotSupportedQueryFragmentException("Unsupported function unique filter", func);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function unique filter", func));
 
                         if (func.WithinGroupClause != null)
-                            throw new NotSupportedQueryFragmentException("Unsupported function group clause", func);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function group clause", func));
 
                         if (func.Parameters.Count > 1 && op != @operator.containvalues && op != @operator.notcontainvalues)
-                            throw new NotSupportedQueryFragmentException("Unsupported number of function parameters", func);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported number of FetchXML function parameters", func));
 
                         // Some advanced FetchXML operators use a value as well - take this as the function parameter
                         // This provides support for queries such as `createdon = lastxdays(3)` becoming <condition attribute="createdon" operator="last-x-days" value="3" />
@@ -409,14 +409,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var nonLiteral = func.Parameters.FirstOrDefault(funcParam => !(funcParam is Literal));
 
                             if (nonLiteral != null)
-                                throw new NotSupportedQueryFragmentException("Unsupported function parameter", nonLiteral);
+                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function parameter", nonLiteral));
 
                             values = func.Parameters.Cast<Literal>().ToArray();
                         }
                         else if (func.Parameters.Count == 1)
                         {
                             if (!(func.Parameters[0] is Literal paramLiteral))
-                                throw new NotSupportedQueryFragmentException("Unsupported function parameter", func.Parameters[0]);
+                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function parameter", func.Parameters[0]));
 
                             values = new[] { paramLiteral };
                         }
@@ -424,7 +424,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                     {
                         // Can't use functions with other operators
-                        throw new NotSupportedQueryFragmentException("Unsupported function use. Only <field> = <func>(<param>) usage is supported", comparison);
+                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function use. Only <field> = <func>(<param>) usage is supported", comparison));
                     }
                 }
                 else if (func != null)
@@ -847,7 +847,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         else if (lit is IntegerLiteral || lit is NumericLiteral || lit is RealLiteral)
                             dt = new DateTime(1900, 1, 1).AddDays(Double.Parse(lit.Value, CultureInfo.InvariantCulture));
                         else
-                            throw new NotSupportedQueryFragmentException("Invalid datetime value", lit);
+                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 241, "Conversion failed when converting date and/or time from character string", lit));
 
                         DateTimeOffset dto;
 
@@ -865,7 +865,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     catch (FormatException)
                     {
-                        throw new NotSupportedQueryFragmentException("Invalid datetime value", lit);
+                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 241, "Conversion failed when converting date and/or time from character string", lit));
                     }
                 }
             }
@@ -879,25 +879,68 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (attributeSuffix == "name" && attribute is EnumAttributeMetadata enumAttr &&
                     (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.@in || op == @operator.notin))
                 {
-                    for (var i = 0; i < literals.Length; i++)
+                    for (var i = literals.Length - 1; i >= 0; i--)
                     {
                         if (!(literals[i] is Literal))
-                            continue;
+                        {
+                            virtualAttributeHandled = false;
+                            break;
+                        }
 
                         var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase)).ToList();
 
                         if (matchingOptions.Count == 1)
                         {
                             values[i] = new conditionValue { Value = matchingOptions[0].Value.ToString() };
-                            virtualAttributeHandled = true;
                         }
                         else if (matchingOptions.Count == 0)
                         {
-                            throw new NotSupportedQueryFragmentException("Unknown optionset value", literals[i]) { Suggestion = "Supported values are:\r\n" + String.Join("\r\n", enumAttr.OptionSet.Options.Select(o => "* " + o.Label.UserLocalizedLabel.Label)) };
+                            // We can't translate this to the expected filter, but we can still run it. Log that the results might not be what is expected
+                            context.Log(new Sql4CdsError(10, 50000, $"Unknown optionset value '{values[i].Value}' for attribute '{attribute.EntityLogicalName}.{attribute.LogicalName}'. Supported values are:\r\n{String.Join("\r\n", enumAttr.OptionSet.Options.Select(o => "* " + o.Label.UserLocalizedLabel.Label))}"));
+
+                            if (op == @operator.eq || op == @operator.ne || op == @operator.neq)
+                            {
+                                // Switch the filter condition so it either matches everything or nothing
+                                attrName = meta.PrimaryIdAttribute;
+
+                                if (op == @operator.eq)
+                                    op = @operator.@null;
+                                else
+                                    op = @operator.notnull;
+                            }
+                            else
+                            {
+                                // Remove this value from the "IN" list
+                                var newValues = new conditionValue[values.Length - 1];
+                                Array.Copy(values, 0, newValues, 0, i);
+                                Array.Copy(values, i + 1, newValues, i, values.Length - i - 1);
+                                values = newValues;
+                            }
                         }
+
+                        virtualAttributeHandled = true;
                     }
 
-                    value = values[0].Value;
+                    // We might have ended up with an empty IN or NOT IN list - translate to a filter on the primary key to match everything or nothing
+                    if ((op == @operator.@in || op == @operator.notin) && values.Length == 0)
+                    {
+                        attrName = meta.PrimaryIdAttribute;
+
+                        if (op == @operator.@in)
+                            op = @operator.@null;
+                        else
+                            op = @operator.notnull;
+                    }
+
+                    if (op == @operator.@null || op == @operator.notnull)
+                    {
+                        value = null;
+                        usesItems = false;
+                    }
+                    else
+                    {
+                        value = values[0].Value;
+                    }
                 }
 
                 // Same again for boolean attributes
@@ -907,25 +950,67 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     for (var i = 0; i < literals.Length; i++)
                     {
                         if (!(literals[i] is Literal))
-                            continue;
+                        {
+                            virtualAttributeHandled = false;
+                            break;
+                        }
 
                         if (boolAttr.OptionSet.TrueOption.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase))
                         {
                             values[i] = new conditionValue { Value = "1" };
-                            virtualAttributeHandled = true;
                         }
                         else if (boolAttr.OptionSet.FalseOption.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase))
                         {
                             values[i] = new conditionValue { Value = "0" };
-                            virtualAttributeHandled = true;
                         }
                         else
                         {
-                            throw new NotSupportedQueryFragmentException("Unknown optionset value", literals[i]) { Suggestion = "Supported values are:\r\n* " + boolAttr.OptionSet.FalseOption.Label.UserLocalizedLabel.Label + "\r\n* " + boolAttr.OptionSet.TrueOption.Label.UserLocalizedLabel.Label };
+                            // We can't translate this to the expected filter, but we can still run it. Log that the results might not be what is expected
+                            context.Log(new Sql4CdsError(10, 50000, $"Unknown optionset value '{values[i].Value}' for attribute '{attribute.EntityLogicalName}.{attribute.LogicalName}'. Supported values are:\r\n* {boolAttr.OptionSet.FalseOption.Label.UserLocalizedLabel.Label}\r\n* {boolAttr.OptionSet.TrueOption.Label.UserLocalizedLabel.Label}"));
+
+                            if (op == @operator.eq || op == @operator.ne || op == @operator.neq)
+                            {
+                                // Switch the filter condition so it either matches everything or nothing
+                                attrName = meta.PrimaryIdAttribute;
+
+                                if (op == @operator.eq || op == @operator.@in)
+                                    op = @operator.@null;
+                                else
+                                    op = @operator.notnull;
+                            }
+                            else
+                            {
+                                // Remove this value from the "IN" list
+                                var newValues = new conditionValue[values.Length - 1];
+                                Array.Copy(values, 0, newValues, 0, i);
+                                Array.Copy(values, i + 1, newValues, i, values.Length - i - 1);
+                                values = newValues;
+                            }
                         }
+
+                        virtualAttributeHandled = true;
                     }
 
-                    value = values[0].Value;
+                    // We might have ended up with an empty IN or NOT IN list - translate to a filter on the primary key to match everything or nothing
+                    if ((op == @operator.@in || op == @operator.notin) && values.Length == 0)
+                    {
+                        attrName = meta.PrimaryIdAttribute;
+
+                        if (op == @operator.@in)
+                            op = @operator.@null;
+                        else
+                            op = @operator.notnull;
+                    }
+
+                    if (op == @operator.@null || op == @operator.notnull)
+                    {
+                        value = null;
+                        usesItems = false;
+                    }
+                    else
+                    {
+                        value = values[0].Value;
+                    }
                 }
 
                 if (attribute is LookupAttributeMetadata lookupAttr)

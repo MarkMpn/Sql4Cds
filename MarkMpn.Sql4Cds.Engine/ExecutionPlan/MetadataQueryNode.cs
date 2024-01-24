@@ -117,7 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     // Work out the consistent type for each property
                     DataTypeReference type = null;
-                    var isNullable = false;
+                    var isNullable = g.Count() < _attributeTypes.Length;
 
                     foreach (var prop in g)
                     {
@@ -133,7 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         if (!isNullable && IsNullable(prop.Property.PropertyType))
-                            isNullable = false;
+                            isNullable = true;
                     }
 
                     if (type == null)

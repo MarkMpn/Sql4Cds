@@ -3351,7 +3351,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.AreEqual("Column is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause: new_name", ex.Message);
+                Assert.AreEqual("Column 'new_customentity.new_name' is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause", ex.Message);
             }
         }
 
@@ -3948,7 +3948,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4002,7 +4002,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4060,7 +4060,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4094,7 +4094,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4186,7 +4186,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4220,7 +4220,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -6766,6 +6766,30 @@ where n = 'a'";
             Assert.AreEqual("@Expr1 + ''", computeScalar.Columns["Expr2"].ToSql());
             var constantScan = AssertNode<ConstantScanNode>(computeScalar.Source);
             Assert.AreEqual(1, constantScan.Values.Count);
+        }
+
+        [TestMethod]
+        public void GotoCantMoveIntoTryBlock()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+GOTO label1
+BEGIN TRY
+    label1:
+END TRY
+BEGIN CATCH
+END CATCH";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(1026, ex.Errors.Single().Number);
+            }
         }
     }
 }

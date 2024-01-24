@@ -26,6 +26,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public int Length { get; set; }
 
+        public int LineNumber { get; set; }
+
         public IExecutionPlanNode Parent { get; set; }
 
         public int ExecutionCount => 0;
@@ -55,6 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 Index = Index,
                 Length = Length,
+                LineNumber = LineNumber,
                 Label = Label,
                 Predicate = Predicate.Clone(),
                 _context = _context,

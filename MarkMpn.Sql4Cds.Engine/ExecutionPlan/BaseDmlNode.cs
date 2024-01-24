@@ -82,6 +82,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
+        /// <summary>
+        /// The number of the first line of the statement
+        /// </summary>
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
         [Browsable(false)]
         public IExecutionPlanNodeInternal Source { get; set; }
 
@@ -129,7 +135,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="context">The context in which the node is being executed</param>
         /// <param name="recordsAffected">The number of records that were affected by the query</param>
-        public abstract void Execute(NodeExecutionContext context, out int recordsAffected);
+        /// <param name="message">A progress message to display</param>
+        public abstract void Execute(NodeExecutionContext context, out int recordsAffected, out string message);
 
         /// <summary>
         /// Indicates if some errors returned by the server can be silently ignored
@@ -189,7 +196,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (batchSizeHint != null)
             {
                 if (!Int32.TryParse(batchSizeHint.Value.Substring(11), out var value) || value < 1)
-                    throw new NotSupportedQueryFragmentException("BATCH_SIZE requires a positive integer value", batchSizeHint);
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10715, $"'{batchSizeHint.Value}' is not a valid hint", batchSizeHint)) { Suggestion = "BATCH_SIZE requires a positive integer value" };
 
                 return value;
             }
@@ -340,6 +347,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 value = new SqlTime(ts);
                             }
+                            else if (value is DBNull)
+                            {
+                                var sqlType = (DataTypeReference)dataTable.Columns[i].ExtendedProperties["SqlType"];
+                                value = SqlTypeConverter.GetNullValue(sqlType.ToNetType(out _));
+                            }
 
                             entity[dataTable.Columns[i].ColumnName] = value;
                             entity[i.ToString()] = value;
@@ -476,7 +488,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             // Convert to destination SQL type - don't do this if we're converting from an EntityReference to a PartyList so
                             // we don't lose the entity name during the conversion via a string
-                            expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+                            expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType, throwOnTruncate: true);
                         }
 
                         // Convert to final .NET SDK type
@@ -564,8 +576,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="meta">The metadata of the entity that will be affected</param>
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
-        /// <param name="log">A callback function to be executed when a log message is generated</param>
-        protected void ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, NodeExecutionContext context, out int recordsAffected, Action<OrganizationResponse> responseHandler = null)
+        /// <param name="context">The context in which the node is being executed</param>
+        /// <param name="recordsAffected">The number of records affected by the operation</param>
+        /// <param name="message">A human-readable message to show the number of records affected</param>
+        /// <param name="responseHandler">An optional parameter to handle the response messages from the server</param>
+        protected void ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, NodeExecutionContext context, out int recordsAffected, out string message, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -707,20 +722,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (ex is AggregateException agg && agg.InnerExceptions.Count == 1)
                     ex = agg.InnerException;
 
-                if (count == 0)
-                {
-                    if (ex == originalEx)
-                        throw;
-                    else
-                        throw ex;
-                }
+                if (count > 0)
+                    context.Log(new Sql4CdsError(1, 0, $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}"));
 
-                throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}", ex);
+                if (ex == originalEx)
+                    throw;
+                else
+                    throw ex;
             }
 
             recordsAffected = count;
+            message = $"({count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase})";
             context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)count;
-            context.Log($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}");
         }
 
         protected class BulkApiErrorDetail
@@ -751,7 +764,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(r => r.Fault != null)
                 .ToList();
 
-            Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
+            Interlocked.Add(ref count, resp.Responses.Count - errorResponses.Count);
             Interlocked.Add(ref errorCount, errorResponses.Count);
 
             var error = errorResponses.FirstOrDefault(item => FilterErrors(context, req.Requests[item.RequestIndex], item.Fault));
