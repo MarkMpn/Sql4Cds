@@ -371,6 +371,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fault.ErrorCode == -2147220970 && fault.Message == "Aggregates are not supported")
                 return true;
 
+            // Triggered when trying to use aggregates on actioncard table
+            if (fault.ErrorCode == -2147220933)
+                return true;
+
+            // Triggered when trying to use aggregates on datalakefolder table
+            if (fault.ErrorCode == -2147220715)
+                return true;
+
             return false;
         }
 
