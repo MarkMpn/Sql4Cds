@@ -1154,45 +1154,122 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 QueryExpression = new QuerySpecification
                 {
-                    FromClause = new FromClause
-                    {
-                        TableReferences =
-                        {
-                            new NamedTableReference { SchemaObject = new SchemaObjectName { Identifiers = { new Identifier { Value = "systemuser" } } } }
-                        }
-                    },
-                    WhereClause = new WhereClause
-                    {
-                        SearchCondition = new BooleanComparisonExpression
-                        {
-                            FirstExpression = impersonate.ExecuteContext.Kind == ExecuteAsOption.Login ? "domainname".ToColumnReference() : "systemuserid".ToColumnReference(),
-                            ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = impersonate.ExecuteContext.Principal
-                        }
-                    },
                     SelectElements =
                     {
                         new SelectScalarExpression
                         {
-                            Expression = "systemuserid".ToColumnReference()
+                            Expression = impersonate.ExecuteContext.Principal,
+                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "username" } }
+                        },
+                        new SelectScalarExpression
+                        {
+                            Expression = new ScalarSubquery
+                            {
+                                QueryExpression = new QuerySpecification
+                                {
+                                    SelectElements =
+                                    {
+                                        new SelectScalarExpression
+                                        {
+                                            Expression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "max" },
+                                                Parameters =
+                                                {
+                                                    "systemuserid".ToColumnReference()
+                                                }
+                                            }
+                                        }
+                                    },
+                                    FromClause = new FromClause
+                                    {
+                                        TableReferences =
+                                        {
+                                            new NamedTableReference { SchemaObject = new SchemaObjectName { Identifiers = { new Identifier { Value = "systemuser" } } } }
+                                        }
+                                    },
+                                    WhereClause = new WhereClause
+                                    {
+                                        SearchCondition = new BooleanComparisonExpression
+                                        {
+                                            FirstExpression = impersonate.ExecuteContext.Kind == ExecuteAsOption.Login ? "domainname".ToColumnReference() : "systemuserid".ToColumnReference(),
+                                            ComparisonType = BooleanComparisonType.Equals,
+                                            SecondExpression = impersonate.ExecuteContext.Principal
+                                        }
+                                    }
+                                }
+                            },
+                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "systemuserid" } }
+                        },
+                        new SelectScalarExpression
+                        {
+                            Expression = new ScalarSubquery
+                            {
+                                QueryExpression = new QuerySpecification
+                                {
+                                    SelectElements =
+                                    {
+                                        new SelectScalarExpression
+                                        {
+                                            Expression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "count" },
+                                                Parameters =
+                                                {
+                                                    new ColumnReferenceExpression { ColumnType = ColumnType.Wildcard }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    FromClause = new FromClause
+                                    {
+                                        TableReferences =
+                                        {
+                                            new NamedTableReference { SchemaObject = new SchemaObjectName { Identifiers = { new Identifier { Value = "systemuser" } } } }
+                                        }
+                                    },
+                                    WhereClause = new WhereClause
+                                    {
+                                        SearchCondition = new BooleanComparisonExpression
+                                        {
+                                            FirstExpression = impersonate.ExecuteContext.Kind == ExecuteAsOption.Login ? "domainname".ToColumnReference() : "systemuserid".ToColumnReference(),
+                                            ComparisonType = BooleanComparisonType.Equals,
+                                            SecondExpression = impersonate.ExecuteContext.Principal
+                                        }
+                                    }
+                                }
+                            },
+                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "count" } }
                         }
                     }
                 }
             };
 
+            var userIdSource = "systemuserid";
+            var filterValueSource = "username";
+            var countSource = "count";
+
             var select = ConvertSelectStatement(selectStatement);
 
             if (select is SelectNode selectNode)
+            {
                 source = selectNode.Source;
+                userIdSource = selectNode.ColumnSet.Single(c => c.OutputColumn == userIdSource).SourceColumn;
+                filterValueSource = selectNode.ColumnSet.Single(c => c.OutputColumn == filterValueSource).SourceColumn;
+                countSource = selectNode.ColumnSet.Single(c => c.OutputColumn == countSource).SourceColumn;
+            }
             else
+            {
                 source = select;
+            }
 
             return new ExecuteAsNode
             {
-                UserIdSource = "systemuser.systemuserid",
+                UserIdSource = userIdSource,
                 Source = source,
                 DataSource = Options.PrimaryDataSource,
-                Username = user.Value
+                FilterValueSource = filterValueSource,
+                CountSource = countSource
             };
         }
 

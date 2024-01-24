@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
+using System.Net.PeerToPeer;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -32,6 +34,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string UserIdSource { get; set; }
 
         [Browsable(false)]
+        public string FilterValueSource { get; set; }
+
+        [Browsable(false)]
+        public string CountSource { get; set; }
+
+        [Browsable(false)]
         public override int MaxDOP { get; set; }
 
         [Browsable(false)]
@@ -42,9 +50,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         [Browsable(false)]
         public override bool ContinueOnError { get; set; }
-
-        [Browsable(false)]
-        public string Username { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -67,11 +72,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var entities = GetDmlSourceEntities(context, out var schema);
 
-                    if (entities.Count == 0)
-                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Cannot execute as the database principal because the principal \"{Username}\" does not exist, this type of principal cannot be impersonated, or you do not have permission."));
+                    if (entities.Count != 1)
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Unexpected error retrieving user details: retrieved {entities.Count} values"));
 
-                    if (entities.Count > 1)
-                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Ambiguous user \"{Username}\""));
+                    var count = entities[0].GetAttributeValue<SqlInt32>(CountSource).Value;
+                    var username = entities[0].GetAttributeValue<SqlString>(FilterValueSource).IsNull ? "(null)" : entities[0].GetAttributeValue<SqlString>(FilterValueSource).Value;
+
+                    if (count == 0)
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Cannot execute as the database principal because the principal \"{username}\" does not exist, this type of principal cannot be impersonated, or you do not have permission."));
+
+                    if (count > 1)
+                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Ambiguous user \"{username}\""));
 
                     // Precompile mappings with type conversions
                     var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
@@ -135,7 +146,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql,
                 UserIdSource = UserIdSource,
-                Username = Username,
+                FilterValueSource = FilterValueSource,
+                CountSource = CountSource
             };
 
             clone.Source.Parent = clone;
