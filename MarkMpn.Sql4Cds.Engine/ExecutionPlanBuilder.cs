@@ -1147,9 +1147,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 impersonate.ExecuteContext.Kind != ExecuteAsOption.User)
                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled impersonation type", impersonate.ExecuteContext));
 
-            if (!(impersonate.ExecuteContext.Principal is StringLiteral user))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled username variable", impersonate.ExecuteContext.Principal));
-
             IExecutionPlanNodeInternal source;
 
             // Create a SELECT query to find the user ID
@@ -1170,7 +1167,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             FirstExpression = impersonate.ExecuteContext.Kind == ExecuteAsOption.Login ? "domainname".ToColumnReference() : "systemuserid".ToColumnReference(),
                             ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = user
+                            SecondExpression = impersonate.ExecuteContext.Principal
                         }
                     },
                     SelectElements =
