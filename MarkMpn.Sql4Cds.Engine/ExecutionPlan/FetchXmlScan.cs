@@ -909,7 +909,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Entity.Items != null)
                 {
-                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
+                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias?.Equals(attr.name, StringComparison.OrdinalIgnoreCase) == true || a.alias?.Equals(parts[1], StringComparison.OrdinalIgnoreCase) == true);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
@@ -942,7 +942,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (linkEntity.Items != null)
                 {
-                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
+                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias?.Equals(attr.name, StringComparison.OrdinalIgnoreCase) == true || a.alias?.Equals(parts[1], StringComparison.OrdinalIgnoreCase) == true);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
