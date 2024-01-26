@@ -33,10 +33,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("UserId Source")]
         public string UserIdSource { get; set; }
 
-        [Browsable(false)]
+        /// <summary>
+        /// The column in the data source that provides the value to use to search for users
+        /// </summary>
+        [Category("Execute As")]
+        [Description("The column in the data source that provides the value to use to search for users")]
+        [DisplayName("Filter Value Source")]
         public string FilterValueSource { get; set; }
 
-        [Browsable(false)]
+        /// <summary>
+        /// The column in the data source that provides the number of matching users
+        /// </summary>
+        [Category("Execute As")]
+        [Description("The column in the data source that provides the number of matching users")]
+        [DisplayName("Count Source")]
         public string CountSource { get; set; }
 
         [Browsable(false)]
