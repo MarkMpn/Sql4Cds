@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlClient;
+using System.Runtime.CompilerServices;
 using System.Text;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
@@ -31,148 +32,148 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public IRootExecutionPlanNode CurrentResultQuery => _node;
 
-        public override object this[int ordinal] => _sqlDataReader[ordinal];
+        public override object this[int ordinal] => HandleException(() => _sqlDataReader[ordinal]);
 
-        public override object this[string name] => _sqlDataReader[name];
+        public override object this[string name] => HandleException(() => _sqlDataReader[name]);
 
-        public override int Depth => _sqlDataReader.Depth;
+        public override int Depth => HandleException(() => _sqlDataReader.Depth);
 
-        public override int FieldCount => _sqlDataReader.FieldCount;
+        public override int FieldCount => HandleException(() => _sqlDataReader.FieldCount);
 
-        public override bool HasRows => _sqlDataReader.HasRows;
+        public override bool HasRows => HandleException(() => _sqlDataReader.HasRows);
 
-        public override bool IsClosed => _sqlDataReader.IsClosed;
+        public override bool IsClosed => HandleException(() => _sqlDataReader.IsClosed);
 
-        public override int RecordsAffected => _sqlDataReader.RecordsAffected;
+        public override int RecordsAffected => HandleException(() => _sqlDataReader.RecordsAffected);
 
         public override bool GetBoolean(int ordinal)
         {
-            return _sqlDataReader.GetBoolean(ordinal);
+            return HandleException(() => _sqlDataReader.GetBoolean(ordinal));
         }
 
         public override byte GetByte(int ordinal)
         {
-            return _sqlDataReader.GetByte(ordinal);
+            return HandleException(() => _sqlDataReader.GetByte(ordinal));
         }
 
         public override long GetBytes(int ordinal, long dataOffset, byte[] buffer, int bufferOffset, int length)
         {
-            return _sqlDataReader.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
+            return HandleException(() => _sqlDataReader.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length));
         }
 
         public override char GetChar(int ordinal)
         {
-            return _sqlDataReader.GetChar(ordinal);
+            return HandleException(() => _sqlDataReader.GetChar(ordinal));
         }
 
         public override long GetChars(int ordinal, long dataOffset, char[] buffer, int bufferOffset, int length)
         {
-            return _sqlDataReader.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
+            return HandleException(() => _sqlDataReader.GetChars(ordinal, dataOffset, buffer, bufferOffset, length));
         }
 
         public override string GetDataTypeName(int ordinal)
         {
-            return _sqlDataReader.GetDataTypeName(ordinal);
+            return HandleException(() => _sqlDataReader.GetDataTypeName(ordinal));
         }
 
         public override DateTime GetDateTime(int ordinal)
         {
-            return _sqlDataReader.GetDateTime(ordinal);
+            return HandleException(() => _sqlDataReader.GetDateTime(ordinal));
         }
 
         public override decimal GetDecimal(int ordinal)
         {
-            return _sqlDataReader.GetDecimal(ordinal);
+            return HandleException(() => _sqlDataReader.GetDecimal(ordinal));
         }
 
         public override double GetDouble(int ordinal)
         {
-            return _sqlDataReader.GetDouble(ordinal);
+            return HandleException(() => _sqlDataReader.GetDouble(ordinal));
         }
 
         public override IEnumerator GetEnumerator()
         {
-            return _sqlDataReader.GetEnumerator();
+            return HandleException(() => _sqlDataReader.GetEnumerator());
         }
 
         public override Type GetFieldType(int ordinal)
         {
-            return _sqlDataReader.GetFieldType(ordinal);
+            return HandleException(() => _sqlDataReader.GetFieldType(ordinal));
         }
 
         public override float GetFloat(int ordinal)
         {
-            return _sqlDataReader.GetFloat(ordinal);
+            return HandleException(() => _sqlDataReader.GetFloat(ordinal));
         }
 
         public override Guid GetGuid(int ordinal)
         {
-            return _sqlDataReader.GetGuid(ordinal);
+            return HandleException(() => _sqlDataReader.GetGuid(ordinal));
         }
 
         public override short GetInt16(int ordinal)
         {
-            return _sqlDataReader.GetInt16(ordinal);
+            return HandleException(() => _sqlDataReader.GetInt16(ordinal));
         }
 
         public override int GetInt32(int ordinal)
         {
-            return _sqlDataReader.GetInt32(ordinal);
+            return HandleException(() => _sqlDataReader.GetInt32(ordinal));
         }
 
         public override long GetInt64(int ordinal)
         {
-            return _sqlDataReader.GetInt64(ordinal);
+            return HandleException(() => _sqlDataReader.GetInt64(ordinal));
         }
 
         public override string GetName(int ordinal)
         {
-            return _sqlDataReader.GetName(ordinal);
+            return HandleException(() => _sqlDataReader.GetName(ordinal));
         }
 
         public override int GetOrdinal(string name)
         {
-            return _sqlDataReader.GetOrdinal(name);
+            return HandleException(() => _sqlDataReader.GetOrdinal(name));
         }
 
         public override string GetString(int ordinal)
         {
-            return _sqlDataReader.GetString(ordinal);
+            return HandleException(() => _sqlDataReader.GetString(ordinal));
         }
 
         public override object GetValue(int ordinal)
         {
-            return _sqlDataReader.GetValue(ordinal);
+            return HandleException(() => _sqlDataReader.GetValue(ordinal)   );
         }
 
         public override int GetValues(object[] values)
         {
-            return _sqlDataReader.GetValues(values);
+            return HandleException(() => _sqlDataReader.GetValues(values));
         }
 
         public override bool IsDBNull(int ordinal)
         {
-            return _sqlDataReader.IsDBNull(ordinal);
+            return HandleException(() => _sqlDataReader.IsDBNull(ordinal));
         }
 
         public override bool NextResult()
         {
-            return _sqlDataReader.NextResult();
+            return HandleException(() => _sqlDataReader.NextResult());
         }
 
         public override bool Read()
         {
-            return _sqlDataReader.Read();
+            return HandleException(() => _sqlDataReader.Read());
         }
 
         public override DataTable GetSchemaTable()
         {
-            return _sqlDataReader.GetSchemaTable();
+            return HandleException(() => _sqlDataReader.GetSchemaTable());
         }
 
         public override void Close()
         {
-            _sqlDataReader.Close();
+            HandleException<object>(() => { _sqlDataReader.Close(); return null; });
         }
 
         protected override void Dispose(bool disposing)
@@ -184,6 +185,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 _sqlDataReader.Close();
                 _sqlCommand.Dispose();
                 _sqlConnection.Dispose();
+            }
+        }
+
+        private T HandleException<T>(Func<T> action)
+        {
+            try
+            {
+                return action();
+            }
+            catch (SqlException ex)
+            {
+                throw new Sql4CdsException(new Sql4CdsError(ex.Class, ex.LineNumber, ex.Number, null, ex.Server, ex.State, ex.Message), ex);
             }
         }
     }
