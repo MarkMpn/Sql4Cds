@@ -249,6 +249,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 top.Source = filter;
                 aggregate.Source = top.FoldQuery(innerContext, hints);
             }
+            else if (RightSource is AliasNode applyAlias &&
+                applyAlias.Source is IndexSpoolNode applyIndexSpool &&
+                LeftSource.EstimateRowsOut(context).Value < 100)
+            {
+                // CROSS or OUTER APPLY was folded to use an index spool, but the outer query is now estimated to produce
+                // a small number of records. Remove the index spool and replace with filter if that filter can be folded
+                // to the datasource
+                var filter = new FilterNode
+                {
+                    Source = applyIndexSpool.Source,
+                    Filter = new BooleanComparisonExpression
+                    {
+                        FirstExpression = applyIndexSpool.KeyColumn.ToColumnReference(),
+                        ComparisonType = BooleanComparisonType.Equals,
+                        SecondExpression = new VariableReference { Name = applyIndexSpool.SeekValue }
+                    },
+                    Parent = applyAlias
+                };
+
+                if (filter.FoldQuery(innerContext, hints) != filter)
+                {
+                    applyAlias.Source = filter;
+                    RightSource = applyAlias.FoldQuery(innerContext, hints);
+                }
+            }
 
             return this;
         }
