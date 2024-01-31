@@ -937,6 +937,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     };
                 }
 
+                if (collation == null)
+                {
+                    // In case the parameter is null, assume a default collation for the output
+                    collation = new SqlDataTypeReferenceWithCollation
+                    {
+                        Collation = primaryDataSource.DefaultCollation,
+                        CollationLabel = CollationLabel.CoercibleDefault
+                    };
+                }
+
                 AssertCollationSensitive(collation, func.FunctionName.Value.ToLowerInvariant() + " operation", func);
 
                 for (var i = 0; i < paramTypes.Length; i++)
