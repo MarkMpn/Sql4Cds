@@ -542,10 +542,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var func = _sqlToNetTypeConversionFuncs[expr.Type];
                     expr = Expression.Invoke(Expression.Constant(func), Expression.Convert(expr, typeof(INullable)));
                 }
-                else
-                {
-                    expr = Expression.Convert(expr, to);
-                }
+                
+                expr = Expression.Convert(expr, to);
 
                 //if (to == typeof(SqlString))
                 //    expr = Expr.Call(() => ApplyCollation(Expr.Arg<Collation>(), Expr.Arg<SqlString>()), Expression.Constant(collation), expr);
