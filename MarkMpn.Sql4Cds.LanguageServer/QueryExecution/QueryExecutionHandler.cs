@@ -432,7 +432,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         }
                         else
                         {
-                            parts.Add($"Line {sql4CdsError.LineNumber}");
+                            parts.Add($"Line {Math.Max(sql4CdsError.LineNumber, 1)}");
                         }
 
                         await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
