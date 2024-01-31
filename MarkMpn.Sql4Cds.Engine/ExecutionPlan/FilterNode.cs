@@ -1617,15 +1617,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var col = comparison.FirstExpression as ColumnReferenceExpression;
-                var literal = comparison.SecondExpression as Literal;
+                var literal = comparison.SecondExpression;
 
-                if (col == null && literal == null)
+                if (col == null || literal.GetColumns().Any())
                 {
                     col = comparison.SecondExpression as ColumnReferenceExpression;
-                    literal = comparison.FirstExpression as Literal;
+                    literal = comparison.FirstExpression;
                 }
 
-                if (col == null || literal == null)
+                if (col == null || literal.GetColumns().Any())
                     return false;
 
                 var schema = meta.GetSchema(context);
@@ -1662,7 +1662,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new InvalidOperationException();
                 }
 
-                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(expressionCompilationContext)(expressionExecutionContext));
+                var condition = new MetadataConditionExpression(parts[1], op, literal);
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -1683,10 +1683,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     return false;
 
-                if (inPred.Values.Any(val => !(val is Literal)))
+                if (inPred.Values.Any(val => val.GetColumns().Any()))
                     return false;
 
-                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(expressionCompilationContext)(expressionExecutionContext)).ToArray());
+                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.ToArray());
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -1782,22 +1782,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 targetValueType != typeof(Guid))
                 return false;
 
-            // String comparisons will be executed case-sensitively, but all other comparisons are case-insensitive. For consistency, don't allow
-            // comparisons on string properties except those where we know the expected case.
-            Func<object, object> valueConverter = (o) => o;
-
-            if (targetValueType == typeof(string))
-            {
-                if (prop.DeclaringType == typeof(EntityMetadata) && (prop.Name == nameof(EntityMetadata.LogicalName) || prop.Name == nameof(EntityMetadata.LogicalCollectionName)) ||
-                    prop.DeclaringType == typeof(AttributeMetadata) && (prop.Name == nameof(AttributeMetadata.LogicalName) || prop.Name == nameof(AttributeMetadata.EntityLogicalName)))
-                {
-                    valueConverter = (o) => ((string)o)?.ToLowerInvariant();
-                }
-                else
-                {
-                    return false;
-                }
-            }
+            // Filtering on enum types only works for = and <>
+            if (targetValueType.IsEnum &&
+                condition.ConditionOperator != MetadataConditionOperator.Equals &&
+                condition.ConditionOperator != MetadataConditionOperator.NotEquals &&
+                condition.ConditionOperator != MetadataConditionOperator.In &&
+                condition.ConditionOperator != MetadataConditionOperator.NotIn)
+                return false;
 
             // Filtering on IsArchivalEnabled is not supported
             if (prop.DeclaringType == typeof(EntityMetadata) &&
@@ -1813,30 +1804,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 prop.Name == nameof(AttributeMetadata.SourceType))
                 return false;
 
-            // Convert the property name to the correct case
-            filter.Conditions[0].PropertyName = prop.Name;
-
-            // Convert the value to the expected type
-            if (filter.Conditions[0].Value != null)
+            // String comparisons will be executed case-sensitively, but all other comparisons are case-insensitive. For consistency, don't allow
+            // comparisons on string properties except those where we know the expected case.
+            if (targetValueType == typeof(string))
             {
-                var propertyType = MetadataQueryNode.GetPropertyType(targetValueType).ToNetType(out _);
-
-                if (filter.Conditions[0].ConditionOperator == MetadataConditionOperator.In ||
-                    filter.Conditions[0].ConditionOperator == MetadataConditionOperator.NotIn)
+                if (prop.DeclaringType == typeof(EntityMetadata) && (prop.Name == nameof(EntityMetadata.LogicalName) || prop.Name == nameof(EntityMetadata.LogicalCollectionName)) ||
+                    prop.DeclaringType == typeof(AttributeMetadata) && (prop.Name == nameof(AttributeMetadata.LogicalName) || prop.Name == nameof(AttributeMetadata.EntityLogicalName)))
                 {
-                    var array = (Array)filter.Conditions[0].Value;
-                    var targetArray = Array.CreateInstance(targetValueType, array.Length);
+                    var toLower = (Func<ScalarExpression, ScalarExpression>)((ScalarExpression o) => new FunctionCall
+                    {
+                        FunctionName = new Identifier { Value = "LOWER" },
+                        Parameters = { o }
+                    });
 
-                    for (var i = 0; i < array.Length; i++)
-                        targetArray.SetValue(valueConverter(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(array.GetValue(i), propertyType), targetValueType)), i);
-
-                    filter.Conditions[0].Value = targetArray;
+                    if (condition.Value is ScalarExpression expr)
+                        condition.Value = toLower(expr);
+                    else if (condition.Value is IList<ScalarExpression> exprs)
+                        condition.Value = exprs.Select(e => toLower(e)).ToList();
                 }
                 else
                 {
-                    filter.Conditions[0].Value = valueConverter(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, propertyType), targetValueType));
+                    return false;
                 }
             }
+
+            // Convert the property name to the correct case
+            filter.Conditions[0].PropertyName = prop.Name;
 
             if (isEntityFilter)
             {

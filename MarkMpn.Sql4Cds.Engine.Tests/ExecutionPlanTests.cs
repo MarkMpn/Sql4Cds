@@ -2639,7 +2639,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, meta.Query.Criteria.Conditions.Count);
             Assert.AreEqual("ObjectTypeCode", meta.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.Equals, meta.Query.Criteria.Conditions[0].ConditionOperator);
-            Assert.AreEqual(1, meta.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual("1", ((CompiledExpression)meta.Query.Criteria.Conditions[0].Value).Expression.ToSql());
         }
 
         [TestMethod]
@@ -2670,7 +2670,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, meta.Query.Criteria.Conditions.Count);
             Assert.AreEqual("LogicalName", meta.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.Equals, meta.Query.Criteria.Conditions[0].ConditionOperator);
-            Assert.AreEqual("account", meta.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual("LOWER('Account')", ((CompiledExpression)meta.Query.Criteria.Conditions[0].Value).Expression.ToSql());
         }
 
         [TestMethod]
@@ -6448,7 +6448,7 @@ FROM   account AS r;";
             Assert.AreEqual("m.d. table", metadata.EntityAlias);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), metadata.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.Equals, metadata.Query.Criteria.Conditions[0].ConditionOperator);
-            Assert.AreEqual("account", metadata.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual("LOWER('account')", ((CompiledExpression)metadata.Query.Criteria.Conditions[0].Value).Expression.ToSql());
         }
 
         [TestMethod]
@@ -6510,10 +6510,10 @@ ORDER BY [union. all].eln";
             Assert.AreEqual("french", mq1.DataSource);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq1.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq1.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq1.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('systemuser')", "LOWER('businessunit')" }, ((IList<CompiledExpression>)mq1.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq1.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq1.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq1.Query.AttributeQuery.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('createdon')" }, ((IList<CompiledExpression>)mq1.Query.AttributeQuery.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
 
             var alias = AssertNode<AliasNode>(join1.RightSource);
             Assert.AreEqual("union. all", alias.Alias);
@@ -6526,20 +6526,20 @@ ORDER BY [union. all].eln";
             Assert.AreEqual("uat", mq2.DataSource);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq2.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq2.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq2.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('systemuser')", "LOWER('businessunit')" }, ((IList<CompiledExpression>)mq2.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq2.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq2.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq2.Query.AttributeQuery.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('createdon')" }, ((IList<CompiledExpression>)mq2.Query.AttributeQuery.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
 
             var compute3 = AssertNode<ComputeScalarNode>(concat.Sources[1]);
             var mq3 = AssertNode<MetadataQueryNode>(compute3.Source);
             Assert.AreEqual("prod", mq3.DataSource);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq3.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq3.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('systemuser')", "LOWER('businessunit')" }, ((IList<CompiledExpression>)mq3.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq3.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq3.Query.AttributeQuery.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('createdon')" }, ((IList<CompiledExpression>)mq3.Query.AttributeQuery.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
         }
 
         [TestMethod]
@@ -6571,7 +6571,7 @@ WHERE  e.logicalname IN ('systemuser');";
             CollectionAssert.AreEquivalent(new[] { nameof(AttributeMetadata.LogicalName), nameof(LookupAttributeMetadata.Targets) }, metadata.Query.AttributeQuery.Properties.PropertyNames);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), metadata.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, metadata.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEquivalent(new[] { "systemuser" }, (string[])metadata.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEquivalent(new[] { "LOWER('systemuser')" }, ((IList<CompiledExpression>)metadata.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
         }
 
         [TestMethod]

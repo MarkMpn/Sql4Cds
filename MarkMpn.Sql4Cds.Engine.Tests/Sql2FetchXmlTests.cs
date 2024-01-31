@@ -2075,10 +2075,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
-            Assert.AreEqual(7, dataTable.Rows.Count);
+            Assert.AreEqual(9, dataTable.Rows.Count);
             var row = 0;
             Assert.AreEqual("new_boolprop", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_customentityid", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_decimalprop", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_doubleprop", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_name", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_optionsetvalue", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_optionsetvaluecollection", dataTable.Rows[row++]["logicalname1"]);

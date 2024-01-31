@@ -440,7 +440,63 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            CompileFilters(context);
             return this;
+        }
+
+        private void CompileFilters(NodeCompilationContext context)
+        {
+            var ecc = new ExpressionCompilationContext(context, null, null);
+
+            CompileFilters(Query.Criteria, ecc, typeof(EntityMetadata));
+            CompileFilters(Query.AttributeQuery?.Criteria, ecc, typeof(AttributeMetadata));
+            CompileFilters(Query.RelationshipQuery?.Criteria, ecc, typeof(RelationshipMetadataBase));
+        }
+
+        private void CompileFilters(MetadataFilterExpression criteria, ExpressionCompilationContext ecc, Type targetType)
+        {
+            if (criteria == null)
+                return;
+
+            foreach (var filter in criteria.Filters)
+                CompileFilters(filter, ecc, targetType);
+
+            foreach (var condition in criteria.Conditions)
+            {
+                // Convert the SQL value to the .NET value
+                var prop = targetType.GetProperty(condition.PropertyName);
+                var targetValueType = prop.PropertyType;
+
+                // Managed properties and nullable types are handled through their Value property
+                if (targetValueType.BaseType != null &&
+                    targetValueType.BaseType.IsGenericType &&
+                    targetValueType.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                    targetValueType = targetValueType.BaseType.GetGenericArguments()[0];
+
+                if (targetValueType.IsGenericType &&
+                    targetValueType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    targetValueType = targetValueType.GetGenericArguments()[0];
+
+                if (condition.Value is ScalarExpression expression)
+                    condition.Value = CompileExpression(expression, ecc, targetValueType);
+                else if (condition.Value is IList<ScalarExpression> expressions)
+                    condition.Value = new CompiledExpressionList(expressions.Select(e => CompileExpression(e, ecc, targetValueType))) { ElementType = targetValueType };
+            }
+        }
+
+        private CompiledExpression CompileExpression(ScalarExpression expression, ExpressionCompilationContext ecc, Type targetValueType)
+        {
+            // Compile the expression to return the SQL value
+            var expr = expression.Compile(ecc);
+            expression.GetType(ecc, out var exprSqlType);
+
+            var targetSqlType = GetPropertyType(targetValueType);
+            var sqlConverter = SqlTypeConverter.GetConversion(exprSqlType, targetSqlType);
+            
+            var targetNetType = targetSqlType.ToNetType(out _);
+            var netConverter = SqlTypeConverter.GetConversion(targetNetType, targetValueType);
+
+            return new CompiledExpression(expression, context => netConverter(sqlConverter((INullable)expr(context))));
         }
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
@@ -668,11 +724,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (cond.ConditionOperator == MetadataConditionOperator.GreaterThan || cond.ConditionOperator == MetadataConditionOperator.LessThan)
                     return true;
 
-                if (cond.ConditionOperator == MetadataConditionOperator.In)
-                    return Array.IndexOf((Array)cond.Value, null) == -1;
-
-                if (cond.ConditionOperator == MetadataConditionOperator.NotIn)
-                    return Array.IndexOf((Array)cond.Value, null) != -1;
+                if (cond.ConditionOperator == MetadataConditionOperator.In || cond.ConditionOperator == MetadataConditionOperator.NotIn)
+                    return true;
             }
 
             return false;
@@ -799,6 +852,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
+            // TODO: Execute expressions to get filter conditions, but preserve the original expressions for later executions
+            ApplyFilterValues(new ExpressionExecutionContext(context));
+
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {
                 if (Query.Properties == null)
@@ -861,7 +917,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
                 results = results.SelectMany(r => r.Entity.ManyToManyRelationships.Where(mm => ManyToManyRelationshipJoin == null || ((string) typeof(ManyToManyRelationshipMetadata).GetProperty(ManyToManyRelationshipJoin).GetValue(mm)) == r.Entity.LogicalName).Select(mm => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mm }));
 
-
             foreach (var result in results)
             {
                 var converted = new Entity();
@@ -923,6 +978,101 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private void ApplyFilterValues(ExpressionExecutionContext context)
+        {
+            ApplyFilterValues(Query.Criteria, context);
+            ApplyFilterValues(Query.AttributeQuery?.Criteria, context);
+            ApplyFilterValues(Query.RelationshipQuery?.Criteria, context);
+        }
+
+        private void ApplyFilterValues(MetadataFilterExpression criteria, ExpressionExecutionContext context)
+        {
+            if (criteria == null)
+                return;
+
+            foreach (var filter in criteria.Filters)
+                ApplyFilterValues(filter, context);
+
+            foreach (var condition in criteria.Conditions.ToArray())
+            {
+                MetadataFilterExpression replacementFilter = null;
+
+                if (condition.Value is CompiledExpression expression)
+                {
+                    var value = expression.Compiled(context);
+
+                    if (value == null)
+                    {
+                        // Comparing any value to null should always return false in SQL, but the metadata query endpoint allows them to match
+                        // using .NET semantics. Replace the condition with an impossible filter
+                        replacementFilter = new MetadataFilterExpression
+                        {
+                            Conditions =
+                            {
+                                new MetadataConditionExpression(condition.PropertyName, MetadataConditionOperator.Equals, null),
+                                new MetadataConditionExpression(condition.PropertyName, MetadataConditionOperator.NotEquals, null)
+                            }
+                        };
+                    }
+                    else if (value != null && value.GetType().IsEnum && !Enum.IsDefined(value.GetType(), value))
+                    {
+                        // Converting an unknown string to a enum will produce a -1 value. Replace the condition with a filter that produces
+                        // the correct results, e.g. AttributeTypeCode = -1 is impossible but AttributeTypeCode <> -1 is true for all non-null values
+                        if (condition.ConditionOperator == MetadataConditionOperator.Equals)
+                        {
+                            replacementFilter = new MetadataFilterExpression
+                            {
+                                Conditions =
+                                {
+                                    new MetadataConditionExpression(condition.PropertyName, MetadataConditionOperator.Equals, Enum.GetValues(value.GetType()).GetValue(0)),
+                                    new MetadataConditionExpression(condition.PropertyName, MetadataConditionOperator.NotEquals, Enum.GetValues(value.GetType()).GetValue(0))
+                                }
+                            };
+                        }
+                        else if (condition.ConditionOperator == MetadataConditionOperator.NotEquals)
+                        {
+                            replacementFilter = new MetadataFilterExpression
+                            {
+                                Conditions =
+                                {
+                                    new MetadataConditionExpression(condition.PropertyName, MetadataConditionOperator.NotEquals, null)
+                                }
+                            };
+                        }
+                    }
+                    else
+                    {
+                        condition.Value = value;
+                    }
+                }
+                else if (condition.Value is CompiledExpressionList expressions)
+                {
+                    var values = new List<object>();
+
+                    foreach (var expr in expressions)
+                    {
+                        var value = expr.Compiled(context);
+
+                        if (value == null || !value.GetType().IsEnum || Enum.IsDefined(value.GetType(), value))
+                            values.Add(value);
+                    }
+
+                    var array = Array.CreateInstance(expressions.ElementType, values.Count);
+
+                    for (var i = 0; i < values.Count; i++)
+                        array.SetValue(values[i], i);
+
+                    condition.Value = array;
+                }
+
+                if (replacementFilter != null)
+                {
+                    criteria.Conditions.Remove(condition);
+                    criteria.Filters.Add(replacementFilter);
+                }
+            }
+        }
+
         public override object Clone()
         {
             return new MetadataQueryNode
@@ -935,7 +1085,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ManyToOneRelationshipAlias = ManyToOneRelationshipAlias,
                 MetadataSource = MetadataSource,
                 OneToManyRelationshipAlias = OneToManyRelationshipAlias,
-                Query = Query,
+                Query = Query.Clone(),
                 _attributeCols = _attributeCols,
                 _entityCols = _entityCols,
                 _manyToManyRelationshipCols = _manyToManyRelationshipCols,

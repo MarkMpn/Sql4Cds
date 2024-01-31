@@ -894,7 +894,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (result is double d)
                 sqlValue = (SqlDouble)d;
             else if (result is XPath2NodeIterator nodeIterator)
-                sqlValue = context.PrimaryDataSource.DefaultCollation.ToSqlString(nodeIterator.Single().Value);
+                sqlValue = context.PrimaryDataSource.DefaultCollation.ToSqlString(nodeIterator.First().Value);
             else
                 throw new QueryExecutionException(new Sql4CdsError(16, 40517, $"Unsupported XPath return type '{result.GetType().Name}'"));
 
