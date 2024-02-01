@@ -453,6 +453,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void MissingAnchorQuery()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH cte (x, y) AS (
+                    SELECT x, y FROM cte
+                )
+                SELECT * FROM cte";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
         public void AliasedAnonymousColumn()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
@@ -488,6 +503,43 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void SelectStarFromValues()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                WITH source_data_cte AS (
+                    SELECT *
+                    FROM (VALUES
+                        ('M', 'B', '6152-000358'),
+                        ('M', 'B', '6152-000530'),
+                        ('M', 'B', '6152-000531'),
+                        ('B', 'C', '97048786'),
+                        ('C', 'D', '35528661'),
+                        ('A', 'B', '97680998')
+                    ) AS source_data (Column1, Column2, Column3)
+                )
+
+                SELECT * 
+                FROM source_data_cte;";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("Column1", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("source_data_cte.Column1", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("Column2", select.ColumnSet[1].OutputColumn);
+            Assert.AreEqual("source_data_cte.Column2", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("Column3", select.ColumnSet[2].OutputColumn);
+            Assert.AreEqual("source_data_cte.Column3", select.ColumnSet[2].SourceColumn);
+
+            var constantScan = AssertNode<ConstantScanNode>(select.Source);
+            Assert.AreEqual("source_data_cte", constantScan.Alias);
         }
 
         [TestMethod]

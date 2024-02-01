@@ -4545,47 +4545,66 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expectedColumnCount < inlineDerivedTable.Columns.Count)
                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8159, $"'{inlineDerivedTable.Alias.Value}' has fewer columns than were specified in the column list", inlineDerivedTable));
 
-            var rows = inlineDerivedTable.RowValues.Select(row => CreateSelectRow(row, inlineDerivedTable.Columns)).ToArray();
-            var select = (QueryExpression) rows[0];
+            var rows = inlineDerivedTable.RowValues.Select(row => ConvertSelectQuerySpec(CreateSelectRow(row, inlineDerivedTable.Columns), null, outerSchema, outerReferences, context));
+            var concat = new ConcatenateNode();
 
-            for (var i = 1; i < rows.Length; i++)
+            foreach (var row in rows)
             {
-                select = new BinaryQueryExpression
+                if (concat.ColumnSet.Count == 0)
                 {
-                    FirstQueryExpression = select,
-                    SecondQueryExpression = rows[i],
-                    All = true
-                };
-            }
+                    for (var i = 0; i < inlineDerivedTable.Columns.Count; i++)
+                        concat.ColumnSet.Add(new ConcatenateColumn { OutputColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier() });
+                }
 
-            var converted = ConvertSelectStatement(select, hints, outerSchema, outerReferences, context);
-            var source = converted.Source;
-
-            // Make sure expected column names are used
-            if (source is ConcatenateNode concat)
-            {
                 for (var i = 0; i < inlineDerivedTable.Columns.Count; i++)
                 {
-                    concat.ColumnSet[i].OutputColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier();
-                    converted.ColumnSet[i].SourceColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier();
+                    concat.ColumnSet[i].SourceColumns.Add(row.ColumnSet[i].SourceColumn);
+                    concat.ColumnSet[i].SourceExpressions.Add(row.ColumnSet[i].SourceExpression);
                 }
+
+                concat.Sources.Add(row.Source);
             }
-            else if (source is ComputeScalarNode compute)
+
+            var source = (IDataExecutionPlanNodeInternal) concat;
+
+            if (concat.Sources.Count == 1)
             {
-                for (var i = 0; i < converted.ColumnSet.Count; i++)
+                // If there was only one source, no need to return the concatenate node but make sure all the column names line up
+                source = concat.Sources[0];
+                var sourceCompute = source as ComputeScalarNode;
+
+                var rename = new ComputeScalarNode { Source = source };
+
+                foreach (var col in concat.ColumnSet)
                 {
-                    if (converted.ColumnSet[i].SourceColumn != converted.ColumnSet[i].OutputColumn && compute.Columns.TryGetValue(converted.ColumnSet[i].SourceColumn, out var expr))
+                    if (col.SourceColumns[0] != col.OutputColumn)
                     {
-                        compute.Columns[converted.ColumnSet[i].OutputColumn.EscapeIdentifier()] = expr;
-                        compute.Columns.Remove(converted.ColumnSet[i].SourceColumn);
-                        converted.ColumnSet[i].SourceColumn = converted.ColumnSet[i].OutputColumn.EscapeIdentifier();
+                        if (sourceCompute != null && sourceCompute.Columns.TryGetValue(col.SourceColumns[0], out var colValue))
+                        {
+                            sourceCompute.Columns.Remove(col.SourceColumns[0]);
+                            sourceCompute.Columns[col.OutputColumn] = colValue;
+                        }
+                        else
+                        {
+                            rename.Columns[col.OutputColumn] = col.SourceColumns[0].ToColumnReference();
+                        }
                     }
                 }
+
+                if (rename.Columns.Count > 0)
+                    source = rename;
             }
 
             // Make sure expected table name is used
             if (!String.IsNullOrEmpty(inlineDerivedTable.Alias?.Value))
+            {
+                var converted = new SelectNode { Source = source };
+
+                foreach (var col in concat.ColumnSet)
+                    converted.ColumnSet.Add(new SelectColumn { SourceColumn = col.OutputColumn, OutputColumn = col.OutputColumn, SourceExpression = col.OutputColumn.ToColumnReference() });
+
                 source = new AliasNode(converted, inlineDerivedTable.Alias, context);
+            }
 
             return source;
         }
