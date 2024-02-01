@@ -324,11 +324,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         // Start by converting the anchor query to a subquery
                         var plan = ConvertSelectStatement(cteValidator.AnchorQuery, hints, null, null, _nodeContext);
 
+                        plan.ExpandWildcardColumns(_nodeContext);
+
                         // Apply column aliases
                         if (cte.Columns.Count > 0)
                         {
-                            plan.ExpandWildcardColumns(_nodeContext);
-
                             if (cte.Columns.Count < plan.ColumnSet.Count)
                                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8158, $"'{cteValidator.Name}' has more columns than were specified in the column list", cte));
 
