@@ -44,8 +44,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The type of value that will be returned by the expression</returns>
         public static Type GetType(this TSqlFragment expr, ExpressionCompilationContext context, out DataTypeReference sqlType)
         {
-            var expression = ToExpression(expr, context, out sqlType, out _);
-            return expression.ReturnType;
+            var expression = ToExpression(expr, context, out _, out sqlType, out _);
+            return expression.Type;
         }
 
         /// <summary>
@@ -56,8 +56,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>A function that accepts an <see cref="ExpressionExecutionContext"/> representing the context the expression is being evaluated in and returns the value of the expression</returns>
         public static Func<ExpressionExecutionContext, object> Compile(this TSqlFragment expr, ExpressionCompilationContext context)
         {
-            var lambda = ToExpression(expr, context, out _, out var cacheKey);
-            var compiled = _cache.GetOrAdd(cacheKey, _ => new CompiledExpression<object>(expr, Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(lambda.Body), lambda.Parameters).Compile()));
+            var lambda = ToExpression(expr, context, out var parameters, out _, out var cacheKey);
+            var compiled = _cache.GetOrAdd(cacheKey, _ => new CompiledExpression<object>(expr, Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(lambda), parameters).Compile()));
 
             return eec => compiled.Compiled(eec, expr);
         }
@@ -70,13 +70,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>A function that accepts aan <see cref="ExpressionExecutionContext"/> representing the context the expression is being evaluated in and returns the value of the expression</returns>
         public static Func<ExpressionExecutionContext, bool> Compile(this BooleanExpression b, ExpressionCompilationContext context)
         {
-            var lambda = ToExpression(b, context, out _, out var cacheKey);
-            var compiled = _boolCache.GetOrAdd(cacheKey, _ => new CompiledExpression<bool>(b, Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, bool>>(Expression.IsTrue(lambda.Body), lambda.Parameters).Compile()));
+            var lambda = ToExpression(b, context, out var parameters, out _, out var cacheKey);
+            var compiled = _boolCache.GetOrAdd(cacheKey, _ => new CompiledExpression<bool>(b, Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, bool>>(Expression.IsTrue(lambda), parameters).Compile()));
 
             return eec => compiled.Compiled(eec, b);
         }
 
-        private static LambdaExpression ToExpression(this TSqlFragment expr, ExpressionCompilationContext context, out DataTypeReference sqlType, out string cacheKey)
+        private static Expression ToExpression(this TSqlFragment expr, ExpressionCompilationContext context, out ParameterExpression[] parameters, out DataTypeReference sqlType, out string cacheKey)
         {
             var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
             var exprParam = Expression.Parameter(typeof(TSqlFragment));
@@ -168,7 +168,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            return Expression.Lambda(expression, contextParam, exprParam);
+            parameters = new[] { contextParam, exprParam };
+            return expression;
         }
 
         private static Expression InvokeSubExpression<TParent, TChild>(this TParent parent, Func<TParent, TChild> child, Expression<Func<TParent, TChild>> subExpressionSelector, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, out DataTypeReference sqlType, out string cacheKey)
@@ -176,7 +177,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             where TChild : TSqlFragment
         {
             // Build an expression to invoke the child expression from within the context of the parent expression
-            var expr = child(parent).ToExpression(context, out sqlType, out cacheKey);
+            var expr = child(parent).ToExpression(context, out var parameters, out sqlType, out cacheKey);
 
             if (!(subExpressionSelector is LambdaExpression lambda) ||
                 !(lambda.Body is MemberExpression memberAccessor) ||
@@ -185,7 +186,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var subExpr = Expression.Property(Expression.Convert(exprParam, prop.DeclaringType), prop);
 
-            return Expression.Invoke(expr, contextParam, subExpr);
+            return Expression.Invoke(Expression.Lambda(expr, parameters), contextParam, subExpr);
         }
 
         private static Expression InvokeSubExpression<TParent, TChild>(this TParent parent, Func<TParent, TChild> child, Expression<Func<TParent, int, TChild>> subExpressionSelector, int index, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, out DataTypeReference sqlType, out string cacheKey)
@@ -193,11 +194,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             where TChild : TSqlFragment
         {
             // Build an expression to invoke the child expression from within the context of the parent expression
-            var expr = child(parent).ToExpression(context, out sqlType, out cacheKey);
+            var expr = child(parent).ToExpression(context, out var parameters, out sqlType, out cacheKey);
 
             var subExpr = Expression.Invoke(subExpressionSelector, Expression.Convert(exprParam, typeof(TParent)), Expression.Constant(index));
 
-            return Expression.Invoke(expr, contextParam, subExpr);
+            return Expression.Invoke(Expression.Lambda(expr, parameters), contextParam, subExpr);
         }
 
         private static Expression ToExpression(ColumnReferenceExpression col, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, out DataTypeReference sqlType, out string cacheKey)
