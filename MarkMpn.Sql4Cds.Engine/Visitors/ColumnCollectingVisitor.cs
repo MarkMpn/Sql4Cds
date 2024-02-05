@@ -92,8 +92,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             base.ExplicitVisit(node);
 
             // Keep track of aliases introduced in the SELECT clause so we can ignore them later
-            if (!String.IsNullOrEmpty(node.ColumnName?.Identifier?.Value))
-                _selectAliases.Add(node.ColumnName.Identifier.Value);
+            if (!String.IsNullOrEmpty(node.ColumnName?.Value))
+                _selectAliases.Add(node.ColumnName.Value);
         }
 
         public override void ExplicitVisit(OrderByClause node)
