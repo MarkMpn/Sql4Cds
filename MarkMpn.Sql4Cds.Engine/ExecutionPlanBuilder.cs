@@ -2427,6 +2427,12 @@ namespace MarkMpn.Sql4Cds.Engine
             var node = querySpec.FromClause == null || querySpec.FromClause.TableReferences.Count == 0 ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
             var logicalSchema = node.GetSchema(context);
 
+            // Rewrite ColumnReferenceExpressions to use the fully qualified column name. This simplifies rewriting the
+            // query later on due to aggregates etc. We need to process the SELECT clause first to capture aliases which might
+            // be used in the ORDER BY clause
+            var normalizeColNamesVisitor = new NormalizeColNamesVisitor(logicalSchema);
+            querySpec.Accept(normalizeColNamesVisitor);
+
             node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
             node = ConvertExistsSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
 

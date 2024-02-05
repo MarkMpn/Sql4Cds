@@ -154,6 +154,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RefactorNotIsNullVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RemoveRecursiveCTETableReferencesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplaceCtesWithSubqueriesVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\NormalizeColNamesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />

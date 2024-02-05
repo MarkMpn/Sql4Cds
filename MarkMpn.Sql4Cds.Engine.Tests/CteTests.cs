@@ -490,7 +490,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("lname", select.ColumnSet[2].OutputColumn);
             Assert.AreEqual("contact.lastname", select.ColumnSet[2].SourceColumn);
             var compute = AssertNode<ComputeScalarNode>(select.Source);
-            Assert.AreEqual("firstname + ''", compute.Columns["Expr1"].ToSql());
+            Assert.AreEqual("contact.firstname + ''", compute.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(compute.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
