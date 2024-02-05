@@ -6747,9 +6747,7 @@ where n = 'a'";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            Assert.AreEqual("n = 'a'", filter.Filter.ToSql());
-            var loop = AssertNode<NestedLoopNode>(filter.Source);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
             Assert.AreEqual("@Expr1", loop.OuterReferences["account.name"]);
             var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
             AssertFetchXml(fetch, @"
@@ -6762,7 +6760,9 @@ where n = 'a'";
             Assert.AreEqual("x", alias.Alias);
             Assert.AreEqual("Expr2", alias.ColumnSet.Single().SourceColumn);
             Assert.AreEqual("n", alias.ColumnSet.Single().OutputColumn);
-            var computeScalar = AssertNode<ComputeScalarNode>(alias.Source);
+            var filter = AssertNode<FilterNode>(alias.Source);
+            Assert.AreEqual("Expr2 = 'a'", filter.Filter.ToSql());
+            var computeScalar = AssertNode<ComputeScalarNode>(filter.Source);
             Assert.AreEqual("@Expr1 + ''", computeScalar.Columns["Expr2"].ToSql());
             var constantScan = AssertNode<ConstantScanNode>(computeScalar.Source);
             Assert.AreEqual(1, constantScan.Values.Count);

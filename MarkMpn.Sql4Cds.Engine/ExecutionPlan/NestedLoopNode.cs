@@ -305,7 +305,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToList();
 
             LeftSource.AddRequiredColumns(context, leftColumns);
-            RightSource.AddRequiredColumns(context, rightColumns);
+            RightSource.AddRequiredColumns(innerContext, rightColumns);
         }
 
         protected override INodeSchema GetRightSchema(NodeCompilationContext context)
