@@ -575,7 +575,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="styleType">An optional parameter defining the type of the <paramref name="style"/> expression</param>
         /// <param name="convert">An optional parameter containing the SQL CONVERT() function call to report any errors against</param>
         /// <returns>An expression to generate values of the required type</returns>
-        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, ConvertCall convert = null, bool throwOnTruncate = false)
+        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, TSqlFragment convert = null, bool throwOnTruncate = false)
         {
             if (from.IsSameAs(to))
                 return expr;
@@ -604,7 +604,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (!CanChangeTypeImplicit(styleType, DataTypeHelpers.Int))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8116, $"Argument data type {styleType.ToSql()} is invalid for argument 3 of convert function", convert.Style));
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8116, $"Argument data type {styleType.ToSql()} is invalid for argument 3 of convert function", ((ConvertCall)convert).Style));
 
             // Special case for conversion to sql_variant
             if (to.IsSameAs(DataTypeHelpers.Variant))
