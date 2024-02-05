@@ -1,20 +1,13 @@
 ﻿using System;
-using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Security.AccessControl;
 using System.ServiceModel;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using SelectColumn = MarkMpn.Sql4Cds.Engine.ExecutionPlan.SelectColumn;
 
