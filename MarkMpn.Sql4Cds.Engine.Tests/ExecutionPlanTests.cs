@@ -6845,5 +6845,43 @@ END CATCH";
                 Assert.AreEqual(1026, ex.Errors.Single().Number);
             }
         }
+
+        [DataTestMethod]
+        [DataRow(1)]
+        [DataRow(2)]
+        [DataRow(3)]
+        public void UpdateTop(int top)
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = $@"
+UPDATE account
+SET    name = 'Test'
+WHERE  accountid IN (SELECT   TOP {top} accountid
+                     FROM     account
+                     WHERE    name = 'Data8'
+                              AND employees > 0
+                     ORDER BY accountid)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            var compute = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual("'Test'", compute.Columns["Expr3"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            AssertFetchXml(fetch, $@"
+                <fetch top='{top}'>
+                  <entity name='account'>
+                    <attribute name='accountid' />
+                    <filter>
+                      <condition attribute='name' operator='eq' value='Data8' />
+                      <condition attribute='employees' operator='gt' value='0' />
+                    </filter>
+                    <order attribute='accountid' />
+                  </entity>
+                </fetch>");
+        }
     }
 }

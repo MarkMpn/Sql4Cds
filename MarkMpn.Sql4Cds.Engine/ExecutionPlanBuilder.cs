@@ -2628,7 +2628,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (references.Count == 0)
                 {
-                    if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, out var outputCol, out var merge))
+                    if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, true, out var outputCol, out var merge))
                     {
                         testColumn = outputCol;
                         join = merge;
@@ -2790,7 +2790,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     };
                 }
-                else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, out testColumn, out var merge))
+                else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, false, out testColumn, out var merge))
                 {
                     join = merge;
                 }
@@ -3626,7 +3626,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
                 BaseJoinNode join = null;
-                if (UseMergeJoin(node, subqueryPlan.Source, context, outerReferences, subqueryCol, null, false, out outputcol, out var merge))
+                if (UseMergeJoin(node, subqueryPlan.Source, context, outerReferences, subqueryCol, null, false, true, out outputcol, out var merge))
                 {
                     join = merge;
                 }
@@ -3722,7 +3722,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IDataExecutionPlanNodeInternal node, IDataExecutionPlanNodeInternal subqueryPlan, NodeCompilationContext context, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IDataExecutionPlanNodeInternal node, IDataExecutionPlanNodeInternal subqueryPlan, NodeCompilationContext context, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, bool preserveTop, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
@@ -3735,7 +3735,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (alias != null)
                 subNode = alias.Source;
 
-            if (subNode is TopNode top && top.Top is IntegerLiteral topLiteral && topLiteral.Value == "1")
+            if (subNode is TopNode top && !preserveTop)
                 subNode = top.Source;
 
             var filter = subNode as FilterNode;
@@ -4352,7 +4352,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var spool = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Lazy };
                         rhs = spool;
                     }
-                    else if (UseMergeJoin(lhs, subqueryPlan, context, lhsReferences, null, null, false, out _, out var merge))
+                    else if (UseMergeJoin(lhs, subqueryPlan, context, lhsReferences, null, null, false, true, out _, out var merge))
                     {
                         if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossApply)
                             merge.JoinType = QualifiedJoinType.Inner;
