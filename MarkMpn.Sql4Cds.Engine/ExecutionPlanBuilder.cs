@@ -164,6 +164,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1026, "GOTO cannot be used to jump into a TRY or CATCH scope", gotoNode.Statement));
             }
 
+            // Ensure rethrows are within a CATCH block
+            foreach (var rethrow in queries.OfType<ThrowNode>().Where(@throw => @throw.ErrorNumber == null))
+            {
+                if (!TryCatchPath(rethrow, queries).Contains("/catch-"))
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10704, "To rethrow an error, a THROW statement must be used inside a CATCH block. Insert the THROW statement inside a CATCH block, or add error parameters to the THROW statement", rethrow.Statement));
+            }
+
             if (EstimatedPlanOnly)
             {
                 foreach (var node in queries)
@@ -266,6 +273,10 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (statement is TryCatchStatement tryCatch)
             {
                 return ConvertTryCatchStatement(tryCatch, optimizer);
+            }
+            else if (statement is ThrowStatement @throw && @throw.ErrorNumber == null)
+            {
+                return ConvertThrowStatement(@throw);
             }
             else if (!EstimatedPlanOnly)
             {
@@ -619,7 +630,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     ErrorNumber = @throw.ErrorNumber,
                     ErrorMessage = @throw.Message,
-                    State = @throw.State
+                    State = @throw.State,
+                    Statement = @throw
                 }
             };
         }

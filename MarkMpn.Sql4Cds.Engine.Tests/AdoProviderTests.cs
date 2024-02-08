@@ -1755,6 +1755,47 @@ SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE
             }
         }
 
+        [TestMethod]
+        public void Rethrow()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    SELECT * FROM invalid_table;
+END TRY
+BEGIN CATCH
+    SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE();
+    THROW;
+END CATCH";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(208, reader.GetInt32(0));
+                    Assert.AreEqual(208, reader.GetInt32(1));
+                    Assert.AreEqual(16, reader.GetInt32(2));
+                    Assert.AreEqual(1, reader.GetInt32(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.AreEqual(2, reader.GetInt32(5));
+                    Assert.AreEqual("Invalid object name 'invalid_table'", reader.GetString(6));
+                    Assert.IsFalse(reader.Read());
+
+                    try
+                    {
+                        reader.NextResult();
+                        Assert.Fail();
+                    }
+                    catch (Sql4CdsException ex)
+                    {
+                        Assert.AreEqual(208, ex.Number);
+                        Assert.AreEqual(2, ex.LineNumber);
+                    }
+                }
+            }
+        }
+
         [DataTestMethod]
         [DataRow("SELECT FORMATMESSAGE('Signed int %i, %d %i, %d, %+i, %+d, %+i, %+d', 5, -5, 50, -50, -11, -11, 11, 11)", "Signed int 5, -5 50, -50, -11, -11, +11, +11")]
         [DataRow("SELECT FORMATMESSAGE('Signed int with up to 3 leading zeros %03i', 5)", "Signed int with up to 3 leading zeros 005")]

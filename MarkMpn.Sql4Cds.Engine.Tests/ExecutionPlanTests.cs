@@ -6883,5 +6883,23 @@ WHERE  accountid IN (SELECT   TOP {top} accountid
                   </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void RethrowMustBeWithinCatchBlock()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "THROW;";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(10704, ex.Errors.Single().Number);
+            }
+        }
     }
 }
