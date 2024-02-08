@@ -3434,7 +3434,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return query;
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNodeInternal node, DistinctNode distinct, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema, INodeSchema logicalSourceSchema)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNodeInternal node, DistinctNode distinct, QuerySpecification query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema, INodeSchema logicalSourceSchema)
         {
             var schema = node.GetSchema(context);
 
@@ -3541,10 +3541,20 @@ namespace MarkMpn.Sql4Cds.Engine
             else
                 select.Source = newSource;
 
-            if (computeScalar.Columns.Count > 0)
+            if (computeScalar.Columns.Count > 0 && query.OrderByClause != null)
             {
+                // Reuse the same calculations for the ORDER BY clause as well
                 var calculationRewrites = computeScalar.Columns.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
-                query.Accept(new RewriteVisitor(calculationRewrites));
+                var rewrite = new RewriteVisitor(calculationRewrites);
+
+                query.OrderByClause.Accept(rewrite);
+
+                // Need to rewrite the select elements as well if the order by clause references a column by index
+                if (query.OrderByClause.OrderByElements.Any(order => order.Expression is IntegerLiteral))
+                {
+                    foreach (var element in selectElements)
+                        element.Accept(rewrite);
+                }
             }
 
             if (distinct != null)
