@@ -1343,7 +1343,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var childContext = context;
 
-                    if (join is NestedLoopNode loop && loop.OuterReferences.Count > 0)
+                    if (join is NestedLoopNode loop && loop.OuterReferences != null && loop.OuterReferences.Count > 0)
                     {
                         var leftSchema = join.LeftSource.GetSchema(context);
                         var innerParameterTypes = context.ParameterTypes
