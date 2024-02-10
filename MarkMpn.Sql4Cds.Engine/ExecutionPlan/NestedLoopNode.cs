@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Implements a nested loop join
     /// </summary>
-    class NestedLoopNode : BaseJoinNode
+    class NestedLoopNode : BaseJoinNode, IExecutionPlanNodeWarning
     {
         /// <summary>
         /// The condition that must be true for two records to join
@@ -29,6 +29,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("Values from the outer query that should be passed as references to the inner query")]
         [DisplayName("Outer References")]
         public Dictionary<string,string> OuterReferences { get; set; }
+
+        [Browsable(false)]
+        public string Warning => JoinCondition == null ? "No Join Predicate" : null;
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {

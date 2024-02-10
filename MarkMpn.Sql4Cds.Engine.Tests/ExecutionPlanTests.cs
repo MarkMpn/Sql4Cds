@@ -6901,5 +6901,45 @@ WHERE  accountid IN (SELECT   TOP {top} accountid
                 Assert.AreEqual(10704, ex.Errors.Single().Number);
             }
         }
+
+        [TestMethod]
+        public void MistypedJoinCriteriaGeneratesWarning()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+SELECT a.name, c.fullname
+FROM account a INNER JOIN contact c ON c.contactid = c.parentcustomerid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual("No Join Predicate", loop.Warning);
+            var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+
+            AssertFetchXml(accountFetch, @"
+                <fetch>
+                  <entity name='account'>
+                    <attribute name='name' />
+                  </entity>
+                </fetch>");
+
+            var spool = AssertNode<TableSpoolNode>(loop.RightSource);
+            var contactFetch = AssertNode<FetchXmlScan>(spool.Source);
+
+            AssertFetchXml(contactFetch, @"
+                <fetch>
+                  <entity name='contact'>
+                    <attribute name='fullname' />
+                    <filter>
+                      <condition attribute='contactid' operator='eq' valueof='parentcustomerid' />
+                    </filter>
+                  </entity>
+                </fetch>");
+        }
     }
 }
