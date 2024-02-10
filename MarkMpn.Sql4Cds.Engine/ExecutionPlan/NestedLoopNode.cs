@@ -184,6 +184,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource = RightSource.FoldQuery(innerContext, hints);
             RightSource.Parent = this;
 
+            if (JoinCondition != null)
+            {
+                var joinColumns = JoinCondition.GetColumns().ToList();
+                var hasLeftColumn = joinColumns.Any(c => leftSchema.ContainsColumn(c, out _));
+                var hasRightColumn = joinColumns.Any(c => rightSchema.ContainsColumn(c, out _));
+
+                if (!hasLeftColumn)
+                {
+                    // Join condition doesn't reference columns from the left source, so we can remove it from the join
+                    // and apply it as a filter to the right source. Inner source will often have a table spool - add the filter
+                    // to the source of that spool to allow for better folding
+                    if (RightSource is TableSpoolNode innerSpool)
+                        innerSpool.Source = new FilterNode { Source = innerSpool.Source, Filter = JoinCondition };
+                    else
+                        RightSource = new FilterNode { Source = RightSource, Filter = JoinCondition };
+
+                    RightSource = RightSource.FoldQuery(innerContext, hints);
+                    RightSource.Parent = this;
+                }
+
+                if (!hasRightColumn)
+                {
+                    // Join condition doesn't reference columns from the right source, so we can remove it from the join
+                    // and apply it as a filter to the left source
+                    LeftSource = new FilterNode { Source = LeftSource, Filter = JoinCondition }.FoldQuery(context, hints);
+                    LeftSource.Parent = this;
+                }
+
+                if (!hasLeftColumn || !hasRightColumn)
+                    JoinCondition = null;
+            }
+
             FoldDefinedValues(rightSchema);
 
             if (LeftSource is ConstantScanNode constant &&
