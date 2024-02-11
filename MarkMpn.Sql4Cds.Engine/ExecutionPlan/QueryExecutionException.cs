@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else if (innerException is FaultException<OrganizationServiceFault> faultEx)
             {
-                Errors = new[] { new Sql4CdsError(16, FaultCodeToSqlError(faultEx.Detail.ErrorCode), message) };
+                Errors = new[] { new Sql4CdsError(16, FaultCodeToSqlError(faultEx.Detail), message) };
             }
             else if (innerException is AggregateException aggregateException)
             {
@@ -38,7 +38,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (innerEx is ISql4CdsErrorException innerSqlEx)
                         errors.AddRange(innerSqlEx.Errors);
                     else if (innerEx is FaultException<OrganizationServiceFault> innerFaultEx)
-                        errors.Add(new Sql4CdsError(16, FaultCodeToSqlError(innerFaultEx.Detail.ErrorCode), innerFaultEx.Message));
+                        errors.Add(new Sql4CdsError(16, FaultCodeToSqlError(innerFaultEx.Detail), innerFaultEx.Message));
                     else
                         errors.Add(new Sql4CdsError(16, 10337, innerEx.Message));
                 }
@@ -68,9 +68,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IReadOnlyList<Sql4CdsError> Errors { get; }
 
-        private static int FaultCodeToSqlError(int faultCode)
+        private static int FaultCodeToSqlError(OrganizationServiceFault fault)
         {
-            switch (faultCode)
+            switch (fault.ErrorCode)
             {
                 case -2147204288: return 8152;
                 case -2147217098: return 8115;
@@ -90,10 +90,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case -2147213282:
                 case -2147086332:
                 case -2147187954: return 547;
+                case 409: // Elastic tables use HTTP status codes instead of the standard web service error codes
                 case -2147220937: return 2627;
-
-                default: return 10337;
             }
+
+            if (fault.ErrorDetails.TryGetValue("ApiExceptionHttpStatusCode", out var httpStatusCode) &&
+                httpStatusCode is int httpError)
+            {
+                switch (httpError)
+                {
+                    case 409: return 2627;
+                }
+            }
+
+            return 10337;
         }
     }
 }
