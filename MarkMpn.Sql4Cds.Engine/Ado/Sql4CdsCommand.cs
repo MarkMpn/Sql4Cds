@@ -243,6 +243,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             try
             {
+                _cancelledManually = false;
+                _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
+
                 if (UseTDSEndpointDirectly)
                 {
 #if NETCOREAPP
@@ -290,11 +293,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     }
 
-                    return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database, node);
+                    return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database, node, _cts.Token);
                 }
 
-                _cancelledManually = false;
-                _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
                 var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
 
                 var reader = new Sql4CdsDataReader(this, options, behavior);

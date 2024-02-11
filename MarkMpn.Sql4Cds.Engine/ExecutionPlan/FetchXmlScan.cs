@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.ServiceModel;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -358,7 +359,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                res = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+                var task = Task.Run(() =>
+                {
+                    return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+                });
+
+                task.Wait(context.Options.CancellationToken);
+                res = task.Result;
             }
             catch (FaultException<OrganizationServiceFault> ex)
             {
@@ -416,7 +423,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 ((FetchExpression)req.Query).Query = Serialize(FetchXml);
-                var nextPage = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+
+                var task = Task.Run(() =>
+                {
+                    return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+                });
+
+                task.Wait(context.Options.CancellationToken);
+                var nextPage = task.Result;
+
                 PagesRetrieved++;
 
                 foreach (var entity in nextPage.Entities)

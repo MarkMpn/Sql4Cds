@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlClient;
-using System.Runtime.CompilerServices;
-using System.Text;
+using System.Threading;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -18,12 +16,14 @@ namespace MarkMpn.Sql4Cds.Engine
         private SqlDataReader _sqlDataReader;
         private readonly SqlNode _node;
 
-        public SqlDataReaderWrapper(Sql4CdsConnection connection, Sql4CdsCommand command, SqlConnection sqlConnection, SqlCommand sqlCommand, string dataSource, SqlNode node)
+        public SqlDataReaderWrapper(Sql4CdsConnection connection, Sql4CdsCommand command, SqlConnection sqlConnection, SqlCommand sqlCommand, string dataSource, SqlNode node, CancellationToken cancellationToken)
         {
             _connection = connection;
             _sqlConnection = sqlConnection;
             _sqlCommand = sqlCommand;
-            _sqlDataReader = sqlCommand.ExecuteReader();
+            cancellationToken.Register(() => _sqlCommand.Cancel());
+
+            HandleException(() => _sqlDataReader = sqlCommand.ExecuteReader());
             _node = node;
 
             foreach (SqlParameter parameter in sqlCommand.Parameters)

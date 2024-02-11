@@ -80,6 +80,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     throw;
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     throw new QueryExecutionException(ex.Message, ex) { Node = this };
@@ -104,6 +108,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (ex.Node == null)
                             ex.Node = this;
 
+                        throw;
+                    }
+                    catch (OperationCanceledException)
+                    {
                         throw;
                     }
                     catch (Exception ex)
