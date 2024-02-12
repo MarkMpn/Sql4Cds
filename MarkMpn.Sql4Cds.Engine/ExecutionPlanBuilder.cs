@@ -1,20 +1,13 @@
 ﻿using System;
-using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Security.AccessControl;
 using System.ServiceModel;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using SelectColumn = MarkMpn.Sql4Cds.Engine.ExecutionPlan.SelectColumn;
 
@@ -171,6 +164,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1026, "GOTO cannot be used to jump into a TRY or CATCH scope", gotoNode.Statement));
             }
 
+            // Ensure rethrows are within a CATCH block
+            foreach (var rethrow in queries.OfType<ThrowNode>().Where(@throw => @throw.ErrorNumber == null))
+            {
+                if (!TryCatchPath(rethrow, queries).Contains("/catch-"))
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10704, "To rethrow an error, a THROW statement must be used inside a CATCH block. Insert the THROW statement inside a CATCH block, or add error parameters to the THROW statement", rethrow.Statement));
+            }
+
             if (EstimatedPlanOnly)
             {
                 foreach (var node in queries)
@@ -274,6 +274,10 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 return ConvertTryCatchStatement(tryCatch, optimizer);
             }
+            else if (statement is ThrowStatement @throw && @throw.ErrorNumber == null)
+            {
+                return ConvertThrowStatement(@throw);
+            }
             else if (!EstimatedPlanOnly)
             {
                 return new[] { new UnparsedStatementNode { Statement = statement, Compiler = this, Optimizer = optimizer } };
@@ -324,11 +328,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         // Start by converting the anchor query to a subquery
                         var plan = ConvertSelectStatement(cteValidator.AnchorQuery, hints, null, null, _nodeContext);
 
+                        plan.ExpandWildcardColumns(_nodeContext);
+
                         // Apply column aliases
                         if (cte.Columns.Count > 0)
                         {
-                            plan.ExpandWildcardColumns(_nodeContext);
-
                             if (cte.Columns.Count < plan.ColumnSet.Count)
                                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8158, $"'{cteValidator.Name}' has more columns than were specified in the column list", cte));
 
@@ -626,7 +630,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     ErrorNumber = @throw.ErrorNumber,
                     ErrorMessage = @throw.Message,
-                    State = @throw.State
+                    State = @throw.State,
+                    Statement = @throw
                 }
             };
         }
@@ -1147,9 +1152,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 impersonate.ExecuteContext.Kind != ExecuteAsOption.User)
                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled impersonation type", impersonate.ExecuteContext));
 
-            if (!(impersonate.ExecuteContext.Principal is StringLiteral user))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled username variable", impersonate.ExecuteContext.Principal));
-
             IExecutionPlanNodeInternal source;
 
             // Create a SELECT query to find the user ID
@@ -1157,6 +1159,38 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 QueryExpression = new QuerySpecification
                 {
+                    SelectElements =
+                    {
+                        new SelectScalarExpression
+                        {
+                            Expression = impersonate.ExecuteContext.Principal,
+                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "username" } }
+                        },
+                        new SelectScalarExpression
+                        {
+                            Expression = new FunctionCall
+                            {
+                                FunctionName = new Identifier { Value = "max" },
+                                Parameters =
+                                {
+                                    "systemuserid".ToColumnReference()
+                                }
+                            },
+                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "systemuserid" } }
+                        },
+                        new SelectScalarExpression
+                        {
+                            Expression = new FunctionCall
+                            {
+                                FunctionName = new Identifier { Value = "count" },
+                                Parameters =
+                                {
+                                    new ColumnReferenceExpression { ColumnType = ColumnType.Wildcard }
+                                }
+                            },
+                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "count" } }
+                        }
+                    },
                     FromClause = new FromClause
                     {
                         TableReferences =
@@ -1170,32 +1204,37 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             FirstExpression = impersonate.ExecuteContext.Kind == ExecuteAsOption.Login ? "domainname".ToColumnReference() : "systemuserid".ToColumnReference(),
                             ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = user
-                        }
-                    },
-                    SelectElements =
-                    {
-                        new SelectScalarExpression
-                        {
-                            Expression = "systemuserid".ToColumnReference()
+                            SecondExpression = impersonate.ExecuteContext.Principal
                         }
                     }
                 }
             };
 
+            var userIdSource = "systemuserid";
+            var filterValueSource = "username";
+            var countSource = "count";
+
             var select = ConvertSelectStatement(selectStatement);
 
             if (select is SelectNode selectNode)
+            {
                 source = selectNode.Source;
+                userIdSource = selectNode.ColumnSet.Single(c => c.OutputColumn == userIdSource).SourceColumn;
+                filterValueSource = selectNode.ColumnSet.Single(c => c.OutputColumn == filterValueSource).SourceColumn;
+                countSource = selectNode.ColumnSet.Single(c => c.OutputColumn == countSource).SourceColumn;
+            }
             else
+            {
                 source = select;
+            }
 
             return new ExecuteAsNode
             {
-                UserIdSource = "systemuser.systemuserid",
+                UserIdSource = userIdSource,
                 Source = source,
                 DataSource = Options.PrimaryDataSource,
-                Username = user.Value
+                FilterValueSource = filterValueSource,
+                CountSource = countSource
             };
         }
 
@@ -2393,6 +2432,12 @@ namespace MarkMpn.Sql4Cds.Engine
             var node = querySpec.FromClause == null || querySpec.FromClause.TableReferences.Count == 0 ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
             var logicalSchema = node.GetSchema(context);
 
+            // Rewrite ColumnReferenceExpressions to use the fully qualified column name. This simplifies rewriting the
+            // query later on due to aggregates etc. We need to process the SELECT clause first to capture aliases which might
+            // be used in the ORDER BY clause
+            var normalizeColNamesVisitor = new NormalizeColNamesVisitor(logicalSchema);
+            querySpec.Accept(normalizeColNamesVisitor);
+
             node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
             node = ConvertExistsSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
 
@@ -2595,7 +2640,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (references.Count == 0)
                 {
-                    if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, out var outputCol, out var merge))
+                    if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, true, out var outputCol, out var merge))
                     {
                         testColumn = outputCol;
                         join = merge;
@@ -2757,7 +2802,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     };
                 }
-                else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, out testColumn, out var merge))
+                else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, false, out testColumn, out var merge))
                 {
                     join = merge;
                 }
@@ -3401,7 +3446,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return query;
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNodeInternal node, DistinctNode distinct, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema, INodeSchema logicalSourceSchema)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNodeInternal node, DistinctNode distinct, QuerySpecification query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema, INodeSchema logicalSourceSchema)
         {
             var schema = node.GetSchema(context);
 
@@ -3508,10 +3553,20 @@ namespace MarkMpn.Sql4Cds.Engine
             else
                 select.Source = newSource;
 
-            if (computeScalar.Columns.Count > 0)
+            if (computeScalar.Columns.Count > 0 && query.OrderByClause != null)
             {
+                // Reuse the same calculations for the ORDER BY clause as well
                 var calculationRewrites = computeScalar.Columns.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
-                query.Accept(new RewriteVisitor(calculationRewrites));
+                var rewrite = new RewriteVisitor(calculationRewrites);
+
+                query.OrderByClause.Accept(rewrite);
+
+                // Need to rewrite the select elements as well if the order by clause references a column by index
+                if (query.OrderByClause.OrderByElements.Any(order => order.Expression is IntegerLiteral))
+                {
+                    foreach (var element in selectElements)
+                        element.Accept(rewrite);
+                }
             }
 
             if (distinct != null)
@@ -3583,7 +3638,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
                 BaseJoinNode join = null;
-                if (UseMergeJoin(node, subqueryPlan.Source, context, outerReferences, subqueryCol, null, false, out outputcol, out var merge))
+                if (UseMergeJoin(node, subqueryPlan.Source, context, outerReferences, subqueryCol, null, false, true, out outputcol, out var merge))
                 {
                     join = merge;
                 }
@@ -3679,7 +3734,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IDataExecutionPlanNodeInternal node, IDataExecutionPlanNodeInternal subqueryPlan, NodeCompilationContext context, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IDataExecutionPlanNodeInternal node, IDataExecutionPlanNodeInternal subqueryPlan, NodeCompilationContext context, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, bool preserveTop, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
@@ -3692,7 +3747,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (alias != null)
                 subNode = alias.Source;
 
-            if (subNode is TopNode top && top.Top is IntegerLiteral topLiteral && topLiteral.Value == "1")
+            if (subNode is TopNode top && !preserveTop)
                 subNode = top.Source;
 
             var filter = subNode as FilterNode;
@@ -4309,7 +4364,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var spool = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Lazy };
                         rhs = spool;
                     }
-                    else if (UseMergeJoin(lhs, subqueryPlan, context, lhsReferences, null, null, false, out _, out var merge))
+                    else if (UseMergeJoin(lhs, subqueryPlan, context, lhsReferences, null, null, false, true, out _, out var merge))
                     {
                         if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossApply)
                             merge.JoinType = QualifiedJoinType.Inner;
@@ -4511,47 +4566,66 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expectedColumnCount < inlineDerivedTable.Columns.Count)
                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8159, $"'{inlineDerivedTable.Alias.Value}' has fewer columns than were specified in the column list", inlineDerivedTable));
 
-            var rows = inlineDerivedTable.RowValues.Select(row => CreateSelectRow(row, inlineDerivedTable.Columns)).ToArray();
-            var select = (QueryExpression) rows[0];
+            var rows = inlineDerivedTable.RowValues.Select(row => ConvertSelectQuerySpec(CreateSelectRow(row, inlineDerivedTable.Columns), null, outerSchema, outerReferences, context));
+            var concat = new ConcatenateNode();
 
-            for (var i = 1; i < rows.Length; i++)
+            foreach (var row in rows)
             {
-                select = new BinaryQueryExpression
+                if (concat.ColumnSet.Count == 0)
                 {
-                    FirstQueryExpression = select,
-                    SecondQueryExpression = rows[i],
-                    All = true
-                };
-            }
+                    for (var i = 0; i < inlineDerivedTable.Columns.Count; i++)
+                        concat.ColumnSet.Add(new ConcatenateColumn { OutputColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier() });
+                }
 
-            var converted = ConvertSelectStatement(select, hints, outerSchema, outerReferences, context);
-            var source = converted.Source;
-
-            // Make sure expected column names are used
-            if (source is ConcatenateNode concat)
-            {
                 for (var i = 0; i < inlineDerivedTable.Columns.Count; i++)
                 {
-                    concat.ColumnSet[i].OutputColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier();
-                    converted.ColumnSet[i].SourceColumn = inlineDerivedTable.Columns[i].Value.EscapeIdentifier();
+                    concat.ColumnSet[i].SourceColumns.Add(row.ColumnSet[i].SourceColumn);
+                    concat.ColumnSet[i].SourceExpressions.Add(row.ColumnSet[i].SourceExpression);
                 }
+
+                concat.Sources.Add(row.Source);
             }
-            else if (source is ComputeScalarNode compute)
+
+            var source = (IDataExecutionPlanNodeInternal) concat;
+
+            if (concat.Sources.Count == 1)
             {
-                for (var i = 0; i < converted.ColumnSet.Count; i++)
+                // If there was only one source, no need to return the concatenate node but make sure all the column names line up
+                source = concat.Sources[0];
+                var sourceCompute = source as ComputeScalarNode;
+
+                var rename = new ComputeScalarNode { Source = source };
+
+                foreach (var col in concat.ColumnSet)
                 {
-                    if (converted.ColumnSet[i].SourceColumn != converted.ColumnSet[i].OutputColumn && compute.Columns.TryGetValue(converted.ColumnSet[i].SourceColumn, out var expr))
+                    if (col.SourceColumns[0] != col.OutputColumn)
                     {
-                        compute.Columns[converted.ColumnSet[i].OutputColumn.EscapeIdentifier()] = expr;
-                        compute.Columns.Remove(converted.ColumnSet[i].SourceColumn);
-                        converted.ColumnSet[i].SourceColumn = converted.ColumnSet[i].OutputColumn.EscapeIdentifier();
+                        if (sourceCompute != null && sourceCompute.Columns.TryGetValue(col.SourceColumns[0], out var colValue))
+                        {
+                            sourceCompute.Columns.Remove(col.SourceColumns[0]);
+                            sourceCompute.Columns[col.OutputColumn] = colValue;
+                        }
+                        else
+                        {
+                            rename.Columns[col.OutputColumn] = col.SourceColumns[0].ToColumnReference();
+                        }
                     }
                 }
+
+                if (rename.Columns.Count > 0)
+                    source = rename;
             }
 
             // Make sure expected table name is used
             if (!String.IsNullOrEmpty(inlineDerivedTable.Alias?.Value))
+            {
+                var converted = new SelectNode { Source = source };
+
+                foreach (var col in concat.ColumnSet)
+                    converted.ColumnSet.Add(new SelectColumn { SourceColumn = col.OutputColumn, OutputColumn = col.OutputColumn, SourceExpression = col.OutputColumn.ToColumnReference() });
+
                 source = new AliasNode(converted, inlineDerivedTable.Alias, context);
+            }
 
             return source;
         }

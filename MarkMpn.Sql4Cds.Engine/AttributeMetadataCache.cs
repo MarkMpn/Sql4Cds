@@ -5,6 +5,7 @@ using Microsoft.Xrm.Sdk.Metadata.Query;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.ServiceModel;
 using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -57,10 +58,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     _metadata[name] = metadata.EntityMetadata;
                     return metadata.EntityMetadata;
                 }
-                catch (Exception ex)
+                catch (FaultException ex)
                 {
                     _invalidEntities[name] = ex;
                     throw;
+                }
+                catch (Exception ex)
+                {
+                    _invalidEntities[name] = ex;
+                    throw new FaultException<OrganizationServiceFault>(new OrganizationServiceFault { Message = ex.Message });
                 }
             }
         }

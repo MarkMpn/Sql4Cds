@@ -38,12 +38,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var compilationContext = new ExpressionCompilationContext(context, null, null);
             var executionContext = new ExpressionExecutionContext(context);
 
+            var cols = Schema.Select(col => new { OutputColumn = PrefixWithAlias(col.Key), SourceColumn = col.Key }).ToArray();
+
             foreach (var row in Values)
             {
                 var value = new Entity();
 
-                foreach (var col in Schema)
-                    value[PrefixWithAlias(col.Key)] = row[col.Key].Compile(compilationContext)(executionContext);
+                foreach (var col in cols)
+                    value[col.OutputColumn] = row[col.SourceColumn].Compile(compilationContext)(executionContext);
 
                 yield return value;
             }

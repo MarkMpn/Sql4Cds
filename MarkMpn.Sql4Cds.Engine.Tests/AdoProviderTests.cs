@@ -1755,6 +1755,47 @@ SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE
             }
         }
 
+        [TestMethod]
+        public void Rethrow()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+BEGIN TRY
+    SELECT * FROM invalid_table;
+END TRY
+BEGIN CATCH
+    SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), ERROR_MESSAGE();
+    THROW;
+END CATCH";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(208, reader.GetInt32(0));
+                    Assert.AreEqual(208, reader.GetInt32(1));
+                    Assert.AreEqual(16, reader.GetInt32(2));
+                    Assert.AreEqual(1, reader.GetInt32(3));
+                    Assert.IsTrue(reader.IsDBNull(4));
+                    Assert.AreEqual(2, reader.GetInt32(5));
+                    Assert.AreEqual("Invalid object name 'invalid_table'", reader.GetString(6));
+                    Assert.IsFalse(reader.Read());
+
+                    try
+                    {
+                        reader.NextResult();
+                        Assert.Fail();
+                    }
+                    catch (Sql4CdsException ex)
+                    {
+                        Assert.AreEqual(208, ex.Number);
+                        Assert.AreEqual(2, ex.LineNumber);
+                    }
+                }
+            }
+        }
+
         [DataTestMethod]
         [DataRow("SELECT FORMATMESSAGE('Signed int %i, %d %i, %d, %+i, %+d, %+i, %+d', 5, -5, 50, -50, -11, -11, 11, 11)", "Signed int 5, -5 50, -50, -11, -11, +11, +11")]
         [DataRow("SELECT FORMATMESSAGE('Signed int with up to 3 leading zeros %03i', 5)", "Signed int with up to 3 leading zeros 005")]
@@ -1777,6 +1818,112 @@ SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE
                 cmd.CommandText = query;
                 var actual = (string)cmd.ExecuteScalar();
                 Assert.AreEqual(expected, actual);
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("accountid", "uniqueidentifier", 8169)]
+        [DataRow("employees", "int", 245)]
+        [DataRow("createdon", "datetime", 241)]
+        [DataRow("turnover", "money", 235)]
+        [DataRow("new_decimalprop", "decimal", 8114)]
+        [DataRow("new_doubleprop", "float", 8114)]
+        public void ConversionErrors(string column, string type, int expectedError)
+        {
+            var tableName = column.StartsWith("new_") ? "new_customentity" : "account";
+
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                var accountId = Guid.NewGuid();
+                _context.Data["account"] = new Dictionary<Guid, Entity>
+                {
+                    [accountId] = new Entity("account", accountId)
+                    {
+                        ["accountid"] = accountId,
+                        ["employees"] = 10,
+                        ["createdon"] = DateTime.Now,
+                        ["turnover"] = new Money(1_000_000),
+                        ["address1_latitude"] = 45.0D
+                    }
+                };
+                _context.Data["new_customentity"] = new Dictionary<Guid, Entity>
+                {
+                    [accountId] = new Entity("new_customentity", accountId)
+                    {
+                        ["new_customentityid"] = accountId,
+                        ["new_decimalprop"] = 123.45M,
+                        ["new_doubleprop"] = 123.45D
+                    }
+                };
+
+                var queries = new[]
+                {
+                    // The error should be thrown when filtering by a column in FetchXML
+                    $"SELECT * FROM {tableName} WHERE {column} = 'test'",
+
+                    // The same error should also be thrown when comparing the values in an expression
+                    $"SELECT CASE WHEN {column} = 'test' then 1 else 0 end FROM {tableName}",
+
+                    // And also when converting a value directly without a comparison
+                    $"SELECT CAST('test' AS {type})"
+                };
+
+                foreach (var query in queries)
+                {
+                    // The error should not be thrown when generating an estimated plan
+                    cmd.CommandText = query;
+                    cmd.Prepare();
+
+                    try
+                    {
+                        cmd.ExecuteNonQuery();
+                        Assert.Fail();
+                    }
+                    catch (Sql4CdsException ex)
+                    {
+                        Assert.AreEqual(expectedError, ex.Number);
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MetadataGuidConversionErrors()
+        {
+            // Failures converting string to guid should be handled in the same way for metadata queries as for FetchXML
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE metadataid = 'test'";
+                cmd.Prepare();
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8169, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MetadataEnumConversionErrors()
+        {
+            // Enum values are presented as simple strings, so there should be no error when converting invalid values
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE ownershiptype = 'test'";
+                cmd.Prepare();
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsFalse(reader.Read());
+                }
             }
         }
     }

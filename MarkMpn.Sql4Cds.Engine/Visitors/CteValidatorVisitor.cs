@@ -18,6 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         private ScalarSubquery _subquery;
         private QualifiedJoin _outerJoin;
         private int _nestedQueryDepth;
+        private CommonTableExpression _root;
 
         public string Name { get; private set; }
 
@@ -29,6 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void Visit(CommonTableExpression node)
         {
+            _root = node;
             Name = node.ExpressionName.Value;
 
             base.Visit(node);
@@ -158,6 +160,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
                 if (!IsRecursive)
                     AnchorQuery = node;
+                else if (AnchorQuery == null)
+                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 246, $"No anchor member was specified for recursive query \"{Name}\"", _root));
                 else
                     RecursiveQueries.Add(node);
             }

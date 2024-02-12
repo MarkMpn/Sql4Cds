@@ -567,11 +567,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='accountid' aggregate='count' alias='count' />
-                        <attribute name='name' aggregate='countcolumn' alias='name_count' />
-                        <attribute name='name' aggregate='countcolumn' distinct='true' alias='name_count_distinct' />
-                        <attribute name='name' aggregate='max' alias='name_max' />
-                        <attribute name='name' aggregate='min' alias='name_min' />
-                        <attribute name='employees' aggregate='avg' alias='employees_avg' />
+                        <attribute name='name' aggregate='countcolumn' alias='account_name_count' />
+                        <attribute name='name' aggregate='countcolumn' distinct='true' alias='account_name_count_distinct' />
+                        <attribute name='name' aggregate='max' alias='account_name_max' />
+                        <attribute name='name' aggregate='min' alias='account_name_min' />
+                        <attribute name='employees' aggregate='avg' alias='account_employees_avg' />
                     </entity>
                 </fetch>
             ");
@@ -2029,7 +2029,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, selectNode.ColumnSet.Count);
             Assert.AreEqual("globaloptionset.displayname", selectNode.ColumnSet[0].SourceColumn);
             var filterNode = (FilterNode)selectNode.Source;
-            Assert.AreEqual("name = 'test'", filterNode.Filter.ToSql());
+            Assert.AreEqual("globaloptionset.name = 'test'", filterNode.Filter.ToSql());
             var optionsetNode = (GlobalOptionSetQueryNode)filterNode.Source;
 
             var dataReader = selectNode.Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
@@ -2075,10 +2075,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
-            Assert.AreEqual(7, dataTable.Rows.Count);
+            Assert.AreEqual(9, dataTable.Rows.Count);
             var row = 0;
             Assert.AreEqual("new_boolprop", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_customentityid", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_decimalprop", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_doubleprop", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_name", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_optionsetvalue", dataTable.Rows[row++]["logicalname1"]);
             Assert.AreEqual("new_optionsetvaluecollection", dataTable.Rows[row++]["logicalname1"]);

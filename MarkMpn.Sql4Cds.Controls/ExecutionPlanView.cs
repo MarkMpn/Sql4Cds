@@ -30,6 +30,8 @@ namespace MarkMpn.Sql4Cds.Controls
         private List<Line> _lines;
         private int _maxY;
         private int _maxBottom;
+        private ToolTip _toolTip;
+        private IExecutionPlanNode _tooltipNode;
 
         const int _offset = 32;
         private readonly Size _iconSize = new Size(32, 32);
@@ -38,6 +40,13 @@ namespace MarkMpn.Sql4Cds.Controls
         {
             AutoScroll = true;
             DoubleBuffered = true;
+
+            _toolTip = new ToolTip
+            {
+                InitialDelay = 1000, // Hover the mouse for 1 second before showing the tooltip
+                AutoPopDelay = 5000, // Show the tooltip for 5 seconds once triggered
+                ReshowDelay = 1000,  // Delay 1 second between different controls
+            };
         }
 
         public bool Executed { get; set; }
@@ -167,7 +176,7 @@ namespace MarkMpn.Sql4Cds.Controls
                         e.Graphics.DrawImage(image, iconRect);
                     }
 
-                    if (Exception?.Node == kvp.Key)
+                    if (Exception?.Node == kvp.Key || (kvp.Key is IExecutionPlanNodeWarning warning && warning.Warning != null))
                     {
                         // Show an error icon overlay
                         e.Graphics.DrawImage(SystemIcons.Error.ToBitmap(), new Rectangle(iconRect.Location, new Size(16, 16)));
@@ -287,32 +296,49 @@ namespace MarkMpn.Sql4Cds.Controls
             base.OnMouseClick(e);
             Focus();
 
-            var hit = false;
+            var hit = HitTest(e.Location);
 
+            if (Selected != null)
+                Invalidate(Selected);
+
+            Selected = hit;
+
+            if (Selected != null)
+                Invalidate(Selected);
+
+            OnNodeSelected(EventArgs.Empty);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+
+            var hit = HitTest(e.Location);
+
+            if (hit != _tooltipNode)
+            {
+                if (Exception != null && Exception.Node == hit)
+                    _toolTip.SetToolTip(this, Exception.Message);
+                else if (hit is IExecutionPlanNodeWarning warning && warning.Warning != null)
+                    _toolTip.SetToolTip(this, warning.Warning);
+                else if (hit is IFetchXmlExecutionPlanNode fetch)
+                    _toolTip.SetToolTip(this, fetch.FetchXmlString);
+                else
+                    _toolTip.SetToolTip(this, null);
+
+                _tooltipNode = hit;
+            }
+        }
+
+        private IExecutionPlanNode HitTest(Point pt)
+        {
             foreach (var node in _nodeLocations)
             {
-                if (OriginToClient(node.Value).Contains(e.Location))
-                {
-                    if (Selected != null)
-                        Invalidate(Selected);
-
-                    Selected = node.Key;
-
-                    Invalidate(Selected);
-
-                    OnNodeSelected(EventArgs.Empty);
-
-                    hit = true;
-                    break;
-                }
+                if (OriginToClient(node.Value).Contains(pt))
+                    return node.Key;
             }
 
-            if (!hit && Selected != null)
-            {
-                Invalidate(Selected);
-                Selected = null;
-                OnNodeSelected(EventArgs.Empty);
-            }
+            return null;
         }
 
         protected override void OnGotFocus(EventArgs e)

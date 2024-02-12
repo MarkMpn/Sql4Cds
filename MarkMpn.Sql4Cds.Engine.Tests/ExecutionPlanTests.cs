@@ -465,7 +465,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
-                        <attribute name='employees' aggregate='sum' alias='employees_sum' />
+                        <attribute name='employees' aggregate='sum' alias='account_employees_sum' />
                         <order alias='name' />
                     </entity>
                 </fetch>");
@@ -474,15 +474,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("account.name", partitionAggregate.GroupBy[0].GetColumnName());
             Assert.AreEqual(2, partitionAggregate.Aggregates.Count);
             Assert.AreEqual(AggregateType.CountStar, partitionAggregate.Aggregates["count"].AggregateType);
-            Assert.AreEqual(AggregateType.Sum, partitionAggregate.Aggregates["employees_sum"].AggregateType);
-            Assert.AreEqual("employees_sum", partitionAggregate.Aggregates["employees_sum"].SqlExpression.ToSql());
+            Assert.AreEqual(AggregateType.Sum, partitionAggregate.Aggregates["account_employees_sum"].AggregateType);
+            Assert.AreEqual("account_employees_sum", partitionAggregate.Aggregates["account_employees_sum"].SqlExpression.ToSql());
             var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
             AssertFetchXml(partitionFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
-                        <attribute name='employees' aggregate='sum' alias='employees_sum' />
+                        <attribute name='employees' aggregate='sum' alias='account_employees_sum' />
                         <order alias='name' />
                     </entity>
                 </fetch>");
@@ -491,8 +491,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("account.name", aggregate.GroupBy[0].GetColumnName());
             Assert.AreEqual(2, aggregate.Aggregates.Count);
             Assert.AreEqual(AggregateType.CountStar, aggregate.Aggregates["count"].AggregateType);
-            Assert.AreEqual(AggregateType.Sum, aggregate.Aggregates["employees_sum"].AggregateType);
-            Assert.AreEqual("employees", aggregate.Aggregates["employees_sum"].SqlExpression.ToSql());
+            Assert.AreEqual(AggregateType.Sum, aggregate.Aggregates["account_employees_sum"].AggregateType);
+            Assert.AreEqual("account.employees", aggregate.Aggregates["account_employees_sum"].SqlExpression.ToSql());
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
@@ -956,7 +956,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(1, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns["Expr1"].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -1011,7 +1011,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr3.name", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
@@ -1044,7 +1044,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.createdon"]);
@@ -1137,7 +1137,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.createdon"]);
@@ -1182,7 +1182,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr2", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
@@ -1224,7 +1224,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
@@ -1275,7 +1275,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
@@ -1328,7 +1328,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr5", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.parentcustomerid"]);
@@ -1417,7 +1417,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(1, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("contact.firstname + ' ' + contact.lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -1503,6 +1503,60 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='fullname' />
                         <order attribute='fullname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UnionMultiple()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT name FROM account
+                UNION
+                SELECT fullname FROM contact
+                UNION
+                SELECT domainname FROM systemuser";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("name", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
+            var distinct = AssertNode<DistinctNode>(select.Source);
+            Assert.AreEqual("Expr2", distinct.Columns.Single());
+            var concat = AssertNode<ConcatenateNode>(distinct.Source);
+            Assert.AreEqual(3, concat.Sources.Count);
+            Assert.AreEqual("Expr2", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("account.name", concat.ColumnSet[0].SourceColumns[0]);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
+            Assert.AreEqual("systemuser.domainname", concat.ColumnSet[0].SourceColumns[2]);
+            var accountFetch = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            AssertFetchXml(accountFetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            AssertFetchXml(contactFetch, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <order attribute='fullname' />
+                    </entity>
+                </fetch>");
+            var systemuserFetch = AssertNode<FetchXmlScan>(concat.Sources[2]);
+            AssertFetchXml(systemuserFetch, @"
+                <fetch distinct='true'>
+                    <entity name='systemuser'>
+                        <attribute name='domainname' />
+                        <order attribute='domainname' />
                     </entity>
                 </fetch>");
         }
@@ -2639,7 +2693,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, meta.Query.Criteria.Conditions.Count);
             Assert.AreEqual("ObjectTypeCode", meta.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.Equals, meta.Query.Criteria.Conditions[0].ConditionOperator);
-            Assert.AreEqual(1, meta.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual("1", ((CompiledExpression)meta.Query.Criteria.Conditions[0].Value).Expression.ToSql());
         }
 
         [TestMethod]
@@ -2661,7 +2715,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var meta = AssertNode<MetadataQueryNode>(filter.Source);
 
             // We don't know the case of the schema name, so need to do this condition in a filter node to do it case insensitively
-            Assert.AreEqual("schemaname = 'Account'", filter.Filter.ToSql());
+            Assert.AreEqual("entity.schemaname = 'Account'", filter.Filter.ToSql());
 
             // We know logical names are lower case so we can fold this part of the filter into the data source.
             Assert.AreEqual(MetadataSource.Entity, meta.MetadataSource);
@@ -2670,7 +2724,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, meta.Query.Criteria.Conditions.Count);
             Assert.AreEqual("LogicalName", meta.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.Equals, meta.Query.Criteria.Conditions[0].ConditionOperator);
-            Assert.AreEqual("account", meta.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual("LOWER('Account')", ((CompiledExpression)meta.Query.Criteria.Conditions[0].Value).Expression.ToSql());
         }
 
         [TestMethod]
@@ -3546,10 +3600,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("Expr1", select.ColumnSet[0].SourceColumn);
 
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
-            Assert.AreEqual("collectionschemaname + '.' + entitysetname", computeScalar.Columns["Expr1"].ToSql());
+            Assert.AreEqual("entity.collectionschemaname + '.' + entity.entitysetname", computeScalar.Columns["Expr1"].ToSql());
 
             var filter = AssertNode<FilterNode>(computeScalar.Source);
-            Assert.AreEqual("description LIKE '%test%'", filter.Filter.ToSql());
+            Assert.AreEqual("entity.description LIKE '%test%'", filter.Filter.ToSql());
 
             var metadataQuery = AssertNode<MetadataQueryNode>(filter.Source);
             Assert.AreEqual(MetadataSource.Entity, metadataQuery.MetadataSource);
@@ -3813,7 +3867,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sort = AssertNode<SortNode>(select.Source);
             Assert.AreEqual("Expr1", sort.Sorts.Single().ToSql());
             var compute = AssertNode<ComputeScalarNode>(sort.Source);
-            Assert.AreEqual("name + 'foo'", compute.Columns["Expr1"].ToSql());
+            Assert.AreEqual("account.name + 'foo'", compute.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(compute.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -4136,7 +4190,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
             Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
             var setCompute = AssertNode<ComputeScalarNode>(setVariable.Source);
-            Assert.AreEqual("CONVERT (VARCHAR (3), name)", setCompute.Columns["Expr1"].ToSql());
+            Assert.AreEqual("CONVERT (VARCHAR (3), account.name)", setCompute.Columns["Expr1"].ToSql());
             var setFetchXml = AssertNode<FetchXmlScan>(setCompute.Source);
             AssertFetchXml(setFetchXml, @"
                 <fetch>
@@ -6400,7 +6454,7 @@ FROM   account AS r;";
             Assert.AreEqual("s.systemuserid", fetch2.ColumnMappings[1].SourceColumn);
             Assert.AreEqual("b_s.systemuserid", fetch2.ColumnMappings[1].OutputColumn);
             Assert.AreEqual("s.msdyn_agentType", fetch2.ColumnMappings[2].SourceColumn);
-            Assert.AreEqual("b_s.msdyn_agenttype", fetch2.ColumnMappings[2].OutputColumn);
+            Assert.AreEqual("b_s.msdyn_agentType", fetch2.ColumnMappings[2].OutputColumn);
             AssertFetchXml(fetch2, @"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
@@ -6448,7 +6502,7 @@ FROM   account AS r;";
             Assert.AreEqual("m.d. table", metadata.EntityAlias);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), metadata.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.Equals, metadata.Query.Criteria.Conditions[0].ConditionOperator);
-            Assert.AreEqual("account", metadata.Query.Criteria.Conditions[0].Value);
+            Assert.AreEqual("LOWER('account')", ((CompiledExpression)metadata.Query.Criteria.Conditions[0].Value).Expression.ToSql());
         }
 
         [TestMethod]
@@ -6510,10 +6564,10 @@ ORDER BY [union. all].eln";
             Assert.AreEqual("french", mq1.DataSource);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq1.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq1.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq1.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('systemuser')", "LOWER('businessunit')" }, ((IList<CompiledExpression>)mq1.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq1.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq1.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq1.Query.AttributeQuery.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('createdon')" }, ((IList<CompiledExpression>)mq1.Query.AttributeQuery.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
 
             var alias = AssertNode<AliasNode>(join1.RightSource);
             Assert.AreEqual("union. all", alias.Alias);
@@ -6526,20 +6580,20 @@ ORDER BY [union. all].eln";
             Assert.AreEqual("uat", mq2.DataSource);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq2.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq2.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq2.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('systemuser')", "LOWER('businessunit')" }, ((IList<CompiledExpression>)mq2.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq2.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq2.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq2.Query.AttributeQuery.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('createdon')" }, ((IList<CompiledExpression>)mq2.Query.AttributeQuery.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
 
             var compute3 = AssertNode<ComputeScalarNode>(concat.Sources[1]);
             var mq3 = AssertNode<MetadataQueryNode>(compute3.Source);
             Assert.AreEqual("prod", mq3.DataSource);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), mq3.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "systemuser", "businessunit" }, (string[])mq3.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('systemuser')", "LOWER('businessunit')" }, ((IList<CompiledExpression>)mq3.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
             Assert.AreEqual(nameof(AttributeMetadata.LogicalName), mq3.Query.AttributeQuery.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, mq3.Query.AttributeQuery.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEqual(new[] { "createdon" }, (string[])mq3.Query.AttributeQuery.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEqual(new[] { "LOWER('createdon')" }, ((IList<CompiledExpression>)mq3.Query.AttributeQuery.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
         }
 
         [TestMethod]
@@ -6571,7 +6625,7 @@ WHERE  e.logicalname IN ('systemuser');";
             CollectionAssert.AreEquivalent(new[] { nameof(AttributeMetadata.LogicalName), nameof(LookupAttributeMetadata.Targets) }, metadata.Query.AttributeQuery.Properties.PropertyNames);
             Assert.AreEqual(nameof(EntityMetadata.LogicalName), metadata.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.In, metadata.Query.Criteria.Conditions[0].ConditionOperator);
-            CollectionAssert.AreEquivalent(new[] { "systemuser" }, (string[])metadata.Query.Criteria.Conditions[0].Value);
+            CollectionAssert.AreEquivalent(new[] { "LOWER('systemuser')" }, ((IList<CompiledExpression>)metadata.Query.Criteria.Conditions[0].Value).Select(e => e.Expression.ToSql()).ToArray());
         }
 
         [TestMethod]
@@ -6747,9 +6801,7 @@ where n = 'a'";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            Assert.AreEqual("n = 'a'", filter.Filter.ToSql());
-            var loop = AssertNode<NestedLoopNode>(filter.Source);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
             Assert.AreEqual("@Expr1", loop.OuterReferences["account.name"]);
             var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
             AssertFetchXml(fetch, @"
@@ -6762,7 +6814,9 @@ where n = 'a'";
             Assert.AreEqual("x", alias.Alias);
             Assert.AreEqual("Expr2", alias.ColumnSet.Single().SourceColumn);
             Assert.AreEqual("n", alias.ColumnSet.Single().OutputColumn);
-            var computeScalar = AssertNode<ComputeScalarNode>(alias.Source);
+            var filter = AssertNode<FilterNode>(alias.Source);
+            Assert.AreEqual("Expr2 = 'a'", filter.Filter.ToSql());
+            var computeScalar = AssertNode<ComputeScalarNode>(filter.Source);
             Assert.AreEqual("@Expr1 + ''", computeScalar.Columns["Expr2"].ToSql());
             var constantScan = AssertNode<ConstantScanNode>(computeScalar.Source);
             Assert.AreEqual(1, constantScan.Values.Count);
@@ -6790,6 +6844,102 @@ END CATCH";
             {
                 Assert.AreEqual(1026, ex.Errors.Single().Number);
             }
+        }
+
+        [DataTestMethod]
+        [DataRow(1)]
+        [DataRow(2)]
+        [DataRow(3)]
+        public void UpdateTop(int top)
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = $@"
+UPDATE account
+SET    name = 'Test'
+WHERE  accountid IN (SELECT   TOP {top} accountid
+                     FROM     account
+                     WHERE    name = 'Data8'
+                              AND employees > 0
+                     ORDER BY accountid)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            var compute = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual("'Test'", compute.Columns["Expr3"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            AssertFetchXml(fetch, $@"
+                <fetch top='{top}'>
+                  <entity name='account'>
+                    <attribute name='accountid' />
+                    <filter>
+                      <condition attribute='name' operator='eq' value='Data8' />
+                      <condition attribute='employees' operator='gt' value='0' />
+                    </filter>
+                    <order attribute='accountid' />
+                  </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void RethrowMustBeWithinCatchBlock()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "THROW;";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(10704, ex.Errors.Single().Number);
+            }
+        }
+
+        [TestMethod]
+        public void MistypedJoinCriteriaGeneratesWarning()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+SELECT a.name, c.fullname
+FROM account a INNER JOIN contact c ON c.contactid = c.parentcustomerid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual("No Join Predicate", loop.Warning);
+            var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+
+            AssertFetchXml(accountFetch, @"
+                <fetch>
+                  <entity name='account'>
+                    <attribute name='name' />
+                  </entity>
+                </fetch>");
+
+            var spool = AssertNode<TableSpoolNode>(loop.RightSource);
+            var contactFetch = AssertNode<FetchXmlScan>(spool.Source);
+
+            AssertFetchXml(contactFetch, @"
+                <fetch>
+                  <entity name='contact'>
+                    <attribute name='fullname' />
+                    <filter>
+                      <condition attribute='contactid' operator='eq' valueof='parentcustomerid' />
+                    </filter>
+                  </entity>
+                </fetch>");
         }
 
         [TestMethod]

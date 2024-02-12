@@ -171,6 +171,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     return new SimpleNameExpandableObjectConverter(_originalValue != null ? _originalValue : _value is TSqlFragment sql ? sql.ToSql() : _prop == null || (_value != null && _prop != null && type != _prop.PropertyType) ? $"({type.Name})" : $"({Name})");
                 }
+                else if (type.IsEnum)
+                {
+                    return new EnumConverter(type);
+                }
 
                 return base.Converter;
             }

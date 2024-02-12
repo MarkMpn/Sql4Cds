@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Implements a nested loop join
     /// </summary>
-    class NestedLoopNode : BaseJoinNode
+    class NestedLoopNode : BaseJoinNode, IExecutionPlanNodeWarning
     {
         /// <summary>
         /// The condition that must be true for two records to join
@@ -29,6 +29,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("Values from the outer query that should be passed as references to the inner query")]
         [DisplayName("Outer References")]
         public Dictionary<string,string> OuterReferences { get; set; }
+
+        [Browsable(false)]
+        public string Warning => JoinCondition == null ? "No Join Predicate" : null;
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
@@ -184,6 +187,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource = RightSource.FoldQuery(innerContext, hints);
             RightSource.Parent = this;
 
+            if (JoinCondition != null)
+            {
+                var joinColumns = JoinCondition.GetColumns().ToList();
+                var hasLeftColumn = joinColumns.Any(c => leftSchema.ContainsColumn(c, out _));
+                var hasRightColumn = joinColumns.Any(c => rightSchema.ContainsColumn(c, out _));
+
+                if (!hasLeftColumn)
+                {
+                    // Join condition doesn't reference columns from the left source, so we can remove it from the join
+                    // and apply it as a filter to the right source. Inner source will often have a table spool - add the filter
+                    // to the source of that spool to allow for better folding
+                    if (RightSource is TableSpoolNode innerSpool)
+                        innerSpool.Source = new FilterNode { Source = innerSpool.Source, Filter = JoinCondition };
+                    else
+                        RightSource = new FilterNode { Source = RightSource, Filter = JoinCondition };
+
+                    RightSource = RightSource.FoldQuery(innerContext, hints);
+                    RightSource.Parent = this;
+                }
+
+                if (!hasRightColumn)
+                {
+                    // Join condition doesn't reference columns from the right source, so we can remove it from the join
+                    // and apply it as a filter to the left source
+                    LeftSource = new FilterNode { Source = LeftSource, Filter = JoinCondition }.FoldQuery(context, hints);
+                    LeftSource.Parent = this;
+                }
+
+                if (!hasLeftColumn || !hasRightColumn)
+                    JoinCondition = null;
+            }
+
             FoldDefinedValues(rightSchema);
 
             if (LeftSource is ConstantScanNode constant &&
@@ -249,6 +284,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 top.Source = filter;
                 aggregate.Source = top.FoldQuery(innerContext, hints);
             }
+            else if (RightSource is AliasNode applyAlias &&
+                applyAlias.Source is IndexSpoolNode applyIndexSpool &&
+                LeftSource.EstimateRowsOut(context).Value < 100)
+            {
+                // CROSS or OUTER APPLY was folded to use an index spool, but the outer query is now estimated to produce
+                // a small number of records. Remove the index spool and replace with filter if that filter can be folded
+                // to the datasource
+                var filter = new FilterNode
+                {
+                    Source = applyIndexSpool.Source,
+                    Filter = new BooleanComparisonExpression
+                    {
+                        FirstExpression = applyIndexSpool.KeyColumn.ToColumnReference(),
+                        ComparisonType = BooleanComparisonType.Equals,
+                        SecondExpression = new VariableReference { Name = applyIndexSpool.SeekValue }
+                    },
+                    Parent = applyAlias
+                };
+
+                if (filter.FoldQuery(innerContext, hints) != filter)
+                {
+                    applyAlias.Source = filter;
+                    RightSource = applyAlias.FoldQuery(innerContext, hints);
+                }
+            }
 
             return this;
         }
@@ -280,7 +340,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToList();
 
             LeftSource.AddRequiredColumns(context, leftColumns);
-            RightSource.AddRequiredColumns(context, rightColumns);
+            RightSource.AddRequiredColumns(innerContext, rightColumns);
         }
 
         protected override INodeSchema GetRightSchema(NodeCompilationContext context)
