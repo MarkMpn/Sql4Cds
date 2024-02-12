@@ -6941,5 +6941,31 @@ FROM account a INNER JOIN contact c ON c.contactid = c.parentcustomerid";
                   </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void AliasSameAsVirtualAttribute()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+select a.name, c.fullname as primarycontactidname from account a
+inner join contact c on a.primarycontactid = c.contactid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='c' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='fullname' alias='primarycontactidname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
     }
 }

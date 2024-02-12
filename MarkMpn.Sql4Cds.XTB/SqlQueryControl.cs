@@ -1040,7 +1040,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 constraintError = true;
                                 foreach (DataRow row in dataTable.Rows)
                                 {
-                                    if (row.RowError != null)
+                                    if (row.HasErrors && row.RowError != null)
                                         throw new ConstraintException(row.RowError, ex);
                                 }
 

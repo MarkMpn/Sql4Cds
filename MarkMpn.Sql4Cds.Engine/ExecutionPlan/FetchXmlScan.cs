@@ -966,7 +966,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Entity.Items != null)
                 {
-                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
+                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias?.Equals(attr.name, StringComparison.OrdinalIgnoreCase) == true || a.alias?.Equals(parts[1], StringComparison.OrdinalIgnoreCase) == true);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
@@ -999,7 +999,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (linkEntity.Items != null)
                 {
-                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
+                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias?.Equals(attr.name, StringComparison.OrdinalIgnoreCase) == true || a.alias?.Equals(parts[1], StringComparison.OrdinalIgnoreCase) == true);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
@@ -1047,7 +1047,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var fullName = $"{alias}.{attrMetadata.LogicalName.EscapeIdentifier()}";
                     var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName.EscapeIdentifier();
                     var attrType = attrMetadata.GetAttributeSqlType(dataSource, false);
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, meta, attrMetadata, innerJoin);
                 }
             }
 
@@ -1105,7 +1105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (requireTablePrefix)
                         attrAlias = null;
 
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, meta, attrMetadata, innerJoin);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -1122,7 +1122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName.EscapeIdentifier();
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, attrMetadata, innerJoin);
+                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, meta, attrMetadata, innerJoin);
                     }
                 }
 
@@ -1224,9 +1224,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullFilters(schema, aliases, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, EntityMetadata entityMetadata, AttributeMetadata attrMetadata, bool innerJoin)
         {
-            var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
+            var notNull = innerJoin && (attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute || attrMetadata.LogicalName == "createdon" || (attrMetadata.EntityLogicalName != "systemuser" && (attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby")));
 
             // Add the logical attribute
             AddSchemaAttribute(schema, aliases, fullName, simpleName, type, notNull);
