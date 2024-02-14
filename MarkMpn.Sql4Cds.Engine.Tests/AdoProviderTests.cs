@@ -1141,15 +1141,17 @@ SELECT @x.query('/ROOT/a')";
             }
         }
 
-        [TestMethod]
-        public void XmlValue()
+        [DataTestMethod]
+        [DataRow("/Root/ProductDescription/@ProductID", "int", 1)]
+        [DataRow("/Root/ProductDescription/Features/Description", "int", null)]
+        public void XmlValue(string xpath, string type, object expected)
         {
             using (var con = new Sql4CdsConnection(_dataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandTimeout = 0;
 
-                cmd.CommandText = @"DECLARE @myDoc XML  
+                cmd.CommandText = $@"DECLARE @myDoc XML  
 DECLARE @ProdID INT  
 SET @myDoc = '<Root>  
 <ProductDescription ProductID=""1"" ProductName=""Road Bike"">  
@@ -1161,12 +1163,12 @@ SET @myDoc = '<Root>
 </Root>'  
 
 
-SET @ProdID = @myDoc.value('/Root/ProductDescription/@ProductID', 'int')
+SET @ProdID = @myDoc.value('{xpath}', '{type}')
 SELECT @ProdID";
 
                 var actual = cmd.ExecuteScalar();
 
-                Assert.AreEqual(1, actual);
+                Assert.AreEqual(expected ?? DBNull.Value, actual);
             }
         }
 
