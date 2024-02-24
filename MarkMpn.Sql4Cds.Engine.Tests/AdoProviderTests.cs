@@ -14,6 +14,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Controls.Primitives;
 using System.Xml.Serialization;
+using Dapper;
 using FakeItEasy;
 using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
@@ -1141,15 +1142,17 @@ SELECT @x.query('/ROOT/a')";
             }
         }
 
-        [TestMethod]
-        public void XmlValue()
+        [DataTestMethod]
+        [DataRow("/Root/ProductDescription/@ProductID", "int", 1)]
+        [DataRow("/Root/ProductDescription/Features/Description", "int", null)]
+        public void XmlValue(string xpath, string type, object expected)
         {
             using (var con = new Sql4CdsConnection(_dataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandTimeout = 0;
 
-                cmd.CommandText = @"DECLARE @myDoc XML  
+                cmd.CommandText = $@"DECLARE @myDoc XML  
 DECLARE @ProdID INT  
 SET @myDoc = '<Root>  
 <ProductDescription ProductID=""1"" ProductName=""Road Bike"">  
@@ -1161,12 +1164,12 @@ SET @myDoc = '<Root>
 </Root>'  
 
 
-SET @ProdID = @myDoc.value('/Root/ProductDescription/@ProductID', 'int')
+SET @ProdID = @myDoc.value('{xpath}', '{type}')
 SELECT @ProdID";
 
                 var actual = cmd.ExecuteScalar();
 
-                Assert.AreEqual(1, actual);
+                Assert.AreEqual(expected ?? DBNull.Value, actual);
             }
         }
 
@@ -1924,6 +1927,126 @@ END CATCH";
                 {
                     Assert.IsFalse(reader.Read());
                 }
+            }
+        }
+
+        class Account<TId>
+        {
+            public TId AccountId { get; set; }
+            public string Name { get; set; }
+            public int? Employees { get; set; }
+        }
+
+        class EntityReferenceTypeHandler : SqlMapper.TypeHandler<EntityReference>
+        {
+            public override EntityReference Parse(object value)
+            {
+                if (value is SqlEntityReference ser)
+                    return ser;
+
+                throw new NotSupportedException();
+            }
+
+            public override void SetValue(IDbDataParameter parameter, EntityReference value)
+            {
+                parameter.Value = (SqlEntityReference)value;
+            }
+        }
+
+        [TestMethod]
+        public void DapperQueryEntityReference()
+        {
+            // reader.GetValue() returns a SqlEntityReference value - need a custom type handler to convert it to the EntityReference
+            // property type
+            SqlMapper.AddTypeHandler(new EntityReferenceTypeHandler());
+
+            DapperQuery<EntityReference>(id => id.Id);
+        }
+
+        [TestMethod]
+        public void DapperQuerySqlEntityReference()
+        {
+            DapperQuery<SqlEntityReference>(id => id.Id);
+        }
+
+        [TestMethod]
+        public void DapperQueryGuid()
+        {
+            DapperQuery<Guid>(id => id);
+        }
+
+        private void DapperQuery<TId>(Func<TId,Guid> selector)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            {
+                if (typeof(TId) == typeof(Guid))
+                    con.ReturnEntityReferenceAsGuid = true;
+
+                var accountId1 = Guid.NewGuid();
+                var accountId2 = Guid.NewGuid();
+                _context.Data["account"] = new Dictionary<Guid, Entity>
+                {
+                    [accountId1] = new Entity("account", accountId1)
+                    {
+                        ["accountid"] = accountId1,
+                        ["name"] = "Account 1",
+                        ["employees"] = 10,
+                        ["createdon"] = DateTime.Now,
+                        ["turnover"] = new Money(1_000_000),
+                        ["address1_latitude"] = 45.0D
+                    },
+                    [accountId2] = new Entity("account", accountId2)
+                    {
+                        ["accountid"] = accountId2,
+                        ["name"] = "Account 2",
+                        ["createdon"] = DateTime.Now,
+                        ["turnover"] = new Money(1_000_000),
+                        ["address1_latitude"] = 45.0D
+                    }
+                };
+
+                var accounts = con.Query<Account<TId>>("SELECT accountid, name, employees FROM account").AsList();
+                Assert.AreEqual(2, accounts.Count);
+                var account1 = accounts.Single(a => selector(a.AccountId) == accountId1);
+                var account2 = accounts.Single(a => selector(a.AccountId) == accountId2);
+                Assert.AreEqual("Account 1", account1.Name);
+                Assert.AreEqual("Account 2", account2.Name);
+                Assert.AreEqual(10, account1.Employees);
+                Assert.IsNull(account2.Employees);
+            }
+        }
+
+        class SqlEntityReferenceTypeHandler : SqlMapper.TypeHandler<SqlEntityReference>
+        {
+            public override SqlEntityReference Parse(object value)
+            {
+                if (value is SqlEntityReference ser)
+                    return ser;
+
+                throw new NotSupportedException();
+            }
+
+            public override void SetValue(IDbDataParameter parameter, SqlEntityReference value)
+            {
+                parameter.Value = value;
+            }
+        }
+
+        [TestMethod]
+        public void DapperParameters()
+        {
+            // Dapper wants to set the DbType of parameters but doesn't understand the SqlEntityReference type, need a custom
+            // type handler to set the paramete
+            SqlMapper.AddTypeHandler(new SqlEntityReferenceTypeHandler());
+
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            {
+                con.Execute("INSERT INTO account (name) VALUES (@name)", new { name = "Dapper" });
+                var id = con.ExecuteScalar<SqlEntityReference>("SELECT @@IDENTITY");
+
+                var name = con.ExecuteScalar<string>("SELECT name FROM account WHERE accountid = @id", new { id });
+
+                Assert.AreEqual("Dapper", name);
             }
         }
     }

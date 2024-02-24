@@ -120,6 +120,9 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Dapper.StrongName">
+      <Version>2.1.28</Version>
+    </PackageReference>
     <PackageReference Include="FakeXrmEasy.9">
       <Version>1.58.1</Version>
     </PackageReference>

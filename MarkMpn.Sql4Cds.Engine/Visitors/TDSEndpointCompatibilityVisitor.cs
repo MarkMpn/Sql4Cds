@@ -387,15 +387,27 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void Visit(FunctionCall node)
         {
-            // Can't use JSON functions
             switch (node.FunctionName.Value.ToUpperInvariant())
             {
+                // Can't use JSON functions
                 case "JSON_VALUE":
                 case "JSON_PATH_EXISTS":
                 case "SQL_VARIANT_PROPERTY":
+
+                // Can't use error handling functions
+                case "ERROR_LINE":
+                case "ERROR_MESSAGE":
+                case "ERROR_NUMBER":
+                case "ERROR_PROCEDURE":
+                case "ERROR_SEVERITY":
+                case "ERROR_STATE":
                     IsCompatible = false;
                     break;
             }
+
+            // Can't use XML data type methods
+            if (node.CallTarget != null)
+                IsCompatible = false;
 
             base.Visit(node);
         }
