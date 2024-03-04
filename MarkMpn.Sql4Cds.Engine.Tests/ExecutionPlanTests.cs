@@ -34,6 +34,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             JoinOperator.LeftOuter
         };
 
+        private bool _orderByEntityNameAvailable;
+
         CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
@@ -49,6 +51,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
+
+        bool IQueryExecutionOptions.OrderByEntityNameAvailable => _orderByEntityNameAvailable;
 
         bool IQueryExecutionOptions.UseLocalTimeZone => true;
 
@@ -867,6 +871,52 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void OrderByEntityName()
+        {
+            _orderByEntityNameAvailable = true;
+
+            try
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+                var query = @"
+                SELECT TOP 1000
+                    name,
+                    firstname
+                FROM
+                    account
+                    INNER JOIN contact ON account.accountid = contact.parentcustomerid
+                ORDER BY
+                    name,
+                    firstname,
+                    accountid";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                <fetch top='1000'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                        </link-entity>
+                        <order attribute='name' entityname='account' />
+                        <order attribute='firstname' />
+                        <order attribute='accountid' entityname='account' />
+                    </entity>
+                </fetch>");
+            }
+            finally
+            {
+                _orderByEntityNameAvailable = false;
+            }
+        }
+
+        [TestMethod]
         public void PartialOrderingAvoidingLegacyPagingWithTop()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
@@ -888,17 +938,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var top = AssertNode<TopNode>(select.Source);
-            var order = AssertNode<SortNode>(top.Source);
-            var fetch = AssertNode<FetchXmlScan>(order.Source);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
-                <fetch>
+                <fetch top='100'>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='name' />
-                            <attribute name='accountid' />
                             <order attribute='name' />
+                            <order attribute='accountid' />
                         </link-entity>
                         <order attribute='firstname' />
                     </entity>

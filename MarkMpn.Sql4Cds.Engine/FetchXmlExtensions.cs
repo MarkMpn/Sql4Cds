@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -148,6 +149,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 link.Items = link.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
             }
+        }
+    }
+
+    namespace FetchXml
+    {
+        partial class FetchOrderType
+        {
+            [XmlAttribute]
+            public string entityname { get; set; }
         }
     }
 }

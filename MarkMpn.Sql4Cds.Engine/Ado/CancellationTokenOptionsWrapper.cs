@@ -35,6 +35,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool ColumnComparisonAvailable => _options.ColumnComparisonAvailable;
 
+        public bool OrderByEntityNameAvailable => _options.OrderByEntityNameAvailable;
+
         public bool UseLocalTimeZone => _options.UseLocalTimeZone;
 
         public List<JoinOperator> JoinOperatorsAvailable => _options.JoinOperatorsAvailable;

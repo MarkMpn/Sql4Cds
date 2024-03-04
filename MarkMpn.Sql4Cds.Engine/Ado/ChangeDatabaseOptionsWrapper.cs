@@ -25,6 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine
             BatchSize = options.BatchSize;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
             ColumnComparisonAvailable = options.ColumnComparisonAvailable;
+            OrderByEntityNameAvailable = options.OrderByEntityNameAvailable;
             UseLocalTimeZone = options.UseLocalTimeZone;
             BypassCustomPlugins = options.BypassCustomPlugins;
             QuotedIdentifiers = options.QuotedIdentifiers;
@@ -46,6 +47,8 @@ namespace MarkMpn.Sql4Cds.Engine
         public int MaxDegreeOfParallelism { get; set; }
 
         public bool ColumnComparisonAvailable { get; }
+
+        public bool OrderByEntityNameAvailable { get; }
 
         public bool UseLocalTimeZone { get; set; }
 

@@ -50,6 +50,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
 
+        bool IQueryExecutionOptions.OrderByEntityNameAvailable => false;
+
         bool IQueryExecutionOptions.UseLocalTimeZone => true;
 
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;

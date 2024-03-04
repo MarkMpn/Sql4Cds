@@ -84,6 +84,11 @@ namespace MarkMpn.Sql4Cds.Engine
         bool ColumnComparisonAvailable { get; }
 
         /// <summary>
+        /// Indicates if the server supports ordering by link-entities in FetchXML
+        /// </summary>
+        bool OrderByEntityNameAvailable { get; }
+
+        /// <summary>
         /// Indicates if date/time values should be interpreted in the local timezone or in UTC
         /// </summary>
         bool UseLocalTimeZone { get; }

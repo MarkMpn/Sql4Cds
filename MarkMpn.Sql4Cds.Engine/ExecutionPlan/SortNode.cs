@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -276,9 +277,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 fetchXml.RemoveSorts();
 
+                // Validate whether the sort orders are applied in a valid order to be added directly to the <entity> and <link-entity>
+                // elements, or if we need to use the <order entityname> attribute
+                var entityOrder = GetEntityOrder(fetchXml);
                 var fetchSchema = fetchXml.GetSchema(context);
-                var entity = fetchXml.Entity;
-                var items = entity.Items;
+                var validOrder = true;
+                var currentEntity = 0;
 
                 foreach (var sortOrder in Sorts)
                 {
@@ -316,14 +320,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         fetchSort.attribute = null;
                     }
 
+                    if (validOrder)
+                    {
+                        var entityIndex = entityOrder.IndexOf(entityName);
+                        if (entityIndex < currentEntity)
+                        {
+                            validOrder = false;
+
+                            // We've already added sorts to a subsequent link-entity. We can only add sorts to a previous entity if
+                            // we support the <order entityname> attribute
+                            if (!context.Options.OrderByEntityNameAvailable)
+                                return this;
+
+                            // Existing orders on link-entities need to be moved to the root entity and have their entityname attribute populated
+                            foreach (var linkEntity in fetchXml.Entity.GetLinkEntities())
+                            {
+                                foreach (var sort in linkEntity.Items?.OfType<FetchOrderType>()?.ToArray() ?? Array.Empty<FetchOrderType>())
+                                {
+                                    sort.entityname = linkEntity.alias;
+                                    linkEntity.Items = linkEntity.Items.Except(new[] { sort }).ToArray();
+                                    fetchXml.Entity.AddItem(sort);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            currentEntity = entityIndex;
+                        }
+                    }
+
                     if (entityName == fetchXml.Alias)
                     {
-                        if (items != entity.Items)
-                            return this;
-
                         if (fetchSort.attribute != null)
                         {
-                            var meta = dataSource.Metadata[entity.name];
+                            var meta = dataSource.Metadata[fetchXml.Entity.name];
                             var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
 
                             // Sorting on multi-select picklist fields isn't supported in FetchXML
@@ -363,12 +393,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 return this;
                         }
 
-                        entity.AddItem(fetchSort);
-                        items = entity.Items;
+                        fetchXml.Entity.AddItem(fetchSort);
                     }
                     else
                     {
-                        var linkEntity = FetchXmlExtensions.FindLinkEntity(items, entityName);
+                        var linkEntity = fetchXml.Entity.FindLinkEntity(entityName);
                         if (linkEntity == null)
                             return this;
 
@@ -430,8 +459,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                         }
 
-                        linkEntity.AddItem(fetchSort);
-                        items = linkEntity.Items;
+                        if (validOrder)
+                        {
+                            linkEntity.AddItem(fetchSort);
+                        }
+                        else
+                        {
+                            fetchSort.entityname = entityName;
+                            fetchXml.Entity.AddItem(fetchSort);
+                        }
                     }
 
                     PresortedCount++;
@@ -461,6 +497,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Source;
 
             return this;
+        }
+
+        private List<string> GetEntityOrder(FetchXmlScan fetchXml)
+        {
+            // Get the list of entities in the order that <order> elements will be applied, i.e. DFS
+            var order = new List<string>();
+            order.Add(fetchXml.Alias);
+
+            foreach (var linkEntity in fetchXml.Entity.GetLinkEntities())
+                order.Add(linkEntity.alias);
+
+            return order;
         }
 
         private string FindEntityWithAttributeAlias(FetchXmlScan fetchXml, string attrName)

@@ -60,6 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             JoinOperatorsAvailable = joinOperators;
             ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
+            OrderByEntityNameAvailable = version >= new Version("9.1.0.25249");
         }
 
         public CancellationToken CancellationToken { get; }
@@ -77,6 +78,8 @@ namespace MarkMpn.Sql4Cds.Engine
         public int MaxDegreeOfParallelism => 10;
 
         public bool ColumnComparisonAvailable { get; }
+
+        public bool OrderByEntityNameAvailable { get; }
 
         public bool UseLocalTimeZone => false;
 
