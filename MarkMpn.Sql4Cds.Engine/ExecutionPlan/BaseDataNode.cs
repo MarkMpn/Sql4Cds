@@ -495,7 +495,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else
                 {
-                    // Column comparisons can only happen within a single entity
                     var columnName2 = field2.GetColumnName();
                     if (!schema.ContainsColumn(columnName2, out columnName2))
                         return false;
@@ -503,12 +502,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var parts2 = columnName2.SplitMultiPartIdentifier();
                     var entityAlias2 = parts2[0];
                     var attrName2 = parts2[1];
-
-                    if (!entityAlias.Equals(entityAlias2, StringComparison.OrdinalIgnoreCase))
-                        return false;
+                    var entityName2 = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias2);
+                    var meta2 = metadata[entityName2];
 
                     var attr1 = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
-                    var attr2 = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName2, StringComparison.OrdinalIgnoreCase));
+                    var attr2 = meta2.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName2, StringComparison.OrdinalIgnoreCase));
 
                     if (!String.IsNullOrEmpty(attr1?.AttributeOf))
                         return false;
@@ -516,12 +514,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!String.IsNullOrEmpty(attr2?.AttributeOf))
                         return false;
 
+                    // We can use valueof="alias.attribute", but the alias of the root entity isn't visible. Swap the comparison round
+                    // so that it can be added to the root entity and reference the value from the link entity.
+                    if (!entityAlias.Equals(entityAlias2, StringComparison.OrdinalIgnoreCase) && entityAlias2.Equals(targetEntityAlias, StringComparison.OrdinalIgnoreCase))
+                    {
+                        (entityAlias, entityAlias2) = (entityAlias2, entityAlias);
+                        (attrName, attrName2) = (attrName2, attrName);
+                        switch (op)
+                        {
+                            case @operator.eq: break;
+                            case @operator.ne: break;
+                            case @operator.lt: op = @operator.gt; break;
+                            case @operator.le: op = @operator.ge; break;
+                            case @operator.gt: op = @operator.lt; break;
+                            case @operator.ge: op = @operator.le; break;
+                        }
+                    }
+
                     condition = new condition
                     {
                         entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
                         attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
                         @operator = op,
-                        ValueOf = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items)
+                        ValueOf = (entityAlias.Equals(entityAlias2, StringComparison.OrdinalIgnoreCase) ? "" : $"{StandardizeAlias(entityAlias2, targetEntityAlias, items)}.") + RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items)
                     };
 
                     if (op == @operator.ne && (type == BooleanComparisonType.NotEqualToBrackets || type == BooleanComparisonType.NotEqualToExclamation))

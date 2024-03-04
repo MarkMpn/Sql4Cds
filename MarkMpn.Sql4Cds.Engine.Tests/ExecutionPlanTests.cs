@@ -34,6 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             JoinOperator.LeftOuter
         };
 
+        private bool _columnComparisonAvailable = true;
         private bool _orderByEntityNameAvailable;
 
         CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
@@ -50,7 +51,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
-        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
+        bool IQueryExecutionOptions.ColumnComparisonAvailable => _columnComparisonAvailable;
 
         bool IQueryExecutionOptions.OrderByEntityNameAvailable => _orderByEntityNameAvailable;
 
@@ -294,6 +295,75 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                         <filter>
                             <condition attribute='name' operator='eq' value='Data8' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void WhereColumnComparison()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    name = accountid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='eq' valueof='accountid' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void WhereColumnComparisonCrossTable()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name,
+                    fullname
+                FROM
+                    account
+                    INNER JOIN contact ON account.accountid = contact.parentcustomerid
+                WHERE
+                    name = fullname";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='fullname' operator='eq' valueof='account.name' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -5606,30 +5676,39 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void FoldMultipleJoinConditionsWithKnownValue()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            _columnComparisonAvailable = false;
 
-            var query = @"SELECT a.name, c.fullname FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid AND a.name = c.fullname WHERE a.name = 'Data8'";
+            try
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
 
-            var plans = planBuilder.Build(query, null, out _);
+                var query = @"SELECT a.name, c.fullname FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid AND a.name = c.fullname WHERE a.name = 'Data8'";
 
-            Assert.AreEqual(1, plans.Length);
-            var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
-            AssertFetchXml(fetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
-                    <entity name='contact'>
-                        <attribute name='fullname' />
-                        <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
-                            <attribute name='name' />
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                        <entity name='contact'>
+                            <attribute name='fullname' />
+                            <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
+                                <attribute name='name' />
+                                <filter>
+                                    <condition attribute='name' operator='eq' value='Data8' />
+                                </filter>
+                            </link-entity>
                             <filter>
-                                <condition attribute='name' operator='eq' value='Data8' />
+                                <condition attribute='fullname' operator='eq' value='Data8' />
                             </filter>
-                        </link-entity>
-                        <filter>
-                            <condition attribute='fullname' operator='eq' value='Data8' />
-                        </filter>
-                    </entity>
-                </fetch>");
+                        </entity>
+                    </fetch>");
+            }
+            finally
+            {
+                _columnComparisonAvailable = true;
+            }
         }
 
         [TestMethod]

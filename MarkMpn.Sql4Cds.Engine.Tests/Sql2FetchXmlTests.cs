@@ -28,6 +28,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     [TestClass]
     public class Sql2FetchXmlTests : FakeXrmEasyTestsBase, IQueryExecutionOptions
     {
+        private bool _columnComparisonAvailable = true;
+
         CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
@@ -42,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
-        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
+        bool IQueryExecutionOptions.ColumnComparisonAvailable => _columnComparisonAvailable;
 
         bool IQueryExecutionOptions.OrderByEntityNameAvailable => false;
 
@@ -1611,54 +1613,63 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GuidEntityReferenceInequality()
         {
-            var query = "SELECT a.name FROM account a INNER JOIN contact c ON a.primarycontactid = c.contactid WHERE (c.parentcustomerid is null or a.accountid <> c.parentcustomerid)";
+            _columnComparisonAvailable = false;
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
-            var queries = planBuilder.Build(query, null, out _);
-
-            var select = (SelectNode)queries[0];
-
-            var account1 = Guid.NewGuid();
-            var account2 = Guid.NewGuid();
-            var contact1 = Guid.NewGuid();
-            var contact2 = Guid.NewGuid();
-
-            _context.Data["account"] = new Dictionary<Guid, Entity>
+            try
             {
-                [account1] = new Entity("account", account1)
+                var query = "SELECT a.name FROM account a INNER JOIN contact c ON a.primarycontactid = c.contactid WHERE (c.parentcustomerid is null or a.accountid <> c.parentcustomerid)";
+
+                var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+                var queries = planBuilder.Build(query, null, out _);
+
+                var select = (SelectNode)queries[0];
+
+                var account1 = Guid.NewGuid();
+                var account2 = Guid.NewGuid();
+                var contact1 = Guid.NewGuid();
+                var contact2 = Guid.NewGuid();
+
+                _context.Data["account"] = new Dictionary<Guid, Entity>
                 {
-                    ["name"] = "Data8",
-                    ["accountid"] = account1,
-                    ["primarycontactid"] = new EntityReference("contact", contact1)
-                },
-                [account2] = new Entity("account", account2)
+                    [account1] = new Entity("account", account1)
+                    {
+                        ["name"] = "Data8",
+                        ["accountid"] = account1,
+                        ["primarycontactid"] = new EntityReference("contact", contact1)
+                    },
+                    [account2] = new Entity("account", account2)
+                    {
+                        ["name"] = "Microsoft",
+                        ["accountid"] = account2,
+                        ["primarycontactid"] = new EntityReference("contact", contact2)
+                    }
+                };
+                _context.Data["contact"] = new Dictionary<Guid, Entity>
                 {
-                    ["name"] = "Microsoft",
-                    ["accountid"] = account2,
-                    ["primarycontactid"] = new EntityReference("contact", contact2)
-                }
-            };
-            _context.Data["contact"] = new Dictionary<Guid, Entity>
+                    [contact1] = new Entity("contact", contact1)
+                    {
+                        ["parentcustomerid"] = new EntityReference("account", account2),
+                        ["contactid"] = contact1
+                    },
+                    [contact2] = new Entity("contact", contact2)
+                    {
+                        ["parentcustomerid"] = new EntityReference("account", account2),
+                        ["contactid"] = contact2
+                    }
+                };
+
+                var dataReader = select.Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
+                var dataTable = new DataTable();
+                dataTable.Load(dataReader);
+
+                Assert.AreEqual(1, dataTable.Rows.Count);
+
+                Assert.AreEqual("Data8", dataTable.Rows[0]["name"]);
+            }
+            finally
             {
-                [contact1] = new Entity("contact", contact1)
-                {
-                    ["parentcustomerid"] = new EntityReference("account", account2),
-                    ["contactid"] = contact1
-                },
-                [contact2] = new Entity("contact", contact2)
-                {
-                    ["parentcustomerid"] = new EntityReference("account", account2),
-                    ["contactid"] = contact2
-                }
-            };
-
-            var dataReader = select.Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
-            var dataTable = new DataTable();
-            dataTable.Load(dataReader);
-
-            Assert.AreEqual(1, dataTable.Rows.Count);
-
-            Assert.AreEqual("Data8", dataTable.Rows[0]["name"]);
+                _columnComparisonAvailable = true;
+            }
         }
 
         [TestMethod]
@@ -1720,19 +1731,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='createdon' />
                         <attribute name='contactid' />
                         <link-entity name='contact' to='parentcustomerid' from='parentcustomerid' alias='c2' link-type='inner'>
                             <attribute name='contactid' />
-                            <attribute name='createdon' />
                             <order attribute='contactid' />
                         </link-entity>
+                        <filter>
+                            <condition attribute='createdon' operator='lt' valueof='c2.createdon' />
+                        </filter>
                         <order attribute='contactid' />
                     </entity>
                 </fetch>");
 
             var delete = (DeleteNode)queries[0];
-            Assert.IsNotInstanceOfType(delete.Source, typeof(FetchXmlScan));
+            Assert.IsInstanceOfType(delete.Source, typeof(FetchXmlScan));
         }
 
         [TestMethod]
