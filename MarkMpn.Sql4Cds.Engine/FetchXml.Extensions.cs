@@ -40,4 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml
         [XmlAttribute("datasource")]
         public string DataSource { get; set; }
     }
+
+    partial class FetchOrderType
+    {
+        [XmlAttribute]
+        public string entityname { get; set; }
+    }
 }

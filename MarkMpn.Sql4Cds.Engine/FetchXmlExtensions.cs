@@ -151,13 +151,4 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
     }
-
-    namespace FetchXml
-    {
-        partial class FetchOrderType
-        {
-            [XmlAttribute]
-            public string entityname { get; set; }
-        }
-    }
 }
