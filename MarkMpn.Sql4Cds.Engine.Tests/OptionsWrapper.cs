@@ -24,10 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             BatchSize = options.BatchSize;
             UseTDSEndpoint = options.UseTDSEndpoint;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
-            ColumnComparisonAvailable = options.ColumnComparisonAvailable;
-            OrderByEntityNameAvailable = options.OrderByEntityNameAvailable;
             UseLocalTimeZone = options.UseLocalTimeZone;
-            JoinOperatorsAvailable = new List<JoinOperator>(options.JoinOperatorsAvailable);
             BypassCustomPlugins = options.BypassCustomPlugins;
             PrimaryDataSource = options.PrimaryDataSource;
             UserId = options.UserId;
@@ -51,13 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         public int MaxDegreeOfParallelism { get; set; }
 
-        public bool ColumnComparisonAvailable { get; set; }
-
-        public bool OrderByEntityNameAvailable { get; set; }
-
         public bool UseLocalTimeZone { get; set; }
-
-        public List<JoinOperator> JoinOperatorsAvailable { get; set; }
 
         public bool BypassCustomPlugins { get; set; }
 

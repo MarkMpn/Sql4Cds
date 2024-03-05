@@ -329,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             // We've already added sorts to a subsequent link-entity. We can only add sorts to a previous entity if
                             // we support the <order entityname> attribute
-                            if (!context.Options.OrderByEntityNameAvailable)
+                            if (!dataSource.OrderByEntityNameAvailable)
                                 return this;
 
                             // Existing orders on link-entities need to be moved to the root entity and have their entityname attribute populated

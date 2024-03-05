@@ -28,8 +28,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     [TestClass]
     public class Sql2FetchXmlTests : FakeXrmEasyTestsBase, IQueryExecutionOptions
     {
-        private bool _columnComparisonAvailable = true;
-
         CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
@@ -44,13 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
-        bool IQueryExecutionOptions.ColumnComparisonAvailable => _columnComparisonAvailable;
-
-        bool IQueryExecutionOptions.OrderByEntityNameAvailable => false;
-
         bool IQueryExecutionOptions.UseLocalTimeZone => false;
-
-        List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
@@ -67,7 +59,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -85,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name, name FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -110,7 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT * FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -143,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT *, name FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -177,7 +169,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account WHERE name = 'test'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -198,7 +190,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account WHERE employees BETWEEN 1 AND 10 AND turnover NOT BETWEEN 2 AND 20";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -224,7 +216,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT contactid, firstname FROM contact WHERE createdon = lastxdays(7)";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -245,7 +237,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account WHERE name = 'test' OR (accountid is not null and name like 'foo%')";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -270,7 +262,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account ORDER BY name DESC, accountid";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -290,7 +282,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account ORDER BY 2 DESC, 1";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -310,7 +302,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name as accountname FROM account ORDER BY name";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -329,7 +321,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT TOP 10 accountid, name FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -347,7 +339,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT TOP (10) accountid, name FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -365,7 +357,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT TOP 10000 accountid, name FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -386,7 +378,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account (NOLOCK)";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -404,7 +396,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT DISTINCT name FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -422,7 +414,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account ORDER BY name OFFSET 100 ROWS FETCH NEXT 50 ROWS ONLY";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -441,7 +433,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON primarycontactid = contactid";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -461,7 +453,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT contact.contactid, contact.firstname, manager.firstname FROM contact LEFT OUTER JOIN contact AS manager ON contact.parentcustomerid = manager.contactid";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -482,7 +474,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid AND (firstname = 'Mark' OR lastname = 'Carrington')";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -506,7 +498,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid OR (firstname = 'Mark' AND lastname = 'Carrington')";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsNotInstanceOfType(((SelectNode)queries[0]).Source, typeof(FetchXmlScan));
@@ -517,7 +509,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON primarycontactid = contactid ORDER BY name, firstname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -539,7 +531,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY name, firstname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -564,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT count(*), count(name), count(DISTINCT name), max(name), min(name), avg(employees) FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -586,7 +578,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT name, count(*) FROM account GROUP BY name";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -605,7 +597,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT name, count(*) FROM account GROUP BY name ORDER BY name, count(*)";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -625,7 +617,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT name, firstname, count(*) FROM account INNER JOIN contact ON parentcustomerid = account.accountid GROUP BY name, firstname ORDER BY firstname, name";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -648,7 +640,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT name, firstname, count(*) as count FROM account INNER JOIN contact ON parentcustomerid = account.accountid GROUP BY name, firstname ORDER BY count";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -670,7 +662,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "UPDATE contact SET firstname = 'Mark'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -687,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT employees + 1 AS a, employees * 2 AS b, turnover / 3 AS c, turnover - 4 AS d, turnover / employees AS e FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -725,12 +717,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void WhereComparingTwoFields()
         {
-            var query = "SELECT contactid FROM contact WHERE firstname = lastname";
+            using (_localDataSource.SetColumnComparison(false))
+            {
+                var query = "SELECT contactid FROM contact WHERE firstname = lastname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, new OptionsWrapper(this) { ColumnComparisonAvailable = false });
-            var queries = planBuilder.Build(query, null, out _);
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var queries = planBuilder.Build(query, null, out _);
 
-            AssertFetchXml(queries, @"
+                AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='contactid' />
@@ -740,30 +734,31 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>
             ");
 
-            var guid1 = Guid.NewGuid();
-            var guid2 = Guid.NewGuid();
-            _context.Data["contact"] = new Dictionary<Guid, Entity>
-            {
-                [guid1] = new Entity("contact", guid1)
+                var guid1 = Guid.NewGuid();
+                var guid2 = Guid.NewGuid();
+                _context.Data["contact"] = new Dictionary<Guid, Entity>
                 {
-                    ["contactid"] = guid1,
-                    ["firstname"] = "Mark",
-                    ["lastname"] = "Carrington"
-                },
-                [guid2] = new Entity("contact", guid2)
-                {
-                    ["contactid"] = guid2,
-                    ["firstname"] = "Mark",
-                    ["lastname"] = "Mark"
-                }
-            };
+                    [guid1] = new Entity("contact", guid1)
+                    {
+                        ["contactid"] = guid1,
+                        ["firstname"] = "Mark",
+                        ["lastname"] = "Carrington"
+                    },
+                    [guid2] = new Entity("contact", guid2)
+                    {
+                        ["contactid"] = guid2,
+                        ["firstname"] = "Mark",
+                        ["lastname"] = "Mark"
+                    }
+                };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
-            var dataTable = new DataTable();
-            dataTable.Load(dataReader);
+                var dataReader = ((SelectNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
+                var dataTable = new DataTable();
+                dataTable.Load(dataReader);
 
-            Assert.AreEqual(1, dataTable.Rows.Count);
-            Assert.AreEqual(guid2, ((SqlEntityReference)dataTable.Rows[0]["contactid"]).Id);
+                Assert.AreEqual(1, dataTable.Rows.Count);
+                Assert.AreEqual(guid2, ((SqlEntityReference)dataTable.Rows[0]["contactid"]).Id);
+            }
         }
 
         [TestMethod]
@@ -771,7 +766,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT contactid FROM contact WHERE lastname = firstname + 'rington'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -815,7 +810,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT contactid FROM contact WHERE 'Mark' like firstname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -856,7 +851,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "UPDATE contact SET firstname = lastname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -888,7 +883,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "UPDATE contact SET firstname = 'Hello ' + lastname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -920,7 +915,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "UPDATE contact SET firstname = REPLACE(firstname, 'Dataflex Pro', 'CDS') WHERE lastname = 'Carrington'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -956,7 +951,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT trim(firstname) as trim, ltrim(firstname) as ltrim, rtrim(firstname) as rtrim, substring(firstname, 2, 3) as substring23, len(firstname) as len FROM contact";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -996,7 +991,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, 'Hello ' + firstname AS greeting FROM contact";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1046,7 +1041,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, 'Hello ' + firstname AS greeting, case when createdon > '2020-01-01' then 'new' else 'old' end AS age FROM contact";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1082,7 +1077,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, lastname FROM contact ORDER BY lastname + ', ' + firstname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1126,7 +1121,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, lastname AS surname FROM contact ORDER BY surname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1171,7 +1166,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, lastname, lastname + ', ' + firstname AS fullname FROM contact ORDER BY fullname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1215,7 +1210,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, lastname, lastname + ', ' + firstname AS fullname FROM contact ORDER BY 3";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1259,7 +1254,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT contactid, DATEADD(day, 1, createdon) AS nextday, DATEPART(minute, createdon) AS minute FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1300,12 +1295,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void TopAppliedAfterCustomFilter()
         {
-            var query = "SELECT TOP 10 contactid FROM contact WHERE firstname = lastname";
+            using (_localDataSource.SetColumnComparison(false))
+            {
+                var query = "SELECT TOP 10 contactid FROM contact WHERE firstname = lastname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, new OptionsWrapper(this) { ColumnComparisonAvailable = false });
-            var queries = planBuilder.Build(query, null, out _);
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var queries = planBuilder.Build(query, null, out _);
 
-            AssertFetchXml(queries, @"
+                AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='contactid' />
@@ -1315,8 +1312,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>
             ");
 
-            Assert.IsInstanceOfType(((SelectNode)queries[0]).Source, typeof(TopNode));
-            Assert.IsInstanceOfType(((SelectNode)queries[0]).Source.GetSources().Single(), typeof(FilterNode));
+                Assert.IsInstanceOfType(((SelectNode)queries[0]).Source, typeof(TopNode));
+                Assert.IsInstanceOfType(((SelectNode)queries[0]).Source.GetSources().Single(), typeof(FilterNode));
+            }
         }
 
         [TestMethod]
@@ -1324,7 +1322,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT TOP 10 lastname, SUM(CASE WHEN firstname = 'Mark' THEN 1 ELSE 0 END) as nummarks, LEFT(lastname, 1) AS lastinitial FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) > 10 GROUP BY lastname HAVING count(*) > 1 ORDER BY 2 DESC";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1392,7 +1390,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT contactid FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) < 10 OR lastname = 'Carrington' ORDER BY createdon";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1450,7 +1448,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT lastname, count(*) FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) > 10 GROUP BY lastname ORDER BY 2 DESC";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1507,7 +1505,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT count(DISTINCT firstname + ' ' + lastname) AS distinctnames FROM contact";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1559,7 +1557,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT name, count(*) FROM account GROUP BY name ORDER BY 2 DESC";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var select = (SelectNode)queries[0];
@@ -1613,13 +1611,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GuidEntityReferenceInequality()
         {
-            _columnComparisonAvailable = false;
-
-            try
+            using (_localDataSource.SetColumnComparison(false))
             {
                 var query = "SELECT a.name FROM account a INNER JOIN contact c ON a.primarycontactid = c.contactid WHERE (c.parentcustomerid is null or a.accountid <> c.parentcustomerid)";
 
-                var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
                 var queries = planBuilder.Build(query, null, out _);
 
                 var select = (SelectNode)queries[0];
@@ -1666,10 +1662,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 Assert.AreEqual("Data8", dataTable.Rows[0]["name"]);
             }
-            finally
-            {
-                _columnComparisonAvailable = true;
-            }
         }
 
         [TestMethod]
@@ -1677,7 +1669,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "UPDATE a SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.accountid = c.parentcustomerid";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var update = (UpdateNode)queries[0];
@@ -1725,7 +1717,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "DELETE c2 FROM contact c1 INNER JOIN contact c2 ON c1.parentcustomerid = c2.parentcustomerid AND c2.createdon > c1.createdon";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1752,7 +1744,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, lastname FROM contact WHERE firstname = lastname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -1775,7 +1767,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             try
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, new OptionsWrapper(this) { QuotedIdentifiers = true });
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, new OptionsWrapper(this) { QuotedIdentifiers = true });
                 var queries = planBuilder.Build(query, null, out _);
 
                 Assert.Fail("Expected exception");
@@ -1791,7 +1783,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, lastname FROM contact WHERE firstname = 'Ma' + 'rk'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
@@ -1812,7 +1804,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT COUNT(1) FROM contact OPTION(USE HINT('RETRIEVE_TOTAL_RECORD_COUNT'))";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var selectNode = (SelectNode)queries[0];
@@ -1825,7 +1817,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "Select Name From Account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
@@ -1842,7 +1834,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT new_name FROM new_customentity WHERE CONTAINS(new_optionsetvaluecollection, '1')";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
@@ -1864,7 +1856,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT new_name FROM new_customentity WHERE new_optionsetvaluecollection = containvalues(1)";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
@@ -1886,7 +1878,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT new_name FROM new_customentity WHERE CONTAINS(new_optionsetvaluecollection, '1 OR 2')";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
@@ -1909,7 +1901,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT new_name FROM new_customentity WHERE new_optionsetvaluecollection = containvalues(1, 2)";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
@@ -1932,7 +1924,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT new_name FROM new_customentity WHERE NOT CONTAINS(new_optionsetvaluecollection, '1 OR 2')";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
@@ -1969,7 +1961,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT employees / 2.0 AS half FROM account";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var account1 = Guid.NewGuid();
@@ -2002,7 +1994,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid FROM account WHERE turnover / 2 > 10";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var account1 = Guid.NewGuid();
@@ -2034,7 +2026,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT displayname FROM metadata.globaloptionset WHERE name = 'test'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsInstanceOfType(queries.Single(), typeof(SelectNode));
@@ -2058,7 +2050,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT logicalname FROM metadata.entity ORDER BY 1";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsInstanceOfType(queries.Single(), typeof(SelectNode));
@@ -2082,7 +2074,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT e.logicalname, a.logicalname FROM metadata.entity e INNER JOIN metadata.attribute a ON e.logicalname = a.entitylogicalname WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var dataReader = ((SelectNode)queries[0]).Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
@@ -2107,7 +2099,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT new_optionsetvalue, new_optionsetvaluename FROM new_customentity ORDER BY new_optionsetvaluename";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var record1 = Guid.NewGuid();
@@ -2158,7 +2150,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT new_customentityid FROM new_customentity WHERE new_optionsetvaluename = 'Value1'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -2177,7 +2169,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT primarycontactid, primarycontactidname FROM account ORDER BY primarycontactidname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -2198,7 +2190,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid FROM account WHERE primarycontactidname = 'Mark Carrington'";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -2217,7 +2209,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "UPDATE account SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.name = c.fullname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
         }
 
@@ -2228,7 +2220,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             try
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
                 var queries = planBuilder.Build(query, null, out _);
                 Assert.Fail("Expected exception");
             }
@@ -2243,7 +2235,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "UPDATE new_customentity SET new_boolprop = CASE WHEN new_name = 'True' THEN 1 ELSE 0 END";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
         }
 
@@ -2254,7 +2246,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 EXECUTE AS LOGIN = 'test1'
                 REVERT";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsInstanceOfType(queries[0], typeof(ExecuteAsNode));
@@ -2279,7 +2271,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM contact INNER JOIN account ON contact.contactid = account.primarycontactid INNER JOIN new_customentity ON contact.parentcustomerid = new_customentity.new_parentid
                 ORDER BY account.employees, contact.fullname";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(new[] { queries[0] }, @"
@@ -2364,12 +2356,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         private void BuildTDSQuery(Action<ExecutionPlanBuilder> action)
         {
-            var ds = _localDataSource["local"];
+            var ds = _localDataSources["local"];
             var con = ds.Connection;
             ds.Connection = null;
             try
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, new OptionsWrapper(this) { UseTDSEndpoint = true });
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, new OptionsWrapper(this) { UseTDSEndpoint = true });
                 action(planBuilder);
             }
             finally
@@ -2383,7 +2375,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, count(*) FROM contact GROUP BY firstname ORDER BY 2";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -2402,7 +2394,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT firstname, count(*) FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid GROUP BY firstname ORDER BY 2";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
@@ -2423,7 +2415,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT name, count(*) FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid GROUP BY name";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var select = (SelectNode)queries[0];
@@ -2453,7 +2445,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT CHARINDEX('a', fullname) AS ci0, CHARINDEX('a', fullname, 1) AS ci1, CHARINDEX('a', fullname, 2) AS ci2, CHARINDEX('a', fullname, 3) AS ci3, CHARINDEX('a', fullname, 8) AS ci8 FROM contact";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var contact1 = Guid.NewGuid();
@@ -2483,7 +2475,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT CAST(createdon AS date) AS converted FROM contact";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var contact1 = Guid.NewGuid();
@@ -2509,7 +2501,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT left(firstname, 1) AS initial, count(*) AS count FROM contact GROUP BY left(firstname, 1) ORDER BY 2 DESC";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
 
             var contact1 = Guid.NewGuid();

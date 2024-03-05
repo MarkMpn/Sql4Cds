@@ -25,13 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
-        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
-
-        bool IQueryExecutionOptions.OrderByEntityNameAvailable => false;
-
         bool IQueryExecutionOptions.UseLocalTimeZone => false;
-
-        List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 

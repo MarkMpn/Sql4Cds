@@ -2,6 +2,9 @@
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using System;
+using System.Collections.Generic;
+using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
+using Microsoft.Crm.Sdk.Messages;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -24,16 +27,19 @@ namespace MarkMpn.Sql4Cds.Engine
         public DataSource(IOrganizationService org)
         {
             string name = null;
+            Version version = null;
 
 #if NETCOREAPP
             if (org is ServiceClient svc)
             {
                 name = svc.ConnectedOrgUniqueName;
+                version = svc.ConnectedOrgVersion;
             }
 #else
             if (org is CrmServiceClient svc)
             {
                 name = svc.ConnectedOrgUniqueName;
+                version = svc.ConnectedOrgVersion;
             }
 #endif
             
@@ -43,11 +49,34 @@ namespace MarkMpn.Sql4Cds.Engine
                 name = orgDetails.GetAttributeValue<string>("name");
             }
 
+            if (version == null)
+            {
+                var ver = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
+                version = new Version(ver.Version);
+            }
+
             Connection = org;
             Metadata = new AttributeMetadataCache(org);
             Name = name;
             TableSizeCache = new TableSizeCache(org, Metadata);
             MessageCache = new MessageCache(org, Metadata);
+
+            var joinOperators = new List<JoinOperator>
+            {
+                JoinOperator.Inner,
+                JoinOperator.LeftOuter
+            };
+
+            if (version >= new Version("9.1.0.17461"))
+            {
+                // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
+                joinOperators.Add(JoinOperator.Any);
+                joinOperators.Add(JoinOperator.Exists);
+            }
+
+            JoinOperatorsAvailable = joinOperators;
+            ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
+            OrderByEntityNameAvailable = version >= new Version("9.1.0.25249");
         }
 
         /// <summary>
@@ -86,6 +115,21 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The session token to use for Elastic table consistency
         /// </summary>
         public string SessionToken { get; set; }
+
+        /// <summary>
+        /// Indicates if the server supports column comparison conditions in FetchXML
+        /// </summary>
+        public virtual bool ColumnComparisonAvailable { get; }
+
+        /// <summary>
+        /// Indicates if the server supports ordering by link-entities in FetchXML
+        /// </summary>
+        public virtual bool OrderByEntityNameAvailable { get; }
+
+        /// <summary>
+        /// Returns a list of join operators that are supported by the server
+        /// </summary>
+        public virtual List<JoinOperator> JoinOperatorsAvailable { get; }
 
         /// <summary>
         /// Returns the default collation used by this instance

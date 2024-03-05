@@ -21,46 +21,23 @@ namespace MarkMpn.Sql4Cds.Engine
             PrimaryDataSource = dataSource.Name;
             CancellationToken = cancellationToken;
 
-            Version version;
-
 #if NETCOREAPP
             if (dataSource.Connection is ServiceClient svc)
             {
                 UserId = svc.GetMyUserId();
-                version = svc.ConnectedOrgVersion;
             }
 #else
             if (dataSource.Connection is CrmServiceClient svc)
             {
                 UserId = svc.GetMyCrmUserId();
-                version = svc.ConnectedOrgVersion;
             }
 #endif
             else
             {
                 var whoami = (WhoAmIResponse)dataSource.Connection.Execute(new WhoAmIRequest());
                 UserId = whoami.UserId;
-
-                var ver = (RetrieveVersionResponse)dataSource.Connection.Execute(new RetrieveVersionRequest());
-                version = new Version(ver.Version);
             }
 
-            var joinOperators = new List<JoinOperator>
-            {
-                JoinOperator.Inner,
-                JoinOperator.LeftOuter
-            };
-
-            if (version >= new Version("9.1.0.17461"))
-            {
-                // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
-                joinOperators.Add(JoinOperator.Any);
-                joinOperators.Add(JoinOperator.Exists);
-            }
-
-            JoinOperatorsAvailable = joinOperators;
-            ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
-            OrderByEntityNameAvailable = version >= new Version("9.1.0.25249");
         }
 
         public CancellationToken CancellationToken { get; }

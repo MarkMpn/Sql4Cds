@@ -893,7 +893,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // We need to use an "in" join type - check that's supported
                     else if (nullFilterRemovable &&
                         nullFilter.IsNot &&
-                        context.Options.JoinOperatorsAvailable.Contains(JoinOperator.Any) &&
+                        context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) &&
                         rightFetch.FetchXml.top == null)
                     {
                         // Remove the filter and replace with an "in" link-entity
@@ -966,9 +966,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (join is NestedLoopNode loop)
                 {
                     // Check we meet all the criteria for a foldable correlated EXISTS query
-                    if (!context.Options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
-                        break;
-
                     if (loop.JoinCondition != null ||
                         loop.OuterReferences.Count != 1 ||
                         loop.DefinedValues.Count != 1)
@@ -988,6 +985,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     if (!(indexSpool.Source is FetchXmlScan rightFetch))
+                        break;
+
+                    if (!context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Exists))
                         break;
 
                     var keyParts = indexSpool.KeyColumn.SplitMultiPartIdentifier();
@@ -1133,7 +1133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(foldableContext, dataSource.Metadata, Filter, schema, null, ignoreAliasesByNode[fetchXml], fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
+                    Filter = ExtractFetchXMLFilters(foldableContext, dataSource, Filter, schema, null, ignoreAliasesByNode[fetchXml], fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
@@ -1455,9 +1455,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, IAttributeMetadataCache metadata, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, DataSource dataSource, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
-            if (TranslateFetchXMLCriteria(context, metadata, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out filter))
+            if (TranslateFetchXMLCriteria(context, dataSource, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out filter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -1466,8 +1466,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(context, metadata, bin.FirstExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var lhsFilter);
-            bin.SecondExpression = ExtractFetchXMLFilters(context, metadata, bin.SecondExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var rhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(context, dataSource, bin.FirstExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(context, dataSource, bin.SecondExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var rhsFilter);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 
