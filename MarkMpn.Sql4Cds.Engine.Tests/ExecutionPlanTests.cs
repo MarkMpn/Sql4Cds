@@ -2211,6 +2211,134 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void ExistsFilterCorrelatedWithAny()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+                    SELECT
+                        accountid,
+                        name
+                    FROM
+                        account
+                    WHERE
+                        EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid) OR
+                        name = 'Data8'";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch>
+                        <entity name='account'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
+                            <filter type='or'>
+                                <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='any'>
+                                </link-entity>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                            <order attribute='accountid' />
+                        </entity>
+                    </fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void ExistsFilterCorrelatedWithAnyParentAndChildAndAdditionalFilter()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+                    SELECT
+                        accountid,
+                        name
+                    FROM
+                        account
+                    WHERE
+                        EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid AND firstname = 'Mark') AND
+                        EXISTS (SELECT * FROM contact WHERE primarycontactid = contactid AND lastname = 'Carrington') AND
+                        name = 'Data8'";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch>
+                        <entity name='account'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
+                            <filter type='and'>
+                                <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='any'>
+                                    <filter>
+                                        <condition attribute='firstname' operator='eq' value='Mark' />
+                                    </filter>
+                                </link-entity>
+                                <link-entity name='contact' from='contactid' to='primarycontactid' link-type='any'>
+                                    <filter>
+                                        <condition attribute='lastname' operator='eq' value='Carrington' />
+                                    </filter>
+                                </link-entity>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </entity>
+                    </fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void NotExistsFilterCorrelatedOnLinkEntity()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.NotAny))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+                    SELECT
+                        accountid,
+                        name
+                    FROM
+                        account
+                        INNER JOIN contact ON account.primarycontactid = contact.contactid
+                    WHERE
+                        NOT EXISTS (SELECT * FROM account WHERE accountid = contact.parentcustomerid AND name = 'Data8')";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch>
+                        <entity name='account'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
+                            <link-entity name='contact' alias='contact' from='contactid' to='primarycontactid' link-type='inner'>
+                                <filter>
+                                    <link-entity name='account' from='accountid' to='parentcustomerid' link-type='not any'>
+                                        <filter>
+                                            <condition attribute='name' operator='eq' value='Data8' />
+                                        </filter>
+                                    </link-entity>
+                                </filter>
+                            </link-entity>
+                        </entity>
+                    </fetch>");
+            }
+        }
+
+        [TestMethod]
         public void NotExistsFilterCorrelated()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
@@ -3058,7 +3186,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterWithInClauseWithoutPrimaryKey()
         {
-            using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
                 var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
@@ -3074,7 +3202,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
+                        <link-entity name='contact' from='createdon' to='createdon' link-type='in'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
@@ -3121,7 +3249,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterWithInClauseOnLinkEntityWithoutPrimaryKey()
         {
-            using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
                 var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
@@ -3142,7 +3270,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                 <condition attribute='name' operator='like' value='Data8%' />
                             </filter>
                         </link-entity>
-                        <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
+                        <link-entity name='contact' from='createdon' to='createdon' link-type='in'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
@@ -3171,7 +3299,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='createdon' to='createdon' link-type='exists'>
+                        <link-entity name='contact' from='createdon' to='createdon' link-type='exists'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                                 <condition attribute='createdon' operator='not-null' />
@@ -6738,7 +6866,7 @@ WHERE  app.name = 'Data8'";
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/366
 
-            using (_dataSource.EnableJoinOperator(JoinOperator.Any))
+            using (_dataSource.EnableJoinOperator(JoinOperator.In))
             {
                 var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
@@ -6755,7 +6883,7 @@ AND    contactid NOT IN (SELECT DISTINCT primarycontactid FROM account WHERE emp
                     <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                         <entity name='contact'>
                             <attribute name='contactid' />
-                            <link-entity name='account' from='primarycontactid' to='contactid' link-type='in' alias='Expr1'>
+                            <link-entity name='account' from='primarycontactid' to='contactid' link-type='in'>
                                 <filter>
                                     <condition attribute='name' operator='eq' value='Data8' />
                                 </filter>

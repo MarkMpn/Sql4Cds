@@ -374,7 +374,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // in the new link entity or we must be using an inner join so we can use a post-filter node
             var additionalCriteria = AdditionalJoinCriteria;
 
-            if (TranslateFetchXMLCriteria(context, dataSource, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter))
+            if (TranslateFetchXMLCriteria(context, dataSource, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, null, null, out var filter))
             {
                 rightEntity.AddItem(filter);
                 additionalCriteria = null;

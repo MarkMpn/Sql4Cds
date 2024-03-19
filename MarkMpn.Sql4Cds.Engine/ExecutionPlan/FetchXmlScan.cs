@@ -580,6 +580,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public void RemoveAttributes()
+        {
+            // Remove any existing sorts
+            if (Entity.Items != null)
+            {
+                Entity.Items = Entity.Items.Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                    linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+            }
+        }
+
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, DataSource dataSource)
         {
             // Expose any formatted values for OptionSetValue and EntityReference values
@@ -1159,7 +1171,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 {
-                    if (linkEntity.SemiJoin)
+                    if (linkEntity.SemiJoin || linkEntity.linktype == "in" || linkEntity.linktype == "exists")
                         continue;
 
                     if (primaryKey != null)
@@ -1519,7 +1531,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // If we've got AND-ed conditions that have an entityname that refers to an inner-joined link entity, move
             // the condition to that link entity
-            var innerLinkEntities = Entity.GetLinkEntities(innerOnly: true).ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
+            var innerLinkEntities = Entity
+                .GetLinkEntities(innerOnly: true)
+                .Where(le => le.alias != null)
+                .ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
 
             Entity.Items = MoveFiltersToLinkEntities(innerLinkEntities, Entity.Items);
             Entity.Items = MoveConditionsToLinkEntities(innerLinkEntities, Entity.Items);
@@ -1695,8 +1710,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var singleConditionFilters = filter.Items
                 .OfType<filter>()
-                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.OfType<condition>().Count() == 1)
-                .ToDictionary(f => f, f => (condition)f.Items[0]);
+                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.Where(x => !(x is filter)).Count() == 1)
+                .ToDictionary(f => f, f => f.Items[0]);
 
             for (var i = 0; i < filter.Items.Length; i++)
             {

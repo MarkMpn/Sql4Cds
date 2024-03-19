@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
@@ -46,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
             {
-                if (linkEntity.alias.Equals(alias, StringComparison.OrdinalIgnoreCase))
+                if (linkEntity.alias != null && linkEntity.alias.Equals(alias, StringComparison.OrdinalIgnoreCase))
                     return linkEntity;
 
                 var childMatch = FindLinkEntity(linkEntity.Items, alias);
@@ -149,6 +150,33 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 link.Items = link.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
             }
+        }
+
+        public static FetchLinkEntityType RemoveNotNullJoinCondition(this FetchLinkEntityType linkEntity)
+        {
+            if (linkEntity.Items == null)
+                return linkEntity;
+
+            foreach (var filter in linkEntity.Items.OfType<filter>())
+            {
+                var notNull = filter.Items
+                    .OfType<condition>()
+                    .Where(c => c.attribute == linkEntity.from && c.entityname == null && c.@operator == @operator.notnull);
+
+                filter.Items = filter.Items.Except(notNull).ToArray();
+            }
+
+            return linkEntity;
+        }
+
+
+        public static IEnumerable<condition> GetConditions(this filter filter)
+        {
+            return filter.Items
+                .OfType<condition>()
+                .Concat(filter.Items
+                    .OfType<filter>()
+                    .SelectMany(f => f.GetConditions()));
         }
     }
 }

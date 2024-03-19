@@ -24,7 +24,14 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Creates a new <see cref="DataSource"/> using default values based on an existing connection.
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> that provides the connection to the instance</param>
-        public DataSource(IOrganizationService org)
+        public DataSource(IOrganizationService org) : this(org, null, null, null)
+        {
+            Metadata = new AttributeMetadataCache(org);
+            TableSizeCache = new TableSizeCache(org, Metadata);
+            MessageCache = new MessageCache(org, Metadata);
+        }
+
+        public DataSource(IOrganizationService org, IAttributeMetadataCache metadata, ITableSizeCache tableSize, IMessageCache messages)
         {
             string name = null;
             Version version = null;
@@ -42,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 version = svc.ConnectedOrgVersion;
             }
 #endif
-            
+
             if (name == null)
             {
                 var orgDetails = org.RetrieveMultiple(new QueryExpression("organization") { ColumnSet = new ColumnSet("name") }).Entities[0];
@@ -56,10 +63,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             Connection = org;
-            Metadata = new AttributeMetadataCache(org);
+            Metadata = metadata;
             Name = name;
-            TableSizeCache = new TableSizeCache(org, Metadata);
-            MessageCache = new MessageCache(org, Metadata);
+            TableSizeCache = tableSize;
+            MessageCache = messages;
 
             var joinOperators = new List<JoinOperator>
             {
@@ -70,8 +77,12 @@ namespace MarkMpn.Sql4Cds.Engine
             if (version >= new Version("9.1.0.17461"))
             {
                 // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
-                joinOperators.Add(JoinOperator.Any);
+                joinOperators.Add(JoinOperator.In);
                 joinOperators.Add(JoinOperator.Exists);
+                joinOperators.Add(JoinOperator.Any);
+                joinOperators.Add(JoinOperator.NotAny);
+                joinOperators.Add(JoinOperator.All);
+                joinOperators.Add(JoinOperator.NotAll);
             }
 
             JoinOperatorsAvailable = joinOperators;
