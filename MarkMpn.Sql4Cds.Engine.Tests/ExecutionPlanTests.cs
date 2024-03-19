@@ -5218,6 +5218,22 @@ UPDATE account SET employees = @employees WHERE name = @name";
         }
 
         [TestMethod]
+        public void MaxDOPUsesHintInsideIfBlock()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"IF (1 = 1) BEGIN UPDATE account SET name = 'test' OPTION (MAXDOP 7) END";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var cond = AssertNode<ConditionalNode>(plans[0]);
+            var update = AssertNode<UpdateNode>(cond.TrueStatements[0]);
+            Assert.AreEqual(7, update.MaxDOP);
+        }
+
+        [TestMethod]
         public void SubqueryUsesSpoolByDefault()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
