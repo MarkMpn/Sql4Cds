@@ -71,6 +71,9 @@ namespace MarkMpn.Sql4Cds.Engine
             // FROM
             var aliasToLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+            // Link entities can also affect the WHERE clause
+            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
+
             if (entity != null)
             {
                 query.FromClause = new FromClause
@@ -97,7 +100,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
 
                 // Recurse into link-entities to build joins
-                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.DataSource == "archive", fetch.nolock, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
+                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.DataSource == "archive", fetch.nolock, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday, ref filter);
             }
 
             // OFFSET
@@ -114,7 +117,6 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // WHERE
-            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
             if (filter != null)
             {
                 query.WhereClause = new WhereClause
@@ -399,7 +401,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="aliasToLogicalName">A mapping of table aliases to the logical name</param>
         /// <param name="nolock">Indicates if the NOLOCK table hint should be applied</param>
         /// <returns>The data source including any required joins</returns>
-        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool archive, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
+        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool archive, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday, ref BooleanExpression where)
         {
             if (items == null)
                 return dataSource;
@@ -407,10 +409,6 @@ namespace MarkMpn.Sql4Cds.Engine
             // Find any <link-entity> elements to process
             foreach (var link in items.OfType<FetchLinkEntityType>())
             {
-                // Store the alias of this link
-                if (!String.IsNullOrEmpty(link.alias))
-                    aliasToLogicalName[link.alias] = link.name;
-
                 // Create the new table reference
                 var table = new NamedTableReference
                 {
@@ -432,6 +430,140 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (nolock)
                     table.TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
+
+                if (link.linktype == "exists" || link.linktype == "in" || link.linktype == "matchfirstrowusingcrossapply")
+                {
+                    // Build a whole new query for the EXISTS subquery
+                    var subqueryFilter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
+
+                    var subquery = new QuerySpecification();
+
+                    if (link.linktype == "exists" || link.linktype == "in")
+                    {
+                        subquery.SelectElements.Add(new SelectScalarExpression
+                        {
+                            Expression = new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers =
+                                {
+                                    new Identifier{ Value = link.alias ?? link.name },
+                                    new Identifier { Value = link.from }
+                                }
+                                }
+                            }
+                        });
+                    }
+                    else if (link.linktype == "matchfirstrowusingcrossapply")
+                    {
+                        AddSelectElements(subquery, link.Items, link.alias ?? link.name);
+                        AddSelectElements(query, link.Items, link.alias ?? link.name);
+                    }
+
+                    subquery.FromClause = new FromClause
+                    {
+                        TableReferences = { table }
+                    };
+
+                    if (archive)
+                        ((NamedTableReference)query.FromClause.TableReferences[0]).SchemaObject.Identifiers.Insert(0, new Identifier { Value = "archive" });
+
+                    if (nolock)
+                        ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
+
+                    // Recurse into link-entities to build joins
+                    subquery.FromClause.TableReferences[0] = BuildJoins(org, metadata, subquery.FromClause.TableReferences[0], (NamedTableReference)subquery.FromClause.TableReferences[0], link.Items, subquery, aliasToLogicalName, archive, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday, ref subqueryFilter);
+
+                    if (link.linktype == "exists" || link.linktype == "matchfirstrowusingcrossapply")
+                    {
+                        var correlatedFilter = new BooleanComparisonExpression
+                        {
+                            FirstExpression = new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier { Value = parentTable.Alias?.Value ?? parentTable.SchemaObject.Identifiers.Last().Value },
+                                        new Identifier { Value = link.to }
+                                    }
+                                }
+                            },
+                            ComparisonType = BooleanComparisonType.Equals,
+                            SecondExpression = new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier{ Value = link.alias ?? link.name },
+                                        new Identifier { Value = link.from }
+                                    }
+                                }
+                            }
+                        };
+
+                        subqueryFilter = AndExpressions(subqueryFilter, correlatedFilter);
+                    }
+
+                    subquery.WhereClause = new WhereClause { SearchCondition = subqueryFilter };
+
+                    if (link.linktype == "exists")
+                    {
+                        var existsPredicate = new ExistsPredicate
+                        {
+                            Subquery = new ScalarSubquery
+                            {
+                                QueryExpression = subquery
+                            }
+                        };
+
+                        where = AndExpressions(where, existsPredicate);
+                    }
+                    else if (link.linktype == "in")
+                    {
+                        var inPredicate = new InPredicate
+                        {
+                            Expression = new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier { Value = parentTable.Alias?.Value ?? parentTable.SchemaObject.Identifiers.Last().Value },
+                                        new Identifier { Value = link.to }
+                                    }
+                                }
+                            },
+                            Subquery = new ScalarSubquery
+                            {
+                                QueryExpression = subquery
+                            }
+                        };
+
+                        where = AndExpressions(where, inPredicate);
+                    }
+                    else if (link.linktype == "matchfirstrowusingcrossapply")
+                    {
+                        subquery.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = "1" } };
+                        dataSource = new UnqualifiedJoin
+                        {
+                            FirstTableReference = dataSource,
+                            UnqualifiedJoinType = UnqualifiedJoinType.CrossApply,
+                            SecondTableReference = new QueryDerivedTable
+                            {
+                                QueryExpression = subquery,
+                                Alias = new Identifier { Value = link.alias ?? link.name }
+                            }
+                        };
+                    }
+                    continue;
+                }
+
+                // Store the alias of this link
+                if (!String.IsNullOrEmpty(link.alias))
+                    aliasToLogicalName[link.alias] = link.name;
 
                 // Add the join from the current data source to the new table
                 var join = new QualifiedJoin
@@ -474,32 +606,36 @@ namespace MarkMpn.Sql4Cds.Engine
                 var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                 if (filter != null)
-                {
-                    if (!(filter is BooleanBinaryExpression bbe) || bbe.BinaryExpressionType == BooleanBinaryExpressionType.And)
-                    {
-                        join.SearchCondition = new BooleanBinaryExpression
-                        {
-                            FirstExpression = join.SearchCondition,
-                            BinaryExpressionType = BooleanBinaryExpressionType.And,
-                            SecondExpression = filter
-                        };
-                    }
-                    else
-                    {
-                        join.SearchCondition = new BooleanBinaryExpression
-                        {
-                            FirstExpression = new BooleanParenthesisExpression { Expression = join.SearchCondition },
-                            BinaryExpressionType = BooleanBinaryExpressionType.And,
-                            SecondExpression = new BooleanParenthesisExpression { Expression = filter }
-                        };
-                    }
-                }
+                    join.SearchCondition = AndExpressions(join.SearchCondition, filter);
 
                 // Recurse into any other links
-                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, archive, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
+                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, archive, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday, ref where);
             }
 
             return dataSource;
+        }
+
+        private static BooleanExpression AndExpressions(BooleanExpression expr1, BooleanExpression expr2)
+        {
+            if (expr1 == null)
+                return expr2;
+
+            if (!(expr1 is BooleanBinaryExpression bbe) || bbe.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                return new BooleanBinaryExpression
+                {
+                    FirstExpression = expr1,
+                    BinaryExpressionType = BooleanBinaryExpressionType.And,
+                    SecondExpression = expr2
+                };
+            }
+
+            return new BooleanBinaryExpression
+            {
+                FirstExpression = new BooleanParenthesisExpression { Expression = expr1 },
+                BinaryExpressionType = BooleanBinaryExpressionType.And,
+                SecondExpression = new BooleanParenthesisExpression { Expression = expr2 }
+            };
         }
 
         /// <summary>
@@ -660,14 +796,16 @@ namespace MarkMpn.Sql4Cds.Engine
             object parameterValue = null;
             if (!String.IsNullOrEmpty(condition.ValueOf))
             {
+                var parts = condition.ValueOf.Split('.');
+
                 value = new ColumnReferenceExpression
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
                         Identifiers =
                         {
-                            new Identifier{Value = condition.entityname ?? prefix},
-                            new Identifier{Value = condition.attribute}
+                            new Identifier{Value = parts.Length == 2 ? parts[0] : condition.entityname ?? prefix},
+                            new Identifier{Value = parts.Length == 2 ? parts[1] : condition.ValueOf}
                         }
                     }
                 };
@@ -2456,6 +2594,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
+                    var entityName = sort.entityname ?? name;
+
                     query.OrderByClause.OrderByElements.Add(new ExpressionWithSortOrder
                     {
                         Expression = new ColumnReferenceExpression
@@ -2464,7 +2604,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 Identifiers =
                             {
-                                new Identifier{Value = name},
+                                new Identifier{Value = entityName},
                                 new Identifier{Value = sort.attribute}
                             }
                             }
@@ -2494,6 +2634,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     node.Identifiers.RemoveAt(0);
 
                 base.ExplicitVisit(node);
+            }
+
+            public override void ExplicitVisit(ExistsPredicate node)
+            {
             }
         }
 
