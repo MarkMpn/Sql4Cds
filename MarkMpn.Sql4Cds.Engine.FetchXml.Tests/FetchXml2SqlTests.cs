@@ -703,6 +703,125 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                 SELECT contact.contactid, contact.fullname, acct.name FROM contact LEFT OUTER JOIN account AS acct ON contact.parentcustomerid = acct.accountid WHERE contact.fullname = acct.name"), NormalizeWhitespace(converted));
         }
 
+        [TestMethod]
+        public void FilterLinkEntityAny()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='or'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='any'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                         <condition attribute='statecode'
+                            operator='eq'
+                            value='1' />
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE (EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid ) OR statecode = '1')"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityNotAny()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='and'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='not any'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE NOT EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityNotAll()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='and'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='not all'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityAll()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='and'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='all'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE EXISTS( SELECT account.primarycontactid FROM account WHERE contact.contactid = account.primarycontactid ) AND NOT EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid )"), NormalizeWhitespace(converted));
+        }
+
         private static string NormalizeWhitespace(string s)
         {
             return Regex.Replace(s, "\\s+", " ").Trim();

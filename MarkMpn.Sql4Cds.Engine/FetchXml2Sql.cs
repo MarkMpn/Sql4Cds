@@ -431,14 +431,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (nolock)
                     table.TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
 
-                if (link.linktype == "exists" || link.linktype == "in" || link.linktype == "matchfirstrowusingcrossapply")
+                if (link.linktype == "exists" || link.linktype == "in" || link.linktype == "matchfirstrowusingcrossapply"
+                    || link.linktype == "any" || link.linktype == "not any" || link.linktype == "not all" || link.linktype == "all")
                 {
                     // Build a whole new query for the EXISTS subquery
                     var subqueryFilter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                     var subquery = new QuerySpecification();
 
-                    if (link.linktype == "exists" || link.linktype == "in")
+                    if (link.linktype == "exists" || link.linktype == "in" || link.linktype == "any" || link.linktype == "not any"
+                        || link.linktype == "not all" || link.linktype == "all")
                     {
                         subquery.SelectElements.Add(new SelectScalarExpression
                         {
@@ -447,10 +449,10 @@ namespace MarkMpn.Sql4Cds.Engine
                                 MultiPartIdentifier = new MultiPartIdentifier
                                 {
                                     Identifiers =
-                                {
-                                    new Identifier{ Value = link.alias ?? link.name },
-                                    new Identifier { Value = link.from }
-                                }
+                                    {
+                                        new Identifier{ Value = link.alias ?? link.name },
+                                        new Identifier { Value = link.from }
+                                    }
                                 }
                             }
                         });
@@ -475,43 +477,44 @@ namespace MarkMpn.Sql4Cds.Engine
                     // Recurse into link-entities to build joins
                     subquery.FromClause.TableReferences[0] = BuildJoins(org, metadata, subquery.FromClause.TableReferences[0], (NamedTableReference)subquery.FromClause.TableReferences[0], link.Items, subquery, aliasToLogicalName, archive, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday, ref subqueryFilter);
 
-                    if (link.linktype == "exists" || link.linktype == "matchfirstrowusingcrossapply")
+                    var correlatedFilter = new BooleanComparisonExpression
                     {
-                        var correlatedFilter = new BooleanComparisonExpression
+                        FirstExpression = new ColumnReferenceExpression
                         {
-                            FirstExpression = new ColumnReferenceExpression
+                            MultiPartIdentifier = new MultiPartIdentifier
                             {
-                                MultiPartIdentifier = new MultiPartIdentifier
-                                {
-                                    Identifiers =
+                                Identifiers =
                                     {
                                         new Identifier { Value = parentTable.Alias?.Value ?? parentTable.SchemaObject.Identifiers.Last().Value },
                                         new Identifier { Value = link.to }
                                     }
-                                }
-                            },
-                            ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = new ColumnReferenceExpression
+                            }
+                        },
+                        ComparisonType = BooleanComparisonType.Equals,
+                        SecondExpression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
                             {
-                                MultiPartIdentifier = new MultiPartIdentifier
-                                {
-                                    Identifiers =
+                                Identifiers =
                                     {
                                         new Identifier{ Value = link.alias ?? link.name },
                                         new Identifier { Value = link.from }
                                     }
-                                }
                             }
-                        };
+                        }
+                    };
 
-                        subqueryFilter = AndExpressions(subqueryFilter, correlatedFilter);
+                    if (link.linktype == "exists" || link.linktype == "matchfirstrowusingcrossapply" || link.linktype == "any"||
+                        link.linktype == "not any" || link.linktype == "not all" || link.linktype == "all")
+                    {
+                        subqueryFilter = CombineExpressions(subqueryFilter, BooleanBinaryExpressionType.And, correlatedFilter);
                     }
 
                     subquery.WhereClause = new WhereClause { SearchCondition = subqueryFilter };
 
-                    if (link.linktype == "exists")
+                    if (link.linktype == "exists" || link.linktype == "any" || link.linktype == "not any" || link.linktype == "not all" || link.linktype == "all")
                     {
-                        var existsPredicate = new ExistsPredicate
+                        var existsPredicate = (BooleanExpression) new ExistsPredicate
                         {
                             Subquery = new ScalarSubquery
                             {
@@ -519,7 +522,23 @@ namespace MarkMpn.Sql4Cds.Engine
                             }
                         };
 
-                        where = AndExpressions(where, existsPredicate);
+                        if (link.linktype == "not any")
+                        {
+                            existsPredicate = new BooleanNotExpression { Expression = existsPredicate };
+                        }
+                        else if (link.linktype == "all")
+                        {
+                            existsPredicate = new BooleanNotExpression { Expression = existsPredicate };
+                            var unfilteredQuery = new QuerySpecification
+                            {
+                                SelectElements = { subquery.SelectElements[0] },
+                                FromClause = subquery.FromClause,
+                                WhereClause = new WhereClause { SearchCondition = correlatedFilter }
+                            };
+                            existsPredicate = CombineExpressions(new ExistsPredicate { Subquery = new ScalarSubquery { QueryExpression = unfilteredQuery } }, BooleanBinaryExpressionType.And, existsPredicate);
+                        }
+
+                        where = CombineExpressions(where, BooleanBinaryExpressionType.And, existsPredicate);
                     }
                     else if (link.linktype == "in")
                     {
@@ -542,7 +561,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             }
                         };
 
-                        where = AndExpressions(where, inPredicate);
+                        where = CombineExpressions(where, BooleanBinaryExpressionType.And, inPredicate);
                     }
                     else if (link.linktype == "matchfirstrowusingcrossapply")
                     {
@@ -606,7 +625,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                 if (filter != null)
-                    join.SearchCondition = AndExpressions(join.SearchCondition, filter);
+                    join.SearchCondition = CombineExpressions(join.SearchCondition, BooleanBinaryExpressionType.And, filter);
 
                 // Recurse into any other links
                 dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, archive, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday, ref where);
@@ -615,26 +634,22 @@ namespace MarkMpn.Sql4Cds.Engine
             return dataSource;
         }
 
-        private static BooleanExpression AndExpressions(BooleanExpression expr1, BooleanExpression expr2)
+        private static BooleanExpression CombineExpressions(BooleanExpression expr1, BooleanBinaryExpressionType type, BooleanExpression expr2)
         {
+            if (expr2 is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
+                expr2 = new BooleanParenthesisExpression { Expression = expr2 };
+
             if (expr1 == null)
                 return expr2;
-
-            if (!(expr1 is BooleanBinaryExpression bbe) || bbe.BinaryExpressionType == BooleanBinaryExpressionType.And)
-            {
-                return new BooleanBinaryExpression
-                {
-                    FirstExpression = expr1,
-                    BinaryExpressionType = BooleanBinaryExpressionType.And,
-                    SecondExpression = expr2
-                };
-            }
+            
+            if (expr1 is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != type)
+                expr2 = new BooleanParenthesisExpression { Expression = expr1 };
 
             return new BooleanBinaryExpression
             {
-                FirstExpression = new BooleanParenthesisExpression { Expression = expr1 },
-                BinaryExpressionType = BooleanBinaryExpressionType.And,
-                SecondExpression = new BooleanParenthesisExpression { Expression = expr2 }
+                FirstExpression = expr1,
+                BinaryExpressionType = type,
+                SecondExpression = expr2
             };
         }
 
@@ -695,58 +710,35 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The SQL condition equivalent of the <paramref name="filter"/></returns>
         private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
         {
+            if (filter.Items == null)
+                return null;
+
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
 
-            // Convert each <condition> within the filter
-            foreach (var condition in filter.Items.OfType<condition>())
+            foreach (var item in filter.Items)
             {
-                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
-
-                if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
-                    newExpression = new BooleanParenthesisExpression { Expression = newExpression };
-
-                if (expression == null)
+                if (item is condition condition)
                 {
-                    expression = newExpression;
+                    // Convert each <condition> within the filter
+                    var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
+
+                    expression = CombineExpressions(expression, type, newExpression);
                 }
-                else
+                else if (item is filter subFilter)
                 {
-                    if (expression is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != type)
-                        expression = new BooleanParenthesisExpression { Expression = expression };
+                    // Recurse into sub-<filter>s
+                    var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
-                    expression = new BooleanBinaryExpression
-                    {
-                        FirstExpression = expression,
-                        BinaryExpressionType = type,
-                        SecondExpression = newExpression
-                    };
+                    expression = CombineExpressions(expression, type, newExpression);
                 }
-            }
-
-            // Recurse into sub-<filter>s
-            foreach (var subFilter in filter.Items.OfType<filter>())
-            {
-                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
-
-                if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
-                    newExpression = new BooleanParenthesisExpression { Expression = newExpression };
-
-                if (expression == null)
+                else if (item is FetchLinkEntityType linkEntity)
                 {
-                    expression = newExpression;
-                }
-                else
-                {
-                    if (expression is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != type)
-                        expression = new BooleanParenthesisExpression { Expression = expression };
+                    // Convert related record filters in <link-entity>
+                    BooleanExpression newExpression = null;
+                    BuildJoins(org, metadata, null, new NamedTableReference { Alias = new Identifier { Value = prefix } }, new[] { item }, null, aliasToLogicalName, false, false, options, ctes, parameters, ref requiresTimeZone, ref usesToday, ref newExpression);
 
-                    expression = new BooleanBinaryExpression
-                    {
-                        FirstExpression = expression,
-                        BinaryExpressionType = type,
-                        SecondExpression = newExpression
-                    };
+                    expression = CombineExpressions(expression, type, newExpression);
                 }
             }
 
