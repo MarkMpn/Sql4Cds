@@ -278,7 +278,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // Can't join with archived data
-            if (leftFetch.FetchXml.DataSource == "archive" || rightFetch.FetchXml.DataSource == "archive")
+            if (leftFetch.FetchXml.DataSource == "retained" || rightFetch.FetchXml.DataSource == "retained")
                 return false;
 
             // If one source is distinct and the other isn't, joining the two won't produce the expected results

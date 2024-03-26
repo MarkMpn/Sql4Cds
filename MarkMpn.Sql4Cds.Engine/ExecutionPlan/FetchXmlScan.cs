@@ -372,7 +372,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Archive queries can fail with this error code if the Synapse database isn't provisioned yet or
                 // no retention policy has yet been applied to this table. In either case there are no records to return
                 // so we can just return an empty result set rather than erroring
-                if (FetchXml.DataSource == "archive" && (ex.Detail.ErrorCode == -2146863832 || ex.Detail.ErrorCode == -2146863829))
+                if (FetchXml.DataSource == "retained" && (ex.Detail.ErrorCode == -2146863832 || ex.Detail.ErrorCode == -2146863829))
                     yield break;
 
                 throw;

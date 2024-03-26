@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
-                if (fetch.DataSource == "archive")
+                if (fetch.DataSource == "archive" || fetch.DataSource == "retained")
                     ((NamedTableReference)query.FromClause.TableReferences[0]).SchemaObject.Identifiers.Insert(0, new Identifier { Value = "archive" });
 
                 if (fetch.nolock)
