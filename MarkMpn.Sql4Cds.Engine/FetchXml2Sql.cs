@@ -2592,14 +2592,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!aliasToLogicalName.TryGetValue(entityAlias, out var entityLogicalName))
                         entityLogicalName = entityAlias;
 
-                    if (!useRawOrderBy)
-                    {
-                        var entityMetadata = metadata[entityLogicalName];
-                        var attr = entityMetadata.Attributes.SingleOrDefault(a => a.LogicalName == attributeName);
+                    var entityMetadata = metadata[entityLogicalName];
+                    var attr = entityMetadata.Attributes.SingleOrDefault(a => a.LogicalName == attributeName);
 
-                        if (attr is LookupAttributeMetadata || attr is EnumAttributeMetadata)
-                            attributeName += "name";
-                    }
+                    if (attr is LookupAttributeMetadata || ((attr is EnumAttributeMetadata || attr is BooleanAttributeMetadata) && !useRawOrderBy))
+                        attributeName += "name";
 
                     query.OrderByClause.OrderByElements.Add(new ExpressionWithSortOrder
                     {

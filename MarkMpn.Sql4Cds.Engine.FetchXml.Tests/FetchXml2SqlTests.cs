@@ -115,39 +115,37 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         }
 
         [TestMethod]
-        public void OrderLookup()
+        public void OrderPicklist()
         {
             var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
-                    <entity name='contact'>
-                        <attribute name='firstname' />
-                        <attribute name='lastname' />
-                        <order attribute='parentcustomerid' />
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <order attribute='new_optionsetvalue' />
                     </entity>
                 </fetch>";
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY parentcustomeridname ASC", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT new_name FROM new_customentity ORDER BY new_optionsetvaluename ASC", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
-        public void OrderLookupRaw()
+        public void OrderPicklistRaw()
         {
             var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch useraworderby='1'>
-                    <entity name='contact'>
-                        <attribute name='firstname' />
-                        <attribute name='lastname' />
-                        <order attribute='parentcustomerid' />
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <order attribute='new_optionsetvalue' />
                     </entity>
                 </fetch>";
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY parentcustomerid ASC", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT new_name FROM new_customentity ORDER BY new_optionsetvalue ASC", NormalizeWhitespace(converted));
         }
 
         [TestMethod]

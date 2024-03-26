@@ -283,6 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var fetchSchema = fetchXml.GetSchema(context);
                 var validOrder = true;
                 var currentEntity = 0;
+                bool? useRawOrderBy = null;
 
                 foreach (var sortOrder in Sorts)
                 {
@@ -375,9 +376,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                             else
                             {
-                                // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
-                                if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                                // Sorting on a lookup Guid and picklist column actually sorts by the associated name field, which isn't what we want
+                                // Picklist sorting can be controlled by the useraworderby flag though.
+                                if (attribute is LookupAttributeMetadata)
                                     return this;
+                                
+                                if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                                {
+                                    if (useRawOrderBy == false)
+                                        return this;
+
+                                    useRawOrderBy = true;
+                                }
 
                                 // Sorts on the virtual ___name attribute should be applied to the underlying field
                                 if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
@@ -385,7 +395,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
 
                                     if (attribute != null)
+                                    {
+                                        if (attribute is LookupAttributeMetadata || useRawOrderBy == true)
+                                            return this;
+
                                         fetchSort.attribute = attribute.LogicalName;
+                                        useRawOrderBy = false;
+                                    }
                                 }
                             }
 
@@ -406,9 +422,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var meta = dataSource.Metadata[linkEntity.name];
                             var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
 
-                            // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
-                            if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                            // Sorting on a lookup Guid or picklist column actually sorts by the associated name field, which isn't what we want
+                            // Picklist sorting can be controlled by the useraworderby flag though.
+                            if (attribute is LookupAttributeMetadata)
                                 return this;
+                            
+                            if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                            {
+                                if (useRawOrderBy == false)
+                                    return this;
+
+                                useRawOrderBy = true;
+                            }
 
                             // Sorting on multi-select picklist fields isn't supported in FetchXML
                             if (attribute is MultiSelectPicklistAttributeMetadata)
@@ -420,7 +445,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
 
                                 if (attribute != null)
+                                {
+                                    if (attribute is LookupAttributeMetadata || useRawOrderBy == true)
+                                        return this;
+
                                     fetchSort.attribute = attribute.LogicalName;
+                                    useRawOrderBy = false;
+                                }
                             }
 
                             if (attribute == null)
@@ -471,6 +502,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     PresortedCount++;
+
+                    if (useRawOrderBy == true)
+                        fetchXml.FetchXml.UseRawOrderBy = true;
                 }
 
                 return Source;
