@@ -39,6 +39,10 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml
 
         [XmlAttribute("datasource")]
         public string DataSource { get; set; }
+
+        [XmlAttribute("useraworderby")]
+        [DefaultValue(false)]
+        public bool UseRawOrderBy { get; set; }
     }
 
     partial class FetchOrderType

@@ -126,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // ORDER BY
-            AddOrderBy(entity.name, entity.Items, query);
+            AddOrderBy(entity.name, entity.Items, query, fetch.UseRawOrderBy, metadata, aliasToLogicalName);
 
             // For single-table queries, don't bother qualifying the column names to make the query easier to read
             if (query.FromClause.TableReferences[0] is NamedTableReference)
@@ -2556,7 +2556,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="name">The name or alias of the &lt;entity&gt; or &lt;link-entity&gt; that the sorts are from</param>
         /// <param name="items">The items within the &lt;entity&gt; or &lt;link-entity&gt; to take the sorts from</param>
         /// <param name="query">The SQL query to apply the sorts to</param>
-        private static void AddOrderBy(string name, object[] items, QuerySpecification query)
+        private static void AddOrderBy(string name, object[] items, QuerySpecification query, bool useRawOrderBy, IAttributeMetadataCache metadata, Dictionary<string,string> aliasToLogicalName)
         {
             if (items == null)
                 return;
@@ -2577,7 +2577,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 Identifiers =
                                 {
-                                    new Identifier{Value = sort.alias}
+                                    new Identifier { Value = sort.alias }
                                 }
                             }
                         },
@@ -2586,7 +2586,20 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
-                    var entityName = sort.entityname ?? name;
+                    var entityAlias = sort.entityname ?? name;
+                    var attributeName = sort.attribute;
+
+                    if (!aliasToLogicalName.TryGetValue(entityAlias, out var entityLogicalName))
+                        entityLogicalName = entityAlias;
+
+                    if (!useRawOrderBy)
+                    {
+                        var entityMetadata = metadata[entityLogicalName];
+                        var attr = entityMetadata.Attributes.SingleOrDefault(a => a.LogicalName == attributeName);
+
+                        if (attr is LookupAttributeMetadata || attr is EnumAttributeMetadata)
+                            attributeName += "name";
+                    }
 
                     query.OrderByClause.OrderByElements.Add(new ExpressionWithSortOrder
                     {
@@ -2595,10 +2608,10 @@ namespace MarkMpn.Sql4Cds.Engine
                             MultiPartIdentifier = new MultiPartIdentifier
                             {
                                 Identifiers =
-                            {
-                                new Identifier{Value = entityName},
-                                new Identifier{Value = sort.attribute}
-                            }
+                                {
+                                    new Identifier { Value = entityAlias },
+                                    new Identifier { Value = attributeName }
+                                }
                             }
                         },
                         SortOrder = sort.descending ? SortOrder.Descending : SortOrder.Ascending
@@ -2608,7 +2621,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Recurse into link entities
             foreach (var link in items.OfType<FetchLinkEntityType>())
-                AddOrderBy(link.alias ?? link.name, link.Items, query);
+                AddOrderBy(link.alias ?? link.name, link.Items, query, useRawOrderBy, metadata, aliasToLogicalName);
         }
 
         private class SimplifyMultiPartIdentifierVisitor : TSqlFragmentVisitor

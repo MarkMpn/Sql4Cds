@@ -115,6 +115,42 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         }
 
         [TestMethod]
+        public void OrderLookup()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <order attribute='parentcustomerid' />
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY parentcustomeridname ASC", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void OrderLookupRaw()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch useraworderby='1'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <order attribute='parentcustomerid' />
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY parentcustomerid ASC", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
         public void OrderDescending()
         {
             var metadata = new AttributeMetadataCache(_service);
