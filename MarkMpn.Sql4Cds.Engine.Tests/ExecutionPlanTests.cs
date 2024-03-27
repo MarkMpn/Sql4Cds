@@ -5331,13 +5331,13 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var select = AssertNode<SelectNode>(plans[0]);
-            var sort = AssertNode<SortNode>(select.Source);
-            var fetch = AssertNode<FetchXmlScan>(sort.Source);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
 
             AssertFetchXml(fetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true' useraworderby='1'>
                     <entity name='new_customentity'>
                         <attribute name='new_optionsetvalue' />
+                        <order attribute='new_optionsetvalue' />
                     </entity>
                 </fetch>");
         }
