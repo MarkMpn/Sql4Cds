@@ -1081,9 +1081,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // it's not always the same under the hood.
                     if (attributeSuffix == "name")
                     {
+                        // Should normally only be one string virtual attribute related to the lookup attribute and one yomi one. Sometimes
+                        // the yomi version is not flagged as such, and some special cases have additional ones as well
+                        // https://github.com/MarkMpn/Sql4Cds/issues/443
                         attribute = meta.Attributes
                             .OfType<StringAttributeMetadata>()
-                            .SingleOrDefault(a => a.AttributeOf == attrName && a.AttributeType == AttributeTypeCode.String && a.YomiOf == null);
+                            .Where(a => a.AttributeOf == attrName && a.AttributeType == AttributeTypeCode.String && a.YomiOf == null)
+                            .OrderBy(a => a.LogicalName == attrName + "name" ? 0 : 1)
+                            .FirstOrDefault();
                     }
                     else
                     {
