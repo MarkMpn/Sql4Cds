@@ -396,11 +396,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                     if (attribute != null)
                                     {
-                                        if (attribute is LookupAttributeMetadata || useRawOrderBy == true)
-                                            return this;
-
                                         fetchSort.attribute = attribute.LogicalName;
-                                        useRawOrderBy = false;
+
+                                        if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                                        {
+                                            if (useRawOrderBy == true)
+                                                return this;
+
+                                            useRawOrderBy = false;
+                                        }
                                     }
                                 }
                             }
@@ -446,11 +450,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                 if (attribute != null)
                                 {
-                                    if (attribute is LookupAttributeMetadata || useRawOrderBy == true)
-                                        return this;
-
                                     fetchSort.attribute = attribute.LogicalName;
-                                    useRawOrderBy = false;
+
+                                    if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                                    {
+                                        if (useRawOrderBy == true)
+                                            return this;
+
+                                        useRawOrderBy = false;
+                                    }
                                 }
                             }
 
