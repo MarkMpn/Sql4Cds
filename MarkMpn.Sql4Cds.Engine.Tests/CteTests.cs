@@ -28,12 +28,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     [TestClass]
     public class CteTests : FakeXrmEasyTestsBase, IQueryExecutionOptions
     {
-        private List<JoinOperator> _supportedJoins = new List<JoinOperator>
-        {
-            JoinOperator.Inner,
-            JoinOperator.LeftOuter
-        };
-
         CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
@@ -48,11 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
-        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
-
         bool IQueryExecutionOptions.UseLocalTimeZone => true;
-
-        List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
@@ -88,7 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSelect()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (SELECT accountid, name FROM account)
@@ -112,7 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ColumnAliases()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte (id, n) AS (SELECT accountid, name FROM account)
@@ -136,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MultipleAnchorQueries()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte (id, n) AS (SELECT accountid, name FROM account UNION ALL select contactid, fullname FROM contact)
@@ -169,7 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MergeFilters()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark')
@@ -198,7 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MultipleReferencesWithAliases()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark')
@@ -236,7 +226,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MultipleReferencesInUnionAll()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (SELECT contactid, firstname, lastname FROM contact WHERE firstname = 'Mark')
@@ -272,7 +262,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void MultipleRecursiveReferences()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -289,7 +279,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void HintsOnRecursiveReference()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -306,7 +296,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void RecursionWithoutUnionAll()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -323,7 +313,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(QueryParseException))]
         public void OrderByWithoutTop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -341,7 +331,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void GroupByOnRecursiveReference()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -358,7 +348,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void AggregateOnRecursiveReference()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -375,7 +365,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void TopOnRecursiveReference()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -392,7 +382,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void OuterJoinOnRecursiveReference()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -409,7 +399,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void SubqueryOnRecursiveReference()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -426,7 +416,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void IncorrectColumnCount()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte (id, fname) AS (
@@ -441,7 +431,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void AnonymousColumn()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -456,7 +446,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void MissingAnchorQuery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte (x, y) AS (
@@ -470,7 +460,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AliasedAnonymousColumn()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte (id, fname, lname) AS (
@@ -508,7 +498,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectStarFromValues()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH source_data_cte AS (
@@ -545,7 +535,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleRecursion()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH cte AS (
@@ -614,7 +604,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FactorialCalc()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -647,7 +637,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FactorialCalcFiltered()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -664,7 +654,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FactorialCalcFilteredCaseInsensitive()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -682,7 +672,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Under()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH account_hierarchical(accountid) AS (
@@ -713,7 +703,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void EqOrUnder()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH account_hierarchical(accountid) AS (
@@ -744,7 +734,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Above()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH account_hierarchical(accountid, parentaccountid) AS (
@@ -775,7 +765,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void EqOrAbove()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"
                 WITH account_hierarchical(accountid, parentaccountid) AS (

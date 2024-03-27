@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var actual = func(new ExpressionExecutionContext(compilationContext));
@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var actual = func(new ExpressionExecutionContext(compilationContext));
@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var actual = func(new ExpressionExecutionContext(compilationContext));
@@ -83,7 +83,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var actual = func(new ExpressionExecutionContext(compilationContext));
@@ -118,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var record = new Entity
@@ -158,7 +158,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var record = new Entity
@@ -186,7 +186,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var record = new Entity

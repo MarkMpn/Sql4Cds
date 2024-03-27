@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [DataRow("strict $.info.none", null, true)]
         public void JsonValue(string path, string expectedValue, bool expectedError)
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -71,7 +71,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
         [TestMethod]
         public void JsonValueNull()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT JSON_VALUE('{ \"changedAttributes\": [ { \"logicalName\": \"column1\", \"oldValue\": null, \"newValue\": \"\" } ] }', '$.changedAttributes[0].oldValue')";
@@ -104,7 +104,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
         [DataRow("strict $.info.none", null, false, true)]
         public void JsonQuery(string path, string expectedValue, bool expectedFullValue, bool expectedError)
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT JSON_QUERY(@json, @path)";
@@ -150,7 +150,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
         [TestMethod]
         public void IsJsonTrue()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT ISJSON('true', VALUE)";
@@ -161,7 +161,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
         [TestMethod]
         public void IsJsonUnquotedString()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT ISJSON('test string', VALUE)";
@@ -172,7 +172,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
         [TestMethod]
         public void IsJsonQuotedString()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT ISJSON('\"test string\"', SCALAR)";

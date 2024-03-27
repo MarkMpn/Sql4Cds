@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = query;
@@ -68,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectParameters()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT @param1, @param2";
@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void InsertRecordsAffected()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name)";
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void InsertRecordsAffectedMultipleCommands()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); INSERT INTO account (name) VALUES (@name)";
@@ -121,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CombinedInsertSelect()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT accountid FROM account WHERE name = @name";
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MultipleResultSets()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT accountid FROM account WHERE name = @name; SELECT name FROM account";
@@ -173,7 +173,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GetLastInsertId()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT @@IDENTITY";
@@ -190,7 +190,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void RowCount()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES ('1'), ('2'), ('3'); SELECT @@ROWCOUNT; SELECT @@ROWCOUNT";
@@ -213,7 +213,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void LoadToDataTable()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT 1, 'hello world'";
@@ -234,7 +234,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ControlOfFlow()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -277,7 +277,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Print()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "PRINT @param1";
@@ -295,7 +295,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GoTo()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -340,7 +340,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ContinueBreak()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -383,7 +383,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GlobalVariablesPreservedBetweenCommands()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES ('test')";
@@ -403,7 +403,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CaseInsensitiveDml()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (Name) VALUES ('ProperCase')";
@@ -439,7 +439,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT name FROM account";
@@ -476,7 +476,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT name FROM account; SELECT accountid FROM account";
@@ -511,7 +511,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT name FROM account; SELECT accountid FROM account";
@@ -530,7 +530,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void StringLengthInSchema()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT accountid, name, name + 'foo', employees, left(name, 2) FROM account";
@@ -556,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void StringLengthUnion()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -580,7 +580,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DecimalPrecisionScaleUnion()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -612,7 +612,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DecimalPrecisionScaleCalculations()
         {
             // Examples from https://docs.microsoft.com/en-us/sql/t-sql/data-types/precision-scale-and-length-transact-sql?view=sql-server-ver15#examples
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -652,7 +652,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DefaultStringLengths()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -674,7 +674,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DateTypeConversions()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -724,7 +724,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void InsertNull()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO contact (firstname, lastname, parentcustomerid) VALUES (NULL, NULL, NULL)";
@@ -744,7 +744,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UpdateNull()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name, employees) VALUES ('Data8', 100); SELECT @@IDENTITY";
@@ -780,7 +780,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void WaitFor()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES ('Mark', 'Carrington');";
@@ -805,7 +805,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void StoredProcedureCommandType()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SampleMessage";
@@ -839,7 +839,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AliasedTVF()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT msg.* FROM SampleMessage('1') AS msg";
@@ -858,7 +858,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CorrelatedNotExistsTypeConversion()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT * FROM (VALUES ('1'), ('2')) a (s) WHERE NOT EXISTS (SELECT TOP 1 1 FROM (VALUES (1)) b (i) WHERE a.s = b.i)";
@@ -878,7 +878,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             // Using example from
             // https://docs.microsoft.com/en-us/sql/t-sql/functions/char-transact-sql?view=sql-server-ver16#a-using-ascii-and-char-to-print-ascii-values-from-a-string
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -923,7 +923,7 @@ GO";
         {
             // Using example from
             // https://docs.microsoft.com/en-us/sql/t-sql/functions/nchar-transact-sql?view=sql-server-ver16#b-using-substring-unicode-convert-and-nchar
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -991,7 +991,7 @@ GO";
         [ExpectedException(typeof(Sql4CdsException))]
         public void Timeout()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandTimeout = 1;
@@ -1008,7 +1008,7 @@ GO";
         [TestMethod]
         public void ReusedParameter()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -1037,7 +1037,7 @@ SELECT name FROM account WHERE name = @name OR name = @name";
         [TestMethod]
         public void SortByCollation()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES ('Chiapas'),('Colima'), ('Cinco Rios'), ('California')";
@@ -1078,7 +1078,7 @@ SELECT name FROM account WHERE name = @name OR name = @name";
         [TestMethod]
         public void CollationSensitiveFunctions()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "select case when 'test' like 't%' then 1 else 0 end";
@@ -1281,7 +1281,7 @@ FOR XML PATH";
         public void UpdateCase()
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/314
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandTimeout = 0;
@@ -1301,7 +1301,7 @@ FOR XML PATH";
         [TestMethod]
         public void FullOuterJoinNoEqijoinPredicate()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandTimeout = 0;
@@ -1339,7 +1339,7 @@ FOR XML PATH";
         [TestMethod]
         public void StringAgg()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES ('A')";
@@ -1360,7 +1360,7 @@ FOR XML PATH";
         [TestMethod]
         public void VariantType()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 // Can select two variant values of different types in the same column
@@ -1380,7 +1380,7 @@ FOR XML PATH";
         [TestMethod]
         public void VariantComparisons()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 // Variant values are compared according to the type family hierarchy
@@ -1416,7 +1416,7 @@ select sql_variant_property(@v, 'BaseType') as BaseType,         -- 'decimal',
         [TestMethod]
         public void SqlVariantProperty()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 // Variant values are compared according to the type family hierarchy
@@ -1446,7 +1446,7 @@ SELECT   SQL_VARIANT_PROPERTY(@v,'BaseType') AS 'Base Type',
         [TestMethod]
         public void VariantTypes()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 // Variant values are compared according to the type family hierarchy
@@ -1490,7 +1490,7 @@ SELECT   @n";
         [TestMethod]
         public void ExecSetState()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES ('Test', 'User'); SELECT @@IDENTITY";
@@ -1519,7 +1519,7 @@ EXEC SetState @id, 1, 2";
         [TestMethod]
         public void ComplexFetchXmlAlias()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES ('Data8')";
@@ -1540,7 +1540,7 @@ EXEC SetState @id, 1, 2";
         [TestMethod]
         public void CheckForMissingTable()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -1556,7 +1556,7 @@ ELSE
         [TestMethod]
         public void Throw()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "THROW 51000, 'The record does not exist.', 1;";
@@ -1582,7 +1582,7 @@ ELSE
         [TestMethod]
         public void Catch()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -1612,7 +1612,7 @@ END CATCH";
         [TestMethod]
         public void RaiseError()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -1642,7 +1642,7 @@ END CATCH";
         [TestMethod]
         public void NestedCatch()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -1705,7 +1705,7 @@ SELECT ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE(), ERROR
         [TestMethod]
         public void GotoOutOfCatchBlockClearsError()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -1761,7 +1761,7 @@ SELECT @@ERROR, ERROR_NUMBER(), ERROR_SEVERITY(), ERROR_STATE(), ERROR_PROCEDURE
         [TestMethod]
         public void Rethrow()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -1815,7 +1815,7 @@ END CATCH";
         [DataRow("SELECT FORMATMESSAGE('Hello %-20s!', 'TEST')", "Hello TEST                !")]
         public void FormatMessage(string query, string expected)
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = query;
@@ -1835,7 +1835,7 @@ END CATCH";
         {
             var tableName = column.StartsWith("new_") ? "new_customentity" : "account";
 
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 var accountId = Guid.NewGuid();
@@ -1895,7 +1895,7 @@ END CATCH";
         public void MetadataGuidConversionErrors()
         {
             // Failures converting string to guid should be handled in the same way for metadata queries as for FetchXML
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE metadataid = 'test'";
@@ -1917,7 +1917,7 @@ END CATCH";
         public void MetadataEnumConversionErrors()
         {
             // Enum values are presented as simple strings, so there should be no error when converting invalid values
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE ownershiptype = 'test'";
@@ -1977,7 +1977,7 @@ END CATCH";
 
         private void DapperQuery<TId>(Func<TId,Guid> selector)
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             {
                 if (typeof(TId) == typeof(Guid))
                     con.ReturnEntityReferenceAsGuid = true;
@@ -2039,7 +2039,7 @@ END CATCH";
             // type handler to set the paramete
             SqlMapper.AddTypeHandler(new SqlEntityReferenceTypeHandler());
 
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             {
                 con.Execute("INSERT INTO account (name) VALUES (@name)", new { name = "Dapper" });
                 var id = con.ExecuteScalar<SqlEntityReference>("SELECT @@IDENTITY");

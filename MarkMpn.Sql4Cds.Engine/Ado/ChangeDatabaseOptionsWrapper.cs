@@ -24,7 +24,6 @@ namespace MarkMpn.Sql4Cds.Engine
             UseBulkDelete = options.UseBulkDelete;
             BatchSize = options.BatchSize;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
-            ColumnComparisonAvailable = options.ColumnComparisonAvailable;
             UseLocalTimeZone = options.UseLocalTimeZone;
             BypassCustomPlugins = options.BypassCustomPlugins;
             QuotedIdentifiers = options.QuotedIdentifiers;
@@ -45,11 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public int MaxDegreeOfParallelism { get; set; }
 
-        public bool ColumnComparisonAvailable { get; }
-
         public bool UseLocalTimeZone { get; set; }
-
-        public List<JoinOperator> JoinOperatorsAvailable => _options.JoinOperatorsAvailable;
 
         public bool BypassCustomPlugins { get; set; }
 

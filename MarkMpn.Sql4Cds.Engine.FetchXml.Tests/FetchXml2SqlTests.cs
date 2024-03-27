@@ -115,6 +115,40 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         }
 
         [TestMethod]
+        public void OrderPicklist()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <order attribute='new_optionsetvalue' />
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT new_name FROM new_customentity ORDER BY new_optionsetvaluename ASC", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void OrderPicklistRaw()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch useraworderby='1'>
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <order attribute='new_optionsetvalue' />
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT new_name FROM new_customentity ORDER BY new_optionsetvalue ASC", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
         public void OrderDescending()
         {
             var metadata = new AttributeMetadataCache(_service);
@@ -130,6 +164,28 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY firstname DESC", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void JoinOrder()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid'>
+                            <attribute name='name' />
+                        </link-entity>
+                        <order entityname='account' attribute='name' />
+                        <order attribute='firstname' />
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid ORDER BY account.name ASC, contact.firstname ASC", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -549,6 +605,255 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     SELECT account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
                 )
                 SELECT * FROM account WHERE accountid IN ( SELECT accountid FROM account_hierarchical )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void Exists()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <link-entity name='account'
+                         from='primarycontactid'
+                         to='contactid'
+                         link-type='exists'>
+                         <filter type='and'>
+                            <condition attribute='statecode'
+                               operator='eq'
+                               value='1' />
+                         </filter>
+                      </link-entity>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE EXISTS( SELECT account.primarycontactid FROM account WHERE account.statecode = '1' AND contact.contactid = account.primarycontactid )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void In()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <link-entity name='account'
+                         from='primarycontactid'
+                         to='contactid'
+                         link-type='in'>
+                         <filter type='and'>
+                            <condition attribute='statecode'
+                               operator='eq'
+                               value='1' />
+                         </filter>
+                      </link-entity>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE contactid IN ( SELECT account.primarycontactid FROM account WHERE account.statecode = '1' )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void MatchFirstRowUsingCrossApply()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <link-entity name='account'
+                         from='primarycontactid'
+                         to='contactid'
+                         link-type='matchfirstrowusingcrossapply'>
+                         <attribute name='accountid' />
+                         <attribute name='name' />
+                      </link-entity>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT contact.fullname, account.accountid, account.name FROM contact CROSS APPLY ( SELECT TOP 1 account.accountid, account.name FROM account WHERE contact.contactid = account.primarycontactid ) AS account"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void ColumnComparison()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact' >
+                      <attribute name='firstname' />
+                      <filter>
+                         <condition attribute='firstname'
+                            operator='eq'
+                            valueof='lastname' />
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT firstname FROM contact WHERE firstname = lastname"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void ColumnComparisonCrossTable()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='contactid' />
+                      <attribute name='fullname' />
+                      <filter type='and'>
+                         <condition attribute='fullname'
+                            operator='eq'
+                            valueof='acct.name' />
+                      </filter>
+                      <link-entity name='account'
+                         from='accountid'
+                         to='parentcustomerid'
+                         link-type='outer'
+                         alias='acct'>
+                         <attribute name='name' />
+                      </link-entity>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT contact.contactid, contact.fullname, acct.name FROM contact LEFT OUTER JOIN account AS acct ON contact.parentcustomerid = acct.accountid WHERE contact.fullname = acct.name"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityAny()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='or'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='any'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                         <condition attribute='statecode'
+                            operator='eq'
+                            value='1' />
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE (EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid ) OR statecode = '1')"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityNotAny()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='and'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='not any'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE NOT EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityNotAll()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='and'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='not all'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid )"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityAll()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='and'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='all'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE EXISTS( SELECT account.primarycontactid FROM account WHERE contact.contactid = account.primarycontactid ) AND NOT EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid )"), NormalizeWhitespace(converted));
         }
 
         private static string NormalizeWhitespace(string s)

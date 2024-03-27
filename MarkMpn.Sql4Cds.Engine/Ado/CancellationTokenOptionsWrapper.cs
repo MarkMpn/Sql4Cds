@@ -33,11 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public int MaxDegreeOfParallelism => _options.MaxDegreeOfParallelism;
 
-        public bool ColumnComparisonAvailable => _options.ColumnComparisonAvailable;
-
         public bool UseLocalTimeZone => _options.UseLocalTimeZone;
-
-        public List<JoinOperator> JoinOperatorsAvailable => _options.JoinOperatorsAvailable;
 
         public bool BypassCustomPlugins => _options.BypassCustomPlugins;
 

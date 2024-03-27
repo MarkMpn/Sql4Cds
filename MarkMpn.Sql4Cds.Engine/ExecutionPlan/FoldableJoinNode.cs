@@ -278,7 +278,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // Can't join with archived data
-            if (leftFetch.FetchXml.DataSource == "archive" || rightFetch.FetchXml.DataSource == "archive")
+            if (leftFetch.FetchXml.DataSource == "retained" || rightFetch.FetchXml.DataSource == "retained")
                 return false;
 
             // If one source is distinct and the other isn't, joining the two won't produce the expected results
@@ -374,7 +374,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // in the new link entity or we must be using an inner join so we can use a post-filter node
             var additionalCriteria = AdditionalJoinCriteria;
 
-            if (TranslateFetchXMLCriteria(context, dataSource.Metadata, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter))
+            if (TranslateFetchXMLCriteria(context, dataSource, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, null, null, out var filter))
             {
                 rightEntity.AddItem(filter);
                 additionalCriteria = null;

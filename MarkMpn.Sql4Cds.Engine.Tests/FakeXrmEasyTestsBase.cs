@@ -20,15 +20,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     {
         protected readonly IOrganizationService _service;
         protected readonly XrmFakedContext _context;
-        protected readonly DataSource _dataSource;
+        protected readonly FakeXrmDataSource _dataSource;
         protected readonly IOrganizationService _service2;
         protected readonly XrmFakedContext _context2;
-        protected readonly DataSource _dataSource2;
+        protected readonly FakeXrmDataSource _dataSource2;
         protected readonly IOrganizationService _service3;
         protected readonly XrmFakedContext _context3;
-        protected readonly DataSource _dataSource3;
+        protected readonly FakeXrmDataSource _dataSource3;
         protected readonly IDictionary<string, DataSource> _dataSources;
-        protected readonly IDictionary<string, DataSource> _localDataSource;
+        protected readonly FakeXrmDataSource _localDataSource;
+        protected readonly IDictionary<string, DataSource> _localDataSources;
 
         static FakeXrmEasyTestsBase()
         {
@@ -73,7 +74,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service = _context.GetOrganizationService();
-            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
+            _dataSource = new FakeXrmDataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
             _context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource.Metadata));
 
             _context2 = new XrmFakedContext();
@@ -85,7 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context2.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
 
             _service2 = _context2.GetOrganizationService();
-            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
+            _dataSource2 = new FakeXrmDataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
             _context2.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource2.Metadata));
 
             _context3 = new XrmFakedContext();
@@ -98,13 +99,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             _service3 = _context3.GetOrganizationService();
             Collation.TryParse("French_CI_AI", out var frenchCIAI);
-            _dataSource3 = new DataSource { Name = "french", Connection = _service3, Metadata = new AttributeMetadataCache(_service3), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = frenchCIAI };
+            _dataSource3 = new FakeXrmDataSource { Name = "french", Connection = _service3, Metadata = new AttributeMetadataCache(_service3), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = frenchCIAI };
             _context3.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource3.Metadata));
 
-            _dataSources = new[] { _dataSource, _dataSource2, _dataSource3 }.ToDictionary(ds => ds.Name);
-            _localDataSource = new Dictionary<string, DataSource>
+            _dataSources = new[] { _dataSource, _dataSource2, _dataSource3 }.ToDictionary(ds => ds.Name, ds => (DataSource)ds);
+
+            _localDataSource = new FakeXrmDataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache, DefaultCollation = Collation.USEnglish };
+            _localDataSources = new Dictionary<string, DataSource>
             {
-                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache, DefaultCollation = Collation.USEnglish }
+                ["local"] = _localDataSource
             };
 
             SetPrimaryIdAttributes(_context);
