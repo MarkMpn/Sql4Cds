@@ -1223,7 +1223,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var cond in filter.Items.OfType<condition>())
             {
-                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid || cond.@operator == @operator.neq || cond.@operator == @operator.neuserid)
+                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid ||
+                    cond.@operator == @operator.neq || cond.@operator == @operator.neuserid || cond.@operator == @operator.notlike ||
+                    cond.@operator == @operator.notin || cond.@operator == @operator.notunder || cond.@operator == @operator.notbeginwith ||
+                    cond.@operator == @operator.notbetween || cond.@operator == @operator.notcontainvalues || cond.@operator == @operator.notendwith)
                     continue;
 
                 var fullname = (cond.entityname?.EscapeIdentifier() ?? alias) + "." + (cond.alias ?? cond.attribute).EscapeIdentifier();

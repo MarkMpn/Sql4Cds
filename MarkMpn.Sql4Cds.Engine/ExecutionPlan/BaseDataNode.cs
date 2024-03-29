@@ -1171,7 +1171,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (meta.LogicalName == "solution" && linkName != null && !new FetchEntityType { Items = items }.GetLinkEntities(true).Any(link => link.alias == linkName))
                 return false;
 
-            if ((op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid) && type != BooleanComparisonType.IsDistinctFrom)
+            if ((op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid || op == @operator.notlike)
+                && type != BooleanComparisonType.IsDistinctFrom)
             {
                 // FetchXML not-equal type operators treat NULL as not-equal to values, but T-SQL treats them as not-not-equal. Add
                 // an extra not-null condition to keep it compatible with T-SQL

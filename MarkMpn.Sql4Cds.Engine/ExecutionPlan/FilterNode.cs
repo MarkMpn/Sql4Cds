@@ -107,12 +107,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullColumns(schema, n.Expression, !not);
             }
 
-            if (!not && filter is InPredicate inPred)
+            if (!not && filter is InPredicate inPred && !inPred.NotDefined)
             {
                 AddNotNullColumn(schema, inPred.Expression);
             }
 
-            if (!not && filter is LikePredicate like)
+            if (!not && filter is LikePredicate like && !like.NotDefined)
             {
                 AddNotNullColumn(schema, like.FirstExpression);
                 AddNotNullColumn(schema, like.SecondExpression);
