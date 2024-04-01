@@ -81,6 +81,7 @@
     <Compile Include="CteTests.cs" />
     <Compile Include="ExecutionPlanTests.cs" />
     <Compile Include="ExpressionTests.cs" />
+    <Compile Include="FakeXrmDataSource.cs" />
     <Compile Include="FakeXrmEasyTestsBase.cs" />
     <Compile Include="JsonFunctionTests.cs" />
     <Compile Include="JsonPathTests.cs" />

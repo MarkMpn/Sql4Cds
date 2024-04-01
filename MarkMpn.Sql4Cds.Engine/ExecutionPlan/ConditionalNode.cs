@@ -70,14 +70,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             Source = Source?.FoldQuery(context, hints);
 
-            TrueStatements = TrueStatements
-                .SelectMany(s => s.FoldQuery(context, hints))
-                .ToArray();
-
-            FalseStatements = FalseStatements
-                ?.SelectMany(s => s.FoldQuery(context, hints))
-                ?.ToArray();
-
             return new[] { this };
         }
 
