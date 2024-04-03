@@ -13,6 +13,7 @@ using Microsoft.ApplicationInsights;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.Xrm.Tooling.Connector;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
@@ -20,6 +21,9 @@ namespace MarkMpn.Sql4Cds.SSMS
     {
         private static readonly IDictionary<string, CrmServiceClient> _clientCache = new Dictionary<string,CrmServiceClient>();
         private static readonly IDictionary<string, AttributeMetadataCache> _metadataCache = new Dictionary<string, AttributeMetadataCache>();
+        private static readonly IDictionary<string, ITableSizeCache> _tableSizeCache = new Dictionary<string, ITableSizeCache>();
+        private static readonly IDictionary<string, IMessageCache> _messageCache = new Dictionary<string, IMessageCache>();
+
         protected static readonly TelemetryClient _ai;
 
         static CommandBase()
@@ -138,14 +142,16 @@ namespace MarkMpn.Sql4Cds.SSMS
             var name = conStr.DataSource.Split('.')[0];
             var con = ConnectCDS(conStr);
             var metadata = GetMetadataCache(conStr);
+            var tableSizeCache = GetTableSizeCache(conStr, metadata);
+            var messageCache = GetMessageCache(conStr, metadata);
 
             return new DataSource
             {
                 Connection = con,
                 Metadata = metadata,
                 Name = name,
-                TableSizeCache = new TableSizeCache(con, metadata),
-                MessageCache = new MessageCache(con, metadata)
+                TableSizeCache = tableSizeCache,
+                MessageCache = messageCache
             };
         }
 
@@ -229,6 +235,38 @@ namespace MarkMpn.Sql4Cds.SSMS
             _metadataCache[server] = metadata;
 
             return metadata;
+        }
+
+        private ITableSizeCache GetTableSizeCache(SqlConnectionStringBuilder conStr, IAttributeMetadataCache metadata)
+        {
+            if (conStr == null)
+                return null;
+
+            var server = conStr.DataSource.Split(',')[0];
+
+            if (_tableSizeCache.TryGetValue(server, out var tableSizeCache))
+                return tableSizeCache;
+
+            tableSizeCache = new TableSizeCache(ConnectCDS(conStr), metadata);
+            _tableSizeCache[server] = tableSizeCache;
+
+            return tableSizeCache;
+        }
+
+        private IMessageCache GetMessageCache(SqlConnectionStringBuilder conStr, IAttributeMetadataCache metadata)
+        {
+            if (conStr == null)
+                return null;
+
+            var server = conStr.DataSource.Split(',')[0];
+
+            if (_messageCache.TryGetValue(server, out var messageCache))
+                return messageCache;
+
+            messageCache = new MessageCache(ConnectCDS(conStr), metadata);
+            _messageCache[server] = messageCache;
+
+            return messageCache;
         }
     }
 }
