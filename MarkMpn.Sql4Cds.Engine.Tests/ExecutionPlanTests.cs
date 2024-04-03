@@ -7258,5 +7258,65 @@ inner join contact c on a.primarycontactid = c.contactid";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void ExistsOrInAndColumnComparisonOrderByEntityName()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
+            using (_localDataSource.SetOrderByEntityName(true))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+SELECT TOP 100
+    account.name,
+    contact.fullname
+FROM
+    account
+    INNER JOIN contact ON account.primarycontactid = contact.contactid
+WHERE
+    (
+        EXISTS (SELECT * FROM contact WHERE parentcustomerid = account.accountid AND firstname = 'Mark')
+        OR employees in (SELECT employees FROM account WHERE name = 'Data8')
+    )
+    AND account.createdon = contact.createdon
+ORDER BY
+    contact.fullname, account.name";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='100'>
+                  <entity name='account'>
+                    <attribute name='name' />
+                    <link-entity name='contact' to='primarycontactid' from='contactid' alias='contact' link-type='inner'>
+                      <attribute name='fullname' />
+                    </link-entity>
+                    <filter>
+                      <filter type='or'>
+                        <link-entity name='contact' to='accountid' from='parentcustomerid' link-type='any'>
+                          <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                          </filter>
+                        </link-entity>
+                        <link-entity name='account' to='employees' from='employees' link-type='any'>
+                          <filter>
+                            <condition attribute='name' operator='eq' value='Data8' />
+                          </filter>
+                        </link-entity>
+                      </filter>
+                      <condition valueof='contact.createdon' attribute='createdon' operator='eq' />
+                    </filter>
+                    <order entityname='contact' attribute='fullname' />
+                    <order attribute='name' />
+                  </entity>
+                </fetch>");
+            }
+        }
     }
 }
