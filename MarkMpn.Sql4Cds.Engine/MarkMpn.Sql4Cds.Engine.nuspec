@@ -24,7 +24,7 @@ Fixed use of TOP 1 with IN expression
 Fixed escaping column names for SELECT and INSERT commands
 Improved setting a partylist attribute based on an EntityReference value
 Fixed sorting results for UNION
-Fold DISTNCT to data source for UNION
+Fold DISTINCT to data source for UNION
 Fold groupings without aggregates to DISTINCT
 Fixed folding filters through nested loops with outer references
 Fixed use of recursive CTE references within subquery
