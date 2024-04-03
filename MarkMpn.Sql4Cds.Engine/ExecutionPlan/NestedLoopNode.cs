@@ -94,18 +94,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         joinConditionContext = joinCondition == null ? null : new ExpressionExecutionContext(context);
                     }
 
-                    var merged = Merge(left, leftSchema, right, rightSchema);
+                    var finalMerged = Merge(left, leftSchema, right, rightSchema, false);
 
                     if (joinCondition == null)
                     {
-                        yield return merged;
+                        yield return finalMerged;
                     }
                     else
                     {
-                        joinConditionContext.Entity = merged;
+                        joinConditionContext.Entity = OutputLeftSchema && OutputRightSchema ? finalMerged : Merge(left, leftSchema, right, rightSchema, true);
 
                         if (joinCondition(joinConditionContext))
-                            yield return merged;
+                            yield return finalMerged;
                         else
                             continue;
                     }
@@ -126,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         joinConditionContext = joinCondition == null ? null : new ExpressionExecutionContext(context);
                     }
 
-                    yield return Merge(left, leftSchema, null, rightSchema);
+                    yield return Merge(left, leftSchema, null, rightSchema, false);
                 }
             }
         }

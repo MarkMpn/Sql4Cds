@@ -7318,5 +7318,46 @@ ORDER BY
                 </fetch>");
             }
         }
+
+        [TestMethod]
+        public void ExistsOrInAndColumnComparisonOrderByEntityNameLegacy()
+        {
+            using (_localDataSource.SetColumnComparison(false))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+SELECT TOP 100
+    account.name,
+    contact.fullname
+FROM
+    account
+    INNER JOIN contact ON account.primarycontactid = contact.contactid
+WHERE
+    (
+        EXISTS (SELECT * FROM contact WHERE parentcustomerid = account.accountid AND firstname = 'Mark')
+        OR employees in (SELECT employees FROM account WHERE name = 'Data8')
+    )
+    AND account.createdon = contact.createdon
+ORDER BY
+    contact.fullname, account.name";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var top = AssertNode<TopNode>(select.Source);
+                var sort = AssertNode<SortNode>(top.Source);
+                var filter = AssertNode<FilterNode>(sort.Source);
+                var loop = AssertNode<NestedLoopNode>(filter.Source);
+                var merge = AssertNode<MergeJoinNode>(loop.LeftSource);
+                var mainFetch = AssertNode<FetchXmlScan>(merge.LeftSource);
+                var existsFetch = AssertNode<FetchXmlScan>(merge.RightSource);
+                var inTop = AssertNode<TopNode>(loop.RightSource);
+                var inIndexSpool = AssertNode<IndexSpoolNode>(inTop.Source);
+                var inFetch = AssertNode<FetchXmlScan>(inIndexSpool.Source);
+            }
+        }
     }
 }
