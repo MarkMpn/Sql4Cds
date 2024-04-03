@@ -315,28 +315,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            if (JoinCondition != null)
-            {
-                foreach (var col in JoinCondition.GetColumns())
-                {
-                    if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
-                        requiredColumns.Add(col);
-                }
-            }
+            var criteriaCols = JoinCondition?.GetColumns() ?? Enumerable.Empty<string>();
 
             var leftSchema = LeftSource.GetSchema(context);
-            var leftColumns = requiredColumns
+            var leftColumns = requiredColumns.Where(col => OutputLeftSchema)
+                .Concat(criteriaCols)
                 .Where(col => leftSchema.ContainsColumn(col, out _))
-                .Concat((IEnumerable<string>) OuterReferences?.Keys ?? Array.Empty<string>())
-                .Distinct()
+                .Concat((IEnumerable<string>) OuterReferences?.Keys ?? Enumerable.Empty<string>())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
             var innerContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes, context.Log);
             var rightSchema = RightSource.GetSchema(innerContext);
-            var rightColumns = requiredColumns
+            var rightColumns = requiredColumns.Where(col => OutputRightSchema)
+                .Concat(criteriaCols)
                 .Where(col => rightSchema.ContainsColumn(col, out _))
                 .Concat(DefinedValues.Values)
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             LeftSource.AddRequiredColumns(context, leftColumns);

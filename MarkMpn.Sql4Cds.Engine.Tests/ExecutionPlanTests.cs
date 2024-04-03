@@ -1522,7 +1522,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='firstname' />
                         <attribute name='lastname' />
                         <link-entity name='account' alias='Expr2' from='accountid' to='parentcustomerid' link-type='inner'>
-                            <attribute name='name' />
                             <filter>
                                 <condition attribute='name' operator='eq' value='Data8' />
                             </filter>
@@ -7357,6 +7356,44 @@ ORDER BY
                 var inTop = AssertNode<TopNode>(loop.RightSource);
                 var inIndexSpool = AssertNode<IndexSpoolNode>(inTop.Source);
                 var inFetch = AssertNode<FetchXmlScan>(inIndexSpool.Source);
+
+                AssertFetchXml(mainFetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='account'>
+    <attribute name='name' />
+    <attribute name='createdon' />
+    <attribute name='accountid' />
+    <attribute name='employees' />
+    <link-entity name='contact' to='primarycontactid' from='contactid' alias='contact' link-type='inner'>
+      <attribute name='fullname' />
+      <attribute name='createdon' />
+    </link-entity>
+    <order attribute='employees' />
+  </entity>
+</fetch>");
+
+                AssertFetchXml(existsFetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+  <entity name='account'>
+    <attribute name='employees' />
+    <filter>
+      <condition attribute='name' operator='eq' value='Data8' />
+    </filter>
+    <order attribute='employees' />
+  </entity>
+</fetch>");
+
+                AssertFetchXml(inFetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='contact'>
+    <attribute name='contactid' />
+    <attribute name='parentcustomerid' />
+    <filter>
+      <condition attribute='firstname' operator='eq' value='Mark' />
+      <condition attribute='parentcustomerid' operator='not-null' />
+    </filter>
+  </entity>
+</fetch>");
             }
         }
     }
