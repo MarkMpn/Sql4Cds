@@ -116,7 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var nextSide = right;
 
-                if (isLt || (hasLeft && !hasRight))
+                if (hasLeft && (isLt || !hasRight))
                 {
                     nextSide = left;
                 }
