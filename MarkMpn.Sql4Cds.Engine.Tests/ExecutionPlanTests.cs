@@ -1522,7 +1522,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='firstname' />
                         <attribute name='lastname' />
                         <link-entity name='account' alias='Expr2' from='accountid' to='parentcustomerid' link-type='inner'>
-                            <attribute name='name' />
                             <filter>
                                 <condition attribute='name' operator='eq' value='Data8' />
                             </filter>
@@ -7257,6 +7256,145 @@ inner join contact c on a.primarycontactid = c.contactid";
                         <order attribute='new_optionsetvalue' />
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void ExistsOrInAndColumnComparisonOrderByEntityName()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
+            using (_localDataSource.SetOrderByEntityName(true))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+SELECT TOP 100
+    account.name,
+    contact.fullname
+FROM
+    account
+    INNER JOIN contact ON account.primarycontactid = contact.contactid
+WHERE
+    (
+        EXISTS (SELECT * FROM contact WHERE parentcustomerid = account.accountid AND firstname = 'Mark')
+        OR employees in (SELECT employees FROM account WHERE name = 'Data8')
+    )
+    AND account.createdon = contact.createdon
+ORDER BY
+    contact.fullname, account.name";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='100'>
+                  <entity name='account'>
+                    <attribute name='name' />
+                    <link-entity name='contact' to='primarycontactid' from='contactid' alias='contact' link-type='inner'>
+                      <attribute name='fullname' />
+                    </link-entity>
+                    <filter>
+                      <filter type='or'>
+                        <link-entity name='contact' to='accountid' from='parentcustomerid' link-type='any'>
+                          <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                          </filter>
+                        </link-entity>
+                        <link-entity name='account' to='employees' from='employees' link-type='any'>
+                          <filter>
+                            <condition attribute='name' operator='eq' value='Data8' />
+                          </filter>
+                        </link-entity>
+                      </filter>
+                      <condition valueof='contact.createdon' attribute='createdon' operator='eq' />
+                    </filter>
+                    <order entityname='contact' attribute='fullname' />
+                    <order attribute='name' />
+                  </entity>
+                </fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void ExistsOrInAndColumnComparisonOrderByEntityNameLegacy()
+        {
+            using (_localDataSource.SetColumnComparison(false))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+SELECT TOP 100
+    account.name,
+    contact.fullname
+FROM
+    account
+    INNER JOIN contact ON account.primarycontactid = contact.contactid
+WHERE
+    (
+        EXISTS (SELECT * FROM contact WHERE parentcustomerid = account.accountid AND firstname = 'Mark')
+        OR employees in (SELECT employees FROM account WHERE name = 'Data8')
+    )
+    AND account.createdon = contact.createdon
+ORDER BY
+    contact.fullname, account.name";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var top = AssertNode<TopNode>(select.Source);
+                var sort = AssertNode<SortNode>(top.Source);
+                var filter = AssertNode<FilterNode>(sort.Source);
+                var loop = AssertNode<NestedLoopNode>(filter.Source);
+                var merge = AssertNode<MergeJoinNode>(loop.LeftSource);
+                var mainFetch = AssertNode<FetchXmlScan>(merge.LeftSource);
+                var existsFetch = AssertNode<FetchXmlScan>(merge.RightSource);
+                var inTop = AssertNode<TopNode>(loop.RightSource);
+                var inIndexSpool = AssertNode<IndexSpoolNode>(inTop.Source);
+                var inFetch = AssertNode<FetchXmlScan>(inIndexSpool.Source);
+
+                AssertFetchXml(mainFetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='account'>
+    <attribute name='name' />
+    <attribute name='createdon' />
+    <attribute name='accountid' />
+    <attribute name='employees' />
+    <link-entity name='contact' to='primarycontactid' from='contactid' alias='contact' link-type='inner'>
+      <attribute name='fullname' />
+      <attribute name='createdon' />
+    </link-entity>
+    <order attribute='employees' />
+  </entity>
+</fetch>");
+
+                AssertFetchXml(existsFetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+  <entity name='account'>
+    <attribute name='employees' />
+    <filter>
+      <condition attribute='name' operator='eq' value='Data8' />
+    </filter>
+    <order attribute='employees' />
+  </entity>
+</fetch>");
+
+                AssertFetchXml(inFetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='contact'>
+    <attribute name='contactid' />
+    <attribute name='parentcustomerid' />
+    <filter>
+      <condition attribute='firstname' operator='eq' value='Mark' />
+      <condition attribute='parentcustomerid' operator='not-null' />
+    </filter>
+  </entity>
+</fetch>");
+            }
         }
     }
 }

@@ -3858,7 +3858,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 outputCol = subqueryCol;
-                subNode.AddRequiredColumns(context, new List<string> { subqueryCol });
+                //subNode.AddRequiredColumns(context, new List<string> { subqueryCol });
             }
 
             if (alias != null && !(subNode is FetchXmlScan))

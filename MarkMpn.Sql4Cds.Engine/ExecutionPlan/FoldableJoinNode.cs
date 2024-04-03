@@ -673,27 +673,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            if (AdditionalJoinCriteria != null)
-            {
-                foreach (var col in AdditionalJoinCriteria.GetColumns())
-                {
-                    if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
-                        requiredColumns.Add(col);
-                }
-            }
+            var criteriaCols = AdditionalJoinCriteria?.GetColumns() ?? Enumerable.Empty<string>();
 
             // Work out which columns need to be pushed down to which source
             var leftSchema = LeftSource.GetSchema(context);
             var rightSchema = RightSource.GetSchema(context);
 
-            var leftColumns = requiredColumns
+            var leftColumns = requiredColumns.Where(col => OutputLeftSchema)
+                .Concat(criteriaCols)
                 .Where(col => leftSchema.ContainsColumn(col, out _))
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var rightColumns = requiredColumns
+            var rightColumns = requiredColumns.Where(col => OutputRightSchema)
+                .Concat(criteriaCols)
                 .Where(col => rightSchema.ContainsColumn(col, out _))
                 .Concat(DefinedValues.Values)
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             if (LeftAttribute != null)

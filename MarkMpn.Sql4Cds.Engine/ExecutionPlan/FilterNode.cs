@@ -1307,11 +1307,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // We've consumed the subquery implemented by this join - remove it from the execution plan
             if (joinNode.Parent == this)
+            {
                 Source = joinNode.LeftSource;
+                joinNode.LeftSource.Parent = this;
+            }
             else if (joinNode.Parent is BaseJoinNode parentJoin)
+            {
                 parentJoin.LeftSource = joinNode.LeftSource;
+                joinNode.LeftSource.Parent = parentJoin;
+            }
             else
+            {
                 throw new NotImplementedException();
+            }
         }
 
         private Dictionary<FetchXmlScan,HashSet<string>> GetIgnoreAliasesByNode(NodeCompilationContext context)
