@@ -494,7 +494,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                     }
                     else
                     {
-                        parts.Add($"Line {sql4CdsError.LineNumber}");
+                        parts.Add($"Line {Math.Max(sql4CdsError.LineNumber, 1)}");
                     }
 
                     if (line != 0)

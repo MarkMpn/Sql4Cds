@@ -62,6 +62,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            // We can have a sequence of Distinct - Concatenate - Distinct - Concatenate when we have multiple UNION statements
+            // We can collapse this to a single Distinct - Concatenate with all the sources from the various Concatenate nodes
+            CombineConcatenateSources();
+
             Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
@@ -176,6 +180,60 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 aggregate.GroupBy.Add(schema.SortOrder[i].ToColumnReference());
 
             return aggregate;
+        }
+
+        private void CombineConcatenateSources()
+        {
+            if (!(Source is ConcatenateNode concat))
+                return;
+
+            for (var i = 0; i < concat.Sources.Count; i++)
+            {
+                bool folded;
+
+                do
+                {
+                    folded = false;
+
+                    if (concat.Sources[i] is DistinctNode distinct)
+                    {
+                        concat.Sources[i] = distinct.Source;
+                        folded = true;
+                    }
+
+                    if (concat.Sources[i] is ConcatenateNode subConcat)
+                    {
+                        for (var j = 0; j < subConcat.Sources.Count; j++)
+                        {
+                            concat.Sources.Insert(i + j + 1, subConcat.Sources[j]);
+
+                            foreach (var col in concat.ColumnSet)
+                            {
+                                foreach (var subCol in subConcat.ColumnSet)
+                                {
+                                    if (col.SourceColumns[i] == subCol.OutputColumn)
+                                    {
+                                        col.SourceColumns.Insert(i + j + 1, subCol.SourceColumns[j]);
+                                        col.SourceExpressions.Insert(i + j + 1, subCol.SourceExpressions[j]);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        concat.Sources.RemoveAt(i);
+
+                        foreach (var col in concat.ColumnSet)
+                        {
+                            col.SourceColumns.RemoveAt(i);
+                            col.SourceExpressions.RemoveAt(i);
+                        }
+
+                        i--;
+                        folded = false;
+                    }
+                } while (folded);
+            }
         }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)

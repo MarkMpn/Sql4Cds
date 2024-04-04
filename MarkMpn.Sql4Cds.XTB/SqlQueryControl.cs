@@ -748,7 +748,7 @@ namespace MarkMpn.Sql4Cds.XTB
                         foreach (var sql4CdsError in sql4CdsException.Errors)
                         {
                             var errorIndex = lines.Take(sql4CdsError.LineNumber - 1).Sum(l => l.Length + 1) + _params.Offset;
-                            var errorLength = lines[sql4CdsError.LineNumber - 1].Length;
+                            var errorLength = sql4CdsError.LineNumber > 0 ? lines[sql4CdsError.LineNumber - 1].Length : 0;
 
                             if (sql4CdsError.Fragment != null)
                             {
@@ -756,7 +756,8 @@ namespace MarkMpn.Sql4Cds.XTB
                                 errorLength = sql4CdsError.Fragment.FragmentLength;
                             }
 
-                            _editor.IndicatorFillRange(errorIndex, errorLength);
+                            if (errorLength > 0)
+                                _editor.IndicatorFillRange(errorIndex, errorLength);
 
                             var parts = new List<string>
                             {
@@ -772,7 +773,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             }
                             else
                             {
-                                parts.Add($"Line {sql4CdsError.LineNumber + _editor.LineFromPosition(_params.Offset)}");
+                                parts.Add($"Line {Math.Max(sql4CdsError.LineNumber, 1) + _editor.LineFromPosition(_params.Offset)}");
                             }
 
                             AddMessage(errorIndex, errorLength, String.Join(", ", parts), MessageType.ErrorPrefix);

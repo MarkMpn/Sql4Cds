@@ -87,12 +87,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (SemiJoin && left.Used)
                             continue;
 
-                        var merged = Merge(left.Entity, leftSchema, entity, rightSchema);
+                        var finalMerged = Merge(left.Entity, leftSchema, entity, rightSchema, false);
+                        var merged = (OutputLeftSchema && OutputRightSchema) || additionalJoinCriteria == null ? finalMerged : Merge(left.Entity, leftSchema, entity, rightSchema, true);
                         expressionContext.Entity = merged;
 
                         if (additionalJoinCriteria == null || additionalJoinCriteria(expressionContext))
                         {
-                            yield return merged;
+                            yield return finalMerged;
                             left.Used = true;
                             matched = true;
                         }
@@ -100,13 +101,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (!matched && (JoinType == QualifiedJoinType.RightOuter || JoinType == QualifiedJoinType.FullOuter))
-                    yield return Merge(null, leftSchema, entity, rightSchema);
+                    yield return Merge(null, leftSchema, entity, rightSchema, false);
             }
 
             if (JoinType == QualifiedJoinType.LeftOuter || JoinType == QualifiedJoinType.FullOuter)
             {
                 foreach (var unmatched in _hashTable.SelectMany(kvp => kvp.Value).Where(e => !e.Used))
-                    yield return Merge(unmatched.Entity, leftSchema, null, rightSchema);
+                    yield return Merge(unmatched.Entity, leftSchema, null, rightSchema, false);
             }
         }
 

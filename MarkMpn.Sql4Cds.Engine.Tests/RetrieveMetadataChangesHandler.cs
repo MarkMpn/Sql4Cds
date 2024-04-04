@@ -11,6 +11,7 @@ using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using System.Data.SqlTypes;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
@@ -107,7 +108,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         private Expression ToExpression(MetadataConditionExpression condition, ParameterExpression param)
         {
             var value = Expression.PropertyOrField(param, condition.PropertyName);
-            var targetValue = Expression.Constant(condition.Value);
+            var targetValue = (Expression)Expression.Constant(condition.Value);
+
+            if (value.Type.IsGenericType &&
+                value.Type.GetGenericTypeDefinition() == typeof(Nullable<>) &&
+                value.Type.GetGenericArguments()[0] == targetValue.Type)
+            {
+                targetValue = Expression.Convert(targetValue, value.Type);
+            }
 
             switch (condition.ConditionOperator)
             {

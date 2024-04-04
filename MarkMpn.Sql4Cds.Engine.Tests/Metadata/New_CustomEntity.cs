@@ -38,6 +38,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("new_optionsetvaluecollection")]
         public OptionSetValueCollection New_OptionSetValueCollection { get; set; }
+
+        [AttributeLogicalName("new_decimalprop")]
+        public decimal? New_DecimalProp { get; set; }
+
+        [AttributeLogicalName("new_doubleprop")]
+        public double? New_DoubleProp { get; set; }
     }
 
     enum New_OptionSet

@@ -412,7 +412,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             if (!(value is IComparable cmp))
-                throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
+                throw new InvalidOperationException("MIN is not valid for values of type " + value.GetType().Name);
 
             var s = (State)state;
 

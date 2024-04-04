@@ -159,6 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static void AddNullableTypeConversion<TSql, TNet>(Func<DataSource, TNet, DataTypeReference, TSql> netToSql, Func<TSql, TNet> sqlToNet)
             where TSql : INullable
+            where TNet : class
         {
             if (netToSql != null)
             {
@@ -180,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (sqlToNet != null && !_sqlToNetTypeConversions.ContainsKey(typeof(TSql)))
             {
                 _sqlToNetTypeConversions[typeof(TSql)] = typeof(TNet);
-                _sqlToNetTypeConversionFuncs[typeof(TSql)] = v => sqlToNet((TSql)v);
+                _sqlToNetTypeConversionFuncs[typeof(TSql)] = v => ((TSql)v).IsNull ? null : sqlToNet((TSql)v);
             }
         }
 
@@ -535,6 +536,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (expr.Type == typeof(object) && expr is ConstantExpression constant && constant.Value == null && typeof(INullable).IsAssignableFrom(to))
                     return Expression.Constant(GetNullValue(to));
 
+                if (_sqlToNetTypeConversions.TryGetValue(expr.Type, out var sqlToNetType) &&
+                    sqlToNetType == to)
+                {
+                    var func = _sqlToNetTypeConversionFuncs[expr.Type];
+                    expr = Expression.Invoke(Expression.Constant(func), Expression.Convert(expr, typeof(INullable)));
+                }
+                
                 expr = Expression.Convert(expr, to);
 
                 //if (to == typeof(SqlString))
@@ -567,7 +575,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="styleType">An optional parameter defining the type of the <paramref name="style"/> expression</param>
         /// <param name="convert">An optional parameter containing the SQL CONVERT() function call to report any errors against</param>
         /// <returns>An expression to generate values of the required type</returns>
-        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, ConvertCall convert = null, bool throwOnTruncate = false)
+        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, TSqlFragment convert = null, bool throwOnTruncate = false)
         {
             if (from.IsSameAs(to))
                 return expr;
@@ -579,6 +587,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Expression.Constant(_nullValues[targetType]);
 
             var sourceType = expr.Type;
+            var originalExpr = expr;
 
             if (!CanChangeTypeExplicit(from, to))
                 throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 529, $"Explicit conversion from data type {from.ToSql()} to {to.ToSql()} is not allowed", convert));
@@ -595,7 +604,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (!CanChangeTypeImplicit(styleType, DataTypeHelpers.Int))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8116, $"Argument data type {styleType.ToSql()} is invalid for argument 3 of convert function", convert.Style));
+                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8116, $"Argument data type {styleType.ToSql()} is invalid for argument 3 of convert function", ((ConvertCall)convert).Style));
 
             // Special case for conversion to sql_variant
             if (to.IsSameAs(DataTypeHelpers.Variant))
@@ -622,7 +631,54 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlBinary>(), Expr.Arg<Collation>(), Expr.Arg<bool>()), expr, Expression.Constant(targetCollation), Expression.Constant(toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar));
 
             if (expr.Type != targetType)
+            {
                 expr = Convert(expr, targetType);
+                
+                // Handle errors during type conversion
+                var errorNumber = 8114;
+                var errorMessage = $"Error converting data type {from.ToSql()} to {to.ToSql()}.";
+
+                if (fromSqlType?.SqlDataTypeOption.IsStringType() == true)
+                {
+                    if (to.IsSameAs(DataTypeHelpers.UniqueIdentifier) || to.IsSameAs(DataTypeHelpers.EntityReference))
+                    {
+                        errorNumber = 8169;
+                        errorMessage = "Conversion failed when converting from a character string to uniqueidentifier";
+                    }
+                    else if (toSqlType?.SqlDataTypeOption.IsDateTimeType() == true)
+                    {
+                        errorNumber = 241;
+                        errorMessage = "Conversion failed when converting date and/or time from character string";
+                    }
+                    else if (toSqlType?.SqlDataTypeOption == SqlDataTypeOption.Money)
+                    {
+                        errorNumber = 235;
+                        errorMessage = "Cannot convert a char value to money. The char value has incorrect syntax";
+                    }
+                    else if (toSqlType?.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
+                    {
+                        errorNumber = 235;
+                        errorMessage = "Cannot convert a char value to smallmoney. The char value has incorrect syntax";
+                    }
+                    else if (toSqlType?.SqlDataTypeOption == SqlDataTypeOption.Int || toSqlType?.SqlDataTypeOption == SqlDataTypeOption.SmallInt || toSqlType?.SqlDataTypeOption == SqlDataTypeOption.TinyInt || toSqlType?.SqlDataTypeOption == SqlDataTypeOption.Bit)
+                    {
+                        errorNumber = 245;
+                        errorMessage = "Conversion failed when converting the varchar value '{0}' to data type {1}";
+                    }
+                }
+
+                var variables = new List<ParameterExpression>();
+                var typedParam = Expression.Variable(targetType);
+                variables.Add(typedParam);
+                var body = new List<Expression>();
+                var returnTarget = Expression.Label(targetType);
+                body.Add(Expression.Throw(Expr.Call(() => CreateConversionError(Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<object>(), Expr.Arg<DataTypeReference>()), Expression.Constant(errorNumber), Expression.Constant(errorMessage), originalExpr, Expression.Constant(to))));
+                body.Add(Expression.Return(returnTarget, typedParam));
+                body.Add(Expression.Label(returnTarget, typedParam));
+                var block = Expression.Block(targetType, variables, body);
+                var catchBlock = Expression.Catch(typeof(FormatException), block);
+                expr = Expression.TryCatch(expr, catchBlock);
+            }
 
             if (toSqlType == null)
                 return expr;
@@ -712,6 +768,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        private static QueryExecutionException CreateConversionError(int number, string message, object arg, DataTypeReference to)
+        {
+            return new QueryExecutionException(new Sql4CdsError(16, number, String.Format(message, arg, to.ToSql()), null));
         }
 
         /// <summary>
@@ -1302,6 +1363,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var parsedValue = (Expression)Expression.Convert(expression, typeof(string));
                 parsedValue = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(destType.GetGenericArguments()[0]), parsedValue, Expression.Constant(true));
                 parsedValue = Expression.Convert(parsedValue, destType);
+
+                // Convert invalid string values to invalid enum values
+                var variables = new List<ParameterExpression>();
+                var typedParam = Expression.Variable(destType);
+                variables.Add(typedParam);
+                var body = new List<Expression>();
+                var returnTarget = Expression.Label(destType);
+                body.Add(Expression.Assign(typedParam, Expression.Convert(Expression.Constant(-1), destType)));
+                body.Add(Expression.Return(returnTarget, typedParam));
+                body.Add(Expression.Label(returnTarget, typedParam));
+                var block = Expression.Block(destType, variables, body);
+                var catchBlock = Expression.Catch(typeof(ArgumentException), block);
+                parsedValue = Expression.TryCatch(parsedValue, catchBlock);
+
                 expression = Expression.Condition(nullCheck, nullValue, parsedValue);
             }
             else if (expression.Type == typeof(SqlString) && destType.IsEnum)
@@ -1309,6 +1384,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = (Expression)Expression.Convert(expression, typeof(string));
                 expression = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(destType), expression, Expression.Constant(true));
                 expression = Expression.Convert(expression, destType);
+
+                // Convert invalid string values to invalid enum values
+                var variables = new List<ParameterExpression>();
+                var typedParam = Expression.Variable(destType);
+                variables.Add(typedParam);
+                var body = new List<Expression>();
+                var returnTarget = Expression.Label(destType);
+                body.Add(Expression.Assign(typedParam, Expression.Convert(Expression.Constant(-1), destType)));
+                body.Add(Expression.Return(returnTarget, typedParam));
+                body.Add(Expression.Label(returnTarget, typedParam));
+                var block = Expression.Block(destType, variables, body);
+                var catchBlock = Expression.Catch(typeof(ArgumentException), block);
+                expression = Expression.TryCatch(expression, catchBlock);
             }
             else if (expression.Type == typeof(SqlInt32) && destType == typeof(OptionSetValue))
             {
@@ -1320,7 +1408,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else
             {
-                expression = Expression.Convert(expression, destType);
+                expression = Convert(expression, destType);
             }
 
             //if (destType == typeof(SqlString))
