@@ -61,9 +61,27 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     using (var reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
-                            _supportedTables.Add(reader.GetString(0));
+                            _supportedTables.Add("dbo." + reader.GetString(0));
                     }
                 }
+
+                _supportedTables.Add("sys.all_columns");
+                _supportedTables.Add("sys.all_objects");
+                _supportedTables.Add("sys.check_constraints");
+                _supportedTables.Add("sys.columns");
+                _supportedTables.Add("sys.computed_columns");
+                _supportedTables.Add("sys.default_constraints");
+                _supportedTables.Add("sys.foreign_key_columns");
+                _supportedTables.Add("sys.foreign_keys");
+                _supportedTables.Add("sys.index_columns");
+                _supportedTables.Add("sys.objects");
+                _supportedTables.Add("sys.sequences");
+                _supportedTables.Add("sys.sql_modules");
+                _supportedTables.Add("sys.stats");
+                _supportedTables.Add("sys.synonyms");
+                _supportedTables.Add("sys.table_types");
+                _supportedTables.Add("sys.tables");
+                _supportedTables.Add("sys.triggers");
             }
 
             IsCompatible = true;
@@ -89,8 +107,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public override void Visit(NamedTableReference node)
         {
             if (node.SchemaObject.ServerIdentifier != null ||
-                node.SchemaObject.DatabaseIdentifier != null ||
-                (!String.IsNullOrEmpty(node.SchemaObject.SchemaIdentifier?.Value) && !node.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase)))
+                node.SchemaObject.DatabaseIdentifier != null)
             {
                 // Can't do cross-instance queries
                 // No access to metadata schema
@@ -98,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 return;
             }
 
-            if (_supportedTables != null && !_supportedTables.Contains(node.SchemaObject.BaseIdentifier.Value) &&
+            if (_supportedTables != null && !_supportedTables.Contains((node.SchemaObject.SchemaIdentifier?.Value ?? "dbo") + "." + node.SchemaObject.BaseIdentifier.Value) &&
                 (node.SchemaObject.Identifiers.Count != 1 || !_ctes.ContainsKey(node.SchemaObject.BaseIdentifier.Value)))
             {
                 // Table does not exist in TDS endpoint and is not defined as a CTE
@@ -387,15 +404,27 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void Visit(FunctionCall node)
         {
-            // Can't use JSON functions
             switch (node.FunctionName.Value.ToUpperInvariant())
             {
+                // Can't use JSON functions
                 case "JSON_VALUE":
                 case "JSON_PATH_EXISTS":
                 case "SQL_VARIANT_PROPERTY":
+
+                // Can't use error handling functions
+                case "ERROR_LINE":
+                case "ERROR_MESSAGE":
+                case "ERROR_NUMBER":
+                case "ERROR_PROCEDURE":
+                case "ERROR_SEVERITY":
+                case "ERROR_STATE":
                     IsCompatible = false;
                     break;
             }
+
+            // Can't use XML data type methods
+            if (node.CallTarget != null)
+                IsCompatible = false;
 
             base.Visit(node);
         }

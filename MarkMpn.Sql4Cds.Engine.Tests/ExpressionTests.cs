@@ -16,6 +16,82 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     public class ExpressionTests : FakeXrmEasyTestsBase
     {
         [TestMethod]
+        public void StringLiteral()
+        {
+            var expr = new StringLiteral { Value = "abc" };
+
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var options = new StubOptions();
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
+
+            var actual = func(new ExpressionExecutionContext(compilationContext));
+
+            Assert.AreEqual("abc", ((SqlString)actual).Value);
+            Assert.AreEqual(typeof(SqlString), expr.GetType(compilationContext, out _));
+        }
+
+        [TestMethod]
+        public void IntegerLiteral()
+        {
+            var expr = new IntegerLiteral { Value = "123" };
+
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var options = new StubOptions();
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
+
+            var actual = func(new ExpressionExecutionContext(compilationContext));
+
+            Assert.AreEqual(123, ((SqlInt32)actual).Value);
+            Assert.AreEqual(typeof(SqlInt32), expr.GetType(compilationContext, out _));
+        }
+
+        [TestMethod]
+        public void StringConcat()
+        {
+            var expr = new BinaryExpression
+            {
+                FirstExpression = new StringLiteral { Value = "hello " },
+                BinaryExpressionType = BinaryExpressionType.Add,
+                SecondExpression = new StringLiteral { Value = "world" }
+            };
+
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var options = new StubOptions();
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
+
+            var actual = func(new ExpressionExecutionContext(compilationContext));
+
+            Assert.AreEqual("hello world", ((SqlString)actual).Value);
+        }
+
+        [TestMethod]
+        public void IntegerAddition()
+        {
+            var expr = new BinaryExpression
+            {
+                FirstExpression = new IntegerLiteral { Value = "123" },
+                BinaryExpressionType = BinaryExpressionType.Add,
+                SecondExpression = new IntegerLiteral { Value = "456" }
+            };
+
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>(), new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var options = new StubOptions();
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
+
+            var actual = func(new ExpressionExecutionContext(compilationContext));
+
+            Assert.AreEqual(579, ((SqlInt32)actual).Value);
+        }
+
+        [TestMethod]
         public void SimpleCaseExpression()
         {
             var expr = new SimpleCaseExpression
@@ -42,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var record = new Entity
@@ -82,7 +158,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var record = new Entity
@@ -110,7 +186,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
-            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var compilationContext = new ExpressionCompilationContext(_localDataSources, options, parameterTypes, schema, null);
             var func = expr.Compile(compilationContext);
 
             var record = new Entity

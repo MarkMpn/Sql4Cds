@@ -42,6 +42,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         TimeSpan Duration { get; }
     }
 
+    /// <summary>
+    /// A node in an execution plan that can have an associated warning
+    /// </summary>
+    public interface IExecutionPlanNodeWarning : IExecutionPlanNode
+    {
+        /// <summary>
+        /// The warning about this node
+        /// </summary>
+        string Warning { get; }
+    }
+
     internal interface IExecutionPlanNodeInternal : IExecutionPlanNode, ICloneable
     {
         /// <summary>

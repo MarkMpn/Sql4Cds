@@ -264,6 +264,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     _instructionPointer++;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, null, 0, _command.CancelledManually ? "Query was cancelled by user" : "Query timed out", null));
+            }
             catch (Sql4CdsException ex)
             {
                 SetErrorLineNumbers(ex, _command.Plan[_instructionPointer]);
@@ -580,7 +584,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (sqlErr == null)
                 {
-                    sqlErr = new Sql4CdsException(ex.Message, ex);
+                    if (ex is OperationCanceledException)
+                        sqlErr = new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, null, 0, _command.CancelledManually ? "Query was cancelled by user" : "Query timed out", null));
+                    else
+                        sqlErr = new Sql4CdsException(ex.Message, ex);
+
                     rethrow = false;
                 }
 

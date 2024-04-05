@@ -29,6 +29,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AdaptiveIndexSpoolNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\CompiledExpression.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RaiseErrorNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ThrowNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TryCatchBlockNode.cs" />
@@ -153,6 +154,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RefactorNotIsNullVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RemoveRecursiveCTETableReferencesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplaceCtesWithSubqueriesVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\NormalizeColNamesVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />

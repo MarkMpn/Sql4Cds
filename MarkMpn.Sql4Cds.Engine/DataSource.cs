@@ -2,6 +2,9 @@
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using System;
+using System.Collections.Generic;
+using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
+using Microsoft.Crm.Sdk.Messages;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -21,33 +24,70 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Creates a new <see cref="DataSource"/> using default values based on an existing connection.
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> that provides the connection to the instance</param>
-        public DataSource(IOrganizationService org)
+        public DataSource(IOrganizationService org) : this(org, null, null, null)
+        {
+            Metadata = new AttributeMetadataCache(org);
+            TableSizeCache = new TableSizeCache(org, Metadata);
+            MessageCache = new MessageCache(org, Metadata);
+        }
+
+        public DataSource(IOrganizationService org, IAttributeMetadataCache metadata, ITableSizeCache tableSize, IMessageCache messages)
         {
             string name = null;
+            Version version = null;
 
 #if NETCOREAPP
             if (org is ServiceClient svc)
             {
                 name = svc.ConnectedOrgUniqueName;
+                version = svc.ConnectedOrgVersion;
             }
 #else
             if (org is CrmServiceClient svc)
             {
                 name = svc.ConnectedOrgUniqueName;
+                version = svc.ConnectedOrgVersion;
             }
 #endif
-            
+
             if (name == null)
             {
                 var orgDetails = org.RetrieveMultiple(new QueryExpression("organization") { ColumnSet = new ColumnSet("name") }).Entities[0];
                 name = orgDetails.GetAttributeValue<string>("name");
             }
 
+            if (version == null)
+            {
+                var ver = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
+                version = new Version(ver.Version);
+            }
+
             Connection = org;
-            Metadata = new AttributeMetadataCache(org);
+            Metadata = metadata;
             Name = name;
-            TableSizeCache = new TableSizeCache(org, Metadata);
-            MessageCache = new MessageCache(org, Metadata);
+            TableSizeCache = tableSize;
+            MessageCache = messages;
+
+            var joinOperators = new List<JoinOperator>
+            {
+                JoinOperator.Inner,
+                JoinOperator.LeftOuter
+            };
+
+            if (version >= new Version("9.1.0.17461"))
+            {
+                // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
+                joinOperators.Add(JoinOperator.In);
+                joinOperators.Add(JoinOperator.Exists);
+                joinOperators.Add(JoinOperator.Any);
+                joinOperators.Add(JoinOperator.NotAny);
+                joinOperators.Add(JoinOperator.All);
+                joinOperators.Add(JoinOperator.NotAll);
+            }
+
+            JoinOperatorsAvailable = joinOperators;
+            ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
+            OrderByEntityNameAvailable = version >= new Version("9.1.0.25249");
         }
 
         /// <summary>
@@ -86,6 +126,21 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The session token to use for Elastic table consistency
         /// </summary>
         public string SessionToken { get; set; }
+
+        /// <summary>
+        /// Indicates if the server supports column comparison conditions in FetchXML
+        /// </summary>
+        public virtual bool ColumnComparisonAvailable { get; }
+
+        /// <summary>
+        /// Indicates if the server supports ordering by link-entities in FetchXML
+        /// </summary>
+        public virtual bool OrderByEntityNameAvailable { get; }
+
+        /// <summary>
+        /// Returns a list of join operators that are supported by the server
+        /// </summary>
+        public virtual List<JoinOperator> JoinOperatorsAvailable { get; }
 
         /// <summary>
         /// Returns the default collation used by this instance

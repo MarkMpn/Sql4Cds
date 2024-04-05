@@ -75,30 +75,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="rightEntity">The data from the right source</param>
         /// <param name="rightSchema">The schema of the right source</param>
         /// <returns>The merged data</returns>
-        protected Entity Merge(Entity leftEntity, INodeSchema leftSchema, Entity rightEntity, INodeSchema rightSchema)
+        protected Entity Merge(Entity leftEntity, INodeSchema leftSchema, Entity rightEntity, INodeSchema rightSchema, bool includeSemiJoin)
         {
             var merged = new Entity();
 
-            if (leftEntity != null)
+            if (OutputLeftSchema || includeSemiJoin)
             {
-                foreach (var attr in leftSchema.Schema)
-                    merged[attr.Key] = leftEntity[attr.Key];
-            }
-            else
-            {
-                foreach (var attr in leftSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.Type.ToNetType(out _));
+                if (leftEntity != null)
+                {
+                    foreach (var attr in leftSchema.Schema)
+                        merged[attr.Key] = leftEntity[attr.Key];
+                }
+                else
+                {
+                    foreach (var attr in leftSchema.Schema)
+                        merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.Type.ToNetType(out _));
+                }
             }
 
-            if (rightEntity != null)
+            if (OutputRightSchema || includeSemiJoin)
             {
-                foreach (var attr in rightSchema.Schema)
-                    merged[attr.Key] = rightEntity[attr.Key];
-            }
-            else
-            {
-                foreach (var attr in rightSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.Type.ToNetType(out _));
+                if (rightEntity != null)
+                {
+                    foreach (var attr in rightSchema.Schema)
+                        merged[attr.Key] = rightEntity[attr.Key];
+                }
+                else
+                {
+                    foreach (var attr in rightSchema.Schema)
+                        merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.Type.ToNetType(out _));
+                }
             }
 
             foreach (var definedValue in DefinedValues)

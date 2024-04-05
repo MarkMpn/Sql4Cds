@@ -18,6 +18,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        [Browsable(false)]
+        public ThrowStatement Statement { get; set; }
+
         [Category("Throw")]
         [Description("The error message that is generated")]
         [DisplayName("Error Message")]
@@ -68,6 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return new ThrowNode
             {
+                Statement = Statement,
                 ErrorMessage = ErrorMessage.Clone(),
                 State = State.Clone(),
                 ErrorNumber = ErrorNumber.Clone(),
@@ -90,6 +94,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
+            if (ErrorNumber == null)
+                context.Log(context.Error);
+
             var ecc = new ExpressionCompilationContext(context, null, null);
             var eec = new ExpressionExecutionContext(context);
             var num = Execute<SqlInt32>(ErrorNumber, ecc, eec, DataTypeHelpers.Int);

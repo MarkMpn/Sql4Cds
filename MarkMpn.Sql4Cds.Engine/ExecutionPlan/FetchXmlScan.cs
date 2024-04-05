@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.ServiceModel;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -300,6 +301,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             FindEntityNameGroupings(dataSource.Metadata);
 
+            VerifyFilterValueTypes(Entity.name, Entity.Items, dataSource);
+
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = dataSource.Metadata[name];
@@ -356,14 +359,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                res = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+                var task = Task.Run(() =>
+                {
+                    return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+                });
+
+                task.Wait(context.Options.CancellationToken);
+                res = task.Result;
             }
             catch (FaultException<OrganizationServiceFault> ex)
             {
                 // Archive queries can fail with this error code if the Synapse database isn't provisioned yet or
                 // no retention policy has yet been applied to this table. In either case there are no records to return
                 // so we can just return an empty result set rather than erroring
-                if (FetchXml.DataSource == "archive" && (ex.Detail.ErrorCode == -2146863832 || ex.Detail.ErrorCode == -2146863829))
+                if (FetchXml.DataSource == "retained" && (ex.Detail.ErrorCode == -2146863832 || ex.Detail.ErrorCode == -2146863829))
                     yield break;
 
                 throw;
@@ -414,7 +423,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 ((FetchExpression)req.Query).Query = Serialize(FetchXml);
-                var nextPage = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+
+                var task = Task.Run(() =>
+                {
+                    return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
+                });
+
+                task.Wait(context.Options.CancellationToken);
+                var nextPage = task.Result;
+
                 PagesRetrieved++;
 
                 foreach (var entity in nextPage.Entities)
@@ -429,6 +446,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (pagingFilter != null)
                     Entity.Items = Entity.Items.Except(new[] { pagingFilter }).ToArray();
             }
+        }
+
+        private void VerifyFilterValueTypes(string entityName, object[] items, DataSource dataSource)
+        {
+            if (items == null)
+                return;
+
+            // Check the value(s) supplied for filter values can be converted to the expected types
+            foreach (var filter in items.OfType<filter>())
+                VerifyFilterValueTypes(entityName, filter.Items, dataSource);
+            
+            foreach (var condition in items.OfType<condition>())
+            {
+                if (condition.value == null && (condition.Items == null || condition.Items.Length == 0))
+                    continue;
+
+                var conditionEntity = entityName;
+
+                if (condition.entityname != null)
+                    conditionEntity = Entity.FindLinkEntity(condition.entityname).name;
+
+                var meta = dataSource.Metadata[conditionEntity];
+                var attr = meta.Attributes.Single(a => a.LogicalName == condition.attribute);
+                var attrType = attr.GetAttributeSqlType(dataSource, false);
+                if (attrType.IsSameAs(DataTypeHelpers.EntityReference))
+                    attrType = DataTypeHelpers.UniqueIdentifier;
+                var conversion = SqlTypeConverter.GetConversion(DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), attrType);
+
+                if (condition.value != null)
+                    conversion(dataSource.DefaultCollation.ToSqlString(condition.value));
+
+                if (condition.Items != null)
+                {
+                    foreach (var value in condition.Items)
+                        conversion(dataSource.DefaultCollation.ToSqlString(value.Value));
+                }
+            }
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+                VerifyFilterValueTypes(linkEntity.name, linkEntity.Items, dataSource);
         }
 
         private void AddPagingFilters(filter filter)
@@ -520,6 +577,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
                     linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+            }
+        }
+
+        public void RemoveAttributes()
+        {
+            // Remove any existing sorts
+            if (Entity.Items != null)
+            {
+                Entity.Items = Entity.Items.Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                    linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
             }
         }
 
@@ -909,7 +978,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Entity.Items != null)
                 {
-                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
+                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias?.Equals(attr.name, StringComparison.OrdinalIgnoreCase) == true || a.alias?.Equals(parts[1], StringComparison.OrdinalIgnoreCase) == true);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
@@ -942,7 +1011,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (linkEntity.Items != null)
                 {
-                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
+                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias?.Equals(attr.name, StringComparison.OrdinalIgnoreCase) == true || a.alias?.Equals(parts[1], StringComparison.OrdinalIgnoreCase) == true);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
@@ -1102,7 +1171,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 {
-                    if (linkEntity.SemiJoin)
+                    if (linkEntity.SemiJoin || linkEntity.linktype == "in" || linkEntity.linktype == "exists")
                         continue;
 
                     if (primaryKey != null)
@@ -1154,7 +1223,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var cond in filter.Items.OfType<condition>())
             {
-                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid || cond.@operator == @operator.neq || cond.@operator == @operator.neuserid)
+                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid ||
+                    cond.@operator == @operator.neq || cond.@operator == @operator.neuserid || cond.@operator == @operator.notlike ||
+                    cond.@operator == @operator.notin || cond.@operator == @operator.notunder || cond.@operator == @operator.notbeginwith ||
+                    cond.@operator == @operator.notbetween || cond.@operator == @operator.notcontainvalues || cond.@operator == @operator.notendwith)
                     continue;
 
                 var fullname = (cond.entityname?.EscapeIdentifier() ?? alias) + "." + (cond.alias ?? cond.attribute).EscapeIdentifier();
@@ -1462,7 +1534,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // If we've got AND-ed conditions that have an entityname that refers to an inner-joined link entity, move
             // the condition to that link entity
-            var innerLinkEntities = Entity.GetLinkEntities(innerOnly: true).ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
+            var innerLinkEntities = Entity
+                .GetLinkEntities(innerOnly: true)
+                .Where(le => le.alias != null)
+                .ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
 
             Entity.Items = MoveFiltersToLinkEntities(innerLinkEntities, Entity.Items);
             Entity.Items = MoveConditionsToLinkEntities(innerLinkEntities, Entity.Items);
@@ -1638,8 +1713,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var singleConditionFilters = filter.Items
                 .OfType<filter>()
-                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.OfType<condition>().Count() == 1)
-                .ToDictionary(f => f, f => (condition)f.Items[0]);
+                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.Where(x => !(x is filter)).Count() == 1)
+                .ToDictionary(f => f, f => f.Items[0]);
 
             for (var i = 0; i < filter.Items.Length; i++)
             {

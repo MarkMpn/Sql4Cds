@@ -36,6 +36,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             public bool ColumnComparisonAvailable => throw new NotImplementedException();
 
+            public bool OrderByEntityNameAvailable => throw new NotImplementedException();
+
             public bool UseLocalTimeZone => throw new NotImplementedException();
 
             public List<JoinOperator> JoinOperatorsAvailable => throw new NotImplementedException();

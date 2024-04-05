@@ -432,7 +432,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         }
                         else
                         {
-                            parts.Add($"Line {sql4CdsError.LineNumber}");
+                            parts.Add($"Line {Math.Max(sql4CdsError.LineNumber, 1)}");
                         }
 
                         await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
@@ -699,6 +699,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 Type = node.GetType().Name.Replace("Node", "")
             };
 
+            if (node is IExecutionPlanNodeWarning warning && warning.Warning != null)
+            {
+                converted.Badges.Add(new Badge { Type = BadgeType.Warning });
+                converted.Description = "<p>" + WebUtility.HtmlEncode(warning.Warning) + "</p>";
+            }
+
             if (executed)
             {
                 converted.CostMetrics.Add(new CostMetric
@@ -793,7 +799,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);
             converted.Properties = ConvertProperties(typeDescriptor, typeDescriptor.GetProperties(null));
 
-            if (node is IFetchXmlExecutionPlanNode && converted.Properties.Count > 0)
+            if (!String.IsNullOrEmpty(converted.Description) && converted.Properties.Count > 0)
                 converted.Description += "<hr />";
 
             converted.Description += "<table>";

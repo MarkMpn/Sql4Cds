@@ -107,12 +107,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullColumns(schema, n.Expression, !not);
             }
 
-            if (!not && filter is InPredicate inPred)
+            if (!not && filter is InPredicate inPred && !inPred.NotDefined)
             {
                 AddNotNullColumn(schema, inPred.Expression);
             }
 
-            if (!not && filter is LikePredicate like)
+            if (!not && filter is LikePredicate like && !like.NotDefined)
             {
                 AddNotNullColumn(schema, like.FirstExpression);
                 AddNotNullColumn(schema, like.SecondExpression);
@@ -152,10 +152,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foldedFilters |= FoldConsecutiveFilters();
             foldedFilters |= FoldNestedLoopFiltersToJoins(context, hints);
-            foldedFilters |= FoldInExistsToFetchXml(context, hints, out var addedLinks);
+            foldedFilters |= FoldInExistsToFetchXml(context, hints, out var addedLinks, out var subqueryConditions);
             foldedFilters |= FoldTableSpoolToIndexSpool(context, hints);
             foldedFilters |= ExpandFiltersOnColumnComparisons(context);
-            foldedFilters |= FoldFiltersToDataSources(context, hints);
+            foldedFilters |= FoldFiltersToDataSources(context, hints, subqueryConditions);
 
             foreach (var addedLink in addedLinks)
             {
@@ -717,7 +717,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             second = temp;
         }
 
-        private bool FoldInExistsToFetchXml(NodeCompilationContext context, IList<OptimizerHint> hints, out Dictionary<FetchLinkEntityType, FetchXmlScan> addedLinks)
+        private bool FoldInExistsToFetchXml(NodeCompilationContext context, IList<OptimizerHint> hints, out Dictionary<FetchLinkEntityType, FetchXmlScan> addedLinks, out Dictionary<BooleanExpression, ConvertedSubquery> subqueryConditions)
         {
             var foldedFilters = false;
 
@@ -747,6 +747,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             addedLinks = new Dictionary<FetchLinkEntityType, FetchXmlScan>();
+            subqueryConditions = new Dictionary<BooleanExpression, ConvertedSubquery>();
+
             FetchXmlScan leftFetch;
 
             if (joins.Count == 0)
@@ -811,6 +813,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var nullFilter = FindNullFilter(Filter, definedValueName, out var nullFilterRemovable);
                     if (nullFilter == null)
                         break;
+
+                    leftAlias = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Reverse().Skip(1).First().Value;
 
                     // If IN query is on matching primary keys (SELECT name FROM account WHERE accountid IN (SELECT accountid FROM account WHERE ...))
                     // we can eliminate the left join and rewrite as SELECT name FROM account WHERE ....
@@ -893,7 +897,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // We need to use an "in" join type - check that's supported
                     else if (nullFilterRemovable &&
                         nullFilter.IsNot &&
-                        context.Options.JoinOperatorsAvailable.Contains(JoinOperator.Any) &&
+                        context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.In) &&
                         rightFetch.FetchXml.top == null)
                     {
                         // Remove the filter and replace with an "in" link-entity
@@ -905,13 +909,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         linkToAdd = new FetchLinkEntityType
                         {
                             name = rightFetch.Entity.name,
-                            alias = rightFetch.Alias,
                             from = merge.RightAttribute.MultiPartIdentifier.Identifiers.Last().Value,
                             to = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value,
                             linktype = "in",
                             Items = rightFetch.Entity.Items
                         };
                         semiJoin = true;
+                    }
+                    // We can use an "any" join type - check that's supported
+                    else if (!nullFilterRemovable &&
+                        nullFilter.IsNot &&
+                        context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) &&
+                        rightFetch.FetchXml.top == null)
+                    {
+                        if (subqueryConditions.ContainsKey(nullFilter))
+                            break; // We've already processed this subquery
+
+                        // We can't remove the filter yet - store the details for use later
+                        var clone = (FetchXmlScan)rightFetch.Clone();
+                        clone.RemoveSorts();
+                        clone.RemoveAttributes();
+                        subqueryConditions[nullFilter] = new ConvertedSubquery
+                        {
+                            JoinNode = join,
+                            Condition = new FetchLinkEntityType
+                            {
+                                name = clone.Entity.name,
+                                from = merge.RightAttribute.MultiPartIdentifier.Identifiers.Last().Value,
+                                to = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value,
+                                linktype = "any",
+                                Items = clone.Entity.Items
+                            },
+                            LinkEntity = leftFetch.Entity.FindLinkEntity(leftAlias)
+                        };
+
+                        // Move this join to the start of the list and continue on to the next join
+                        joins.Remove(join);
+                        joins.Insert(0, join);
+                        continue;
                     }
                     // We can fold NOT IN to a left outer join, using similar rules to IN on the primary key
                     else if (!nullFilter.IsNot && rightFetch.FetchXml.top == null)
@@ -957,8 +992,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                     }
 
-                    leftAlias = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Reverse().Skip(1).First().Value;
-
                     // Remove the sort that has been merged into the left side too
                     if (leftFetch.FetchXml.top == null)
                         leftFetch.RemoveSorts();
@@ -966,9 +999,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (join is NestedLoopNode loop)
                 {
                     // Check we meet all the criteria for a foldable correlated EXISTS query
-                    if (!context.Options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
-                        break;
-
                     if (loop.JoinCondition != null ||
                         loop.OuterReferences.Count != 1 ||
                         loop.DefinedValues.Count != 1)
@@ -998,24 +1028,62 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     var notNullFilter = FindNullFilter(Filter, loop.DefinedValues.Single().Key, out var notNullFilterRemovable);
-                    if (notNullFilter == null || !notNullFilterRemovable)
+                    if (notNullFilter == null)
                         break;
-
-                    // Remove the filter and replace with an "exists" link-entity
-                    Filter = Filter.RemoveCondition(notNullFilter);
-                    foldedFilters = true;
-
-                    linkToAdd = new FetchLinkEntityType
-                    {
-                        name = rightFetch.Entity.name,
-                        alias = rightFetch.Alias,
-                        from = keyParts[1],
-                        to = outerReferenceParts[1],
-                        linktype = "exists",
-                        Items = rightFetch.Entity.Items
-                    };
-                    semiJoin = true;
+                    
                     leftAlias = outerReferenceParts[0];
+
+                    if (context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Exists) &&
+                        notNullFilter.IsNot &&
+                        notNullFilterRemovable)
+                    {
+                        // Remove the filter and replace with an "exists" link-entity
+                        Filter = Filter.RemoveCondition(notNullFilter);
+                        foldedFilters = true;
+
+                        linkToAdd = new FetchLinkEntityType
+                        {
+                            name = rightFetch.Entity.name,
+                            from = keyParts[1],
+                            to = outerReferenceParts[1],
+                            linktype = "exists",
+                            Items = rightFetch.Entity.Items
+                        };
+                        semiJoin = true;
+                    }
+                    else if (context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) && notNullFilter.IsNot ||
+                        context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.NotAny) && !notNullFilter.IsNot)
+                    {
+                        if (subqueryConditions.ContainsKey(notNullFilter))
+                            break; // We've already processed this subquery
+
+                        // We can't remove the filter yet - store the details for use later
+                        var clone = (FetchXmlScan)rightFetch.Clone();
+                        clone.RemoveSorts();
+                        clone.RemoveAttributes();
+                        subqueryConditions[notNullFilter] = new ConvertedSubquery
+                        {
+                            JoinNode = join,
+                            Condition = new FetchLinkEntityType
+                            {
+                                name = clone.Entity.name,
+                                from = keyParts[1],
+                                to = outerReferenceParts[1],
+                                linktype = notNullFilter.IsNot ? "any" : "not any",
+                                Items = clone.Entity.Items
+                            }.RemoveNotNullJoinCondition(),
+                            LinkEntity = leftFetch.Entity.FindLinkEntity(leftAlias)
+                        };
+
+                        // Move this join to the start of the list and continue on to the next join
+                        joins.Remove(join);
+                        joins.Insert(0, join);
+                        continue;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
                 else
                 {
@@ -1112,7 +1180,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        private bool FoldFiltersToDataSources(NodeCompilationContext context, IList<OptimizerHint> hints)
+        private bool FoldFiltersToDataSources(NodeCompilationContext context, IList<OptimizerHint> hints, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions)
         {
             var foldedFilters = false;
 
@@ -1133,7 +1201,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(foldableContext, dataSource.Metadata, Filter, schema, null, ignoreAliasesByNode[fetchXml], fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
+                    Filter = ExtractFetchXMLFilters(
+                        foldableContext,
+                        dataSource,
+                        Filter,
+                        schema,
+                        null,
+                        ignoreAliasesByNode[fetchXml],
+                        fetchXml,
+                        subqueryExpressions,
+                        out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
@@ -1226,6 +1303,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
+        private void RemoveJoin(BaseJoinNode joinNode)
+        {
+            // We've consumed the subquery implemented by this join - remove it from the execution plan
+            if (joinNode.Parent == this)
+            {
+                Source = joinNode.LeftSource;
+                joinNode.LeftSource.Parent = this;
+            }
+            else if (joinNode.Parent is BaseJoinNode parentJoin)
+            {
+                parentJoin.LeftSource = joinNode.LeftSource;
+                joinNode.LeftSource.Parent = parentJoin;
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+        }
+
         private Dictionary<FetchXmlScan,HashSet<string>> GetIgnoreAliasesByNode(NodeCompilationContext context)
         {
             var fetchXmlSources = GetFoldableSources(Source, context)
@@ -1282,7 +1378,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return fetchXml.Alias;
 
             foreach (var linkEntity in fetchXml.Entity.GetLinkEntities())
-                yield return linkEntity.alias;
+            {
+                if (linkEntity.alias != null)
+                    yield return linkEntity.alias;
+            }
         }
 
         private BooleanExpression ReplaceColumnNames(BooleanExpression filter, Dictionary<ScalarExpression, string> replacements)
@@ -1343,7 +1442,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var childContext = context;
 
-                    if (join is NestedLoopNode loop && loop.OuterReferences.Count > 0)
+                    if (join is NestedLoopNode loop && loop.OuterReferences != null && loop.OuterReferences.Count > 0)
                     {
                         var leftSchema = join.LeftSource.GetSchema(context);
                         var innerParameterTypes = context.ParameterTypes
@@ -1455,9 +1554,62 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, IAttributeMetadataCache metadata, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, DataSource dataSource, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, FetchXmlScan fetchXmlScan, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions, out filter filter)
         {
-            if (TranslateFetchXMLCriteria(context, metadata, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out filter))
+            var targetEntityName = fetchXmlScan.Entity.name;
+            var targetEntityAlias = fetchXmlScan.Alias;
+            var items = fetchXmlScan.Entity.Items;
+
+            var subqueryConditions = new HashSet<BooleanExpression>();
+            var result = ExtractFetchXMLFilters(context, dataSource, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, subqueryConditions, out filter);
+
+            if (result == criteria)
+                return result;
+
+            // If we've used any subquery expressions we need to make sure all the conditions are for the same entity as we
+            // can't specify an entityname attribute for the subquery filter.
+            if (subqueryConditions.Count == 0)
+                return result;
+
+            var subqueryLinks = subqueryConditions
+                .Select(c => subqueryExpressions[c].LinkEntity?.alias ?? targetEntityAlias)
+                .Distinct()
+                .ToList();
+
+            if (subqueryLinks.Count > 1)
+            {
+                filter = null;
+                return criteria;
+            }
+
+            foreach (var condition in filter.GetConditions())
+            {
+                if ((condition.entityname ?? targetEntityAlias) != subqueryLinks[0])
+                {
+                    filter = null;
+                    return criteria;
+                }
+
+                condition.entityname = null;
+            }
+
+            foreach (var subqueryCondition in subqueryConditions)
+                RemoveJoin(subqueryExpressions[subqueryCondition].JoinNode);
+
+            // If the criteria are to be applied to the root entity, no need to do any further processing
+            if (subqueryLinks[0] == targetEntityAlias)
+                return result;
+
+            // Otherwise, add the filter directly to the link entity
+            var linkEntity = fetchXmlScan.Entity.FindLinkEntity(subqueryLinks[0]);
+            linkEntity.AddItem(filter);
+            filter = null;
+            return result;
+        }
+
+        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, DataSource dataSource, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, string targetEntityName, string targetEntityAlias, object[] items, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions, HashSet<BooleanExpression> replacedSubqueryExpressions, out filter filter)
+        {
+            if (TranslateFetchXMLCriteria(context, dataSource, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out filter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -1466,8 +1618,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(context, metadata, bin.FirstExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var lhsFilter);
-            bin.SecondExpression = ExtractFetchXMLFilters(context, metadata, bin.SecondExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, out var rhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(context, dataSource, bin.FirstExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(context, dataSource, bin.SecondExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out var rhsFilter);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 
@@ -1617,15 +1769,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var col = comparison.FirstExpression as ColumnReferenceExpression;
-                var literal = comparison.SecondExpression as Literal;
+                var literal = comparison.SecondExpression;
 
-                if (col == null && literal == null)
+                if (col == null || literal.GetColumns().Any())
                 {
                     col = comparison.SecondExpression as ColumnReferenceExpression;
-                    literal = comparison.FirstExpression as Literal;
+                    literal = comparison.FirstExpression;
                 }
 
-                if (col == null || literal == null)
+                if (col == null || literal.GetColumns().Any())
                     return false;
 
                 var schema = meta.GetSchema(context);
@@ -1662,7 +1814,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new InvalidOperationException();
                 }
 
-                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(expressionCompilationContext)(expressionExecutionContext));
+                var condition = new MetadataConditionExpression(parts[1], op, literal);
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -1683,10 +1835,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     return false;
 
-                if (inPred.Values.Any(val => !(val is Literal)))
+                if (inPred.Values.Any(val => val.GetColumns().Any()))
                     return false;
 
-                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(expressionCompilationContext)(expressionExecutionContext)).ToArray());
+                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.ToArray());
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -1782,22 +1934,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 targetValueType != typeof(Guid))
                 return false;
 
-            // String comparisons will be executed case-sensitively, but all other comparisons are case-insensitive. For consistency, don't allow
-            // comparisons on string properties except those where we know the expected case.
-            Func<object, object> valueConverter = (o) => o;
-
-            if (targetValueType == typeof(string))
-            {
-                if (prop.DeclaringType == typeof(EntityMetadata) && (prop.Name == nameof(EntityMetadata.LogicalName) || prop.Name == nameof(EntityMetadata.LogicalCollectionName)) ||
-                    prop.DeclaringType == typeof(AttributeMetadata) && (prop.Name == nameof(AttributeMetadata.LogicalName) || prop.Name == nameof(AttributeMetadata.EntityLogicalName)))
-                {
-                    valueConverter = (o) => ((string)o)?.ToLowerInvariant();
-                }
-                else
-                {
-                    return false;
-                }
-            }
+            // Filtering on enum types only works for = and <>
+            if (targetValueType.IsEnum &&
+                condition.ConditionOperator != MetadataConditionOperator.Equals &&
+                condition.ConditionOperator != MetadataConditionOperator.NotEquals &&
+                condition.ConditionOperator != MetadataConditionOperator.In &&
+                condition.ConditionOperator != MetadataConditionOperator.NotIn)
+                return false;
 
             // Filtering on IsArchivalEnabled is not supported
             if (prop.DeclaringType == typeof(EntityMetadata) &&
@@ -1813,30 +1956,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 prop.Name == nameof(AttributeMetadata.SourceType))
                 return false;
 
-            // Convert the property name to the correct case
-            filter.Conditions[0].PropertyName = prop.Name;
-
-            // Convert the value to the expected type
-            if (filter.Conditions[0].Value != null)
+            // String comparisons will be executed case-sensitively, but all other comparisons are case-insensitive. For consistency, don't allow
+            // comparisons on string properties except those where we know the expected case.
+            if (targetValueType == typeof(string))
             {
-                var propertyType = MetadataQueryNode.GetPropertyType(targetValueType).ToNetType(out _);
-
-                if (filter.Conditions[0].ConditionOperator == MetadataConditionOperator.In ||
-                    filter.Conditions[0].ConditionOperator == MetadataConditionOperator.NotIn)
+                if (prop.DeclaringType == typeof(EntityMetadata) && (prop.Name == nameof(EntityMetadata.LogicalName) || prop.Name == nameof(EntityMetadata.LogicalCollectionName)) ||
+                    prop.DeclaringType == typeof(AttributeMetadata) && (prop.Name == nameof(AttributeMetadata.LogicalName) || prop.Name == nameof(AttributeMetadata.EntityLogicalName)))
                 {
-                    var array = (Array)filter.Conditions[0].Value;
-                    var targetArray = Array.CreateInstance(targetValueType, array.Length);
+                    var toLower = (Func<ScalarExpression, ScalarExpression>)((ScalarExpression o) => new FunctionCall
+                    {
+                        FunctionName = new Identifier { Value = "LOWER" },
+                        Parameters = { o }
+                    });
 
-                    for (var i = 0; i < array.Length; i++)
-                        targetArray.SetValue(valueConverter(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(array.GetValue(i), propertyType), targetValueType)), i);
-
-                    filter.Conditions[0].Value = targetArray;
+                    if (condition.Value is ScalarExpression expr)
+                        condition.Value = toLower(expr);
+                    else if (condition.Value is IList<ScalarExpression> exprs)
+                        condition.Value = exprs.Select(e => toLower(e)).ToList();
                 }
                 else
                 {
-                    filter.Conditions[0].Value = valueConverter(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, propertyType), targetValueType));
+                    return false;
                 }
             }
+
+            // Convert the property name to the correct case
+            filter.Conditions[0].PropertyName = prop.Name;
 
             if (isEntityFilter)
             {

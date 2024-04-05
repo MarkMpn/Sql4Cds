@@ -123,6 +123,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     return reader;
                 }
+                catch (SqlException ex)
+                {
+                    throw new QueryExecutionException(new Sql4CdsError(ex.Class, ex.Number, ex.Message), ex)
+                    {
+                        Node = this
+                    };
+                }
                 catch (QueryExecutionException ex)
                 {
                     if (ex.Node == null)
