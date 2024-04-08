@@ -278,11 +278,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         foreach (Sql4CdsParameter sql4cdsParam in Parameters)
                         {
-                            if (!requiredParameters.Contains(sql4cdsParam.ParameterName))
+                            if (!requiredParameters.Contains(sql4cdsParam.FullParameterName))
                                 continue;
 
                             var param = cmd.CreateParameter();
-                            param.ParameterName = sql4cdsParam.ParameterName;
+                            param.ParameterName = sql4cdsParam.FullParameterName;
 
                             if (sql4cdsParam.Value is SqlEntityReference er)
                                 param.Value = (SqlGuid)er;
@@ -304,7 +304,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Capture the values of output parameters
                     foreach (var param in Parameters.Cast<Sql4CdsParameter>().Where(p => p.Direction == ParameterDirection.Output))
-                        param.SetOutputValue((INullable)reader.ParameterValues[param.ParameterName]);
+                        param.SetOutputValue((INullable)reader.ParameterValues[param.FullParameterName]);
                 }
 
                 return reader;

@@ -79,19 +79,9 @@ namespace MarkMpn.Sql4Cds.Engine
         int MaxDegreeOfParallelism { get; }
 
         /// <summary>
-        /// Indicates if the server supports column comparison conditions in FetchXML
-        /// </summary>
-        bool ColumnComparisonAvailable { get; }
-
-        /// <summary>
         /// Indicates if date/time values should be interpreted in the local timezone or in UTC
         /// </summary>
         bool UseLocalTimeZone { get; }
-
-        /// <summary>
-        /// Returns a list of join operators that are supported by the server
-        /// </summary>
-        List<JoinOperator> JoinOperatorsAvailable { get; }
 
         /// <summary>
         /// Indicates if plugins should be bypassed when executing DML operations

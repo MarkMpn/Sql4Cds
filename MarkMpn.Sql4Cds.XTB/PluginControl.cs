@@ -111,16 +111,10 @@ namespace MarkMpn.Sql4Cds.XTB
             if (!_dataSources.ContainsKey(con.ConnectionName))
             {
                 var metadata = new SharedMetadataCache(con, GetNewServiceClient(con));
+                var tableSize = new TableSizeCache(GetNewServiceClient(con), metadata);
+                var messages = new MessageCache(GetNewServiceClient(con), metadata);
 
-                _dataSources[con.ConnectionName] = new XtbDataSource
-                {
-                    ConnectionDetail = con,
-                    Connection = GetNewServiceClient(con),
-                    Metadata = metadata,
-                    TableSizeCache = new TableSizeCache(GetNewServiceClient(con), metadata),
-                    Name = con.ConnectionName,
-                    MessageCache = new MessageCache(GetNewServiceClient(con), metadata)
-                };
+                _dataSources[con.ConnectionName] = new XtbDataSource(con, GetNewServiceClient, metadata, tableSize, messages);
             }
 
             // Start loading the entity list in the background

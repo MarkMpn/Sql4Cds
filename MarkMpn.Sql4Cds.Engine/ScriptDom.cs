@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Web.UI.WebControls;
+using System.Xml.Linq;
+using Castle.DynamicProxy.Generators.Emitters.SimpleAST;
+using Microsoft.Xrm.Sdk.Query;
+using Newtonsoft.Json.Linq;
 
 /// <summary>
 /// Basic shims for ScriptDom classes required to build a SQL statement from FetchXml
@@ -17,9 +22,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var statement in Statements)
-                statement.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -48,9 +50,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var declaration in Declarations)
-                declaration.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -82,9 +81,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-            VariableName?.Accept(visitor);
-            DataType?.Accept(visitor);
-            Value?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -110,8 +106,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-            QueryExpression?.Accept(visitor);
-            WithCtesAndXmlNamespaces?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -149,16 +143,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-            TopRowFilter?.Accept(visitor);
-
-            foreach (var element in SelectElements)
-                element.Accept(visitor);
-
-            FromClause?.Accept(visitor);
-            OffsetClause?.Accept(visitor);
-            WhereClause?.Accept(visitor);
-            GroupByClause?.Accept(visitor);
-            OrderByClause?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -216,9 +200,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FirstQueryExpression?.Accept(visitor);
-            SecondQueryExpression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -258,7 +239,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-            Expression?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -374,9 +354,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var table in TableReferences)
-                table.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent, int longestClauseLength)
@@ -418,13 +395,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            SchemaObject?.Accept(visitor);
-
-            foreach (var hint in TableHints)
-                hint.Accept(visitor);
-
-            Alias?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -467,10 +437,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FirstTableReference?.Accept(visitor);
-            SecondTableReference?.Accept(visitor);
-            SearchCondition?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -510,9 +476,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var identifier in Identifiers)
-                identifier.Accept(visitor);
         }
     }
 
@@ -552,9 +515,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public virtual void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var identifier in Identifiers)
-                identifier.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -607,9 +567,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            OffsetExpression?.Accept(visitor);
-            FetchExpression?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent, int longestClauseLength)
@@ -631,8 +588,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            SearchCondition?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent, int longestClauseLength)
@@ -659,8 +614,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Qualifier?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -684,9 +637,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
-            ColumnName?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -712,8 +662,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            MultiPartIdentifier?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -733,11 +681,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FunctionName?.Accept(visitor);
-
-            foreach (var param in Parameters)
-                param.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -769,9 +712,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            DataType?.Accept(visitor);
-            Parameter?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -793,8 +733,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Name?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -816,8 +754,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Identifier?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf)
@@ -833,9 +769,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var group in GroupingSpecifications)
-                group.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent, int longestClauseLength)
@@ -866,8 +799,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -889,9 +820,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FirstExpression?.Accept(visitor);
-            SecondExpression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -949,8 +877,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -970,9 +896,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FirstExpression?.Accept(visitor);
-            SecondExpression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1015,9 +938,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FirstExpression?.Accept(visitor);
-            SecondExpression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1043,10 +963,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FirstExpression?.Accept(visitor);
-            SecondExpression?.Accept(visitor);
-            ThirdExpression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1089,13 +1005,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
-
-            foreach (var value in Values)
-                value.Accept(visitor);
-
-            Subquery?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1137,11 +1046,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var col in Columns)
-                col.Accept(visitor);
-
-            Value?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1179,8 +1083,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1201,9 +1103,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            FirstExpression?.Accept(visitor);
-            SecondExpression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1248,8 +1147,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1308,8 +1205,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            QueryExpression?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -1326,8 +1221,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
         }
 
         public override void ToString(StringBuilder buf, int indent)
@@ -1348,9 +1241,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var order in OrderByElements)
-                order.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent, int longestClauseLength)
@@ -1383,8 +1273,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            Expression?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -1414,9 +1302,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            foreach (var cte in CommonTableExpressions)
-                cte.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -1450,13 +1335,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
-
-            ExpressionName?.Accept(visitor);
-
-            foreach (var col in Columns)
-                col.Accept(visitor);
-
-            QueryExpression?.Accept(visitor);
         }
 
         public void ToString(StringBuilder buf, int indent)
@@ -1478,208 +1356,383 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
     }
 
+    class ExistsPredicate : BooleanExpression
+    {
+        public ScalarSubquery Subquery { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            buf.Append("EXISTS(");
+            Subquery?.ToString(buf, indent);
+            buf.Append(")");
+        }
+    }
+
+    class QueryDerivedTable : TableReference
+    {
+        public QueryExpression QueryExpression { get; set; }
+
+        public Identifier Alias { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            buf.Append("(");
+            QueryExpression?.ToString(buf, indent);
+            buf.Append(")");
+
+            if (Alias != null)
+            {
+                buf.Append(" AS ");
+                Alias.ToString(buf);
+            }
+        }
+    }
+
+    class UnqualifiedJoin : TableReference
+    {
+        public TableReference FirstTableReference { get; set; }
+        public UnqualifiedJoinType UnqualifiedJoinType { get; set; }
+        public TableReference SecondTableReference { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            FirstTableReference?.ToString(buf, indent);
+            buf.Append(" CROSS APPLY ");
+            SecondTableReference?.ToString(buf, indent);
+        }
+    }
+
     enum SortOrder
     {
         Ascending,
         Descending
     }
 
+    enum UnqualifiedJoinType
+    {
+        CrossApply
+    }
+
     class TSqlFragmentVisitor
     {
         public virtual void ExplicitVisit(TSqlBatch node)
         {
+            foreach (var statement in node.Statements)
+                statement.Accept(this);
         }
 
         public virtual void ExplicitVisit(DeclareVariableStatement node)
         {
+            foreach (var declaration in node.Declarations)
+                declaration.Accept(this);
         }
 
         public virtual void ExplicitVisit(DeclareVariableElement node)
         {
+            node.VariableName?.Accept(this);
+            node.DataType?.Accept(this);
+            node.Value?.Accept(this);
         }
 
         public virtual void ExplicitVisit(SelectStatement node)
         {
+            node.QueryExpression?.Accept(this);
+            node.WithCtesAndXmlNamespaces?.Accept(this);
         }
 
         public virtual void ExplicitVisit(MultiPartIdentifier node)
         {
+            foreach (var identifier in node.Identifiers)
+                identifier.Accept(this);
         }
 
         public virtual void ExplicitVisit(Identifier node)
         {
         }
 
-        public virtual void ExplicitVisit(QuerySpecification querySpecification)
+        public virtual void ExplicitVisit(QuerySpecification node)
+        {
+            node.TopRowFilter?.Accept(this);
+
+            foreach (var element in node.SelectElements)
+                element.Accept(this);
+
+            node.FromClause?.Accept(this);
+            node.OffsetClause?.Accept(this);
+            node.WhereClause?.Accept(this);
+            node.GroupByClause?.Accept(this);
+            node.OrderByClause?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(TopRowFilter node)
+        {
+            node.Expression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(NullLiteral node)
         {
         }
 
-        public virtual void ExplicitVisit(TopRowFilter topRowFilter)
+        public virtual void ExplicitVisit(IntegerLiteral node)
         {
         }
 
-        public virtual void ExplicitVisit(NullLiteral integerLiteral)
+        public virtual void ExplicitVisit(StringLiteral node)
         {
         }
 
-        public virtual void ExplicitVisit(IntegerLiteral integerLiteral)
+        public virtual void ExplicitVisit(BinaryLiteral node)
         {
         }
 
-        public virtual void ExplicitVisit(StringLiteral stringLiteral)
+        public virtual void ExplicitVisit(NumericLiteral node)
         {
         }
 
-        public virtual void ExplicitVisit(BinaryLiteral binaryLiteral)
+        public virtual void ExplicitVisit(MoneyLiteral node)
         {
         }
 
-        public virtual void ExplicitVisit(NumericLiteral numericLiteral)
+        public virtual void ExplicitVisit(FromClause node)
+        {
+            foreach (var table in node.TableReferences)
+                table.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(NamedTableReference node)
+        {
+            node.SchemaObject?.Accept(this);
+
+            foreach (var hint in node.TableHints)
+                hint.Accept(this);
+
+            node.Alias?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(QualifiedJoin node)
+        {
+            node.FirstTableReference?.Accept(this);
+            node.SecondTableReference?.Accept(this);
+            node.SearchCondition?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(SchemaObjectName node)
+        {
+            foreach (var identifier in node.Identifiers)
+                identifier.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(OffsetClause node)
+        {
+            node.OffsetExpression?.Accept(this);
+            node.FetchExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(WhereClause node)
+        {
+            node.SearchCondition?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(SelectStarExpression node)
+        {
+            node.Qualifier?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(SelectScalarExpression node)
+        {
+            node.Expression?.Accept(this);
+            node.ColumnName?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(ColumnReferenceExpression node)
+        {
+            node.MultiPartIdentifier?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(FunctionCall node)
+        {
+            node.FunctionName?.Accept(this);
+
+            foreach (var param in node.Parameters)
+                param.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(IdentifierOrValueExpression node)
+        {
+            node.Identifier?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(GroupByClause node)
+        {
+            foreach (var group in node.GroupingSpecifications)
+                group.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(ExpressionGroupingSpecification node)
+        {
+            node.Expression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(BooleanComparisonExpression node)
+        {
+            node.FirstExpression?.Accept(this);
+            node.SecondExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(BooleanBinaryExpression node)
+        {
+            node.FirstExpression?.Accept(this);
+            node.SecondExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(LikePredicate node)
+        {
+            node.FirstExpression?.Accept(this);
+            node.SecondExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(BooleanTernaryExpression node)
+        {
+            node.FirstExpression?.Accept(this);
+            node.SecondExpression?.Accept(this);
+            node.ThirdExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(InPredicate node)
+        {
+            node.Expression?.Accept(this);
+
+            foreach (var value in node.Values)
+                value.Accept(this);
+
+            node.Subquery?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(BooleanIsNullExpression node)
+        {
+            node.Expression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(OrderByClause node)
+        {
+            foreach (var order in node.OrderByElements)
+                order.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(ExpressionWithSortOrder node)
+        {
+            node.Expression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(TableHint node)
         {
         }
 
-        public virtual void ExplicitVisit(MoneyLiteral moneyLiteral)
+        public virtual void ExplicitVisit(ConvertCall node)
+        {
+            node.DataType?.Accept(this);
+            node.Parameter?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(SqlDataTypeReference node)
+        {
+            node.Name?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(VariableReference node)
         {
         }
 
-        public virtual void ExplicitVisit(FromClause fromClause)
+        public virtual void ExplicitVisit(BooleanParenthesisExpression node)
+        {
+            node.Expression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(WithCtesAndXmlNamespaces node)
+        {
+            foreach (var cte in node.CommonTableExpressions)
+                cte.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(CommonTableExpression node)
+        {
+            node.ExpressionName?.Accept(this);
+
+            foreach (var col in node.Columns)
+                col.Accept(this);
+
+            node.QueryExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(ScalarSubquery node)
+        {
+            node.QueryExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(BinaryQueryExpression node)
+        {
+            node.FirstQueryExpression?.Accept(this);
+            node.SecondQueryExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(BinaryExpression node)
+        {
+            node.FirstExpression?.Accept(this);
+            node.SecondExpression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(UnaryExpression node)
+        {
+            node.Expression?.Accept(this);
+        }
+
+        public virtual void ExplicitVisit(ParameterlessCall node)
         {
         }
 
-        public virtual void ExplicitVisit(NamedTableReference namedTableReference)
+        public virtual void ExplicitVisit(FullTextPredicate node)
         {
+            foreach (var col in node.Columns)
+                col.Accept(this);
+
+            node.Value?.Accept(this);
         }
 
-        public virtual void ExplicitVisit(QualifiedJoin qualifiedJoin)
+        public virtual void ExplicitVisit(BooleanNotExpression node)
         {
+            node.Expression?.Accept(this);
         }
 
-        public virtual void ExplicitVisit(SchemaObjectName schemaObjectName)
+        public virtual void ExplicitVisit(ExistsPredicate node)
         {
+            node.Subquery?.Accept(this);
         }
 
-        public virtual void ExplicitVisit(OffsetClause offsetClause)
+        public virtual void ExplicitVisit(QueryDerivedTable node)
         {
+            node.QueryExpression?.Accept(this);
+            node.Alias?.Accept(this);
         }
 
-        public virtual void ExplicitVisit(WhereClause whereClause)
+        public virtual void ExplicitVisit(UnqualifiedJoin node)
         {
-        }
-
-        public virtual void ExplicitVisit(SelectStarExpression selectStarExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(SelectScalarExpression selectScalarExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(ColumnReferenceExpression columnReferenceExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(FunctionCall functionCall)
-        {
-        }
-
-        public virtual void ExplicitVisit(IdentifierOrValueExpression identifierOrValueExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(GroupByClause groupByClause)
-        {
-        }
-
-        public virtual void ExplicitVisit(ExpressionGroupingSpecification expressionGroupingSpecification)
-        {
-        }
-
-        public virtual void ExplicitVisit(BooleanComparisonExpression booleanComparisonExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(BooleanBinaryExpression booleanBinaryExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(LikePredicate likePredicate)
-        {
-        }
-
-        public virtual void ExplicitVisit(BooleanTernaryExpression booleanTernaryExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(InPredicate inPredicate)
-        {
-        }
-
-        public virtual void ExplicitVisit(BooleanIsNullExpression booleanIsNullExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(OrderByClause orderByClause)
-        {
-        }
-
-        public virtual void ExplicitVisit(ExpressionWithSortOrder expressionWithSortOrder)
-        {
-        }
-
-        public virtual void ExplicitVisit(TableHint tableHint)
-        {
-        }
-
-        public virtual void ExplicitVisit(ConvertCall convertCall)
-        {
-        }
-
-        public virtual void ExplicitVisit(SqlDataTypeReference sqlDataTypeReference)
-        {
-        }
-
-        public virtual void ExplicitVisit(VariableReference variableReference)
-        {
-        }
-
-        public virtual void ExplicitVisit(BooleanParenthesisExpression booleanParenthesisExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(WithCtesAndXmlNamespaces withCtesAndXmlNamespaces)
-        {
-        }
-
-        public virtual void ExplicitVisit(CommonTableExpression commonTableExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(ScalarSubquery scalarSubquery)
-        {
-        }
-
-        public virtual void ExplicitVisit(BinaryQueryExpression binaryQueryExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(BinaryExpression binaryExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(UnaryExpression unaryExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(ParameterlessCall unaryExpression)
-        {
-        }
-
-        public virtual void ExplicitVisit(FullTextPredicate fullTextPredicate)
-        {
-        }
-
-        public virtual void ExplicitVisit(BooleanNotExpression notExpression)
-        {
+            node.FirstTableReference?.Accept(this);
+            node.SecondTableReference?.Accept(this);
         }
     }
 

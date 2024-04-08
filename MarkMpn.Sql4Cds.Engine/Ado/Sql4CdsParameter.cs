@@ -54,6 +54,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override string ParameterName { get; set; }
 
+        internal string FullParameterName => ParameterName.StartsWith("@") ? ParameterName : ("@" + ParameterName);
+
         public override int Size { get; set; }
 
         public override string SourceColumn { get; set; }
