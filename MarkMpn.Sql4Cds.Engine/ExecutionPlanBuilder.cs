@@ -3858,7 +3858,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 outputCol = subqueryCol;
-                subNode.AddRequiredColumns(context, new List<string> { subqueryCol });
+                //subNode.AddRequiredColumns(context, new List<string> { subqueryCol });
             }
 
             if (alias != null && !(subNode is FetchXmlScan))
@@ -4182,7 +4182,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (meta.IsRetentionEnabled != true && meta.IsArchivalEnabled != true)
                         throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{table.ToSql()}'", table)) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
 
-                    fetchXmlScan.FetchXml.DataSource = "archive";
+                    fetchXmlScan.FetchXml.DataSource = "retained";
                 }
 
                 return fetchXmlScan;

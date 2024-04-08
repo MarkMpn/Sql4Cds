@@ -47,12 +47,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var lt = LeftAttribute == null || RightAttribute == null
                 ? ConstantResult(false)
-                : new BooleanComparisonExpression
+                : new BooleanBinaryExpression
+                {
+                    FirstExpression = new BooleanBinaryExpression
+                    {
+                        FirstExpression = new BooleanIsNullExpression { Expression = LeftAttribute },
+                        BinaryExpressionType = BooleanBinaryExpressionType.And,
+                        SecondExpression = new BooleanIsNullExpression { Expression = RightAttribute, IsNot = true }
+                    },
+                    BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                    SecondExpression = new BooleanComparisonExpression
                     {
                         FirstExpression = LeftAttribute,
                         ComparisonType = BooleanComparisonType.LessThan,
                         SecondExpression = RightAttribute
-                    }.Compile(expressionCompilationContext);
+                    }
+                }.Compile(expressionCompilationContext);
 
             var eq = LeftAttribute == null || RightAttribute == null
                 ? ConstantResult(true)
@@ -65,12 +75,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var gt = LeftAttribute == null || RightAttribute == null
                 ? ConstantResult(false)
-                : new BooleanComparisonExpression
+                : new BooleanBinaryExpression
+                {
+                    FirstExpression = new BooleanBinaryExpression
+                    {
+                        FirstExpression = new BooleanIsNullExpression { Expression = LeftAttribute, IsNot = true },
+                        BinaryExpressionType = BooleanBinaryExpressionType.And,
+                        SecondExpression = new BooleanIsNullExpression { Expression = RightAttribute }
+                    },
+                    BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                    SecondExpression = new BooleanComparisonExpression
                     {
                         FirstExpression = LeftAttribute,
                         ComparisonType = BooleanComparisonType.GreaterThan,
                         SecondExpression = RightAttribute
-                    }.Compile(expressionCompilationContext);
+                    }
+                }.Compile(expressionCompilationContext);
 
             string leftAttributeName = null;
             if (LeftAttribute != null)
@@ -86,7 +106,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             while (!Done(hasLeft, hasRight))
             {
                 // Compare key values
-                var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
+                var finalMerged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema, false);
+                var merged = OutputLeftSchema && OutputRightSchema ? finalMerged : Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema, true);
 
                 expressionExecutionContext.Entity = merged;
                 var isLt = lt(expressionExecutionContext);
@@ -95,7 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var nextSide = right;
 
-                if (isLt || (hasLeft && !hasRight))
+                if (hasLeft && (isLt || !hasRight))
                 {
                     nextSide = left;
                 }
@@ -133,7 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(expressionExecutionContext) == true))
                     {
-                        yield return merged;
+                        yield return finalMerged;
                         leftMatched = true;
                         rightMatched = true;
                         workTableUnmatched.Remove(right.Current);
@@ -144,7 +165,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (nextSide == right)
                 {
                     if (!rightMatched && right == rightSource && (JoinType == QualifiedJoinType.RightOuter || JoinType == QualifiedJoinType.FullOuter))
-                        yield return Merge(null, leftSchema, right.Current, rightSchema);
+                        yield return Merge(null, leftSchema, right.Current, rightSchema, false);
 
                     hasRight = right.MoveNext();
                     rightMatched = false;
@@ -162,7 +183,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (nextSide == left)
                 {
                     if (!leftMatched && (JoinType == QualifiedJoinType.LeftOuter || JoinType == QualifiedJoinType.FullOuter))
-                        yield return Merge(left.Current, leftSchema, null, rightSchema);
+                        yield return Merge(left.Current, leftSchema, null, rightSchema, false);
 
                     // If we're using the work table, check if the key is about to change in the left input. If so, discard the 
                     // work table and move back to the right input
@@ -180,7 +201,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (JoinType == QualifiedJoinType.RightOuter || JoinType == QualifiedJoinType.FullOuter)
                             {
                                 foreach (var entity in workTableUnmatched)
-                                    yield return Merge(null, leftSchema, entity, rightSchema);
+                                    yield return Merge(null, leftSchema, entity, rightSchema, false);
                             }
                         }
                     }

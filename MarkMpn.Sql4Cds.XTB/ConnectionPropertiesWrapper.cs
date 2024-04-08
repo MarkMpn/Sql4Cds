@@ -15,22 +15,22 @@ namespace MarkMpn.Sql4Cds.XTB
 
         [Category("Connection")]
         [DisplayName("Connection Name")]
-        public string ConnectionName => _connection.ConnectionName;
+        public string ConnectionName => _connection?.ConnectionName;
 
         [Category("Connection")]
         [DisplayName("Connection Id")]
-        public Guid? ConnectionId => _connection.ConnectionId;
+        public Guid? ConnectionId => _connection?.ConnectionId;
 
         [Category("Organization")]
         [DisplayName("Organization Name")]
-        public string Organization => _connection.Organization;
+        public string Organization => _connection?.Organization;
 
         [Category("Organization")]
         [DisplayName("Version")]
-        public string OrganizationVersion => _connection.OrganizationVersion;
+        public string OrganizationVersion => _connection?.OrganizationVersion;
 
         [Category("Organization")]
         [DisplayName("URL")]
-        public string OrganizationServiceUrl => _connection.OrganizationServiceUrl;
+        public string OrganizationServiceUrl => _connection?.OrganizationServiceUrl;
     }
 }
