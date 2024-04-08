@@ -175,12 +175,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (expr is DistinctPredicate distinct)
                 expression = ToExpression(distinct, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             else
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unhandled expression type", expr));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(expr)) { Suggestion = "Unhandled expression type" };
 
             if (expr is PrimaryExpression primary && primary.Collation != null)
             {
                 if (!Collation.TryParse(primary.Collation.Value, out var coll))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 447, $"Invalid collation '{primary.Collation}'", primary.Collation));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidCollation(primary.Collation));
 
                 if (sqlType is SqlDataTypeReferenceWithCollation sqlTypeWithCollation)
                 {
@@ -259,9 +259,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (context.Schema == null || !context.Schema.Aliases.TryGetValue(name, out var normalized))
                 {
                     if (context.NonAggregateSchema != null && context.NonAggregateSchema.ContainsColumn(name, out var nonAggregateName))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8120, $"Column '{nonAggregateName}' is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause", col));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NonAggregateColumnReference(col));
 
-                    var ex = new NotSupportedQueryFragmentException(new Sql4CdsError(16, 207, $"Invalid column name '{name}'", col));
+                    var ex = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnName(col));
 
                     if (col.MultiPartIdentifier.Identifiers.Count == 1 && col.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote)
                         ex.Suggestion = $"Did you mean '{name}'?";
@@ -273,7 +273,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw ex;
                 }
 
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 209, $"Ambiguous column name '{name}'", col))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousColumnName(col))
                 {
                     Suggestion = $"Did you mean:\r\n{String.Join("\r\n", normalized.Select(c => $"* {c}"))}"
                 };
@@ -453,7 +453,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Expression.Property(Expression.Convert(exprParam, typeof(OdbcLiteral)), nameof(OdbcLiteral.Value)));
 
                 default:
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unknown literal type", odbc));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(odbc)) { Suggestion = "Unknown literal type" };
             }
         }
 
@@ -490,7 +490,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var lhs = cmp.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var lhsType, out var lhsCacheKey);
             var rhs = cmp.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var rhsType, out var rhsCacheKey);
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsType, rhsType, context.PrimaryDataSource, out var type))
+            var operation = Regex.Replace(cmp.ComparisonType.ToString(), "[a-z][A-Z]", m => (m.Value[0] + " " + m.Value[1]).ToLowerInvariant());
+
+            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsType, rhsType, context.PrimaryDataSource, cmp, operation, out var type))
             {
                 // Special case - we can filter on entity reference types by string
                 if (lhs.Type == typeof(SqlEntityReference) && rhs.Type == typeof(SqlString) ||
@@ -500,7 +502,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {lhsType.ToSql()} is incompatible with {rhsType.ToSql()}", cmp));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(cmp, lhsType, rhsType));
                 }
             }
 
@@ -519,7 +521,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     ) &&
                     context.Schema.ContainsColumn(col.GetColumnName() + "name", out var nameCol))
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 245, $"Conversion failed when converting the {rhsType.ToSql()} value '{str.Value}' to data type {type.ToSql()}", str))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.ConversionFailed(rhsType, str, type))
                     {
                         Suggestion = $"Did you mean to filter on the {nameCol} column instead?\r\n" + new string(' ', 26 + nameCol.Length) + "^^^^"
                     };
@@ -528,7 +530,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 rhs = createExpression ? SqlTypeConverter.Convert(rhs, rhsType, type) : null;
             }
 
-            AssertCollationSensitive(type, cmp.ComparisonType.ToString().ToLowerInvariant() + " operation", cmp);
+            AssertCollationSensitive(type);
 
             switch (cmp.ComparisonType)
             {
@@ -560,7 +562,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return createExpression ? Expression.NotEqual(lhs, rhs) : null;
 
                 default:
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unknown comparison type", cmp));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(cmp)) { Suggestion = "Unknown comparison type" };
             }
         }
 
@@ -571,7 +573,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var lhs = distinct.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var lhsType, out var lhsCacheKey);
             var rhs = distinct.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var rhsType, out var rhsCacheKey);
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsType, rhsType, context.PrimaryDataSource, out var type))
+            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsType, rhsType, context.PrimaryDataSource, distinct, distinct.IsNot ? "is not distinct from" : "is distinct from", out var type))
             {
                 // Special case - we can filter on entity reference types by string
                 if (lhs.Type == typeof(SqlEntityReference) && rhs.Type == typeof(SqlString) ||
@@ -581,7 +583,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {lhsType.ToSql()} is incompatible with {rhsType.ToSql()}", distinct));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(distinct, lhsType, rhsType));
                 }
             }
 
@@ -600,7 +602,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     ) &&
                     context.Schema.ContainsColumn(col.GetColumnName() + "name", out var nameCol))
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 245, $"Conversion failed when converting the {rhsType.ToSql()} value '{str.Value}' to data type {type.ToSql()}", str))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.ConversionFailed(rhsType, str, type))
                     {
                         Suggestion = $"Did you mean to filter on the {nameCol} column instead?\r\n" + new string(' ', 26 + nameCol.Length) + "^^^^"
                     };
@@ -609,7 +611,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 rhs = createExpression ? SqlTypeConverter.Convert(rhs, rhsType, type) : null;
             }
 
-            AssertCollationSensitive(type, "IS DISTINCT FROM operation", distinct);
+            AssertCollationSensitive(type);
 
             // Using linked server decoding pseudocode from https://learn.microsoft.com/en-us/sql/t-sql/queries/is-distinct-from-transact-sql?view=sql-server-ver16#remarks
             var expr = createExpression
@@ -672,8 +674,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var lhs = bin.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, true, out var lhsSqlType, out var lhsCacheKey);
             var rhs = bin.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, true, out var rhsSqlType, out var rhsCacheKey);
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsSqlType, rhsSqlType, context.PrimaryDataSource, out var type))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {lhsSqlType.ToSql()} is incompatible with {rhsSqlType.ToSql()}", bin));
+            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsSqlType, rhsSqlType, context.PrimaryDataSource, bin, bin.BinaryExpressionType.ToString().ToLowerInvariant(), out var type))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(bin, lhsSqlType, rhsSqlType));
 
             // For decimal types, need to work out the precision and scale of the result depending on the type of operation
             if (type is SqlDataTypeReference sqlTargetType && (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
@@ -777,15 +779,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         var length = lhsLength + rhsLength;
 
-                        if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, out var collation, out var collationLabel))
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, $"Cannot resolve collation conflict between '{lhsSql.Collation.Name}' and {rhsSql.Collation.Name}' in add operation", bin));
+                        if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, bin, "add", out var collation, out var collationLabel, out var collationError))
+                            throw new NotSupportedQueryFragmentException(collationError);
 
                         sqlType = new SqlDataTypeReferenceWithCollation
                         {
                             SqlDataTypeOption = ((SqlDataTypeReference)type).SqlDataTypeOption,
                             Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() },
                             Collation = collation,
-                            CollationLabel = collationLabel
+                            CollationLabel = collationLabel,
+                            CollationConflictError = collationError
                         };
                     }
                     break;
@@ -831,7 +834,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
 
                 default:
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unknown operator", bin));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(bin)) { Suggestion = "Unknown operator" };
             }
 
             if (sqlType == null && expr.Type == typeof(SqlDecimal))
@@ -878,7 +881,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         // Check parameter is an expected datepart value
                         if (!(param is ColumnReferenceExpression col) || col.MultiPartIdentifier.Identifiers.Count != 1)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1023, $"Invalid parameter 1 specified for datepart", param));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameter(param, 1, "datepart"));
 
                         try
                         {
@@ -886,7 +889,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         catch
                         {
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 155, $"'{param.ToSql()}' is not a recognized datepart option", param));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "datepart"));
                         }
 
                         return new { Expression = createExpression ? (Expression)Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value) : null, Type = (DataTypeReference)DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), CacheKey = col.MultiPartIdentifier.Identifiers.Single().Value };
@@ -897,7 +900,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         // Check parameter is an expected datepart value
                         if (!(param is ColumnReferenceExpression col) || col.MultiPartIdentifier.Identifiers.Count != 1)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1023, "Invalid parameter 2 specified for isjson", param));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameter(param, 2, "isjson"));
 
                         switch (col.MultiPartIdentifier.Identifiers.Single().Value.ToLowerInvariant())
                         {
@@ -908,7 +911,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 break;
 
                             default:
-                               throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 155, $"'{param.ToSql()}' is not a recognized isjson option", param));
+                               throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "isjson"));
                         }
 
                         return new { Expression = createExpression ? (Expression)Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value) : null, Type = (DataTypeReference)DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), CacheKey = col.MultiPartIdentifier.Identifiers.Single().Value };
@@ -944,7 +947,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (methods.Count == 0)
             {
                 if (throwOnMissing)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 195, $"{func.FunctionName.Value}' is not a recognized built-in function name", func));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunction(func.FunctionName));
 
                 cacheKey = null;
                 sqlType = DataTypeHelpers.Int;
@@ -971,7 +974,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToList();
 
             if (correctParameterCount.Count == 0)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 174, $"The {func.FunctionName.Value}' function requires {methods[0].GetParameters().Length} argument(s)", func));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(func.FunctionName, methods[0].GetParameters().Length));
 
             if (correctParameterCount.Count > 1)
                 throw new NotSupportedQueryFragmentException("Ambiguous method", func);
@@ -1106,10 +1109,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         // Expect only a literal string
                         if (!(func.Parameters[paramIndex] is StringLiteral typeLiteral))
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8172, $"The argument {i} of the XML data type method \"{func.FunctionName.Value}\" must be a string literal", func.Parameters[i]));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.XmlDataTypeMethodRequiresStringLiteralParameter(func.Parameters[paramIndex], func.FunctionName, i));
 
                         if (!DataTypeHelpers.TryParse(context, typeLiteral.Value, out var parsedType))
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 9500, $"The data type '{typeLiteral.Value}' used in the {func.FunctionName.Value} method is invalid", typeLiteral));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidDataTypeForXmlValueMethod(typeLiteral));
 
                         cacheKey +=$"(TYPE:{parsedType.ToSql()})";
 
@@ -1127,7 +1130,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     // Expect only a literal string
                     if (!(func.Parameters[paramIndex] is StringLiteral xpathLiteral))
-                        throw new NotSupportedQueryFragmentException($"The argument {i} of the XML data type method \"{func.FunctionName.Value}\" must be a string literal");
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.XmlDataTypeMethodRequiresStringLiteralParameter(func.Parameters[paramIndex], func.FunctionName, i));
 
                     cacheKey += $"(XPATH:{xpathLiteral.Value})";
 
@@ -1138,7 +1141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (paramType != typeof(INullable) && !SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i - hiddenParams], paramType.ToSqlType(primaryDataSource)))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {paramTypes[i].ToSql()} is incompatible with {paramType.ToSqlType(primaryDataSource).ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(i < paramOffset ? func : func.Parameters[i - paramOffset], paramTypes[i], paramType.ToSqlType(primaryDataSource)));
             }
 
             for (var i = parameters.Length; i < paramTypes.Length; i++)
@@ -1146,7 +1149,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var paramType = parameters.Last().ParameterType.GetElementType();
 
                 if (paramType != typeof(INullable) && !SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType(primaryDataSource)))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {paramTypes[i].ToSql()} is incompatible with {paramType.ToSqlType(primaryDataSource).ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(i < paramOffset ? func : func.Parameters[i - paramOffset], paramTypes[i], paramType.ToSqlType(primaryDataSource)));
             }
 
             if (createExpression && parameters.Length > 0 && parameters.Last().ParameterType.IsArray)
@@ -1188,14 +1191,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(collation, collationParam, out var consistentCollation, out var collationLabel))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, $"Cannot resolve the collation conflict between \"{collation.Collation.Name}\" and \"{collationParam.Collation.Name}\" in the {func.FunctionName.Value.ToLowerInvariant()} operation", func));
+                    if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(collation, collationParam, func, func.FunctionName.Value.ToLowerInvariant(), out var consistentCollation, out var collationLabel, out var collationError))
+                        throw new NotSupportedQueryFragmentException(collationError);
 
                     collation = new SqlDataTypeReferenceWithCollation
                     {
                         Collation = consistentCollation,
-                        CollationLabel = collationLabel
+                        CollationLabel = collationLabel,
+                        CollationConflictError = collationError
                     };
+
+                    AssertCollationSensitive(collation);
                 }
 
                 if (collation == null)
@@ -1207,8 +1213,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         CollationLabel = CollationLabel.CoercibleDefault
                     };
                 }
-
-                AssertCollationSensitive(collation, func.FunctionName.Value.ToLowerInvariant() + " operation", func);
 
                 for (var i = 0; i < paramTypes.Length; i++)
                 {
@@ -1246,10 +1250,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this FunctionCall func, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
             if (func.OverClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Window functions are not supported", func));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(func, "OVER"));
 
             if (func.WithinGroupClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, $"The function '{func.FunctionName.Value}' may not have a WITHIN GROUP clause", func));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func)) { Suggestion = $"The function '{func.FunctionName.Value}' may not have a WITHIN GROUP clause" };
 
             // Special case: ExplicitCollation is a pseudo-function that's introduced by the ExplicitCollationVisitor to wrap
             // primary expressions with a collation definition. The inner expression will already have applied the collation
@@ -1263,7 +1267,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     coll.Collation == null ||
                     coll.CollationLabel != CollationLabel.Explicit)
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 195, $"'{func.FunctionName.Value}' is not a recognized built-in function name", func));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunction(func.FunctionName));
                 }
 
                 cacheKey = $"ExplicitCollation({cacheKey})";
@@ -1326,7 +1330,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return createExpression ? Expression.Not(value) : null;
 
                 default:
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unknown unary operator", unary));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(unary)) { Suggestion = "Unknown unary operator" };
             }
         }
 
@@ -1347,8 +1351,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var comparisonValue = inPred.InvokeSubExpression(x => x.Values[i], (x, j) => x.Values[j], i, context, contextParam, exprParam, createExpression, out var comparisonType, out var comparisonCacheKey);
 
-                if (!SqlTypeConverter.CanMakeConsistentTypes(exprType, comparisonType, context.PrimaryDataSource, out var type))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {exprType.ToSql()} is incompatible with {comparisonType.ToSql()}", inPred));
+                if (!SqlTypeConverter.CanMakeConsistentTypes(exprType, comparisonType, context.PrimaryDataSource, inPred, "in", out var type))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(inPred, exprType, comparisonType));
 
                 if (createExpression)
                 {
@@ -1382,7 +1386,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this VariableReference var, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
             if (context.ParameterTypes == null || !context.ParameterTypes.TryGetValue(var.Name, out sqlType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 137, $"Must declare the scalar variable \"{var.Name}\"", var));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.UndeclaredVariable(var));
 
             var netType = sqlType.ToNetType(out _);
             cacheKey = $"({netType})<Variable>";
@@ -1399,7 +1403,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this GlobalVariableExpression var, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
             if (context.ParameterTypes == null || !context.ParameterTypes.TryGetValue(var.Name, out sqlType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 137, $"Must declare the scalar variable \"{var.Name}\"", var));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.UndeclaredVariable(var));
 
             var netType = sqlType.ToNetType(out _);
             cacheKey = $"({netType})<GlobalVariable>";
@@ -1448,7 +1452,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (valueType.GetDataTypeFamily() != DataTypeFamily.Character)
             {
                 if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, stringType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {valueType.ToSql()} is incompatible with {stringType.ToSql()}", like.FirstExpression));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(like.FirstExpression, valueType, stringType));
 
                 value = createExpression ? SqlTypeConverter.Convert(value, valueType, stringType) : null;
                 valueType = stringType;
@@ -1457,7 +1461,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (patternType.GetDataTypeFamily() != DataTypeFamily.Character)
             {
                 if (!SqlTypeConverter.CanChangeTypeImplicit(patternType, stringType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {patternType.ToSql()} is incompatible with {stringType.ToSql()}", like.FirstExpression));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(like.FirstExpression, patternType, stringType));
 
                 pattern = createExpression ? SqlTypeConverter.Convert(pattern, patternType, stringType) : null;
                 patternType = stringType;
@@ -1466,29 +1470,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (escapeType != null && escapeType.GetDataTypeFamily() != DataTypeFamily.Character)
             {
                 if (!SqlTypeConverter.CanChangeTypeImplicit(escapeType, stringType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {escapeType.ToSql()} is incompatible with {stringType.ToSql()}", like.FirstExpression));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(like.FirstExpression, escapeType, stringType));
 
                 escape = createExpression ? SqlTypeConverter.Convert(escape, escapeType, stringType) : null;
                 escapeType = stringType;
             }
 
-            if (!SqlDataTypeReferenceWithCollation.TryConvertCollation((SqlDataTypeReference)valueType, (SqlDataTypeReference)patternType, out var collation, out var collationLabel))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, $"Cannot resolve the collation conflict between \"{((SqlDataTypeReferenceWithCollation)valueType).Collation.Name}\" and \"{((SqlDataTypeReferenceWithCollation)patternType).Collation.Name}\" in the like operation", like));
+            if (!SqlDataTypeReferenceWithCollation.TryConvertCollation((SqlDataTypeReference)valueType, (SqlDataTypeReference)patternType, like, "like", out var collation, out var collationLabel, out var collationError))
+                throw new NotSupportedQueryFragmentException(collationError);
+
+            AssertCollationSensitive(stringType);
 
             ((SqlDataTypeReferenceWithCollation)stringType).Collation = collation;
             ((SqlDataTypeReferenceWithCollation)stringType).CollationLabel = collationLabel;
+            ((SqlDataTypeReferenceWithCollation)stringType).CollationConflictError = collationError;
 
-            if (escapeType != null && !SqlDataTypeReferenceWithCollation.TryConvertCollation(stringType, (SqlDataTypeReference)escapeType, out collation, out collationLabel))
+            if (escapeType != null && !SqlDataTypeReferenceWithCollation.TryConvertCollation(stringType, (SqlDataTypeReference)escapeType, like, "like", out collation, out collationLabel, out collationError))
             {
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, $"Cannot resolve the collation conflict between \"{((SqlDataTypeReferenceWithCollation)stringType).Collation.Name}\" and \"{((SqlDataTypeReferenceWithCollation)escapeType).Collation.Name}\" in the like operation", like));
+                throw new NotSupportedQueryFragmentException(collationError);
             }
             else
             {
                 ((SqlDataTypeReferenceWithCollation)stringType).Collation = collation;
                 ((SqlDataTypeReferenceWithCollation)stringType).CollationLabel = collationLabel;
-            }
+                ((SqlDataTypeReferenceWithCollation)stringType).CollationConflictError = collationError;
 
-            AssertCollationSensitive(stringType, "like operation", like);
+                AssertCollationSensitive(stringType);
+            }
 
             if (escape == null && createExpression)
                 escape = Expression.Constant(SqlString.Null);
@@ -1710,8 +1718,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var whenType = whenClauses[i].Type;
 
-                if (!SqlTypeConverter.CanMakeConsistentTypes(valueType, whenType, context.PrimaryDataSource, out var caseType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {valueType.ToSql()} is incompatible with {whenType.ToSql()}", simpleCase.WhenClauses[i].WhenExpression));
+                if (!SqlTypeConverter.CanMakeConsistentTypes(valueType, whenType, context.PrimaryDataSource, simpleCase, "case", out var caseType))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(simpleCase.WhenClauses[i].WhenExpression, valueType, whenType));
 
                 caseTypes[i] = caseType;
 
@@ -1719,16 +1727,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (type == null)
                     type = thenType;
-                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, thenType, context.PrimaryDataSource, out type))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with {thenType.ToSql()}", simpleCase));
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, thenType, context.PrimaryDataSource, simpleCase, "case", out type))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(simpleCase, type, thenType));
             }
 
             if (elseValue != null)
             {
                 if (type == null)
                     type = elseType;
-                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, elseType, context.PrimaryDataSource, out type))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with {elseType.ToSql()}", simpleCase));
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, elseType, context.PrimaryDataSource, simpleCase, "case", out type))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(simpleCase, type, elseType));
             }
 
             // Second pass to build up the calculation. Do this in reverse so we can keep wrapping the previous expression in more conditions to
@@ -1810,16 +1818,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (type == null)
                     type = thenType;
-                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, thenType, context.PrimaryDataSource, out type))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with {thenType.ToSql()}", searchedCase));
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, thenType, context.PrimaryDataSource, searchedCase, "case", out type))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(searchedCase, type, thenType));
             }
 
             if (elseValue != null)
             {
                 if (type == null)
                     type = elseType;
-                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, elseType, context.PrimaryDataSource, out type))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with {elseType.ToSql()}", searchedCase));
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(type, elseType, context.PrimaryDataSource, searchedCase, "case", out type))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(searchedCase, type, elseType));
             }
 
             // Second pass to build up the calculation. Do this in reverse so we can keep wrapping the previous expression in more conditions to
@@ -1930,13 +1938,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return typeof(SqlXml);
                 }
 
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2715, $"Cannot find data type {type.ToSql()}", type));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidDataType(type));
             }
 
             sqlDataType = dataType;
 
             if (!_typeMapping.TryGetValue(dataType.SqlDataTypeOption, out var targetType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2715, $"Cannot find data type {type.ToSql()}", type));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidDataType(type));
 
             return targetType;
         }
@@ -2049,25 +2057,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Only support simple CONTAINS calls to handle multi-select optionsets for now
             if (fullText.FullTextFunctionType != FullTextFunctionType.Contains)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported full text predicate type", fullText)) { Suggestion = "Only CONTAINS is currently supported for full text searching" };
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(fullText, fullText.FullTextFunctionType.ToString())) { Suggestion = "Only CONTAINS is currently supported for full text searching" };
 
             if (fullText.Columns.Count != 1)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Only one column is currently supported for CONTAINS function", fullText));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(fullText, "multi-column CONTAINS"));
 
             if (fullText.Columns[0].ColumnType == ColumnType.Wildcard)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Only one column is currently supported for CONTAINS function", fullText));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(fullText, "multi-column CONTAINS"));
 
             if (fullText.PropertyName != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "PROPERTY is not currently supported", fullText.PropertyName));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(fullText.PropertyName, "PROPERTY"));
 
             if (fullText.LanguageTerm != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "LANGUAGE is not currently supported", fullText.LanguageTerm));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(fullText.LanguageTerm, "LANGUAGE"));
 
             var col = fullText.InvokeSubExpression(x => x.Columns[0], (x, i) => x.Columns[i], 0, context, contextParam, exprParam, createExpression, out var colType, out var colCacheKey);
             var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(colType, stringType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 7670, $"Column '{fullText.Columns[0].ToSql()}' cannot be used for full-text search because it is not a character-based, XML, image, JSON or varbinary(max) type column or it is encrypted", fullText.Columns[0]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnForFullTextSearch(fullText.Columns[0]));
 
             col = createExpression ? SqlTypeConverter.Convert(col, colType, stringType) : null;
             sqlType = DataTypeHelpers.Bit;
@@ -2075,7 +2083,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fullText.Value is StringLiteral lit)
             {
                 if (!_containsParser.IsMatch(lit.Value))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Only simple \"word OR word OR word\" patterns are currently supported", lit));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(lit, "complex CONTAINS patterns")) { Suggestion = "Only simple \"word OR word OR word\" patterns are currently supported" };
 
                 var words = GetContainsWords(lit.Value, true);
                 cacheKey = $"{colCacheKey} REGEX CONTAINS ({String.Join(", ", words.Select(w => w.ToString()))})";
@@ -2085,7 +2093,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var value = fullText.InvokeSubExpression(x => x.Value, x => x.Value, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, stringType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {valueType.ToSql()} is incompatible with {stringType.ToSql()}", fullText.Value));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(fullText.Value, valueType, stringType));
 
             value = createExpression ? SqlTypeConverter.Convert(value, valueType, stringType) : null;
 
@@ -2113,7 +2121,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Regex[] GetContainsWords(string pattern, bool compile)
         {
             if (!_containsParser.IsMatch(pattern))
-                throw new QueryExecutionException(new Sql4CdsError(15, 40133, "Invalid CONTAINS pattern. Only simple \"word OR word OR word\" patterns are currently supported"));
+                throw new QueryExecutionException(Sql4CdsError.InvalidFullTextPattern(pattern));
 
             var options = RegexOptions.IgnoreCase;
             if (compile)
@@ -2397,11 +2405,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        private static void AssertCollationSensitive(DataTypeReference sqlType, string description, TSqlFragment fragment)
+        private static void AssertCollationSensitive(DataTypeReference finalType)
         {
-            if (sqlType is SqlDataTypeReferenceWithCollation collation &&
+            if (finalType is SqlDataTypeReferenceWithCollation collation &&
                 collation.CollationLabel == CollationLabel.NoCollation)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, $"Cannot resolve collation conflict for {description}", fragment));
+                throw new NotSupportedQueryFragmentException(collation.CollationConflictError);
         }
 
         /// <summary>

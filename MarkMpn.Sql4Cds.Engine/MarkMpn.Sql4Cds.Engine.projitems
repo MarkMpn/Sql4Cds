@@ -168,6 +168,7 @@
     <None Include="$(MSBuildThisFileDirectory)FetchXml.xsd">
       <SubType>Designer</SubType>
     </None>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)resources\Errors.csv" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="$(MSBuildThisFileDirectory)Resources\" />

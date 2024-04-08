@@ -1782,7 +1782,7 @@ END CATCH";
                     Assert.AreEqual(1, reader.GetInt32(3));
                     Assert.IsTrue(reader.IsDBNull(4));
                     Assert.AreEqual(2, reader.GetInt32(5));
-                    Assert.AreEqual("Invalid object name 'invalid_table'", reader.GetString(6));
+                    Assert.AreEqual("Invalid object name 'invalid_table'.", reader.GetString(6));
                     Assert.IsFalse(reader.Read());
 
                     try

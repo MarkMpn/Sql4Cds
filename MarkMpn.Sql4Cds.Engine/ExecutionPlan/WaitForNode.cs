@@ -106,12 +106,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         else if (time is SqlString sqlString)
                         {
                             if (!TimeSpan.TryParseExact(sqlString.Value, new[] { @"hh\:mm", @"hh\:mm\:ss", @"hh\:mm\:ss.fff", @"hh\:mm.fff" }, null, out delay))
-                                throw new QueryExecutionException(new Sql4CdsError(15, 148, $"Incorrect time syntax in time string '{sqlString.Value}' used with WAITFOR"));
+                                throw new QueryExecutionException(Sql4CdsError.InvalidWaitForTimeSyntax(sqlString.Value));
                         }
                         else
                         {
                             Time.GetType(new ExpressionCompilationContext(context, null, null), out var type);
-                            throw new QueryExecutionException(new Sql4CdsError(16, 9815, $"Waitfor delay and waitfor time cannot be of type {type.ToSql()}"));
+                            throw new QueryExecutionException(Sql4CdsError.InvalidWaitForType(type));
                         }
 
                         if (WaitType == WaitForOption.Time)

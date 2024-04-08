@@ -1498,12 +1498,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             if (pageSizeHints.Count > 1)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 2042, "Conflicting FETCHXML_PAGE_SIZE optimizer hints specified", pageSizeHints[1]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.ConflictingHints(pageSizeHints[0], "FETCHXML_PAGE_SIZE"));
 
             var pageSize = Int32.Parse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length));
 
             if (pageSize < 1 || pageSize > 5000)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 304, $"'{pageSize}' is out of range for FETCHXML_PAGE_SIZE option, must be between 1 and 5000", pageSizeHints[0]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidHint(pageSizeHints[0])) { Suggestion = $"'{pageSize}' is out of range for FETCHXML_PAGE_SIZE option, must be between 1 and 5000" };
 
             FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
         }

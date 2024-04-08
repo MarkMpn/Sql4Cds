@@ -234,10 +234,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     e2New = e2Prev;
 
                                 if (e1New == null)
-                                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot set {entity1IntersectAttribute} to NULL"));
+                                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = entity1IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Update"));
 
                                 if (e2New == null)
-                                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot set {entity2IntersectAttribute} to NULL"));
+                                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = entity2IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Update"));
 
                                 if (meta.LogicalName == "listmember")
                                 {

@@ -511,13 +511,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // All messages are in the "dbo" schema
             if (tvf.SchemaObject.SchemaIdentifier != null && !String.IsNullOrEmpty(tvf.SchemaObject.SchemaIdentifier.Value) &&
                 !tvf.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{tvf.SchemaObject.ToSql()}'", tvf.SchemaObject));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
 
             if (!dataSource.MessageCache.TryGetValue(tvf.SchemaObject.BaseIdentifier.Value, out var message))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{tvf.SchemaObject.ToSql()}'", tvf.SchemaObject));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
 
             if (!message.IsValidAsTableValuedFunction())
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, "Message is not valid to be called as a table valued function", tvf.SchemaObject))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject))
                 {
                     Suggestion = "Messages must only have scalar type inputs and must produce either one or more scalar type outputs or a single Entity or EntityCollection output"
                 };
@@ -548,13 +548,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Check we have the right number of parameters
             if (expectedInputParameters.Count > tvf.Parameters.Count)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 313, $"An insufficient number of arguments were supplied for the procedure or function {message.Name}", tvf))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InsufficientArguments(tvf.SchemaObject))
                 {
                     Suggestion = "The following parameters are required:" + String.Join("", expectedInputParameters.Select(p => $"\r\n* {p.Name}"))
                 };
 
             if (expectedInputParameters.Count < tvf.Parameters.Count)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8144, $"Procedure or function {message.Name} has too many arguments specified", tvf.Parameters[expectedInputParameters.Count]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TooManyArguments(tvf.SchemaObject, false));
 
             // Add the parameter values to the node, including any required type conversions
             for (var i = 0; i < expectedInputParameters.Count; i++)
@@ -565,7 +565,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {sourceType.ToSql()} is incompatible with {expectedType.ToSql()}", tvf.Parameters[f.Position]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(tvf.Parameters[f.Position], sourceType, expectedType));
 
                 if (sourceType.IsSameAs(expectedType))
                 {
@@ -593,15 +593,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // All messages are in the "dbo" schema
             if (sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier != null && !String.IsNullOrEmpty(sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier.Value) &&
                 !sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2812, $"Could not find stored procedure '{sproc.ProcedureReference.ProcedureReference.Name.ToSql()}", sproc.ProcedureReference.ProcedureReference.Name));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidSprocName(sproc.ProcedureReference.ProcedureReference.Name));
 
             if (!dataSource.MessageCache.TryGetValue(sproc.ProcedureReference.ProcedureReference.Name.BaseIdentifier.Value, out var message))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2812, $"Could not find stored procedure '{sproc.ProcedureReference.ProcedureReference.Name.ToSql()}", sproc.ProcedureReference.ProcedureReference.Name));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidSprocName(sproc.ProcedureReference.ProcedureReference.Name));
 
             if (!message.IsValidAsStoredProcedure())
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2812, "Message is not valid to be called as a stored procedure", sproc.ProcedureReference.ProcedureReference.Name))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidSprocName(sproc.ProcedureReference.ProcedureReference.Name))
                 {
-                    Suggestion = "Messages must only have scalar type inputs and must produce no more than one Entity or EntityCollection output or any number of scalar type outputs"
+                    Suggestion = "Message is not valid to be called as a stored procedure\r\nMessages must only have scalar type inputs and must produce no more than one Entity or EntityCollection output or any number of scalar type outputs"
                 };
 
             var node = new ExecuteMessageNode
@@ -636,7 +636,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     usedParamName = true;
 
                 if (usedParamName && sproc.Parameters[i].Variable == null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 119, $"Must pass parameter number {i+1} and subsequent parameters as '@name = value'. After the form '@name = value' has been used, all subsequent parameters must be passed in the form '@name = value'", sproc.Parameters[i]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NamedParametersRequiredAfter(sproc.Parameters[i], i + 1));
 
                 if (sproc.Parameters[i].IsOutput)
                     continue;
@@ -651,7 +651,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         paramIndex++;
 
                     if (paramIndex >= message.InputParameters.Count)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 8144, message.Name, null, 0, $"Procedure or function {message.Name} has too many arguments specified", sproc.Parameters[i]));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TooManyArguments(sproc.ProcedureReference.ProcedureReference.Name, true));
 
                     targetParamName = message.InputParameters[paramIndex].Name;
                 }
@@ -663,14 +663,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var targetParam = message.InputParameters.SingleOrDefault(p => p.Name.Equals(targetParamName, StringComparison.OrdinalIgnoreCase));
 
                 if (targetParam == null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 8145, message.Name, null, 0, $"{targetParamName} is not a parameter for procedure {message.Name}", sproc.Parameters[i]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameterName(sproc.Parameters[i], sproc.ProcedureReference.ProcedureReference.Name));
 
                 var sourceExpression = sproc.Parameters[i].ParameterValue;
                 sourceExpression.GetType(context, out var sourceType);
                 var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 206, message.Name, null, 0, $"Operand type clash: {sourceType.ToSql()} is incompatible with {expectedType.ToSql()}", sproc.Parameters[i].ParameterValue));
+                {
+                    var err = Sql4CdsError.TypeClash(sproc.Parameters[i].ParameterValue, sourceType, expectedType);
+                    err.Procedure = message.Name;
+                    throw new NotSupportedQueryFragmentException(err);
+                }
 
                 if (sourceType.IsSameAs(expectedType))
                 {
@@ -695,7 +699,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
 
                 if (!inputParameter.Optional)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 201, message.Name, null, 0, $"Procedure or function '{message.Name}' expects parameter '{inputParameter.Name}', which was not supplied", sproc));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.MissingParameter(sproc.ProcedureReference.ProcedureReference.Name, inputParameter.Name, true));
             }
 
             node.SetOutputSchema(dataSource, message, sproc.ProcedureReference);

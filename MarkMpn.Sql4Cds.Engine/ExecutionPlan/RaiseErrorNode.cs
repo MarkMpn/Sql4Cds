@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var state = Execute<SqlInt32>(State, ecc, eec, DataTypeHelpers.Int);
 
             if (severity.Value > 18)
-                throw new QueryExecutionException(new Sql4CdsError(16, 2754, "Error severity levels greater than 18 can only be specified by members of the sysadmin role, using the WITH LOG option"));
+                throw new QueryExecutionException(Sql4CdsError.InvalidSeverityLevel(18));
 
             if (severity.Value < 0)
                 severity = 0;
@@ -118,43 +118,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             context.Log(new Sql4CdsError((byte)severity.Value, -1, 50000, null, null, (byte)state.Value, msg.IsNull ? null : msg.Value));
             recordsAffected = 0;
             message = null;
-        }
-
-        private T GetValue<T>(ExpressionCompilationContext ecc, ExpressionExecutionContext eec, SqlDataTypeReference expectedType, ref int paramIndex)
-        {
-            if (paramIndex >= Parameters.Length)
-                throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
-
-            var param = Parameters[paramIndex];
-            param.GetType(ecc, out var type);
-
-            if (expectedType.SqlDataTypeOption.IsStringType() && (!(type is SqlDataTypeReference sqlType) || !sqlType.SqlDataTypeOption.IsStringType()) ||
-                !expectedType.SqlDataTypeOption.IsStringType() && !expectedType.IsSameAs(type))
-                throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
-
-            var value = Execute<T>(param, ecc, eec, type);
-
-            paramIndex++;
-            return value;
-        }
-
-        private string GetParam(ExpressionCompilationContext ecc, ExpressionExecutionContext eec, ref int paramIndex)
-        {
-            if (paramIndex >= Parameters.Length)
-                throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
-
-            var param = Parameters[paramIndex];
-            param.GetType(ecc, out var widthType);
-            if (!(widthType is SqlDataTypeReference widthSqlType) || !widthSqlType.SqlDataTypeOption.IsExactNumeric())
-                throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
-
-            var value = Execute<SqlInt32>(param, ecc, eec, widthType);
-
-            if (value.IsNull)
-                throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
-
-            paramIndex++;
-            return value.Value.ToString();
         }
 
         private T Execute<T>(ScalarExpression expression, ExpressionCompilationContext ecc, ExpressionExecutionContext eec, DataTypeReference dataType)

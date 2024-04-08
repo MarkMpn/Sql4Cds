@@ -405,7 +405,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     default:
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported comparison type", comparison));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(comparison)) { Suggestion = "Unsupported comparison type" };
                 }
 
                 ValueExpression[] values = null;
@@ -431,22 +431,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Check for unsupported SQL DOM elements within the function call
                         if (func.CallTarget != null)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function call target", func));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func)) { Suggestion = "Unsupported FetchXML function call target" };
 
                         if (func.Collation != null)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function collation", func));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func)) { Suggestion = "Unsupported FetchXML function collation" };
 
                         if (func.OverClause != null)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function OVER clause", func));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func)) { Suggestion = "Unsupported FetchXML function OVER clause" };
 
                         if (func.UniqueRowFilter != UniqueRowFilter.NotSpecified)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function unique filter", func));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func)) { Suggestion = "Unsupported FetchXML function unique filter" };
 
                         if (func.WithinGroupClause != null)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function group clause", func));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func)) { Suggestion = "Unsupported FetchXML function group clause" };
 
                         if (func.Parameters.Count > 1 && op != @operator.containvalues && op != @operator.notcontainvalues)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported number of FetchXML function parameters", func));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func)) { Suggestion = "Unsupported number of FetchXML function parameters" };
 
                         // Some advanced FetchXML operators use a value as well - take this as the function parameter
                         // This provides support for queries such as `createdon = lastxdays(3)` becoming <condition attribute="createdon" operator="last-x-days" value="3" />
@@ -456,14 +456,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var nonLiteral = func.Parameters.FirstOrDefault(funcParam => !(funcParam is Literal));
 
                             if (nonLiteral != null)
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function parameter", nonLiteral));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(nonLiteral)) { Suggestion = "Unsupported FetchXML function parameter" };
 
                             values = func.Parameters.Cast<Literal>().ToArray();
                         }
                         else if (func.Parameters.Count == 1)
                         {
                             if (!(func.Parameters[0] is Literal paramLiteral))
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function parameter", func.Parameters[0]));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(func.Parameters[0])) { Suggestion = "Unsupported FetchXML function parameter" };
 
                             values = new[] { paramLiteral };
                         }
@@ -471,7 +471,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                     {
                         // Can't use functions with other operators
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unsupported FetchXML function use. Only <field> = <func>(<param>) usage is supported", comparison));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(comparison)) { Suggestion = "Unsupported FetchXML function use. Only <field> = <func>(<param>) usage is supported" };
                     }
                 }
                 else if (func != null)
@@ -909,7 +909,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         else if (lit is IntegerLiteral || lit is NumericLiteral || lit is RealLiteral)
                             dt = new DateTime(1900, 1, 1).AddDays(Double.Parse(lit.Value, CultureInfo.InvariantCulture));
                         else
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 241, "Conversion failed when converting date and/or time from character string", lit));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DateTimeParseError(lit));
 
                         DateTimeOffset dto;
 
@@ -927,7 +927,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     catch (FormatException)
                     {
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 241, "Conversion failed when converting date and/or time from character string", lit));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DateTimeParseError(lit));
                     }
                 }
             }

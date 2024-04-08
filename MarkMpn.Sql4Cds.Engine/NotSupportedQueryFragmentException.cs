@@ -19,7 +19,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="fragment">The fragment of the query that caused the error</param>
         public NotSupportedQueryFragmentException(string message, TSqlFragment fragment) : this(message, fragment, null)
         {
-            Fragment = fragment;
         }
 
         /// <summary>
@@ -30,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="innerException">The original exception</param>
         public NotSupportedQueryFragmentException(string message, TSqlFragment fragment, Exception innerException) : base(message, innerException)
         {
+            Fragment = fragment;
         }
 
         /// <summary>
