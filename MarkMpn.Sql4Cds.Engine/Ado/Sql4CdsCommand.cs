@@ -293,7 +293,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     }
 
-                    return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database, node, _cts.Token);
+                    return new SqlDataReaderWrapper(con, cmd, behavior, node, _cts.Token);
                 }
 
                 var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);

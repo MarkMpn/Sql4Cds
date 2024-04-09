@@ -119,13 +119,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         };
                     }
 
-                    var reader = cmd.ExecuteReader(behavior | CommandBehavior.CloseConnection);
-
-                    return reader;
+                    return new SqlDataReaderWrapper(con, cmd, behavior | CommandBehavior.CloseConnection, this, context.Options.CancellationToken);
                 }
                 catch (SqlException ex)
                 {
-                    throw new QueryExecutionException(new Sql4CdsError(ex.Class, ex.Number, ex.Message), ex)
+                    throw new QueryExecutionException(new Sql4CdsError(ex.Class, ex.LineNumber + LineNumber - 1, ex.Number, String.IsNullOrEmpty(ex.Procedure) ? null : ex.Procedure, ex.Server, ex.State, ex.Message), ex)
                     {
                         Node = this
                     };
