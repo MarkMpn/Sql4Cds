@@ -218,7 +218,12 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (Exception ex)
             {
-                _connection.TelemetryClient.TrackException(ex, new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName });
+                var exProps = new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName };
+
+                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
+                    exProps["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
+
+                _connection.TelemetryClient.TrackException(ex, exProps);
 
                 if (ex is Sql4CdsException)
                     throw;
@@ -311,7 +316,12 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (Exception ex)
             {
-                _connection.TelemetryClient.TrackException(ex, new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName });
+                var exProps = new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName };
+
+                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
+                    exProps["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
+
+                _connection.TelemetryClient.TrackException(ex, exProps);
                 throw;
             }
         }

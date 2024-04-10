@@ -8,7 +8,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// <summary>
     /// Provides information about an error that occurred while executing a query
     /// </summary>
-    public class Sql4CdsException : DbException
+    public class Sql4CdsException : DbException, ISql4CdsErrorException
     {
         internal Sql4CdsException(Sql4CdsError error) : base(error.Message)
         {
