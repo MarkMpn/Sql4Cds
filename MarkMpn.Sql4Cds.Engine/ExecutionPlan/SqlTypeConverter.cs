@@ -652,29 +652,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         conversionError = Expr.Call(() => Sql4CdsError.ConversionErrorWithValue(Expr.Arg<TSqlFragment>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlString>()), Expression.Constant(convert, typeof(TSqlFragment)), Expression.Constant(from), Expression.Constant(to), originalExpr);
                 }
 
-                var variables = new List<ParameterExpression>();
-                var typedParam = Expression.Variable(targetType);
-                variables.Add(typedParam);
-                var body = new List<Expression>();
-                var returnTarget = Expression.Label(targetType);
-                body.Add(Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), conversionError)));
-                body.Add(Expression.Return(returnTarget, typedParam));
-                body.Add(Expression.Label(returnTarget, typedParam));
-                var block = Expression.Block(targetType, variables, body);
-                var catchFormatExceptionBlock = Expression.Catch(typeof(FormatException), block);
+                var catchFormatExceptionBlock = Expression.Catch(typeof(FormatException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), conversionError), targetType));
 
                 var overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()), Expression.Constant(from), Expression.Constant(to));
 
                 if (from.IsSameAs(DataTypeHelpers.Int))
                     overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), Expression.Constant(to), originalExpr);
 
-                var overflowBody = new List<Expression>();
-                var overflowReturnTarget = Expression.Label(targetType);
-                overflowBody.Add(Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), overflowError)));
-                overflowBody.Add(Expression.Return(returnTarget, typedParam));
-                overflowBody.Add(Expression.Label(returnTarget, typedParam));
-                var overflowBlock = Expression.Block(targetType, variables, overflowBody);
-                var catchOverflowExceptionBlock = Expression.Catch(typeof(OverflowException), overflowBlock);
+                var catchOverflowExceptionBlock = Expression.Catch(typeof(OverflowException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), overflowError), targetType));
                 
                 expr = Expression.TryCatch(expr, catchFormatExceptionBlock, catchOverflowExceptionBlock);
             }

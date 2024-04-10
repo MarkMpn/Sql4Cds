@@ -811,6 +811,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case BinaryExpressionType.Divide:
                     cacheKey = lhsCacheKey + " / " + rhsCacheKey;
                     expr = Expression.Divide(lhs, rhs);
+
+                    expr = Expression.TryCatch(expr, Expression.Catch(typeof(DivideByZeroException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), Expr.Call(() => Sql4CdsError.DivideByZero())), expr.Type)));
                     break;
 
                 case BinaryExpressionType.Modulo:

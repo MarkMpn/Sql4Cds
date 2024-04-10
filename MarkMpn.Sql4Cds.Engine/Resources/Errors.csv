@@ -111,3 +111,4 @@
 1042,15,Conflicting %ls optimizer hints specified.
 179,15,Cannot use the OUTPUT option when passing a constant to a stored procedure.
 220,16,Arithmetic overflow error for data type %ls, value = %ld.
+8134,16,Divide by zero error encountered.

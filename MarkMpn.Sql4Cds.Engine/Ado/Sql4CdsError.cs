@@ -682,6 +682,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return err;
         }
 
+        internal static Sql4CdsError DivideByZero()
+        {
+            return Create(8134, null);
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)
