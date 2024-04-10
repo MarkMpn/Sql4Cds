@@ -185,10 +185,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var entityId = (Guid?)attributeAccessors["entityid"](entity);
 
                 if (listId == null)
-                    throw new QueryExecutionException(new Sql4CdsError(16, 515, "Cannot insert value NULL into listmember.listid"));
+                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = "listid" }, new Identifier { Value = "listmember" }, "Insert"));
 
                 if (entityId == null)
-                    throw new QueryExecutionException(new Sql4CdsError(16, 515, "Cannot insert value NULL into listmember.entityid"));
+                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = "entityid" }, new Identifier { Value = "listmember" }, "Insert"));
 
                 return new AddMemberListRequest
                 {
@@ -207,10 +207,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var e2 = (Guid?)attributeAccessors[relationship.Entity2IntersectAttribute](entity);
 
                 if (e1 == null)
-                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot insert value NULL into {relationship.Entity1IntersectAttribute}"));
+                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity1IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Insert"));
 
                 if (e2 == null)
-                    throw new QueryExecutionException(new Sql4CdsError(16, 515, $"Cannot insert value NULL into {relationship.Entity2IntersectAttribute}"));
+                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity2IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Insert"));
 
                 return new AssociateRequest
                 {

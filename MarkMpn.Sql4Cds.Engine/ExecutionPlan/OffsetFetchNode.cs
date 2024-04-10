@@ -40,10 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(expressionCompilationContext)(expressionExecutionContext));
 
             if (offset < 0)
-                throw new QueryExecutionException(new Sql4CdsError(15, 10742, "The offset specified in a OFFSET clause may not be negative."));
+                throw new QueryExecutionException(Sql4CdsError.Create(10742, null));
 
             if (fetch <= 0)
-                throw new QueryExecutionException(new Sql4CdsError(15, 10744, "The number of rows provided for a FETCH clause must be greater then zero."));
+                throw new QueryExecutionException(Sql4CdsError.Create(10744, null));
 
             return Source.Execute(context)
                 .Skip(offset)

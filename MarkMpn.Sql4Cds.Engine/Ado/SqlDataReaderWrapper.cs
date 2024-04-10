@@ -10,20 +10,18 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     class SqlDataReaderWrapper : DbDataReader
     {
-        private Sql4CdsConnection _connection;
         private SqlConnection _sqlConnection;
         private SqlCommand _sqlCommand;
         private SqlDataReader _sqlDataReader;
         private readonly SqlNode _node;
 
-        public SqlDataReaderWrapper(Sql4CdsConnection connection, Sql4CdsCommand command, SqlConnection sqlConnection, SqlCommand sqlCommand, string dataSource, SqlNode node, CancellationToken cancellationToken)
+        public SqlDataReaderWrapper(SqlConnection sqlConnection, SqlCommand sqlCommand, CommandBehavior behavior, SqlNode node, CancellationToken cancellationToken)
         {
-            _connection = connection;
             _sqlConnection = sqlConnection;
             _sqlCommand = sqlCommand;
             cancellationToken.Register(() => _sqlCommand.Cancel());
 
-            HandleException(() => _sqlDataReader = sqlCommand.ExecuteReader());
+            HandleException(() => _sqlDataReader = sqlCommand.ExecuteReader(behavior));
             _node = node;
 
             foreach (SqlParameter parameter in sqlCommand.Parameters)
@@ -196,7 +194,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (SqlException ex)
             {
-                throw new Sql4CdsException(new Sql4CdsError(ex.Class, ex.LineNumber, ex.Number, null, ex.Server, ex.State, ex.Message), ex);
+                var error = new Sql4CdsError(ex.Class, ex.LineNumber + _node.LineNumber - 1, ex.Number, String.IsNullOrEmpty(ex.Procedure) ? null : ex.Procedure, ex.Server, ex.State, ex.Message);
+                throw new Sql4CdsException(error, new QueryExecutionException(error, ex) { Node = _node });
             }
         }
     }

@@ -86,8 +86,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 for (var colIndex = 0; colIndex < types.Length; colIndex++)
                 {
-                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], nextTypes[colIndex], context.PrimaryDataSource, out var colType))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {types[colIndex].ToSql()} is incompatible with {nextTypes[colIndex].ToSql()}", ColumnSet[colIndex].SourceExpressions[i]));
+                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], nextTypes[colIndex], context.PrimaryDataSource, null, "union", out var colType))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(ColumnSet[colIndex].SourceExpressions[i], types[colIndex], nextTypes[colIndex]));
 
                     types[colIndex] = colType;
                 }

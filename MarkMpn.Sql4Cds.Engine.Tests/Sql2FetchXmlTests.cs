@@ -2226,7 +2226,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.AreEqual("The table 'account' is ambiguous", ex.Message);
+                Assert.AreEqual("The table 'account' is ambiguous.", ex.Message);
             }
         }
 

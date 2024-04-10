@@ -44,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // The FROM clause of a recursive member must refer only one time to the CTE expression_name.
             if (_cteReferenceCount > 1)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 253, $"Recursive member of a common table expression '{Name}' has multiple recursive references", node));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.CteMultipleRecursiveMembers(node, Name));
         }
 
         public override void Visit(NamedTableReference node)
@@ -58,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 // The following items aren't allowed in the CTE_query_definition of a recursive member:
                 // A hint applied to a recursive reference to a CTE inside a CTE_query_definition.
                 if (node.TableHints.Count > 0)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 4150, $"Hints are not allowed on recursive common table expression (CTE) references. Consider removing hint from recursive CTE reference '{node.SchemaObject.ToSql()}'", node.TableHints[0]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedHintsInRecursivePart(node.TableHints[0], Name));
             }
 
             base.Visit(node);
@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // UNION ALL is the only set operator allowed between the last anchor member and first recursive member, and when combining multiple recursive members.
             if (IsRecursive && (node.BinaryQueryExpressionType != BinaryQueryExpressionType.Union || !node.All))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 252, $"Recursive common table expression '{Name}' does not contain a top-level UNION ALL operator", node));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.CteRecursiveMemberWithoutUnionAll(node, Name));
         }
 
         public override void ExplicitVisit(QueryParenthesisExpression node)
@@ -118,50 +118,50 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 // The following clauses can't be used in the CTE_query_definition:
                 // ORDER BY (except when a TOP clause is specified)
                 if (node.OrderByClause != null && node.TopRowFilter == null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1033, "The ORDER BY clause is invalid in views, inline functions, derived tables, subqueries, and common table expressions, unless TOP, OFFSET or FOR XML is also specified", node.OrderByClause));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.OrderByWithoutTop(node.OrderByClause));
 
                 // FOR BROWSE
-                if (node.ForClause is BrowseForClause)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 176, "The FOR BROWSE clause is no longer supported in views", node.ForClause));
+                if (node.ForClause is BrowseForClause forBrowse)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.ForBrowseNotSupported(forBrowse));
 
                 if (IsRecursive)
                 {
                     // The following items aren't allowed in the CTE_query_definition of a recursive member:
                     // SELECT DISTINCT
                     if (node.UniqueRowFilter == UniqueRowFilter.Distinct)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 460, $"DISTINCT operator is not allowed in the recursive part of a recursive common table expression '{Name}'", node));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedDistinct(node, Name));
 
                     // GROUP BY
                     if (node.GroupByClause != null)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 467, $"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", node.GroupByClause));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedGroupByInRecursivePart(node.GroupByClause, Name));
 
                     // TODO: PIVOT
 
                     // HAVING
                     if (node.HavingClause != null)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 467, $"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", node.HavingClause));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedGroupByInRecursivePart(node.HavingClause, Name));
 
                     // Scalar aggregation
                     if (_scalarAggregate != null)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 467, $"GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '{Name}'", _scalarAggregate));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedGroupByInRecursivePart(_scalarAggregate, Name));
 
                     // TOP
                     if (node.TopRowFilter != null || node.OffsetClause != null)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 461, $"The TOP or OFFSET operator is not allowed in the recursive part of a recursive common table expression '{Name}'", (TSqlFragment)node.TopRowFilter ?? node.OffsetClause));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedTopOffsetInRecursivePart((TSqlFragment)node.TopRowFilter ?? node.OffsetClause, Name));
 
                     // LEFT, RIGHT, OUTER JOIN (INNER JOIN is allowed)
                     if (_outerJoin != null)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 462, $"Outer join is not allowed in the recursive part of a recursive common table expression '{Name}'", _outerJoin));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedOuterJoinInRecursivePart(_outerJoin, Name));
 
                     // Subqueries
                     if (_subquery != null)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 465, "Recursive references are not allowed in subqueries", _subquery));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNotAllowedRecursiveReferenceInSubquery(_subquery));
                 }
 
                 if (!IsRecursive)
                     AnchorQuery = node;
                 else if (AnchorQuery == null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 246, $"No anchor member was specified for recursive query \"{Name}\"", _root));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.CteNoAnchorMember(_root, Name));
                 else
                     RecursiveQueries.Add(node);
             }
@@ -174,11 +174,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // The following clauses can't be used in the CTE_query_definition:
             // INTO
             if (node.Into != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 156, "INTO is not supported in CTEs", node.Into));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxErrorKeyword(node.Into, "INTO")) { Suggestion = "INTO is not supported in CTEs" };
 
             // OPTION clause with query hints
             if (node.OptimizerHints.Count > 0)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 156, "Optimizer hints are not supported in CTEs", node.OptimizerHints[0]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxErrorKeyword(node.OptimizerHints[0], "OPTION")) { Suggestion = "Optimizer hints are not supported in CTEs" };
         }
 
         public override void ExplicitVisit(ScalarSubquery node)

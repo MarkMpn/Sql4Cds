@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rightCompilationContext = new ExpressionCompilationContext(context, rightSchema, null);
             RightAttribute.GetType(rightCompilationContext, out var rightColType);
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, context.PrimaryDataSource, out var keyType))
+            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, context.PrimaryDataSource, null, null, out var keyType))
                 throw new QueryExecutionException($"Cannot match key types {leftColType.ToSql()} and {rightColType.ToSql()}");
 
             Identifier keyTypeCollation = null;

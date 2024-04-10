@@ -8,6 +8,7 @@ using System.ServiceModel;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using SelectColumn = MarkMpn.Sql4Cds.Engine.ExecutionPlan.SelectColumn;
 
@@ -145,14 +146,14 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var gotoNode in queries.OfType<GoToNode>())
             {
                 if (!labels.ContainsKey(gotoNode.Label))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 133, $"A GOTO statement references the label '{gotoNode.Label}' but the label has not been declared", gotoNode.Statement));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.UnknownGotoLabel((GoToStatement)gotoNode.Statement));
             }
 
             // Ensure all labels are unique
             foreach (var kvp in labels)
             {
                 if (kvp.Value.Count > 1)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 132, $"The label '{kvp.Key}' has already been declared. Label names must be unique within a query batch or stored procedure", kvp.Value[1].Statement));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateGotoLabel(kvp.Value[1].Statement));
             }
 
             // Ensure GOTOs don't enter a TRY or CATCH block
@@ -161,14 +162,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 var label = labels[gotoNode.Label][0];
 
                 if (!TryCatchPath(gotoNode, queries).StartsWith(TryCatchPath(label, queries)))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1026, "GOTO cannot be used to jump into a TRY or CATCH scope", gotoNode.Statement));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.GotoIntoTryOrCatch((GoToStatement)gotoNode.Statement));
             }
 
             // Ensure rethrows are within a CATCH block
             foreach (var rethrow in queries.OfType<ThrowNode>().Where(@throw => @throw.ErrorNumber == null))
             {
                 if (!TryCatchPath(rethrow, queries).Contains("/catch-"))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10704, "To rethrow an error, a THROW statement must be used inside a CATCH block. Insert the THROW statement inside a CATCH block, or add error parameters to the THROW statement", rethrow.Statement));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.ThrowOutsideCatch(rethrow.Statement));
             }
 
             if (EstimatedPlanOnly)
@@ -320,7 +321,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     foreach (var cte in stmtWithCtes.WithCtesAndXmlNamespaces.CommonTableExpressions)
                     {
                         if (_cteSubplans.ContainsKey(cte.ExpressionName.Value))
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 239, $"Duplicate common table expression name '{cte.ExpressionName.Value}' was specified", cte.ExpressionName));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.CteDuplicateName(cte.ExpressionName));
 
                         var cteValidator = new CteValidatorVisitor();
                         cte.Accept(cteValidator);
@@ -334,10 +335,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (cte.Columns.Count > 0)
                         {
                             if (cte.Columns.Count < plan.ColumnSet.Count)
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8158, $"'{cteValidator.Name}' has more columns than were specified in the column list", cte));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooManyColumns(cte.ExpressionName));
 
                             if (cte.Columns.Count > plan.ColumnSet.Count)
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8159, $"'{cteValidator.Name}' has fewer columns than were specified in the column list", cte));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooFewColumns(cte.ExpressionName));
 
                             for (var i = 0; i < cte.Columns.Count; i++)
                                 plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
@@ -346,7 +347,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         for (var i = 0; i < plan.ColumnSet.Count; i++)
                         {
                             if (plan.ColumnSet[i].OutputColumn == null)
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8155, $"No column name was specified for column {i+1} of '{cteValidator.Name}'", cte));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.CteUnnamedColumn(cte.ExpressionName, i + 1));
                         }
 
                         var anchorQuery = new AliasNode(plan, cte.ExpressionName, _nodeContext);
@@ -490,10 +491,10 @@ namespace MarkMpn.Sql4Cds.Engine
                                 ?? "100";
 
                             if (!Int32.TryParse(maxRecursion, out var max) || max < 0)
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid MAXRECURSION hint", maxRecursionHint));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(maxRecursionHint)) { Suggestion = "Invalid MAXRECURSION hint" };
 
                             if (max > 32767)
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 310, $"The value {maxRecursion} specified for the MAXRECURSION option exceeds the allowed maximum of 32767", maxRecursionHint));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.ExceededMaxRecursion(maxRecursionHint, 32767, max));
 
                             if (max > 0)
                             {
@@ -556,7 +557,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (statement is RaiseErrorStatement raiserror)
                 plans = ConvertRaiseErrorStatement(raiserror);
             else
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported statement", statement));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(statement, statement.GetType().Name.Replace("Statement", "").ToUpperInvariant()));
 
             var output = new List<IRootExecutionPlanNodeInternal>();
 
@@ -607,21 +608,22 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 @throw.ErrorNumber.GetType(ecc, out var type);
                 if (!SqlTypeConverter.CanChangeTypeImplicit(type, DataTypeHelpers.Int))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with int", @throw.ErrorNumber));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(@throw.ErrorNumber, type, DataTypeHelpers.Int));
             }
 
             if (@throw.Message != null)
             {
                 @throw.Message.GetType(ecc, out var type);
-                if (!SqlTypeConverter.CanChangeTypeImplicit(type, DataTypeHelpers.NVarChar(2048, _nodeContext.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with nvarchar", @throw.Message));
+                var messageType = DataTypeHelpers.NVarChar(2048, _nodeContext.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(type, messageType))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(@throw.Message, type, messageType));
             }
 
             if (@throw.State != null)
             {
                 @throw.State.GetType(ecc, out var type);
                 if (!SqlTypeConverter.CanChangeTypeImplicit(type, DataTypeHelpers.Int))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {type.ToSql()} is incompatible with int", @throw.State));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(@throw.State, type, DataTypeHelpers.Int));
             }
 
             return new[]
@@ -643,22 +645,22 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // T-SQL supports using integer values for RAISERROR but we don't have sys.messages available so require a string
             if (!(msgType is SqlDataTypeReference msgSqlType) || !msgSqlType.SqlDataTypeOption.IsStringType())
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Only user-defined error messages are supported", raiserror.FirstParameter));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(raiserror.FirstParameter, "predefined error number")) { Suggestion = "Define a message string instead of a number" };
 
             // Severity and State must be integers
             raiserror.SecondParameter.GetType(ecc, out var severityType);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(severityType, DataTypeHelpers.Int))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: int is incompatible with {severityType.ToSql()}", raiserror.SecondParameter));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(raiserror.SecondParameter, severityType, DataTypeHelpers.Int));
 
             raiserror.ThirdParameter.GetType(ecc, out var stateType);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(stateType, DataTypeHelpers.Int))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: int is incompatible with {stateType.ToSql()}", raiserror.ThirdParameter));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(raiserror.ThirdParameter, stateType, DataTypeHelpers.Int));
 
             // Can't support more than 20 parameters
             if (raiserror.OptionalParameters.Count > 20)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2747, "Too many substitution parameters for RAISERROR. Cannot exceed 20 substitution parameters", raiserror.OptionalParameters[20]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.ExceedeMaxRaiseErrorParameters(raiserror.OptionalParameters[20], 20));
 
             // All parameters must be tinyint, smallint, int, char, varchar, nchar, nvarchar, binary, or varbinary.
             var allowedParamTypes = new[]
@@ -679,11 +681,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 raiserror.OptionalParameters[i].GetType(ecc, out var paramType);
 
                 if (!(paramType is SqlDataTypeReference paramSqlType) || !allowedParamTypes.Contains(paramSqlType.SqlDataTypeOption))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2748, $"Cannot specify {paramType.ToSql()} data type (parameter {i+4}) as a substitution parameter", raiserror.OptionalParameters[i]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidRaiseErrorParameterType(raiserror.OptionalParameters[i], paramType, i + 4));
             }
 
             if (raiserror.RaiseErrorOptions.HasFlag(RaiseErrorOptions.Log))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2778, "Only System Administrator can specify WITH LOG option for RAISERROR command"));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SysAdminRequired(raiserror, "WITH LOG", "RAISERROR"));
 
             return new[]
             {
@@ -702,19 +704,19 @@ namespace MarkMpn.Sql4Cds.Engine
             var nodes = new List<IRootExecutionPlanNodeInternal>();
 
             if (execute.Options != null && execute.Options.Count > 0)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "EXECUTE option is not supported", execute.Options[0]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(execute.Options[0], "EXECUTE WITH"));
 
             if (execute.ExecuteSpecification.ExecuteContext != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "EXECUTE option is not supported", execute.ExecuteSpecification.ExecuteContext));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(execute.ExecuteSpecification.ExecuteContext, "EXECUTE AS"));
 
             if (!(execute.ExecuteSpecification.ExecutableEntity is ExecutableProcedureReference sproc))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "EXECUTE can only be used to execute messages as stored procedures", execute.ExecuteSpecification.ExecutableEntity));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(execute.ExecuteSpecification.ExecutableEntity, "EXECUTE <string>")) { Suggestion = "EXECUTE can only be used to execute messages as stored procedures" };
 
             if (sproc.AdHocDataSource != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Ad-hoc data sources are not supported", sproc.AdHocDataSource));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(sproc.AdHocDataSource, "AT DATA_SOURCE"));
 
             if (sproc.ProcedureReference.ProcedureVariable != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Variable stored procedure names are not supported", sproc.ProcedureReference.ProcedureVariable));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(sproc.ProcedureReference.ProcedureVariable, "stored procedure variable name"));
 
             var dataSource = SelectDataSource(sproc.ProcedureReference.ProcedureReference.Name);
 
@@ -728,7 +730,7 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var outputParam in outputParams)
             {
                 if (!message.OutputParameters.Any(p => p.IsScalarType() && p.Name.Equals(outputParam.Variable.Name.Substring(1), StringComparison.OrdinalIgnoreCase)))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 8145, message.Name, null, 0, $"{outputParam.Variable.Name} is not a parameter for procedure {message.Name}", outputParam.Variable));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameterName(outputParam, sproc.ProcedureReference.ProcedureReference.Name));
             }
 
             if (message.OutputParameters.Count == 0 || outputParams.Count == 0)
@@ -758,18 +760,22 @@ namespace MarkMpn.Sql4Cds.Engine
                     var sourceCol = outputParam.Variable.Name.Substring(1);
 
                     if (!schema.ContainsColumn(sourceCol, out sourceCol))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 8145, message.Name, null, 0, $"{outputParam.Variable.Name} is not a parameter for procedure {message.Name}", outputParam));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameterName(outputParam, sproc.ProcedureReference.ProcedureReference.Name));
 
                     if (!(outputParam.ParameterValue is VariableReference targetVariable))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, -1, 179, message.Name, null, 0, "Cannot use the OUTPUT option when passing a constant to a stored procedure", outputParam.ParameterValue));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOutputConstant(outputParam, sproc.ProcedureReference.ProcedureReference.Name));
 
                     if (!_nodeContext.ParameterTypes.TryGetValue(targetVariable.Name, out var targetVariableType))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 137, $"Must declare the scalar variable \"{targetVariable.Name}\"", targetVariable));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.UndeclaredVariable(targetVariable));
 
                     var sourceType = schema.Schema[sourceCol].Type;
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetVariableType))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 206, message.Name, null, 0, $"Operand type clash: {sourceType.ToSql()} is incompatible with {targetVariableType.ToSql()}", outputParam));
+                    {
+                        var err = Sql4CdsError.TypeClash(outputParam, sourceType, targetVariableType);
+                        err.Procedure = sproc.ProcedureReference.ProcedureReference.Name.BaseIdentifier.Value;
+                        throw new NotSupportedQueryFragmentException(err);
+                    }
 
                     assignVariablesNode.Variables.Add(new VariableAssignment
                     {
@@ -786,10 +792,14 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // Variable should be set to 1 when sproc executes successfully.
                 if (!_nodeContext.ParameterTypes.TryGetValue(execute.ExecuteSpecification.Variable.Name, out var returnStatusType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 137, $"Must declare the scalar variable \"{execute.ExecuteSpecification.Variable.Name}\"", execute.ExecuteSpecification.Variable));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.UndeclaredVariable(execute.ExecuteSpecification.Variable));
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(DataTypeHelpers.Int, returnStatusType))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, -1, 206, message.Name, null, 0, $"Operand type clash: int is incompatible with {returnStatusType.ToSql()}", execute.ExecuteSpecification.Variable));
+                {
+                    var err = Sql4CdsError.TypeClash(execute.ExecuteSpecification.Variable, DataTypeHelpers.Int, returnStatusType);
+                    err.Procedure = sproc.ProcedureReference.ProcedureReference.Name.BaseIdentifier.Value;
+                    throw new NotSupportedQueryFragmentException(err);
+                }
 
                 var constName = _nodeContext.GetExpressionName();
 
@@ -826,7 +836,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private IRootExecutionPlanNodeInternal ConvertWaitForStatement(WaitForStatement waitFor)
         {
             if (waitFor.WaitForOption == WaitForOption.Statement)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "WAITFOR <statement> is not supported", waitFor));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(waitFor, "WAITFOR <statement>"));
 
             waitFor.Parameter.GetType(_staticContext, out _);
 
@@ -870,7 +880,7 @@ namespace MarkMpn.Sql4Cds.Engine
             print.Expression.Accept(subqueryVisitor);
 
             if (subqueryVisitor.Subqueries.Count > 0)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1046, "Subqueries are not allowed in this context. Only scalar expressions are allowed.", print.Expression));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.Create(1046, print.Expression));
 
             // Check the expression for errors. Ensure it can be converted to a string
             var expr = print.Expression.Clone();
@@ -993,19 +1003,19 @@ namespace MarkMpn.Sql4Cds.Engine
         private IRootExecutionPlanNodeInternal ConvertSetVariableStatement(SetVariableStatement set)
         {
             if (set.CursorDefinition != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Cursors are not supported", set.CursorDefinition));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(set.CursorDefinition, "CURSOR"));
 
             if (set.FunctionCallExists)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Custom functions are not supported", set));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(set, "custom functions"));
 
             if (set.Identifier != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "User defined types are not supported", set));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(set, "user defined types"));
 
             if (set.Parameters != null && set.Parameters.Count > 0)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Parameters are not supported", set.Parameters[0]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(set.Parameters[0], "custom functions"));
 
             if (!_nodeContext.ParameterTypes.TryGetValue(set.Variable.Name, out var paramType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 137, $"Must declare the scalar variable \"{set.Variable.Name}\"", set.Variable));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.UndeclaredVariable(set.Variable));
 
             // Create the SELECT statement that generates the required information
             var expr = set.Expression;
@@ -1079,16 +1089,16 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var declaration in declare.Declarations)
             {
                 if (_nodeContext.ParameterTypes.ContainsKey(declaration.VariableName.Value))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 134, $"The variable name '{declaration.VariableName}' has already been declared. Variable names must be unique within a query batch or stored procedure", declaration.VariableName));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateVariable(declaration));
 
                 // Apply default maximum length for [n][var]char types
                 if (declaration.DataType is SqlDataTypeReference dataType)
                 {
                     if (dataType.SqlDataTypeOption == SqlDataTypeOption.Cursor)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Cursors are not supported", dataType));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(dataType, "CURSOR"));
 
                     if (dataType.SqlDataTypeOption == SqlDataTypeOption.Table)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Table variables are not supported", dataType));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(dataType, "TABLE"));
 
                     if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char ||
                         dataType.SqlDataTypeOption == SqlDataTypeOption.NChar ||
@@ -1143,14 +1153,14 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             // Check for any DOM elements we don't support converting
             if (impersonate.Cookie != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled impersonation cookie", impersonate.Cookie));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(impersonate.Cookie, "WITH COOKIE"));
 
             if (impersonate.WithNoRevert)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled WITH NO REVERT option", impersonate));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(impersonate, "WITH NO REVERT"));
 
             if (impersonate.ExecuteContext.Kind != ExecuteAsOption.Login &&
                 impersonate.ExecuteContext.Kind != ExecuteAsOption.User)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled impersonation type", impersonate.ExecuteContext));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(impersonate.ExecuteContext, impersonate.ExecuteContext.Kind.ToString()));
 
             IExecutionPlanNodeInternal source;
 
@@ -1255,19 +1265,19 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             // Check for any DOM elements that don't have an equivalent in CDS
             if (insert.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled INSERT WITH clause", insert.WithCtesAndXmlNamespaces));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.WithCtesAndXmlNamespaces, "WITH"));
 
             if (insert.InsertSpecification.Columns == null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled INSERT without column specification", insert));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert, "INSERT without column specification")) { Suggestion = "Define the column names to insert the values into, e.g. INSERT INTO table (col1, col2) VALUES (val1, val2)" };
 
             if (insert.InsertSpecification.OutputClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled INSERT OUTPUT clause", insert.InsertSpecification.OutputClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.InsertSpecification.OutputClause, "OUTPUT"));
 
             if (insert.InsertSpecification.OutputIntoClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled INSERT OUTPUT INTO clause", insert.InsertSpecification.OutputIntoClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.InsertSpecification.OutputIntoClause, "OUTPUT INTO"));
 
             if (!(insert.InsertSpecification.Target is NamedTableReference target))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled INSERT target", insert.InsertSpecification.Target));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.InsertSpecification.Target, "non-table INSERT target"));
 
             // Check if we are inserting constant values or the results of a SELECT statement and perform the appropriate conversion
             IExecutionPlanNodeInternal source;
@@ -1278,7 +1288,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (insert.InsertSpecification.InsertSource is SelectInsertSource select)
                 source = ConvertInsertSelectSource(select, insert.OptimizerHints, out columns);
             else
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled INSERT source", insert.InsertSpecification.InsertSource));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.InsertSpecification.InsertSource, "unknown INSERT source"));
 
             return ConvertInsertSpecification(target, insert.InsertSpecification.Columns, source, columns, insert.OptimizerHints, insert);
         }
@@ -1320,7 +1330,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return sql;
             }
 
-            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled INSERT source", selectSource));
+            throw new NotSupportedQueryFragmentException(Sql4CdsError.UnsupportedStatement(selectSource, "INSERT"));
         }
 
         private DataSource SelectDataSource(SchemaObjectName schemaObject)
@@ -1328,7 +1338,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var databaseName = schemaObject.DatabaseIdentifier?.Value ?? Options.PrimaryDataSource;
             
             if (!DataSources.TryGetValue(databaseName, out var dataSource))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid database name '{databaseName}'", schemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n* ", DataSources.Keys.OrderBy(k => k))}" };
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(schemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n* ", DataSources.Keys.OrderBy(k => k))}" };
 
             return dataSource;
         }
@@ -1355,7 +1365,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (FaultException ex)
             {
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{node.LogicalName}'", target), ex);
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
             }
 
             var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
@@ -1376,33 +1386,33 @@ namespace MarkMpn.Sql4Cds.Engine
                     lookupAttr.Targets.Length > 1)
                 {
                     if (!virtualTypeAttributes.Add(colName))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 264, $"The column name '{colName}' is specified more than once in the SET clause or column list of an INSERT. A column cannot be assigned more than one value in the same clause. Modify the clause to make sure that a column is updated only once. If this statement updates or inserts columns into a view, column aliasing can conceal the duplication in your code", col));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
 
                     continue;
                 }
 
                 if (!attributes.TryGetValue(colName, out attr))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 207, $"Invalid column name '{colName}'", col));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnName(col));
 
                 if (!attributeNames.Add(colName))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 264, $"The column name '{colName}' is specified more than once in the SET clause or column list of an INSERT. A column cannot be assigned more than one value in the same clause. Modify the clause to make sure that a column is updated only once. If this statement updates or inserts columns into a view, column aliasing can conceal the duplication in your code", col));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
 
                 if (metadata.LogicalName == "listmember")
                 {
                     if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, "Only the listid and entityid columns can be used when inserting values into the listmember table", col));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = "Only the listid and entityid columns can be used when inserting values into the listmember table" };
                 }
                 else if (metadata.IsIntersect == true)
                 {
                     var relationship = metadata.ManyToManyRelationships.Single();
 
                     if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, $"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when inserting values into the {metadata.LogicalName} table", col));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = $"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when inserting values into the {metadata.LogicalName} table" };
                 }
                 else
                 {
                     if (attr.IsValidForCreate == false)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, "Column is not valid for INSERT", col));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = "Column is not valid for INSERT" };
                 }
             }
 
@@ -1410,17 +1420,17 @@ namespace MarkMpn.Sql4Cds.Engine
             if (metadata.LogicalName == "listmember")
             {
                 if (!attributeNames.Contains("listid"))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 515, "Inserting values into the listmember table requires the listid column to be set", target));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "listid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the listid column to be set" };
                 if (!attributeNames.Contains("entityid"))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 515, "Inserting values into the listmember table requires the entity column to be set", target));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "entityid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the entityid column to be set" };
             }
             else if (metadata.IsIntersect == true)
             {
                 var relationship = metadata.ManyToManyRelationships.Single();
                 if (!attributeNames.Contains(relationship.Entity1IntersectAttribute))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 515, $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity1IntersectAttribute} column to be set", target));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity1IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity1IntersectAttribute} column to be set" };
                 if (!attributeNames.Contains(relationship.Entity2IntersectAttribute))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 515, $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity2IntersectAttribute} column to be set", target));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity2IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity2IntersectAttribute} column to be set" };
             }
 
             if (sourceColumns == null)
@@ -1433,20 +1443,10 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 if (targetColumns.Count != sourceColumns.Length)
                 {
-                    if (insertStatement.InsertSpecification.InsertSource is ValuesInsertSource)
-                    {
-                        if (targetColumns.Count > sourceColumns.Length)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 109, "There are more columns in the INSERT statement than values specified in the VALUES clause. The number of values in the VALUES clause must match the number of columns specified in the INSERT statement", insertStatement));
-                        else
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 110, "There are fewer columns in the INSERT statement than values specified in the VALUES clause. The number of values in the VALUES clause must match the number of columns specified in the INSERT statement", insertStatement));
-                    }
+                    if (targetColumns.Count > sourceColumns.Length)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InsertTooManyColumns(insertStatement));
                     else
-                    {
-                        if (targetColumns.Count > sourceColumns.Length)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 120, "The select list for the INSERT statement contains fewer items than the insert list. The number of SELECT values must match the number of INSERT columns", insertStatement));
-                        else
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 121, "The select list for the INSERT statement contains more items than the insert list. The number of SELECT values must match the number of INSERT columns", insertStatement));
-                    }
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InsertTooFewColumns(insertStatement));
                 }
 
                 for (var i = 0; i < targetColumns.Count; i++)
@@ -1479,7 +1479,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var sourceType = schema.Schema[sourceColumn].Type;
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {sourceType.ToSql()} is incompatible with {targetType.ToSql()}", targetColumns[i]));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(targetColumns[i], sourceType, targetType));
 
                     node.ColumnMappings[targetName] = sourceColumn;
                 }
@@ -1506,9 +1506,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
                             continue;
 
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, "Inserting values into a polymorphic lookup field requires setting the associated type column as well", col))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
                         {
-                            Suggestion = $"Add a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                            Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
                         };
                     }
                 }
@@ -1518,9 +1518,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (!attributeNames.Contains(idAttrName))
                     {
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, "Inserting values into a polymorphic type field requires setting the associated ID column as well", col))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
                         {
-                            Suggestion = $"Add a value for the {idAttrName} column"
+                            Suggestion = $"Inserting values into a polymorphic type field requires setting the associated ID column as well\r\nAdd a value for the {idAttrName} column"
                         };
                     }
                 }
@@ -1538,18 +1538,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 return;
 
             if (target.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, "Invalid schema name 'archive'", target.SchemaObject.SchemaIdentifier)) { Suggestion = "Archive tables are read-only" };
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Archive tables are read-only" };
 
             if (target.SchemaObject.SchemaIdentifier.Value.Equals("metadata", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, "Invalid schema name 'metadata'", target.SchemaObject.SchemaIdentifier)) { Suggestion = "Metadata tables are read-only" };
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Metadata tables are read-only" };
 
-            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid schema name '{target.SchemaObject.SchemaIdentifier.Value}'", target.SchemaObject.SchemaIdentifier)) { Suggestion = "All data tables are in the 'dbo' schema" };
+            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "All data tables are in the 'dbo' schema" };
         }
 
         private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
         {
             if (delete.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported CTE clause", delete.WithCtesAndXmlNamespaces));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.WithCtesAndXmlNamespaces, "WITH"));
 
             return ConvertDeleteStatement(delete.DeleteSpecification, delete.OptimizerHints);
         }
@@ -1557,13 +1557,13 @@ namespace MarkMpn.Sql4Cds.Engine
         private DeleteNode ConvertDeleteStatement(DeleteSpecification delete, IList<OptimizerHint> hints)
         {
             if (delete.OutputClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported OUTPUT clause", delete.OutputClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.OutputClause, "OUTPUT"));
 
             if (delete.OutputIntoClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported OUTPUT INTO clause", delete.OutputIntoClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.OutputIntoClause, "OUTPUT INTO"));
 
             if (!(delete.Target is NamedTableReference target))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported DELETE target", delete.Target));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.Target, "non-table DELETE target"));
 
             if (delete.WhereClause == null && Options.BlockDeleteWithoutWhere)
             {
@@ -1588,13 +1588,13 @@ namespace MarkMpn.Sql4Cds.Engine
             queryExpression.FromClause.Accept(deleteTarget);
 
             if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Target table '{target.ToSql()}' not found in FROM clause", target));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
 
             if (deleteTarget.Ambiguous)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8154, $"The table '{target.ToSql()}' is ambiguous", target));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
             if (!DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid database name '{target.SchemaObject.DatabaseIdentifier.ToSql()}'", target.SchemaObject.DatabaseIdentifier)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
 
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
@@ -1607,7 +1607,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (FaultException ex)
             {
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{targetLogicalName}'", deleteTarget.Target), ex);
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
             }
 
             var primaryKey = targetMetadata.PrimaryIdAttribute;
@@ -1704,7 +1704,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private UpdateNode ConvertUpdateStatement(UpdateStatement update)
         {
             if (update.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported CTE clause", update.WithCtesAndXmlNamespaces));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.WithCtesAndXmlNamespaces, "WITH"));
 
             return ConvertUpdateStatement(update.UpdateSpecification, update.OptimizerHints);
         }
@@ -1712,13 +1712,13 @@ namespace MarkMpn.Sql4Cds.Engine
         private UpdateNode ConvertUpdateStatement(UpdateSpecification update, IList<OptimizerHint> hints)
         {
             if (update.OutputClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported OUTPUT clause", update.OutputClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.OutputClause, "OUTPUT"));
 
             if (update.OutputIntoClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported OUTPUT INTO clause", update.OutputIntoClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.OutputIntoClause, "OUTPUT INTO"));
 
             if (!(update.Target is NamedTableReference target))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported UPDATE target", update.Target));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.Target, "non-table UPDATE target"));
 
             if (update.WhereClause == null && Options.BlockUpdateWithoutWhere)
             {
@@ -1743,13 +1743,13 @@ namespace MarkMpn.Sql4Cds.Engine
             queryExpression.FromClause.Accept(updateTarget);
 
             if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Target table '{target.ToSql()}' not found in FROM clause", target));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
 
             if (updateTarget.Ambiguous)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8154, $"The table '{target.ToSql()}' is ambiguous", target));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
             if (!DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid database name '{target.SchemaObject.DatabaseIdentifier.ToSql()}'", target.SchemaObject.DatabaseIdentifier)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
 
             var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
             var targetLogicalName = updateTarget.TargetEntityName;
@@ -1762,7 +1762,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (FaultException ex)
             {
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{targetLogicalName}'", updateTarget.Target), ex);
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject), ex);
             }
 
             if (targetMetadata.IsIntersect != true)
@@ -1795,7 +1795,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var existingSet = update.SetClauses.OfType<AssignmentSetClause>().FirstOrDefault(set => set.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
 
                     if (existingSet != null)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, "The column \"partitionid\" cannot be modified", existingSet.Column));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(existingSet.Column)) { Suggestion = "The column \"partitionid\" cannot be modified" };
 
                     update.SetClauses.Add(new AssignmentSetClause
                     {
@@ -1836,10 +1836,10 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var set in update.SetClauses)
             {
                 if (!(set is AssignmentSetClause assignment))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled SET clause", set));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(set, "SET"));
 
                 if (assignment.Variable != null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled variable SET clause", set));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(set, "variable reference in SET clause"));
 
                 switch (assignment.AssignmentKind)
                 {
@@ -1887,30 +1887,30 @@ namespace MarkMpn.Sql4Cds.Engine
                     lookupAttr.Targets.Length > 1)
                 {
                     if (!virtualTypeAttributes.Add(targetAttrName))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 264, $"The column name '{targetAttrName}' is specified more than once in the SET clause or column list of an INSERT. A column cannot be assigned more than one value in the same clause. Modify the clause to make sure that a column is updated only once. If this statement updates or inserts columns into a view, column aliasing can conceal the duplication in your code", assignment.Column));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
                 }
                 else
                 {
                     if (!attributes.TryGetValue(targetAttrName, out attr))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 207, $"Invalid column name '{targetAttrName}'", assignment.Column));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnName(assignment.Column));
 
                     if (!attributeNames.Add(attr.LogicalName))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 264, $"The column name '{attr.LogicalName}' is specified more than once in the SET clause or column list of an INSERT. A column cannot be assigned more than one value in the same clause. Modify the clause to make sure that a column is updated only once. If this statement updates or inserts columns into a view, column aliasing can conceal the duplication in your code", assignment.Column));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
 
                     if (manyToManyRelationship != null)
                     {
                         if (attr.LogicalName != manyToManyRelationship.Entity1IntersectAttribute & attr.LogicalName != manyToManyRelationship.Entity2IntersectAttribute)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, $"Only the {manyToManyRelationship.Entity1IntersectAttribute} and {manyToManyRelationship.Entity2IntersectAttribute} columns can be used when updating values in the {targetMetadata.LogicalName} table", assignment.Column));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = $"Only the {manyToManyRelationship.Entity1IntersectAttribute} and {manyToManyRelationship.Entity2IntersectAttribute} columns can be used when updating values in the {targetMetadata.LogicalName} table" };
                     }
                     else if (targetMetadata.LogicalName == "listmember")
                     {
                         if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, "Only the listid and entityid columns can be used when updating values in the listmember table", assignment.Column));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = "Only the listid and entityid columns can be used when updating values in the listmember table" };
                     }
                     else
                     {
                         if (attr.IsValidForUpdate == false)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 271, $"The column \"{targetAttrName}\" cannot be modified", assignment.Column));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = $"The column \"{targetAttrName}\" cannot be modified" };
                     }
 
                     targetAttrName = attr.LogicalName;
@@ -2055,10 +2055,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     sourceCol.GetType(expressionContext, out var sourceType);
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {sourceType.ToSql()} is incompatible with {targetType.ToSql()}", assignment));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(assignment, sourceType, targetType));
 
                     if (update.ColumnMappings.ContainsKey(targetAttrName))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 264, $"The column name '{targetAttrName}' is specified more than once in the SET clause or column list of an INSERT. A column cannot be assigned more than one value in the same clause. Modify the clause to make sure that a column is updated only once. If this statement updates or inserts columns into a view, column aliasing can conceal the duplication in your code", assignment.Column));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
 
                     sourceTypes[targetAttrName] = sourceType;
 
@@ -2181,13 +2181,13 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (select.ComputeClauses != null && select.ComputeClauses.Count > 0)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported COMPUTE clause", select.ComputeClauses[0]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(select.ComputeClauses[0], "COMPUTE"));
 
             if (select.Into != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported INTO clause", select.Into));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(select.Into, "INTO"));
 
             if (select.On != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported ON clause", select.On));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(select.On, "ON"));
 
             var variableAssignments = new List<string>();
             SelectElement firstNonSetSelectElement = null;
@@ -2201,12 +2201,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (selectElement is SelectSetVariable set)
                     {
                         if (firstNonSetSelectElement != null)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 141, "A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations", selectElement));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidSelectVariableAssignment(selectElement));
 
                         variableAssignments.Add(set.Variable.Name);
 
                         if (!_nodeContext.ParameterTypes.TryGetValue(set.Variable.Name, out var paramType))
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 137, $"Must declare the scalar variable \"{set.Variable.Name}\"", set.Variable));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.UndeclaredVariable(set.Variable));
 
                         // Create the SELECT statement that generates the required information
                         var expr = set.Expression;
@@ -2254,7 +2254,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else if (firstNonSetSelectElement == null)
                     {
                         if (variableAssignments.Count > 0)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 141, "A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations", selectElement));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidSelectVariableAssignment(selectElement));
 
                         firstNonSetSelectElement = selectElement;
                     }
@@ -2295,13 +2295,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 return ConvertSelectStatement(paren.QueryExpression, hints, outerSchema, outerReferences, context);
             }
 
-            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled SELECT query expression", query));
+            throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(query, "query expression"));
         }
 
         private SelectNode ConvertBinaryQuery(BinaryQueryExpression binary, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeCompilationContext context)
         {
             if (binary.BinaryQueryExpressionType != BinaryQueryExpressionType.Union)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, $"Unhandled {binary.BinaryQueryExpressionType} query type", binary));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(binary, binary.BinaryQueryExpressionType.ToString()));
 
             var left = ConvertSelectStatement(binary.FirstQueryExpression, hints, outerSchema, outerReferences, context);
             var right = ConvertSelectStatement(binary.SecondQueryExpression, hints, outerSchema, outerReferences, context);
@@ -2332,7 +2332,7 @@ namespace MarkMpn.Sql4Cds.Engine
             right.ExpandWildcardColumns(context);
 
             if (concat.ColumnSet.Count != right.ColumnSet.Count)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 205, "All queries combined using a UNION, INTERSECT or EXCEPT operator must have an equal number of expressions in their target lists", binary));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SetOperationWithDifferentColumnCounts(binary));
 
             for (var i = 0; i < concat.ColumnSet.Count; i++)
             {
@@ -2404,7 +2404,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (binary.ForClause is XmlForClause forXml)
                 ConvertForXmlClause(select, forXml, context);
             else if (binary.ForClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled FOR clause", binary.ForClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(binary.ForClause, "FOR"));
 
             return select;
         }
@@ -2425,7 +2425,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 querySpec.WhereClause.Accept(aggregateCollector);
 
                 if (aggregateCollector.Aggregates.Any())
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 147, "An aggregate may not appear in the WHERE clause unless it is in a subquery contained in a HAVING clause or a select list, and the column being aggregated is an outer reference", aggregateCollector.Aggregates[0]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidAggregateInWhereClause(aggregateCollector.Aggregates[0]));
             }
 
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
@@ -2499,7 +2499,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10741, "A TOP can not be used in the same query or sub-query as a OFFSET", querySpec.TopRowFilter));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTopWithOffset(querySpec.TopRowFilter));
 
             node = ConvertTopClause(node, querySpec.TopRowFilter, querySpec.OrderByClause, context);
             node = ConvertOffsetClause(node, querySpec.OffsetClause, context);
@@ -2510,7 +2510,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (querySpec.ForClause is XmlForClause forXml)
                 ConvertForXmlClause(selectNode, forXml, context);
             else if (querySpec.ForClause != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled FOR clause", querySpec.ForClause));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(querySpec.ForClause, "FOR"));
 
             return selectNode;
         }
@@ -2570,7 +2570,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     default:
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled FOR XML option", option));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(option, "FOR XML"));
                 }
             }
 
@@ -2632,7 +2632,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Scalar subquery must return exactly one column and one row
                 if (innerQuery.ColumnSet.Count != 1)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 116, "Only one expression can be specified in the select list when the subquery is not introduced with EXISTS", inSubquery.Subquery));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.MultiColumnScalarSubquery(inSubquery.Subquery));
 
                 // Create the join
                 BaseJoinNode join;
@@ -2904,10 +2904,10 @@ namespace MarkMpn.Sql4Cds.Engine
             else
             {
                 if (querySpec.GroupByClause.All == true)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled GROUP BY ALL clause", querySpec.GroupByClause));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(querySpec.GroupByClause, "GROUP BY ALL"));
 
                 if (querySpec.GroupByClause.GroupByOption != GroupByOption.None)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled GROUP BY option", querySpec.GroupByClause));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(querySpec.GroupByClause, $"GROUP BY {querySpec.GroupByClause.GroupByOption}"));
             }
 
             var schema = source.GetSchema(context);
@@ -2923,7 +2923,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var grouping in querySpec.GroupByClause.GroupingSpecifications)
                 {
                     if (!(grouping is ExpressionGroupingSpecification exprGroup))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled GROUP BY expression", grouping));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(grouping, "GROUP BY"));
 
                     // Validate the GROUP BY expression
                     exprGroup.Expression.GetType(GetExpressionContext(schema, context), out _);
@@ -3078,16 +3078,16 @@ namespace MarkMpn.Sql4Cds.Engine
                         converted.AggregateType = AggregateType.StringAgg;
 
                         if (aggregate.Expression.Parameters.Count != 2)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 174, "STRING_AGG must have two parameters", aggregate.Expression));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(aggregate.Expression.FunctionName, 2));
 
                         if (!aggregate.Expression.Parameters[1].IsConstantValueExpression(new ExpressionCompilationContext(context, null, null), out var separator))
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8733, "Separator parameter for STRING_AGG must be a string literal or variable", aggregate.Expression));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidStringAggSeparator(aggregate.Expression.Parameters[1]));
 
                         converted.Separator = separator.Value;
                         break;
 
                     default:
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unknown aggregate function", aggregate.Expression));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(aggregate.Expression, aggregate.Expression.FunctionName.Value));
                 }
 
                 // Validate the aggregate expression
@@ -3138,13 +3138,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (aggregate.Expression.WithinGroupClause != null)
                 {
                     if (converted.AggregateType != AggregateType.StringAgg)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10757, $"The function '{aggregate.Expression.FunctionName.Value}' may not have a WITHIN GROUP clause", aggregate.Expression));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidWithinGroupClause(aggregate.Expression.FunctionName));
 
                     if (hashMatch.WithinGroupSorts.Any())
                     {
                         // Defining a WITHIN GROUP clause more than once is not allowed - unless they are identical
                         if (aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements.Count != hashMatch.WithinGroupSorts.Count)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8711, "Multiple ordered aggregate functions in the same scope have mutually incompatible orderings", aggregate.Expression));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidWithinGroupOrdering(aggregate.Expression));
 
                         for (var i = 0; i < aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements.Count; i++)
                         {
@@ -3152,7 +3152,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             var existingSort = hashMatch.WithinGroupSorts[i];
 
                             if (newSort.ToSql() != existingSort.ToSql())
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8711, "Multiple ordered aggregate functions in the same scope have mutually incompatible orderings", aggregate.Expression));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidWithinGroupOrdering(aggregate.Expression));
                         }
                     }
                     else
@@ -3219,10 +3219,10 @@ namespace MarkMpn.Sql4Cds.Engine
             var intType = DataTypeHelpers.Int;
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, intType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10743, "The number of rows provided for a OFFSET clause must be an integer", offsetClause.OffsetExpression));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOffsetClause(offsetClause.OffsetExpression));
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(fetchType, intType))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1060, "The number of rows provided for a TOP or FETCH clauses row count parameter must be an integer", offsetClause.FetchExpression));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTopOrFetchClause(offsetClause.FetchExpression));
 
             return new OffsetFetchNode
             {
@@ -3243,9 +3243,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
             {
                 if (topRowFilter.Percent)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 206, $"Operand type clash: {topType.ToSql()} is incompatible with flat", topRowFilter.Expression));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(topRowFilter.Expression, topType, targetType));
                 else
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1060, "The number of rows provided for a TOP or FETCH clauses row count parameter must be an integer", topRowFilter.Expression));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTopOrFetchClause(topRowFilter.Expression));
             }
 
             var tieColumns = new HashSet<string>();
@@ -3253,7 +3253,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (topRowFilter.WithTies)
             {
                 if (orderByClause == null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1062, "The TOP N WITH TIES clause is not allowed without a corresponding ORDER BY clause", topRowFilter));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TopNWithTiesRequiresOrderBy(topRowFilter));
 
                 var schema = source.GetSchema(context);
 
@@ -3263,7 +3263,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("ORDER BY must reference a column for use with TOP N WITH TIES", sort.Expression);
 
                     if (!schema.ContainsColumn(sortCol.GetColumnName(), out var colName))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 207, $"Invalid column name '{sortCol.ToSql()}'", sortCol));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnName(sortCol));
 
                     tieColumns.Add(colName);
                 }
@@ -3316,7 +3316,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     aliases.TryGetValue(orderByCol.GetColumnName(), out var aliasedCols))
                 {
                     if (aliasedCols.Count > 1)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 209, $"Ambiguous column name '{orderByCol.ToSql()}'", order.Expression));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousColumnName(orderByCol));
 
                     order.Expression = aliasedCols[0].ToColumnReference();
                     order.ScriptTokenStream = null;
@@ -3335,7 +3335,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (index < 0 || index >= selectList.Length)
                     {
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 108, $"The ORDER BY position number {index} is out of range of the number of items in the select list", literal))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOrderByColumnNumber(orderBy))
                         {
                             Suggestion = $"Must be between 1 and {selectList.Length}"
                         };
@@ -3381,7 +3381,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return source;
 
             if (whereClause.Cursor != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported cursor", whereClause.Cursor));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(whereClause.Cursor, "CURSOR"));
 
             CaptureOuterReferences(outerSchema, source, whereClause.SearchCondition, context, outerReferences);
 
@@ -3472,7 +3472,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         // Check the expression is valid. This will throw an exception in case of missing columns etc.
                         col.GetType(GetExpressionContext(schema, context, nonAggregateSchema), out var colType);
                         if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, $"Cannot resolve collation conflict for '{col.ToSql()}'", element));
+                            throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
 
                         var colName = col.GetColumnName();
 
@@ -3499,7 +3499,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var scalarSchema = computeScalar.GetSchema(context);
                         var colType = scalarSchema.Schema[alias].Type;
                         if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, "Cannot resolve collation conflict", element));
+                            throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
 
                         if (distinct != null)
                             distinct.Source = scalarSource;
@@ -3523,14 +3523,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         .ToList();
 
                     if (colName != null && cols.Count == 0)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 107, $"The column prefix '{colName}' does not match with a table name or alias name used in the query", star));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnPrefix(star));
 
                     // Can't select no-collation columns
                     foreach (var col in cols)
                     {
                         var colType = schema.Schema[col].Type;
                         if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 468, $"Cannot resolve collation conflict for '{col}'", element));
+                            throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
                     }
 
                     select.ColumnSet.Add(new SelectColumn
@@ -3542,7 +3542,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled SELECT element", element));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(element, "SELECT"));
                 }
             }
 
@@ -3633,7 +3633,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Scalar subquery must return exactly one column and one row
                 if (subqueryPlan.ColumnSet.Count != 1)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 116, "Only one expression can be specified in the select list when the subquery is not introduced with EXISTS", subquery));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.MultiColumnScalarSubquery(subquery));
 
                 string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
@@ -4127,13 +4127,13 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{table.ToSql()}'", table));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
                 }
 
                 if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) &&
                     !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
                     !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{table.ToSql()}'", table));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
 
                 // Validate the entity name
                 EntityMetadata meta;
@@ -4144,18 +4144,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 catch (FaultException ex)
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{table.ToSql()}'", table), ex);
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject), ex);
                 }
 
                 var unsupportedHint = table.TableHints.FirstOrDefault(hint => hint.HintKind != TableHintKind.NoLock);
                 if (unsupportedHint != null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported table hint", unsupportedHint));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(unsupportedHint, unsupportedHint.HintKind.ToString()));
 
                 if (table.TableSampleClause != null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported table sample clause", table.TableSampleClause));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(table.TableSampleClause, "TABLESAMPLE"));
 
                 if (table.TemporalClause != null)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unsupported temporal clause", table.TemporalClause));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(table.TemporalClause, table.TemporalClause.TemporalClauseType.ToString()));
 
                 // Convert to a simple FetchXML source
                 var fetchXmlScan = new FetchXmlScan
@@ -4180,7 +4180,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (table.SchemaObject.SchemaIdentifier?.Value.Equals("archive", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     if (meta.IsRetentionEnabled != true && meta.IsArchivalEnabled != true)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{table.ToSql()}'", table)) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject)) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
 
                     fetchXmlScan.FetchXml.DataSource = "retained";
                 }
@@ -4325,7 +4325,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (reference is QueryDerivedTable queryDerivedTable)
             {
                 if (queryDerivedTable.Columns.Count > 0)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 40517, "Unhandled query derived table column list", queryDerivedTable));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(queryDerivedTable, "query-derived table column list"));
 
                 var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, hints, outerSchema, outerReferences, context);
                 var alias = new AliasNode(select, queryDerivedTable.Alias, context);
@@ -4423,7 +4423,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (tvf.SchemaObject.SchemaIdentifier.Value.Equals("sys", StringComparison.OrdinalIgnoreCase))
                 {
                     if (!Enum.TryParse<SystemFunction>(tvf.SchemaObject.BaseIdentifier.Value, true, out var systemFunction))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{tvf.SchemaObject.ToSql()}'", tvf));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
 
                     execute = new SystemFunctionNode
                     {
@@ -4434,7 +4434,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 208, $"Invalid object name '{tvf.SchemaObject.ToSql()}'", tvf));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
                 }
 
                 if (source == null)
@@ -4495,7 +4495,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return loop;
             }
 
-            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Unhandled table reference", reference));
+            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(reference)) { Suggestion = "Unhandled table reference" };
         }
 
         private HashSet<string> GetFixedValueColumnsFromWhereClause(TSqlFragment query, params INodeSchema[] schemas)
@@ -4549,7 +4549,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var expectedColumnCount = inlineDerivedTable.RowValues[0].ColumnValues.Count;
             var firstRowWithIncorrectNumberOfColumns = inlineDerivedTable.RowValues.FirstOrDefault(row => row.ColumnValues.Count != expectedColumnCount);
             if (firstRowWithIncorrectNumberOfColumns != null)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 10709, "The number of columns for each row in a table value constructor must be the same", firstRowWithIncorrectNumberOfColumns));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorRequiresConsistentColumns(firstRowWithIncorrectNumberOfColumns));
 
             // Check all the rows have the expected number of values and column names are unique
             var columnNames = inlineDerivedTable.Columns.Select(col => col.Value).ToList();
@@ -4557,14 +4557,14 @@ namespace MarkMpn.Sql4Cds.Engine
             for (var i = 1; i < columnNames.Count; i++)
             {
                 if (columnNames.Take(i).Any(prevCol => prevCol.Equals(columnNames[i], StringComparison.OrdinalIgnoreCase)))
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8156, $"The column '{columnNames[i]}' was specified multiple times for '{inlineDerivedTable.Alias.Value}'", inlineDerivedTable.Columns[i]));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateColumn(inlineDerivedTable.Alias, columnNames[i]));
             }
 
             if (expectedColumnCount > inlineDerivedTable.Columns.Count)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8158, $"'{inlineDerivedTable.Alias.Value}' has more columns than were specified in the column list", inlineDerivedTable));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooManyColumns(inlineDerivedTable.Alias));
 
             if (expectedColumnCount < inlineDerivedTable.Columns.Count)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8159, $"'{inlineDerivedTable.Alias.Value}' has fewer columns than were specified in the column list", inlineDerivedTable));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooFewColumns(inlineDerivedTable.Alias));
 
             var rows = inlineDerivedTable.RowValues.Select(row => ConvertSelectQuerySpec(CreateSelectRow(row, inlineDerivedTable.Columns), null, outerSchema, outerReferences, context));
             var concat = new ConcatenateNode();

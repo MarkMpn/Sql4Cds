@@ -74,7 +74,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // If the types are different but in the same family, convert them to the same type based
             // on the precedence order and then compare them
-            if (!SqlTypeConverter.CanMakeConsistentTypes(BaseType, sqlVariant.BaseType, null, out var consistentType))
+            if (!SqlTypeConverter.CanMakeConsistentTypes(BaseType, sqlVariant.BaseType, null, null, null, out var consistentType))
                 throw new ArgumentException();
 
             var value1 = SqlTypeConverter.GetConversion(BaseType, consistentType)(Value);

@@ -424,7 +424,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         protected override DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
         {
-            throw new Sql4CdsException(new Sql4CdsError(16, 40517, "Transactions are not supported"));
+            throw new Sql4CdsException(Sql4CdsError.NotSupported(null, "BEGIN TRAN"));
         }
 
         protected override DbCommand CreateDbCommand()

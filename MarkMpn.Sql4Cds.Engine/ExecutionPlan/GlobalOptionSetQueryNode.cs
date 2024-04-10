@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             type = MetadataQueryNode.GetPropertyType(prop.Property.PropertyType);
                         }
-                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, MetadataQueryNode.GetPropertyType(prop.Property.PropertyType), null, out type))
+                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, MetadataQueryNode.GetPropertyType(prop.Property.PropertyType), null, null, null, out type))
                         {
                             // Can't make a consistent type for this property, so we can't use it
                             type = null;
