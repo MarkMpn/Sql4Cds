@@ -83,16 +83,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var entities = GetDmlSourceEntities(context, out var schema);
 
                     if (entities.Count != 1)
-                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Unexpected error retrieving user details: retrieved {entities.Count} values"));
+                        throw new QueryExecutionException(Sql4CdsError.ImpersonationError("(null)"), new ApplicationException($"Unexpected error retrieving user details: retrieved {entities.Count} values"));
 
                     var count = entities[0].GetAttributeValue<SqlInt32>(CountSource).Value;
                     var username = entities[0].GetAttributeValue<SqlString>(FilterValueSource).IsNull ? "(null)" : entities[0].GetAttributeValue<SqlString>(FilterValueSource).Value;
 
                     if (count == 0)
-                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Cannot execute as the database principal because the principal \"{username}\" does not exist, this type of principal cannot be impersonated, or you do not have permission."));
+                        throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username));
 
                     if (count > 1)
-                        throw new QueryExecutionException(new Sql4CdsError(16, 15517, $"Ambiguous user \"{username}\""));
+                        throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), new ApplicationException("Ambiguous username"));
 
                     // Precompile mappings with type conversions
                     var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);

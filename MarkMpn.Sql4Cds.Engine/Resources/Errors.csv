@@ -1,0 +1,114 @@
+40517,16,Keyword or statement option '%.*ls' is not supported in this version of SQL Server.
+102,15,Incorrect syntax near '%.*ls'.
+241,16,Conversion failed when converting date and/or time from character string.
+8117,16,Operand data type %ls is invalid for %ls operator.
+206,16,Operand type clash: %ls is incompatible with %ls
+1001,16,Line %d: Length or precision specification %d is invalid.
+8115,16,Arithmetic overflow error converting %ls to data type %ls.
+137,15,Must declare the scalar variable "%.*ls".
+8156,15,The column '%.*ls' was specified multiple times for '%.*ls'.
+448,16,Invalid collation '%.*ls'.
+8120,16,Column '%.*ls.%.*ls' is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause.
+207,16,Invalid column name '%.*ls'.
+208,16,Invalid object name '%.*ls'.
+209,16,Ambiguous column name '%.*ls'.
+245,16,Conversion failed when converting the %ls value '%.*ls' to data type %ls.
+468,16,Cannot resolve the collation conflict between "%.*ls" and "%.*ls" in the %ls operation.
+1011,15,The correlation name '%.*ls' is specified multiple times in a FROM clause.
+1012,15,The correlation name '%.*ls' has the same exposed name as table '%.*ls'.
+1013,15,The objects "%.*ls" and "%.*ls" in the FROM clause have the same exposed names. Use correlation names to distinguish them.
+515,16,Cannot insert the value NULL into column '%.*ls', table '%.*ls'; column does not allow nulls. %ls fails.
+271,16,The column "%.*ls" cannot be modified because it is either a computed column or is the result of a UNION operator.
+2715,16,Column, parameter, or variable #%d: Cannot find data type %.*ls.
+10715,15,'%.*ls' is not a valid hint.
+15517,16,Cannot execute as the database principal because the principal "%.*ls" does not exist, this type of principal cannot be impersonated, or you do not have permission.
+313,16,An insufficient number of arguments were supplied for the procedure or function %.*ls.
+8144,16,Procedure or function %.*ls has too many arguments specified.
+2812,16,Could not find stored procedure '%.*ls'.
+119,15,Must pass parameter number %d and subsequent parameters as '@name = value'. After the form '@name = value' has been used, all subsequent parameters must be passed in the form '@name = value'.
+8145,16,%.*ls is not a parameter for procedure %.*ls.
+201,16,Procedure or function '%.*ls' expects parameter '%.*ls', which was not supplied.
+529,16,Explicit conversion from data type %ls to %ls is not allowed.
+8116,16,Argument data type %ls is invalid for argument %d of %ls function.
+8152,16,String or binary data would be truncated.
+8114,16,Error converting data type %ls to %ls.
+245,16,Conversion failed when converting the %ls value '%.*ls' to data type %ls.
+235,16,Cannot convert a char value to money. The char value has incorrect syntax.
+293,16,Cannot convert char value to smallmoney. The char value has incorrect syntax.
+8169,16,Conversion failed when converting from a character string to uniqueidentifier.
+13618,16,AS JSON option can be specified only for column of nvarchar(max) type in WITH clause.
+13608,16,Property cannot be found on the specified JSON path.
+13623,16,Scalar value cannot be found in the specified JSON path.
+13624,16,Object or array cannot be found in the specified JSON path.
+13625,16,String value in the specified JSON path would be truncated.
+9501,16,XQuery: Unable to resolve sql:variable('%.*ls'). The variable must be declared as a scalar TSQL variable.
+1023,15,Invalid parameter %d specified for %ls.
+155,15,'%.*ls' is not a recognized %ls option.
+195,15,'%.*ls' is not a recognized %S_MSG.
+174,15,The %.*ls function requires %d argument(s).
+8172,16,The argument %d of the XML data type method "%.*ls" must be a string literal.
+9500,16,The data type '%.*ls' used in the VALUE method is invalid.
+8711,16,Multiple ordered aggregate functions in the same scope have mutually incompatible orderings.
+10757,15,The function '%.*ls' may not have a WITHIN GROUP clause.
+10743,15,The number of rows provided for a OFFSET clause must be an integer.
+1060,15,The number of rows provided for a TOP or FETCH clauses row count parameter must be an integer.
+1062,16,The TOP N WITH TIES clause is not allowed without a corresponding ORDER BY clause.
+10709,15,The number of columns for each row in a table value constructor must be the same.
+8158,15,'%.*ls' has more columns than were specified in the column list.
+8159,15,'%.*ls' has fewer columns than were specified in the column list.
+2786,16,The data type of substitution parameter %d does not match the expected type of the format specification.
+264,16,The column name '%.*ls' is specified more than once in the SET clause or column list of an INSERT. A column cannot be assigned more than one value in the same clause. Modify the clause to make sure that a column is updated only once. If this statement updates or inserts columns into a view, column aliasing can conceal the duplication in your code.
+8154,15,The table '%.*ls' is ambiguous.
+109,15,There are more columns in the INSERT statement than values specified in the VALUES clause. The number of values in the VALUES clause must match the number of columns specified in the INSERT statement.
+110,15,There are fewer columns in the INSERT statement than values specified in the VALUES clause. The number of values in the VALUES clause must match the number of columns specified in the INSERT statement.
+120,15,The select list for the INSERT statement contains fewer items than the insert list. The number of SELECT values must match the number of INSERT columns.
+121,15,The select list for the INSERT statement contains more items than the insert list. The number of SELECT values must match the number of INSERT columns.
+156,15,Incorrect syntax near the keyword '%.*ls'.
+176,15,The FOR BROWSE clause is no longer supported in views.
+460,16,DISTINCT operator is not allowed in the recursive part of a recursive common table expression '%.*ls'.
+461,16,The TOP or OFFSET operator is not allowed in the recursive part of a recursive common table expression '%.*ls'.
+462,16,Outer join is not allowed in the recursive part of a recursive common table expression '%.*ls'.
+465,16,Recursive references are not allowed in subqueries.
+467,16,GROUP BY, HAVING, or aggregate functions are not allowed in the recursive part of a recursive common table expression '%.*ls'.
+252,16,Recursive common table expression '%.*ls' does not contain a top-level UNION ALL operator.
+253,16,Recursive member of a common table expression '%.*ls' has multiple recursive references.
+246,46,No anchor member was specified for recursive query "%.*ls".
+1033,16,The ORDER BY clause is invalid in views, inline functions, derived tables, subqueries, and common table expressions, unless TOP, OFFSET or FOR XML is also specified.
+4150,16,Hints are not allowed on recursive common table expression (CTE) references. Consider removing hint from recursive CTE reference '%.*ls'.
+281,16,%d is not a valid style number when converting from %ls to a character string.
+132,15,The label '%.*ls' has already been declared. Label names must be unique within a query batch or stored procedure.
+133,15,A GOTO statement references the label '%.*ls' but the label has not been declared.
+1026,16,GOTO cannot be used to jump into a TRY or CATCH scope.
+10704,15,To rethrow an error, a THROW statement must be used inside a CATCH block. Insert the THROW statement inside a CATCH block, or add error parameters to the THROW statement.
+7670,16,Column '%.*ls' cannot be used for full-text search because it is not a character-based, XML, image, JSON or varbinary(max) type column or it is encrypted.
+13611,16,Value referenced by JSON path is not an array or object and cannot be opened with OPENJSON.
+10742,15,The offset specified in a OFFSET clause may not be negative.
+10744,15,The number of rows provided for a FETCH clause must be greater then zero.
+2754,16,Error severity levels greater than %d can only be specified by members of the sysadmin role, using the WITH LOG option.
+148,15,Incorrect time syntax in time string '%.*ls' used with WAITFOR.
+9815,16,Waitfor delay and waitfor time cannot be of type %s.
+239,16,Duplicate common table expression name '%.*ls' was specified.
+8155,15,No column name was specified for column %d of '%.*ls'.
+310,15,The value %d specified for the MAXRECURSION option exceeds the allowed maximum of %d.
+2747,16,Too many substitution parameters for RAISERROR. Cannot exceed %d substitution parameters.
+2748,16,Cannot specify %ls data type (parameter %d) as a substitution parameter.
+2778,16,Only System Administrator can specify %s option for %s command.
+1046,15,Subqueries are not allowed in this context. Only scalar expressions are allowed.
+2787,16,Invalid format specification: '%.*ls'.
+134,15,The variable name '%.*ls' has already been declared. Variable names must be unique within a query batch or stored procedure.
+40517,15,Keyword or statement option '%.*ls' is not supported in this version of SQL Server.
+141,15,A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations.
+205,16,All queries combined using a UNION, INTERSECT or EXCEPT operator must have an equal number of expressions in their target lists.
+147,15,An aggregate may not appear in the WHERE clause unless it is in a subquery contained in a HAVING clause or a select list, and the column being aggregated is an outer reference.
+10741,15,A TOP can not be used in the same query or sub-query as a OFFSET.
+116,15,Only one expression can be specified in the select list when the subquery is not introduced with EXISTS.
+8733,16,Separator parameter for STRING_AGG must be a string literal or variable.
+108,15,The ORDER BY position number %ld is out of range of the number of items in the select list.
+107,15,The column prefix '%.*ls' does not match with a table name or alias name used in the query.
+40133,15,This operation is not supported in this version of SQL Server.
+10337,16,An internal error occurred.
+19306,16,The provided pattern is too complex. Please retry by reducing the complexity of pattern - '%.*ls'.
+1042,15,Conflicting %ls optimizer hints specified.
+179,15,Cannot use the OUTPUT option when passing a constant to a stored procedure.
+220,16,Arithmetic overflow error for data type %ls, value = %ld.
+8134,16,Divide by zero error encountered.

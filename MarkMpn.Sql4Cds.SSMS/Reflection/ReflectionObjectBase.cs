@@ -79,7 +79,16 @@ namespace MarkMpn.Sql4Cds.SSMS
                     .ToArray();
 
                 if (method.Length == 1)
-                    return method[0].Invoke(target, args);
+                {
+                    try
+                    {
+                        return method[0].Invoke(target, args);
+                    }
+                    catch (TargetInvocationException ex)
+                    {
+                        throw ex.InnerException;
+                    }
+                }
 
                 if (method.Length > 1)
                 {

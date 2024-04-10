@@ -193,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="primaryDataSource">The details of the primary data source being used for the connection</param>
         /// <param name="consistent">The type that both values can be converted to</param>
         /// <returns><c>true</c> if the two values can be converted to a consistent type, or <c>false</c> otherwise</returns>
-        public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, DataSource primaryDataSource, out DataTypeReference consistent)
+        public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, DataSource primaryDataSource, TSqlFragment fragment, string operation, out DataTypeReference consistent)
         {
             if (lhs == DataTypeHelpers.ImplicitIntForNullLiteral)
             {
@@ -267,7 +267,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (lhsColl != null && rhsColl != null)
                 {
-                    if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, out var coll, out var collLabel))
+                    if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, fragment, operation, out var coll, out var collLabel, out var collError))
                     {
                         consistent = null;
                         return false;
@@ -277,7 +277,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         SqlDataTypeOption = targetType,
                         Collation = coll,
-                        CollationLabel = collLabel
+                        CollationLabel = collLabel,
+                        CollationConflictError = collError
                     };
                 }
                 else
@@ -590,7 +591,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var originalExpr = expr;
 
             if (!CanChangeTypeExplicit(from, to))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 529, $"Explicit conversion from data type {from.ToSql()} to {to.ToSql()} is not allowed", convert));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.ExplicitConversionNotAllowed(convert, from, to));
 
             // Special cases for styles
             if (style == null)
@@ -604,7 +605,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (!CanChangeTypeImplicit(styleType, DataTypeHelpers.Int))
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8116, $"Argument data type {styleType.ToSql()} is invalid for argument 3 of convert function", ((ConvertCall)convert).Style));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidArgumentType(((ConvertCall)convert).Style, styleType, 3, "convert"));
 
             // Special case for conversion to sql_variant
             if (to.IsSameAs(DataTypeHelpers.Variant))
@@ -633,51 +634,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (expr.Type != targetType)
             {
                 expr = Convert(expr, targetType);
-                
-                // Handle errors during type conversion
-                var errorNumber = 8114;
-                var errorMessage = $"Error converting data type {from.ToSql()} to {to.ToSql()}.";
 
+                // Handle errors during type conversion
+                var conversionError = Expr.Call(() => Sql4CdsError.ConversionError(Expr.Arg<TSqlFragment>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()), Expression.Constant(convert, typeof(TSqlFragment)), Expression.Constant(from), Expression.Constant(to));
+                
                 if (fromSqlType?.SqlDataTypeOption.IsStringType() == true)
                 {
                     if (to.IsSameAs(DataTypeHelpers.UniqueIdentifier) || to.IsSameAs(DataTypeHelpers.EntityReference))
-                    {
-                        errorNumber = 8169;
-                        errorMessage = "Conversion failed when converting from a character string to uniqueidentifier";
-                    }
+                        conversionError = Expr.Call(() => Sql4CdsError.GuidParseError(Expr.Arg<TSqlFragment>()), Expression.Constant(convert, typeof(TSqlFragment)));
                     else if (toSqlType?.SqlDataTypeOption.IsDateTimeType() == true)
-                    {
-                        errorNumber = 241;
-                        errorMessage = "Conversion failed when converting date and/or time from character string";
-                    }
+                        conversionError = Expr.Call(() => Sql4CdsError.DateTimeParseError(Expr.Arg<TSqlFragment>()), Expression.Constant(convert, typeof(TSqlFragment)));
                     else if (toSqlType?.SqlDataTypeOption == SqlDataTypeOption.Money)
-                    {
-                        errorNumber = 235;
-                        errorMessage = "Cannot convert a char value to money. The char value has incorrect syntax";
-                    }
+                        conversionError = Expr.Call(() => Sql4CdsError.MoneyParseError(Expr.Arg<TSqlFragment>()), Expression.Constant(convert, typeof(TSqlFragment)));
                     else if (toSqlType?.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
-                    {
-                        errorNumber = 235;
-                        errorMessage = "Cannot convert a char value to smallmoney. The char value has incorrect syntax";
-                    }
+                        conversionError = Expr.Call(() => Sql4CdsError.SmallMoneyParseError(Expr.Arg<TSqlFragment>()), Expression.Constant(convert, typeof(TSqlFragment)));
                     else if (toSqlType?.SqlDataTypeOption == SqlDataTypeOption.Int || toSqlType?.SqlDataTypeOption == SqlDataTypeOption.SmallInt || toSqlType?.SqlDataTypeOption == SqlDataTypeOption.TinyInt || toSqlType?.SqlDataTypeOption == SqlDataTypeOption.Bit)
-                    {
-                        errorNumber = 245;
-                        errorMessage = "Conversion failed when converting the varchar value '{0}' to data type {1}";
-                    }
+                        conversionError = Expr.Call(() => Sql4CdsError.ConversionErrorWithValue(Expr.Arg<TSqlFragment>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlString>()), Expression.Constant(convert, typeof(TSqlFragment)), Expression.Constant(from), Expression.Constant(to), originalExpr);
                 }
 
-                var variables = new List<ParameterExpression>();
-                var typedParam = Expression.Variable(targetType);
-                variables.Add(typedParam);
-                var body = new List<Expression>();
-                var returnTarget = Expression.Label(targetType);
-                body.Add(Expression.Throw(Expr.Call(() => CreateConversionError(Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<object>(), Expr.Arg<DataTypeReference>()), Expression.Constant(errorNumber), Expression.Constant(errorMessage), originalExpr, Expression.Constant(to))));
-                body.Add(Expression.Return(returnTarget, typedParam));
-                body.Add(Expression.Label(returnTarget, typedParam));
-                var block = Expression.Block(targetType, variables, body);
-                var catchBlock = Expression.Catch(typeof(FormatException), block);
-                expr = Expression.TryCatch(expr, catchBlock);
+                var catchFormatExceptionBlock = Expression.Catch(typeof(FormatException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), conversionError), targetType));
+
+                var overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()), Expression.Constant(from), Expression.Constant(to));
+
+                if (from.IsSameAs(DataTypeHelpers.Int))
+                    overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), Expression.Constant(to), originalExpr);
+
+                var catchOverflowExceptionBlock = Expression.Catch(typeof(OverflowException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), overflowError), targetType));
+                
+                expr = Expression.TryCatch(expr, catchFormatExceptionBlock, catchOverflowExceptionBlock);
             }
 
             if (toSqlType == null)
@@ -695,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (toSqlType.Parameters[0].LiteralType == LiteralType.Integer && Int32.TryParse(toSqlType.Parameters[0].Value, out var maxLength))
                     {
                         if (maxLength < 1)
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1001, "Length or precision specification 0 is invalid", toSqlType));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidLengthOrPrecision(toSqlType));
 
                         // Truncate the value to the specified length, but some special cases
                         string valueOnTruncate = null;
@@ -706,16 +690,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
                                 valueOnTruncate = "*";
                             else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
-                                exceptionOnTruncate = new QueryExecutionException(new Sql4CdsError(16, 8115, "Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption));
+                                exceptionOnTruncate = new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, toSqlType));
                         }
                         else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
                             (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
                         {
-                            exceptionOnTruncate = new QueryExecutionException(new Sql4CdsError(16, 8115, "Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption));
+                            exceptionOnTruncate = new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, toSqlType));
                         }
                         else if (throwOnTruncate)
                         {
-                            exceptionOnTruncate = new QueryExecutionException(new Sql4CdsError(16, 8152, "String or binary data would be truncated"));
+                            exceptionOnTruncate = new QueryExecutionException(Sql4CdsError.StringTruncation(convert));
                         }
 
                         expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Exception>()),
@@ -726,12 +710,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else if (toSqlType.Parameters[0].LiteralType != LiteralType.Max)
                     {
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
                     }
                 }
                 else if (toSqlType.Parameters.Count > 1)
                 {
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
                 }
 
                 if (targetCollation != null)
@@ -744,35 +728,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (toSqlType.Parameters.Count > 0)
                 {
                     if (!Int32.TryParse(toSqlType.Parameters[0].Value, out var precision))
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
 
                     if (precision < 1)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 1001, "Length or precision specification 0 is invalid", toSqlType));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidLengthOrPrecision(toSqlType));
 
                     var scale = 0;
 
                     if (toSqlType.Parameters.Count > 1)
                     {
                         if (!Int32.TryParse(toSqlType.Parameters[1].Value, out scale))
-                            throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
                     }
 
                     if (toSqlType.Parameters.Count > 2)
-                        throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 102, "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType));
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
 
-                    expr = Expr.Call(() => SqlDecimal.ConvertToPrecScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>()),
+                    expr = Expr.Call(() => ApplyPrecisionScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()),
                         expr,
                         Expression.Constant(precision),
-                        Expression.Constant(scale));
+                        Expression.Constant(scale),
+                        Expression.Constant(from),
+                        Expression.Constant(to));
                 }
             }
 
             return expr;
         }
 
-        private static QueryExecutionException CreateConversionError(int number, string message, object arg, DataTypeReference to)
+        private static SqlDecimal ApplyPrecisionScale(SqlDecimal value, int precision, int scale, DataTypeReference from, DataTypeReference to)
         {
-            return new QueryExecutionException(new Sql4CdsError(16, number, String.Format(message, arg, to.ToSql()), null));
+            try
+            {
+                return SqlDecimal.ConvertToPrecScale(value, precision, scale);
+            }
+            catch (SqlTruncateException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, to));
+            }
         }
 
         /// <summary>
@@ -1060,7 +1053,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
 
                 default:
-                    throw new QueryExecutionException(new Sql4CdsError(16, 281, $"{style.Value} is not a valid style number when converting from datetime to a character string"));
+                    throw new QueryExecutionException(Sql4CdsError.InvalidConversionStyle(null, style.Value, fromType));
             }
 
             if (!date && String.IsNullOrEmpty(timeFormatString) ||
@@ -1185,7 +1178,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return variant.Value;
 
             if (!CanChangeTypeExplicit(variant.BaseType, targetType))
-                throw new QueryExecutionException(new Sql4CdsError(16, 529, $"No type conversion available from {variant.BaseType.ToSql()} to {targetType.ToSql()}"));
+                throw new QueryExecutionException(Sql4CdsError.ExplicitConversionNotAllowed(null, variant.BaseType, targetType));
 
             var conversion = GetConversion(variant.BaseType, targetType, style.IsNull ? (int?)null : style.Value);
             return conversion(variant.Value);

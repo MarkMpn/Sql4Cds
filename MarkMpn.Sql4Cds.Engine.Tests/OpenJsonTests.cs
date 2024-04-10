@@ -13,7 +13,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void OpenJsonDefaultSchema()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -58,7 +58,7 @@ FROM OPENJSON(@json);";
         [TestMethod]
         public void OpenJsonDefaultSchemaWithPath()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -106,7 +106,7 @@ FROM OPENJSON(@json,'$.path.to.""sub-object""')";
         [TestMethod]
         public void OpenJsonDefaultSchemaDataTypes()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -177,7 +177,7 @@ SELECT * FROM OpenJson(@json);";
         [TestMethod]
         public void OpenJsonExplicitSchema()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -252,7 +252,7 @@ WITH (
         [TestMethod]
         public void MergeJson()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -298,7 +298,7 @@ WHERE [key] NOT IN (SELECT [key] FROM OPENJSON(@json1))";
         [TestMethod]
         public void NestedJson()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -388,7 +388,7 @@ CROSS APPLY OPENJSON ( root.value) AS TheValues";
         [TestMethod]
         public void RecursiveCTEJson()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"

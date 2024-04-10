@@ -196,7 +196,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (batchSizeHint != null)
             {
                 if (!Int32.TryParse(batchSizeHint.Value.Substring(11), out var value) || value < 1)
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 10715, $"'{batchSizeHint.Value}' is not a valid hint", batchSizeHint)) { Suggestion = "BATCH_SIZE requires a positive integer value" };
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidHint(batchSizeHint)) { Suggestion = "BATCH_SIZE requires a positive integer value" };
 
                 return value;
             }

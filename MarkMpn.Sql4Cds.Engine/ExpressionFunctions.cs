@@ -71,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
-                        throw new QueryExecutionException(new Sql4CdsError(16, 13608, "Property cannot be found on the speicified JSON path"));
+                        throw new QueryExecutionException(Sql4CdsError.JsonPropertyNotFound(null));
                 }
 
                 switch (jtoken.Value.ValueKind)
@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (jsonPath.Mode == JsonPathMode.Lax)
                             return SqlString.Null;
                         else
-                            throw new QueryExecutionException(new Sql4CdsError(16, 13623, "Scalar value cannot be found in the speicified JSON path"));
+                            throw new QueryExecutionException(Sql4CdsError.JsonScalarValueNotFound(null));
 
                     case JsonValueKind.Null:
                         return SqlString.Null;
@@ -94,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
-                        throw new QueryExecutionException(new Sql4CdsError(16, 13625, "String value in the specified JSON path would be truncated"));
+                        throw new QueryExecutionException(Sql4CdsError.JsonStringTruncation(null));
                 }
 
                 return new SqlString(value, json.LCID, json.SqlCompareOptions);
@@ -130,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (jsonPath.Mode == JsonPathMode.Lax)
                         return SqlString.Null;
                     else
-                        throw new QueryExecutionException(new Sql4CdsError(16, 13608, "Property cannot be found on the specified JSON path"));
+                        throw new QueryExecutionException(Sql4CdsError.JsonPropertyNotFound(null));
                 }
 
                 switch (jtoken.Value.ValueKind)
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (jsonPath.Mode == JsonPathMode.Lax)
                             return SqlString.Null;
                         else
-                            throw new QueryExecutionException(new Sql4CdsError(16, 13624, "Object or array cannot be found in the specified JSON path"));
+                            throw new QueryExecutionException(Sql4CdsError.JsonObjectOrArrayNotFound(null));
                 }
             }
             catch (Newtonsoft.Json.JsonException ex)
@@ -704,7 +704,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var valueProp = typeof(T).GetProperty("Value");
 
             if (!typeof(IFormattable).IsAssignableFrom(valueProp.PropertyType))
-                throw new QueryExecutionException(new Sql4CdsError(16, 8116, $"Argument data type {type.ToSql()} is invalid for argument 1 of format function"));
+                throw new QueryExecutionException(Sql4CdsError.InvalidArgumentType(null, type, 1, "format"));
 
             var innerValue = (IFormattable)valueProp.GetValue(value);
             return Format(innerValue, format, culture, context);
@@ -894,9 +894,9 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (result is double d)
                 sqlValue = (SqlDouble)d;
             else if (result is XPath2NodeIterator nodeIterator)
-                sqlValue = context.PrimaryDataSource.DefaultCollation.ToSqlString(nodeIterator.First().Value);
+                sqlValue = context.PrimaryDataSource.DefaultCollation.ToSqlString(nodeIterator.FirstOrDefault()?.Value);
             else
-                throw new QueryExecutionException(new Sql4CdsError(16, 40517, $"Unsupported XPath return type '{result.GetType().Name}'"));
+                throw new QueryExecutionException(Sql4CdsError.NotSupported(null, $"XPath return type '{result.GetType().Name}'"));
 
             if (sqlValue.GetType() != targetNetType)
                 sqlValue = (INullable) SqlTypeConverter.ChangeType(sqlValue, targetNetType);
@@ -1181,16 +1181,16 @@ namespace MarkMpn.Sql4Cds.Engine
             if (message.IsNull)
                 return SqlString.Null;
 
-            var regex = new Regex("%(?<flag>[-+0# ])?(?<width>([0-9]+|\\*))?(\\.(?<precision>([0-9]+|\\*)))?(?<size>h|l)?(?<type>[diosuxX]|I64d)");
+            var regex = new Regex("%(?<flag>[-+0# ])?(?<width>([0-9]+|\\*))?(\\.(?<precision>([0-9]+|\\*)))?(?<size>h|l)?(?<type>[diosuxX]|I64d|S_MSG)");
             var paramIndex = 0;
 
             T GetValue<T>()
             {
                 if (paramIndex >= parameters.Length)
-                    throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
+                    throw new QueryExecutionException(Sql4CdsError.InvalidDataTypeForSubstitutionParameter(paramIndex + 1));
 
                 if (!(parameters[paramIndex] is T val))
-                    throw new QueryExecutionException(new Sql4CdsError(16, 2786, $"The data type of substitution parameter {paramIndex + 1} does not match the expected type of the format specification"));
+                    throw new QueryExecutionException(Sql4CdsError.InvalidDataTypeForSubstitutionParameter(paramIndex + 1));
 
                 paramIndex++;
                 return val;
@@ -1275,7 +1275,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                         else
                         {
-                            throw new QueryExecutionException(new Sql4CdsError(16, 2787, $"Invalid format specification: '{match.Value}'"));
+                            throw new QueryExecutionException(Sql4CdsError.InvalidFormatSpecification(match.Value));
                         }
                         break;
 
@@ -1289,6 +1289,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case "s":
+                    case "S_MSG":
                         var strValue = GetValue<SqlString>();
 
                         if (strValue.IsNull)
@@ -1301,7 +1302,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     default:
-                        throw new QueryExecutionException(new Sql4CdsError(16, 2787, $"Invalid format specification: '{match.Value}'"));
+                        throw new QueryExecutionException(Sql4CdsError.InvalidFormatSpecification(match.Value));
                 }
 
                 if (width != null && formatted.Length < Int32.Parse(width))
@@ -1317,7 +1318,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return formatted;
             });
 
-            return context.PrimaryDataSource.DefaultCollation.ToSqlString(msg);
+            return (context?.PrimaryDataSource.DefaultCollation ?? Collation.USEnglish).ToSqlString(msg);
         }
     }
 

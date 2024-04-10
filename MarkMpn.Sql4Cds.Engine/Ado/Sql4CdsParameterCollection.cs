@@ -47,14 +47,14 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return _parameters
                 .Cast<Sql4CdsParameter>()
-                .ToDictionary(param => param.ParameterName, param => param.GetDataType(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(param => param.FullParameterName, param => param.GetDataType(), StringComparer.OrdinalIgnoreCase);
         }
 
         internal Dictionary<string, object> GetParameterValues()
         {
             return _parameters
                 .Cast<Sql4CdsParameter>()
-                .ToDictionary(param => param.ParameterName, param => (object) param.GetValue(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(param => param.FullParameterName, param => (object) param.GetValue(), StringComparer.OrdinalIgnoreCase);
         }
 
         public override bool Contains(string value)

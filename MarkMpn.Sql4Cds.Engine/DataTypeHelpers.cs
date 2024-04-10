@@ -251,7 +251,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (type is XmlDataTypeReference)
                     return Int32.MaxValue;
                 else
-                    throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 2715, $"Cannot find data type {type.ToSql()}", type));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidDataType(type));
             }
 
             switch (dataType.SqlDataTypeOption)
@@ -611,23 +611,34 @@ namespace MarkMpn.Sql4Cds.Engine
         public CollationLabel CollationLabel { get; set; }
 
         /// <summary>
+        /// The error to use if a value of this type is used
+        /// </summary>
+        public Sql4CdsError CollationConflictError { get; set; }
+
+        /// <summary>
         /// Applies the precedence rules to convert values of different collations to a single collation
         /// </summary>
         /// <param name="lhsSql">The type of the first expression</param>
         /// <param name="rhsSql">The type of the second expression</param>
+        /// <param name="fragment">The query fragment to report any errors against</param>
+        /// <param name="operation">The operation name to include in the error message</param>
         /// <param name="collation">The final collation to use</param>
         /// <param name="collationLabel">The final collation label to use</param>
+        /// <param name="error">The error to use</param>
         /// <returns>The final collation to use</returns>
-        internal static bool TryConvertCollation(SqlDataTypeReference lhsSql, SqlDataTypeReference rhsSql, out Collation collation, out CollationLabel collationLabel)
+        internal static bool TryConvertCollation(SqlDataTypeReference lhsSql, SqlDataTypeReference rhsSql, TSqlFragment fragment, string operation, out Collation collation, out CollationLabel collationLabel, out Sql4CdsError error)
         {
             collation = null;
             collationLabel = CollationLabel.NoCollation;
+            error = null;
 
             if (!(lhsSql is SqlDataTypeReferenceWithCollation lhsSqlWithColl))
                 return false;
 
             if (!(rhsSql is SqlDataTypeReferenceWithCollation rhsSqlWithColl))
                 return false;
+
+            error = Sql4CdsError.CollationConflict(fragment, lhsSqlWithColl.Collation, rhsSqlWithColl.Collation, operation);
 
             // Two different explicit collations cannot be converted
             if (lhsSqlWithColl.CollationLabel == CollationLabel.Explicit &&

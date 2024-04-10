@@ -11,6 +11,7 @@ using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.Management.QueryExecution;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
+using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 
@@ -127,14 +128,14 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                     con.InfoMessage += (s, msg) =>
                     {
-                        sqlScriptEditorControl.Results.AddStringToMessages(msg.Message + "\r\n\r\n");
+                        sqlScriptEditorControl.Results.AddStringToMessages(msg.Message.Message + "\r\n\r\n");
                         resultFlag |= 1; // Success
                     };
 
                     cmd.StatementCompleted += (s, stmt) =>
                     {
                         if (tabPage != null)
-                            ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource, true);
+                            ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource, true, null);
 
                         if (stmt.Message != null)
                             sqlScriptEditorControl.Results.AddStringToMessages(stmt.Message + "\r\n\r\n");
@@ -170,6 +171,10 @@ namespace MarkMpn.Sql4Cds.SSMS
                         catch (Exception ex)
                         {
                             AddException(sqlScriptEditorControl, textSpan, ex);
+
+                            if (ex is Sql4CdsException sqlEx && sqlEx.InnerException is QueryExecutionException qee && tabPage != null)
+                                ShowPlan(sqlScriptEditorControl, tabPage, GetRootNode(qee.Node), dataSource, true, qee);
+
                             resultFlag |= 2; // Failure
                         }
 
@@ -188,6 +193,19 @@ namespace MarkMpn.Sql4Cds.SSMS
             {
                 VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
             }
+        }
+
+        private IRootExecutionPlanNode GetRootNode(IExecutionPlanNode node)
+        {
+            while (node != null)
+            {
+                if (node is IRootExecutionPlanNode root)
+                    return root;
+
+                node = node.Parent;
+            }
+
+            return null;
         }
 
         private void OnCancelQuery(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)
@@ -255,7 +273,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                     sqlScriptEditorControl.Results.ResultsTabCtrl.SelectedTab = tabPage;
 
                     foreach (var query in plans)
-                        ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, false);
+                        ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, false, null);
 
                     var resultFlag = 1; // Success
 
@@ -289,7 +307,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             return tabPage;
         }
 
-        private void ShowPlan(SqlScriptEditorControlWrapper sqlScriptEditorControl, TabPage tabPage, IRootExecutionPlanNode query, DataSource dataSource, bool executed)
+        private void ShowPlan(SqlScriptEditorControlWrapper sqlScriptEditorControl, TabPage tabPage, IRootExecutionPlanNode query, DataSource dataSource, bool executed, QueryExecutionException ex)
         {
             if (tabPage.InvokeRequired)
             {
@@ -297,7 +315,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                 {
                     ThreadHelper.ThrowIfNotOnUIThread();
 
-                    ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, executed);
+                    ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, executed, ex);
                 }));
                 return;
             }
@@ -316,7 +334,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                 AutoEllipsis = true,
                 UseMnemonic = false
             };
-            var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = executed, DataSources = new Dictionary<string, DataSource> { [dataSource.Name] = dataSource } };
+            var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = executed, DataSources = new Dictionary<string, DataSource> { [dataSource.Name] = dataSource }, Exception = ex };
             planView.Plan = query;
 
             planView.NodeSelected += (s, e) =>

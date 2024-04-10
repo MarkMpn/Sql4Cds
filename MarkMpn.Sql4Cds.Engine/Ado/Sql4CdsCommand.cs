@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine
             set
             {
                 if (value != null)
-                    throw new Sql4CdsException(new Sql4CdsError(16, 40517, "Transactions are not supported"));
+                    throw new Sql4CdsException(Sql4CdsError.NotSupported(null, "BEGIN TRAN"));
             }
         }
 
@@ -218,7 +218,12 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (Exception ex)
             {
-                _connection.TelemetryClient.TrackException(ex, new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName });
+                var exProps = new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName };
+
+                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
+                    exProps["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
+
+                _connection.TelemetryClient.TrackException(ex, exProps);
 
                 if (ex is Sql4CdsException)
                     throw;
@@ -278,11 +283,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         foreach (Sql4CdsParameter sql4cdsParam in Parameters)
                         {
-                            if (!requiredParameters.Contains(sql4cdsParam.ParameterName))
+                            if (!requiredParameters.Contains(sql4cdsParam.FullParameterName))
                                 continue;
 
                             var param = cmd.CreateParameter();
-                            param.ParameterName = sql4cdsParam.ParameterName;
+                            param.ParameterName = sql4cdsParam.FullParameterName;
 
                             if (sql4cdsParam.Value is SqlEntityReference er)
                                 param.Value = (SqlGuid)er;
@@ -293,7 +298,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     }
 
-                    return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database, node, _cts.Token);
+                    return new SqlDataReaderWrapper(con, cmd, behavior, node, _cts.Token);
                 }
 
                 var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
@@ -304,14 +309,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Capture the values of output parameters
                     foreach (var param in Parameters.Cast<Sql4CdsParameter>().Where(p => p.Direction == ParameterDirection.Output))
-                        param.SetOutputValue((INullable)reader.ParameterValues[param.ParameterName]);
+                        param.SetOutputValue((INullable)reader.ParameterValues[param.FullParameterName]);
                 }
 
                 return reader;
             }
             catch (Exception ex)
             {
-                _connection.TelemetryClient.TrackException(ex, new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName });
+                var exProps = new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName };
+
+                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
+                    exProps["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
+
+                _connection.TelemetryClient.TrackException(ex, exProps);
                 throw;
             }
         }

@@ -259,7 +259,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if ((aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum))
                         {
                             if (!(aggregateType is SqlDataTypeReference sqlRetType) || !sqlRetType.SqlDataTypeOption.IsNumeric())
-                                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 8117, $"Operand data type {aggregateType.ToSql()} is invalid for {aggregate.Value.AggregateType} operator", aggregate.Value.SqlExpression));
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.Create(8117, aggregate.Value.SqlExpression, aggregateType.ToSql(), aggregate.Value.AggregateType.ToString()));
 
                             if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
                                 aggregateType = DataTypeHelpers.Int;

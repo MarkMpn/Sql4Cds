@@ -372,7 +372,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Archive queries can fail with this error code if the Synapse database isn't provisioned yet or
                 // no retention policy has yet been applied to this table. In either case there are no records to return
                 // so we can just return an empty result set rather than erroring
-                if (FetchXml.DataSource == "archive" && (ex.Detail.ErrorCode == -2146863832 || ex.Detail.ErrorCode == -2146863829))
+                if (FetchXml.DataSource == "retained" && (ex.Detail.ErrorCode == -2146863832 || ex.Detail.ErrorCode == -2146863829))
                     yield break;
 
                 throw;
@@ -577,6 +577,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
                     linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+            }
+        }
+
+        public void RemoveAttributes()
+        {
+            // Remove any existing sorts
+            if (Entity.Items != null)
+            {
+                Entity.Items = Entity.Items.Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                    linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
             }
         }
 
@@ -1159,7 +1171,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 {
-                    if (linkEntity.SemiJoin)
+                    if (linkEntity.SemiJoin || linkEntity.linktype == "in" || linkEntity.linktype == "exists")
                         continue;
 
                     if (primaryKey != null)
@@ -1211,7 +1223,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var cond in filter.Items.OfType<condition>())
             {
-                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid || cond.@operator == @operator.neq || cond.@operator == @operator.neuserid)
+                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid ||
+                    cond.@operator == @operator.neq || cond.@operator == @operator.neuserid || cond.@operator == @operator.notlike ||
+                    cond.@operator == @operator.notin || cond.@operator == @operator.notunder || cond.@operator == @operator.notbeginwith ||
+                    cond.@operator == @operator.notbetween || cond.@operator == @operator.notcontainvalues || cond.@operator == @operator.notendwith)
                     continue;
 
                 var fullname = (cond.entityname?.EscapeIdentifier() ?? alias) + "." + (cond.alias ?? cond.attribute).EscapeIdentifier();
@@ -1483,12 +1498,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             if (pageSizeHints.Count > 1)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(15, 2042, "Conflicting FETCHXML_PAGE_SIZE optimizer hints specified", pageSizeHints[1]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.ConflictingHints(pageSizeHints[0], "FETCHXML_PAGE_SIZE"));
 
             var pageSize = Int32.Parse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length));
 
             if (pageSize < 1 || pageSize > 5000)
-                throw new NotSupportedQueryFragmentException(new Sql4CdsError(16, 304, $"'{pageSize}' is out of range for FETCHXML_PAGE_SIZE option, must be between 1 and 5000", pageSizeHints[0]));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidHint(pageSizeHints[0])) { Suggestion = $"'{pageSize}' is out of range for FETCHXML_PAGE_SIZE option, must be between 1 and 5000" };
 
             FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
         }
@@ -1519,7 +1534,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // If we've got AND-ed conditions that have an entityname that refers to an inner-joined link entity, move
             // the condition to that link entity
-            var innerLinkEntities = Entity.GetLinkEntities(innerOnly: true).ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
+            var innerLinkEntities = Entity
+                .GetLinkEntities(innerOnly: true)
+                .Where(le => le.alias != null)
+                .ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
 
             Entity.Items = MoveFiltersToLinkEntities(innerLinkEntities, Entity.Items);
             Entity.Items = MoveConditionsToLinkEntities(innerLinkEntities, Entity.Items);
@@ -1695,8 +1713,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var singleConditionFilters = filter.Items
                 .OfType<filter>()
-                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.OfType<condition>().Count() == 1)
-                .ToDictionary(f => f, f => (condition)f.Items[0]);
+                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.Where(x => !(x is filter)).Count() == 1)
+                .ToDictionary(f => f, f => f.Items[0]);
 
             for (var i = 0; i < filter.Items.Length; i++)
             {

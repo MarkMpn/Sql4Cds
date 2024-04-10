@@ -278,7 +278,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // Can't join with archived data
-            if (leftFetch.FetchXml.DataSource == "archive" || rightFetch.FetchXml.DataSource == "archive")
+            if (leftFetch.FetchXml.DataSource == "retained" || rightFetch.FetchXml.DataSource == "retained")
                 return false;
 
             // If one source is distinct and the other isn't, joining the two won't produce the expected results
@@ -374,7 +374,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // in the new link entity or we must be using an inner join so we can use a post-filter node
             var additionalCriteria = AdditionalJoinCriteria;
 
-            if (TranslateFetchXMLCriteria(context, dataSource.Metadata, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter))
+            if (TranslateFetchXMLCriteria(context, dataSource, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, null, null, out var filter))
             {
                 rightEntity.AddItem(filter);
                 additionalCriteria = null;
@@ -673,27 +673,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            if (AdditionalJoinCriteria != null)
-            {
-                foreach (var col in AdditionalJoinCriteria.GetColumns())
-                {
-                    if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
-                        requiredColumns.Add(col);
-                }
-            }
+            var criteriaCols = AdditionalJoinCriteria?.GetColumns() ?? Enumerable.Empty<string>();
 
             // Work out which columns need to be pushed down to which source
             var leftSchema = LeftSource.GetSchema(context);
             var rightSchema = RightSource.GetSchema(context);
 
-            var leftColumns = requiredColumns
+            var leftColumns = requiredColumns.Where(col => OutputLeftSchema)
+                .Concat(criteriaCols)
                 .Where(col => leftSchema.ContainsColumn(col, out _))
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var rightColumns = requiredColumns
+            var rightColumns = requiredColumns.Where(col => OutputRightSchema)
+                .Concat(criteriaCols)
                 .Where(col => rightSchema.ContainsColumn(col, out _))
                 .Concat(DefinedValues.Values)
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             if (LeftAttribute != null)
