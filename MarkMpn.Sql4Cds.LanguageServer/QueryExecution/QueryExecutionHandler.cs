@@ -157,6 +157,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
             var infoMessageHandler = (EventHandler<InfoMessageEventArgs>)((object sender, InfoMessageEventArgs msg) =>
             {
+                var message = msg.Message.Message;
+
+                if (msg.Message.Class != 0 && msg.Message.Class != 10)
+                    message += $"\r\nMsg {msg.Message.Number}, Level {msg.Message.Class}, State {msg.Message.State}";
+
                 _ = _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
                 {
                     OwnerUri = request.OwnerUri,
@@ -164,7 +169,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     {
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
-                        Message = msg.Message.Message
+                        Message = message
                     }
                 });
             });

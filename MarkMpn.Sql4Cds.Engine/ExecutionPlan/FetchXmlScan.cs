@@ -1241,7 +1241,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, EntityMetadata entityMetadata, AttributeMetadata attrMetadata, bool innerJoin)
         {
-            var notNull = innerJoin && (attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute || attrMetadata.LogicalName == "createdon" || (attrMetadata.EntityLogicalName != "systemuser" && (attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby")));
+            var notNull = innerJoin && (attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute || attrMetadata.LogicalName == "createdon");
 
             // Add the logical attribute
             AddSchemaAttribute(schema, aliases, fullName, simpleName, type, notNull);

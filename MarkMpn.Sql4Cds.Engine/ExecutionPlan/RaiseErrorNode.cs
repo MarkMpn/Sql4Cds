@@ -20,6 +20,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private readonly Timer _timer = new Timer();
 
         [Category("Raise Error")]
+        [Description("The error number that is generated")]
+        [DisplayName("Error Number")]
+        public ScalarExpression ErrorNumber { get; set; }
+
+        [Category("Raise Error")]
         [Description("The error message that is generated")]
         [DisplayName("Error Message")]
         public ScalarExpression ErrorMessage { get; set; }
@@ -72,7 +77,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return new RaiseErrorNode
             {
-                ErrorMessage = ErrorMessage.Clone(),
+                ErrorNumber = ErrorNumber?.Clone(),
+                ErrorMessage = ErrorMessage?.Clone(),
                 Severity = Severity.Clone(),
                 State = State.Clone(),
                 Parameters = Parameters.Select(p => p.Clone()).ToArray(),
@@ -95,29 +101,55 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
-            var ecc = new ExpressionCompilationContext(context, null, null);
-            var eec = new ExpressionExecutionContext(context);
+            try
+            {
+                var ecc = new ExpressionCompilationContext(context, null, null);
+                var eec = new ExpressionExecutionContext(context);
 
-            var msg = Execute<SqlString>(ErrorMessage, ecc, eec, DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-            var severity = Execute<SqlInt32>(Severity, ecc, eec, DataTypeHelpers.Int);
-            var state = Execute<SqlInt32>(State, ecc, eec, DataTypeHelpers.Int);
+                SqlInt32 num;
+                SqlString msg;
 
-            if (severity.Value > 18)
-                throw new QueryExecutionException(Sql4CdsError.InvalidSeverityLevel(18));
+                if (ErrorNumber == null)
+                {
+                    num = 50000;
+                    msg = Execute<SqlString>(ErrorMessage, ecc, eec, DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                }
+                else
+                {
+                    num = Execute<SqlInt32>(ErrorNumber, ecc, eec, DataTypeHelpers.Int);
+                    msg = Sql4CdsError.GetAllErrors().SingleOrDefault(e => e.Number == num.Value)?.Message;
 
-            if (severity.Value < 0)
-                severity = 0;
+                    if (num < 13000 || num == 50000)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidErrorNumber(num.Value));
+                }
 
-            if (state.Value > 255)
-                state = 255;
-            else if (state.Value < 0)
-                state = 1;
+                var severity = Execute<SqlInt32>(Severity, ecc, eec, DataTypeHelpers.Int);
+                var state = Execute<SqlInt32>(State, ecc, eec, DataTypeHelpers.Int);
 
-            msg = ExpressionFunctions.FormatMessage(msg, eec, Parameters.Select(p => (INullable)p.Compile(ecc)(eec)).ToArray());
+                if (severity.Value > 18)
+                    throw new QueryExecutionException(Sql4CdsError.InvalidSeverityLevel(18));
 
-            context.Log(new Sql4CdsError((byte)severity.Value, -1, 50000, null, null, (byte)state.Value, msg.IsNull ? null : msg.Value));
-            recordsAffected = 0;
-            message = null;
+                if (severity.Value < 0)
+                    severity = 0;
+
+                if (state.Value > 255)
+                    state = 255;
+                else if (state.Value < 0)
+                    state = 1;
+
+                msg = ExpressionFunctions.FormatMessage(msg, eec, Parameters.Select(p => (INullable)p.Compile(ecc)(eec)).ToArray());
+
+                context.Log(new Sql4CdsError((byte)severity.Value, -1, num.Value, null, null, (byte)state.Value, msg.IsNull ? null : msg.Value));
+                recordsAffected = 0;
+                message = null;
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
         }
 
         private T Execute<T>(ScalarExpression expression, ExpressionCompilationContext ecc, ExpressionExecutionContext eec, DataTypeReference dataType)

@@ -207,7 +207,12 @@ namespace MarkMpn.Sql4Cds.XTB
             _connection.ApplicationName = "XrmToolBox";
             _connection.InfoMessage += (s, msg) =>
             {
-                Execute(() => ShowResult(msg.Statement, null, null, msg.Message.Message, null));
+                var message = msg.Message.Message;
+
+                if (msg.Message.Class != 0 && msg.Message.Class != 10)
+                    message += $"\r\nMsg {msg.Message.Number}, Level {msg.Message.Class}, State {msg.Message.State}";
+
+                Execute(() => ShowResult(msg.Statement, null, null, message, null));
             };
         }
 

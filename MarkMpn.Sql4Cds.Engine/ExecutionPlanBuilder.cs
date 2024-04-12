@@ -4,6 +4,7 @@ using System.Data.SqlTypes;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.ServiceModel;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
@@ -644,8 +645,9 @@ namespace MarkMpn.Sql4Cds.Engine
             raiserror.FirstParameter.GetType(ecc, out var msgType);
 
             // T-SQL supports using integer values for RAISERROR but we don't have sys.messages available so require a string
-            if (!(msgType is SqlDataTypeReference msgSqlType) || !msgSqlType.SqlDataTypeOption.IsStringType())
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(raiserror.FirstParameter, "predefined error number")) { Suggestion = "Define a message string instead of a number" };
+            if ((!(msgType is SqlDataTypeReference msgSqlType) || !msgSqlType.SqlDataTypeOption.IsStringType()) &&
+                !msgType.IsSameAs(DataTypeHelpers.Int))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidRaiseErrorParameterType(raiserror.FirstParameter, msgType, 1));
 
             // Severity and State must be integers
             raiserror.SecondParameter.GetType(ecc, out var severityType);
@@ -691,7 +693,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 new RaiseErrorNode
                 {
-                    ErrorMessage = raiserror.FirstParameter,
+                    ErrorNumber = msgType.IsSameAs(DataTypeHelpers.Int) ? raiserror.FirstParameter : null,
+                    ErrorMessage = msgType.IsSameAs(DataTypeHelpers.Int) ? null : raiserror.FirstParameter,
                     Severity = raiserror.SecondParameter,
                     State = raiserror.ThirdParameter,
                     Parameters = raiserror.OptionalParameters.ToArray()
@@ -4129,6 +4132,21 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
                 }
+                else if (table.SchemaObject.SchemaIdentifier?.Value.Equals("sys", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (!Enum.TryParse<SystemFunction>(table.SchemaObject.BaseIdentifier.Value, true, out var systemFunction))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
+
+                    if (typeof(SystemFunction).GetField(systemFunction.ToString()).GetCustomAttribute<SystemObjectTypeAttribute>().Type != SystemObjectType.View)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.FunctionCalledWithoutParameters(table.SchemaObject));
+
+                    return new SystemFunctionNode
+                    {
+                        DataSource = dataSource.Name,
+                        Alias = table.Alias?.Value ?? systemFunction.ToString(),
+                        SystemFunction = systemFunction
+                    };
+                }
 
                 if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) &&
                     !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
@@ -4424,6 +4442,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (!Enum.TryParse<SystemFunction>(tvf.SchemaObject.BaseIdentifier.Value, true, out var systemFunction))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
+
+                    if (typeof(SystemFunction).GetField(systemFunction.ToString()).GetCustomAttribute<SystemObjectTypeAttribute>().Type != SystemObjectType.Function)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NonFunctionCalledWithParameters(tvf.SchemaObject));
 
                     execute = new SystemFunctionNode
                     {
