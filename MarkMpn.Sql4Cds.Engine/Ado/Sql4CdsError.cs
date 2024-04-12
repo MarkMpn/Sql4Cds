@@ -83,6 +83,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public TSqlFragment Fragment { get; }
 
+        internal static IEnumerable<Sql4CdsError> GetAllErrors()
+        {
+            return _errorNumberToDetails.Values;
+        }
+
         internal static Sql4CdsError Create(int number, TSqlFragment fragment)
         {
             var template = _errorNumberToDetails[number];
@@ -181,6 +186,18 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var name = obj.ToSql();
             return Create(208, obj, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError NonFunctionCalledWithParameters(SchemaObjectName obj)
+        {
+            var name = obj.ToSql();
+            return Create(215, obj, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError FunctionCalledWithoutParameters(SchemaObjectName obj)
+        {
+            var name = obj.ToSql();
+            return Create(216, obj, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
         internal static Sql4CdsError InvalidSprocName(SchemaObjectName sproc)
@@ -386,7 +403,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal static Sql4CdsError InvalidFunction(Identifier identifier)
         {
-            return Create(195, identifier, (SqlInt32)identifier.Value.Length, Collation.USEnglish.ToSqlString(identifier.Value), "built-in function name");
+            return Create(195, identifier, (SqlInt32)identifier.Value.Length, Collation.USEnglish.ToSqlString(identifier.Value), Collation.USEnglish.ToSqlString("built-in function name"));
         }
 
         internal static Sql4CdsError InvalidFunctionParameterCount(Identifier identifier, int expectedArgs)
@@ -567,6 +584,11 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var colName = col.GetColumnName();
             return Create(7670, col, (SqlInt32)colName.Length, Collation.USEnglish.ToSqlString(colName));
+        }
+
+        internal static Sql4CdsError InvalidErrorNumber(int number)
+        {
+            return Create(2732, null, (SqlInt32)number);
         }
 
         internal static Sql4CdsError InvalidSeverityLevel(int maxSeverity)

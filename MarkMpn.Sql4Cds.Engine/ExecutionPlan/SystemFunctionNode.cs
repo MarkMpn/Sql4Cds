@@ -66,6 +66,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         aliases: null,
                         primaryKey: null,
                         sortOrder: null);
+
+                case SystemFunction.messages:
+                    return new NodeSchema(
+                        schema: new ColumnList
+                        {
+                            [PrefixWithAlias("message_id")] = new ColumnDefinition(DataTypeHelpers.Int, false, false),
+                            [PrefixWithAlias("language_id")] = new ColumnDefinition(DataTypeHelpers.SmallInt, false, false),
+                            [PrefixWithAlias("severity")] = new ColumnDefinition(DataTypeHelpers.TinyInt, false, false),
+                            [PrefixWithAlias("is_event_logged")] = new ColumnDefinition(DataTypeHelpers.Bit, false, false),
+                            [PrefixWithAlias("text")] = new ColumnDefinition(DataTypeHelpers.NVarChar(2048, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false)
+                        },
+                        aliases: null,
+                        primaryKey: null,
+                        sortOrder: null);
             }
 
             throw new NotSupportedException("Unsupported function " + SystemFunction);
@@ -98,6 +112,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     break;
 
+                case SystemFunction.messages:
+                    foreach (var err in Sql4CdsError.GetAllErrors())
+                    {
+                        yield return new Entity
+                        {
+                            [PrefixWithAlias("message_id")] = (SqlInt32)err.Number,
+                            [PrefixWithAlias("language_id")] = (SqlInt16)1033,
+                            [PrefixWithAlias("severity")] = (SqlByte)err.Class,
+                            [PrefixWithAlias("is_event_logged")] = SqlBoolean.False,
+                            [PrefixWithAlias("text")] = dataSource.DefaultCollation.ToSqlString(err.Message)
+                        };
+                    }
+                    break;
+
                 default:
                     throw new NotSupportedException("Unsupported function " + SystemFunction);
             }
@@ -119,6 +147,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
     enum SystemFunction
     {
-        fn_helpcollations
+        [SystemObjectType(SystemObjectType.Function)]
+        fn_helpcollations,
+
+        [SystemObjectType(SystemObjectType.View)]
+        messages
+    }
+
+    enum SystemObjectType
+    {
+        Function,
+        View
+    }
+
+    class SystemObjectTypeAttribute : Attribute
+    {
+        public SystemObjectTypeAttribute(SystemObjectType type)
+        {
+            Type = type;
+        }
+
+        public SystemObjectType Type { get; }
     }
 }
