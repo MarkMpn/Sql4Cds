@@ -128,7 +128,12 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                     con.InfoMessage += (s, msg) =>
                     {
-                        sqlScriptEditorControl.Results.AddStringToMessages(msg.Message.Message + "\r\n\r\n");
+                        var message = msg.Message.Message;
+
+                        if (msg.Message.Class != 0 && msg.Message.Class != 10)
+                            message += $"\r\nMsg {msg.Message.Number}, Level {msg.Message.Class}, State {msg.Message.State}";
+
+                        sqlScriptEditorControl.Results.AddStringToMessages(message + "\r\n\r\n");
                         resultFlag |= 1; // Success
                     };
 
