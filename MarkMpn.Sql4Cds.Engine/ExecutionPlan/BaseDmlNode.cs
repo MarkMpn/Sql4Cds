@@ -488,7 +488,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             // Convert to destination SQL type - don't do this if we're converting from an EntityReference to a PartyList so
                             // we don't lose the entity name during the conversion via a string
-                            expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType, throwOnTruncate: true);
+                            expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType, throwOnTruncate: true, table: logicalName, column: destAttributeName);
                         }
 
                         // Convert to final .NET SDK type

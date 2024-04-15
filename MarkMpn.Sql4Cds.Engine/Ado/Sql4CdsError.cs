@@ -317,9 +317,9 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(8116, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type)), (SqlInt32)paramNum, Collation.USEnglish.ToSqlString(function));
         }
 
-        internal static Sql4CdsError StringTruncation(TSqlFragment fragment)
+        internal static Sql4CdsError StringTruncation(TSqlFragment fragment, string table, string column, string value)
         {
-            return Create(8152, fragment);
+            return Create(2628, fragment, (SqlInt32)table.Length, Collation.USEnglish.ToSqlString(table), (SqlInt32)column.Length, Collation.USEnglish.ToSqlString(column), (SqlInt32)value.Length, Collation.USEnglish.ToSqlString(value));
         }
 
         internal static Sql4CdsError ConversionError(TSqlFragment fragment, DataTypeReference from, DataTypeReference to)

@@ -72,6 +72,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             switch (fault.ErrorCode)
             {
+                case -2146892759: return 2628;
+                case -2147204303:
                 case -2147204288: return 8152;
                 case -2147217098: return 8115;
                 case -2147204304:
