@@ -576,7 +576,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="styleType">An optional parameter defining the type of the <paramref name="style"/> expression</param>
         /// <param name="convert">An optional parameter containing the SQL CONVERT() function call to report any errors against</param>
         /// <returns>An expression to generate values of the required type</returns>
-        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, TSqlFragment convert = null, bool throwOnTruncate = false)
+        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, TSqlFragment convert = null, bool throwOnTruncate = false, string table = null, string column = null)
         {
             if (from.IsSameAs(to))
                 return expr;
@@ -683,30 +683,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Truncate the value to the specified length, but some special cases
                         string valueOnTruncate = null;
-                        Exception exceptionOnTruncate = null;
+                        Func<string,Sql4CdsError> errorOnTruncate = null;
 
                         if (sourceType == typeof(SqlInt32) || sourceType == typeof(SqlInt16) || sourceType == typeof(SqlByte))
                         {
                             if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
                                 valueOnTruncate = "*";
                             else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
-                                exceptionOnTruncate = new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, toSqlType));
+                                errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
                         }
                         else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
                             (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
                         {
-                            exceptionOnTruncate = new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, toSqlType));
+                            errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
                         }
                         else if (throwOnTruncate)
                         {
-                            exceptionOnTruncate = new QueryExecutionException(Sql4CdsError.StringTruncation(convert));
+                            errorOnTruncate = truncated => Sql4CdsError.StringTruncation(convert, table, column, truncated);
                         }
 
-                        expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Exception>()),
+                        expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Func<string,Sql4CdsError>>()),
                             expr,
                             Expression.Constant(maxLength),
                             Expression.Constant(valueOnTruncate, typeof(string)),
-                            Expression.Constant(exceptionOnTruncate, typeof(Exception)));
+                            Expression.Constant(errorOnTruncate, typeof(Func<string,Sql4CdsError>)));
                     }
                     else if (toSqlType.Parameters[0].LiteralType != LiteralType.Max)
                     {
@@ -782,7 +782,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return collation.ToSqlString(value.Value);
         }
 
-        private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Exception exceptionOnTruncate)
+        private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Func<string,Sql4CdsError> errorOnTruncate)
         {
             if (value.IsNull)
                 return value;
@@ -793,10 +793,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (valueOnTruncate != null)
                 return new SqlString(valueOnTruncate, value.LCID, value.SqlCompareOptions);
 
-            if (exceptionOnTruncate != null)
-                throw exceptionOnTruncate;
+            var truncated = value.Value.Substring(0, maxLength);
 
-            return new SqlString(value.Value.Substring(0, maxLength), value.LCID, value.SqlCompareOptions);
+            if (errorOnTruncate != null)
+                throw new QueryExecutionException(errorOnTruncate(truncated));
+
+            return new SqlString(truncated, value.LCID, value.SqlCompareOptions);
         }
 
         private static EntityCollection CreateEntityCollection(SqlEntityReference value)
