@@ -364,7 +364,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
                 });
 
-                task.Wait(context.Options.CancellationToken);
+                try
+                {
+                    task.Wait(context.Options.CancellationToken);
+                }
+                catch (AggregateException ex)
+                {
+                    throw ex.InnerException;
+                }
+
                 res = task.Result;
             }
             catch (FaultException<OrganizationServiceFault> ex)
@@ -429,7 +437,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
                 });
 
-                task.Wait(context.Options.CancellationToken);
+                try
+                {
+                    task.Wait(context.Options.CancellationToken);
+                }
+                catch (AggregateException ex)
+                {
+                    throw ex.InnerException;
+                }
+
                 var nextPage = task.Result;
 
                 PagesRetrieved++;
