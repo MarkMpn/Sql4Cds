@@ -1165,6 +1165,23 @@ namespace MarkMpn.Sql4Cds.Engine
                 impersonate.ExecuteContext.Kind != ExecuteAsOption.User)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(impersonate.ExecuteContext, impersonate.ExecuteContext.Kind.ToString()));
 
+            var subqueries = new ScalarSubqueryVisitor();
+            impersonate.ExecuteContext.Principal.Accept(subqueries);
+            if (subqueries.Subqueries.Count > 0)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SubqueriesNotAllowed(subqueries.Subqueries[0]));
+
+            var columns = new ColumnCollectingVisitor();
+            impersonate.ExecuteContext.Principal.Accept(columns);
+            if (columns.Columns.Count > 0)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.ConstantExpressionsOnly(columns.Columns[0]));
+
+            // Validate the expression
+            var ecc = new ExpressionCompilationContext(_nodeContext, null, null);
+            var type = impersonate.ExecuteContext.Principal.GetType(ecc, out _);
+
+            if (type != typeof(SqlString) && type != typeof(SqlEntityReference))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTypeForStatement(impersonate.ExecuteContext.Principal, "Execute As"));
+
             IExecutionPlanNodeInternal source;
 
             // Create a SELECT query to find the user ID
@@ -1218,6 +1235,16 @@ namespace MarkMpn.Sql4Cds.Engine
                             FirstExpression = impersonate.ExecuteContext.Kind == ExecuteAsOption.Login ? "domainname".ToColumnReference() : "systemuserid".ToColumnReference(),
                             ComparisonType = BooleanComparisonType.Equals,
                             SecondExpression = impersonate.ExecuteContext.Principal
+                        }
+                    },
+                    GroupByClause = new GroupByClause
+                    {
+                        GroupingSpecifications =
+                        {
+                            new ExpressionGroupingSpecification
+                            {
+                                Expression = impersonate.ExecuteContext.Principal
+                            }
                         }
                     }
                 }
@@ -2911,6 +2938,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (querySpec.GroupByClause.GroupByOption != GroupByOption.None)
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(querySpec.GroupByClause, $"GROUP BY {querySpec.GroupByClause.GroupByOption}"));
+
+                var groupByValidator = new GroupByValidatingVisitor();
+                querySpec.GroupByClause.Accept(groupByValidator);
+
+                if (groupByValidator.Error != null)
+                    throw new NotSupportedQueryFragmentException(groupByValidator.Error);
             }
 
             var schema = source.GetSchema(context);

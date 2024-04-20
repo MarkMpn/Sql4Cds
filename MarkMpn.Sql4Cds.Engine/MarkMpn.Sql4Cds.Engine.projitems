@@ -133,6 +133,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)StateTransitionLoader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\CteValidatorVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ExplicitCollationVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\GroupByValidatingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\JoinConditionVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetadataExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetadataQueryExtensions.cs" />
