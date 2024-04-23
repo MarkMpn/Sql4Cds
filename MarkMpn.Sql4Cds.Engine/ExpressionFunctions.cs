@@ -1405,6 +1405,23 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Given a lambda expression that accesses a property, return the property info
+        /// </summary>
+        /// <typeparam name="T">The type of value returned by the property</typeparam>
+        /// <param name="expression">The expression</param>
+        /// <returns>The property details</returns>
+        public static PropertyInfo GetPropertyInfo<T>(Expression<Func<T>> expression)
+        {
+            var lambda = (LambdaExpression)expression;
+            var prop = lambda.Body as MemberExpression;
+
+            if (prop == null)
+                throw new ArgumentException("Invalid Expression. Expression should consist of a property access only.");
+
+            return prop.Member as PropertyInfo;
+        }
+
+        /// <summary>
         /// Placeholder for a function argument when using <see cref="Call{T}(Expression{Func{T}}, Expression[])"/>
         /// </summary>
         /// <typeparam name="T">The type of value expected by the function argument</typeparam>
