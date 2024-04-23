@@ -235,11 +235,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             if (catchDepth == 0)
                                 break;
-                        }
 
-                        // Remove error information from context
-                        _errorDetails.Pop();
-                        context.Error = _errorDetails.FirstOrDefault();
+                            _instructionPointer++;
+                        }
                     }
                     else if (node is BeginCatchNode)
                     {

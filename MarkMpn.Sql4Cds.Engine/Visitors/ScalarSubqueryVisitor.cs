@@ -15,5 +15,10 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             Subqueries.Add(node);
         }
+
+        public override void ExplicitVisit(GroupByClause node)
+        {
+            // Subqueries aren't allowed in the GROUP BY clause - don't collect them so they are still present to produce validation errors later
+        }
     }
 }

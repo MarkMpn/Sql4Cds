@@ -71,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Do not recurse into subqueries - they'll be handled separately
         }
 
-        private bool IsAggregate(FunctionCall func)
+        internal static bool IsAggregate(FunctionCall func)
         {
             if (func.OverClause != null)
                 return false;

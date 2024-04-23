@@ -291,7 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = context.Schema.Schema[normalizedName].Type;
             var returnType = sqlType.ToNetType(out _);
-            cacheKey = $"({returnType})<ColumnReference>";
+            cacheKey = $"({GetTypeKey(sqlType, false)})<ColumnReference>";
 
             if (!createExpression)
                 return null;
@@ -392,7 +392,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ? DataTypeHelpers.NVarChar(str.Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)
                 : DataTypeHelpers.VarChar(str.Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
-            cacheKey = "<StringLiteral>";
+            cacheKey = $"<StringLiteral({GetTypeKey(sqlType, false)})>";
 
             if (!createExpression)
                 return null;
@@ -1225,7 +1225,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         // TODO: Ensure same collation isn't reused when cached compiled expression is executed for different collations
                         if (createExpression)
+                        {
+                            cacheKey += $"(COLLATE {collation.Collation.Name}";
                             paramExpressions[i] = Expr.Call(() => SqlTypeConverter.ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), paramExpressions[i], Expression.Constant(collation.Collation));
+                        }
 
                         paramTypes[i] = new SqlDataTypeReferenceWithCollation
                         {
@@ -1391,7 +1394,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.UndeclaredVariable(var));
 
             var netType = sqlType.ToNetType(out _);
-            cacheKey = $"({netType})<Variable>";
+            cacheKey = $"({GetTypeKey(sqlType, false)})<Variable>";
 
             if (!createExpression)
                 return null;
@@ -1534,6 +1537,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (escapeCacheKey != null)
                 cacheKey += $" ESCAPE {escapeCacheKey}";
+
+            cacheKey += $"(COLLATE {collation.Name}";
 
             return createExpression ? Expr.Call(() => Like(Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<bool>()), value, pattern, escape, Expression.Constant(like.NotDefined)) : null;
         }
@@ -2037,7 +2042,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            cacheKey = $"CONVERT({sqlType.ToSql()}, {valueCacheKey}";
+            cacheKey = $"CONVERT({GetTypeKey(sqlType, true)}, {valueCacheKey}";
             if (styleCacheKey != null)
                 cacheKey += ", " + styleCacheKey;
             cacheKey += ")";
@@ -2469,6 +2474,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 default:
                     throw new ArgumentOutOfRangeException(nameof(cmp));
             }
+        }
+
+        private static string GetTypeKey(DataTypeReference type, bool includeStringLength)
+        {
+            if (type is XmlDataTypeReference)
+                return "xml";
+
+            if (type is UserDataTypeReference userType)
+                return String.Join(".", userType.Name.Identifiers.Select(i => i.Value));
+
+            if (type is SqlDataTypeReference sqlType)
+            {
+                if (sqlType.Parameters.Count == 0)
+                    return sqlType.SqlDataTypeOption.ToString();
+
+                var key = sqlType.SqlDataTypeOption.IsStringType() && !includeStringLength ? sqlType.SqlDataTypeOption.ToString() : $"{sqlType.SqlDataTypeOption}({String.Join(",", sqlType.Parameters.Select(p => p.Value))})";
+
+                if (sqlType is SqlDataTypeReferenceWithCollation coll)
+                    key += " " + coll.Collation.Name;
+
+                return key;
+            }
+
+            throw new ArgumentOutOfRangeException(nameof(type));
         }
     }
 }

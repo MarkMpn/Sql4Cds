@@ -3,11 +3,9 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
-using System.Net.PeerToPeer;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.Xrm.Sdk;
+using System.Reflection;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Query;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -100,22 +98,58 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var userId = (Guid)userIdAccessor(entities[0]);
 
+                    PropertyInfo callerIdProp;
+
 #if NETCOREAPP
                     if (dataSource.Connection is ServiceClient svc)
-                        svc.CallerId = userId;
+                        callerIdProp = Expr.GetPropertyInfo(() => svc.CallerId);
 #else
                     if (dataSource.Connection is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
-                        svcProxy.CallerId = userId;
+                        callerIdProp = Expr.GetPropertyInfo(() => svcProxy.CallerId);
                     else if (dataSource.Connection is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
-                        webProxy.CallerId = userId;
+                        callerIdProp = Expr.GetPropertyInfo(() => webProxy.CallerId);
                     else if (dataSource.Connection is CrmServiceClient svc)
-                        svc.CallerId = userId;
+                        callerIdProp = Expr.GetPropertyInfo(() => svc.CallerId);
 #endif
                     else
                         throw new QueryExecutionException("Unexpected organization service type");
 
-                    recordsAffected = -1;
-                    message = $"Impersonated user {userId}";
+                    // Some application users can't be reliably impersonated - check the impersonation has actually worked and revert it if not
+                    var existingUserId = callerIdProp.GetValue(dataSource.Connection);
+
+                    callerIdProp.SetValue(dataSource.Connection, userId);
+
+                    try
+                    {
+                        try
+                        {
+                            var qry = new Microsoft.Xrm.Sdk.Query.QueryExpression("systemuser");
+                            qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
+                            var actualUserId = ((RetrieveMultipleResponse)dataSource.Execute(new RetrieveMultipleRequest { Query = qry })).EntityCollection.Entities.Single().Id;
+
+                            if (actualUserId != userId)
+                                throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), new ApplicationException("User was found but the server could not impersonate it"));
+
+                            recordsAffected = -1;
+                            message = $"Impersonated user {userId}";
+                        }
+                        catch
+                        {
+                            callerIdProp.SetValue(dataSource.Connection, existingUserId);
+                            throw;
+                        }
+                    }
+                    catch (QueryExecutionException ex)
+                    {
+                        if (ex.Errors[0].Number != 15517)
+                            throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), ex);
+
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), ex);
+                    }
                 }
             }
             catch (QueryExecutionException ex)

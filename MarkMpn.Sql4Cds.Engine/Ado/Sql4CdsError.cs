@@ -165,7 +165,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal static Sql4CdsError NonAggregateColumnReference(ColumnReferenceExpression column)
         {
-            var tableName = column.MultiPartIdentifier.Identifiers[column.MultiPartIdentifier.Identifiers.Count - 2].Value;
+            var tableName = column.MultiPartIdentifier.Identifiers.Count == 1 ? "" : column.MultiPartIdentifier.Identifiers[column.MultiPartIdentifier.Identifiers.Count - 2].Value;
             var columnName = column.MultiPartIdentifier.Identifiers[column.MultiPartIdentifier.Identifiers.Count - 1].Value;
 
             return Create(8120, column, (SqlInt32)tableName.Length, Collation.USEnglish.ToSqlString(tableName), (SqlInt32)columnName.Length, Collation.USEnglish.ToSqlString(columnName));
@@ -707,6 +707,27 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError DivideByZero()
         {
             return Create(8134, null);
+        }
+
+        internal static Sql4CdsError InvalidAggregateOrSubqueryInGroupByClause(TSqlFragment fragment)
+        {
+            return Create(144, fragment);
+        }
+
+        internal static Sql4CdsError SubqueriesNotAllowed(TSqlFragment fragment)
+        {
+            return Create(1046, fragment);
+        }
+
+        internal static Sql4CdsError ConstantExpressionsOnly(ColumnReferenceExpression col)
+        {
+            var name = col.GetColumnName();
+            return Create(128, col, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError InvalidTypeForStatement(TSqlFragment fragment, string name)
+        {
+            return Create(15533, fragment, name);
         }
 
         private static string GetTypeName(DataTypeReference type)

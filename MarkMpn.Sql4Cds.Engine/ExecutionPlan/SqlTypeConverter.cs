@@ -678,35 +678,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     if (toSqlType.Parameters[0].LiteralType == LiteralType.Integer && Int32.TryParse(toSqlType.Parameters[0].Value, out var maxLength))
                     {
-                        if (maxLength < 1)
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidLengthOrPrecision(toSqlType));
-
-                        // Truncate the value to the specified length, but some special cases
-                        string valueOnTruncate = null;
-                        Func<string,Sql4CdsError> errorOnTruncate = null;
-
-                        if (sourceType == typeof(SqlInt32) || sourceType == typeof(SqlInt16) || sourceType == typeof(SqlByte))
+                        if ((sourceType != typeof(SqlString) || fromSqlType.Parameters[0] is IntegerLiteral fromLengthParam && Int32.TryParse(fromLengthParam.Value, out var fromLength) && fromLength > maxLength))
                         {
-                            if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
-                                valueOnTruncate = "*";
-                            else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                            if (maxLength < 1)
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidLengthOrPrecision(toSqlType));
+
+                            // Truncate the value to the specified length, but some special cases
+                            string valueOnTruncate = null;
+                            Func<string, Sql4CdsError> errorOnTruncate = null;
+
+                            if (sourceType == typeof(SqlInt32) || sourceType == typeof(SqlInt16) || sourceType == typeof(SqlByte))
+                            {
+                                if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
+                                    valueOnTruncate = "*";
+                                else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                                    errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
+                            }
+                            else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
+                                (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
+                            {
                                 errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
-                        }
-                        else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
-                            (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
-                        {
-                            errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
-                        }
-                        else if (throwOnTruncate)
-                        {
-                            errorOnTruncate = truncated => Sql4CdsError.StringTruncation(convert, table, column, truncated);
-                        }
+                            }
+                            else if (throwOnTruncate)
+                            {
+                                errorOnTruncate = truncated => Sql4CdsError.StringTruncation(convert, table, column, truncated);
+                            }
 
-                        expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Func<string,Sql4CdsError>>()),
-                            expr,
-                            Expression.Constant(maxLength),
-                            Expression.Constant(valueOnTruncate, typeof(string)),
-                            Expression.Constant(errorOnTruncate, typeof(Func<string,Sql4CdsError>)));
+                            expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Func<string, Sql4CdsError>>()),
+                                expr,
+                                Expression.Constant(maxLength),
+                                Expression.Constant(valueOnTruncate, typeof(string)),
+                                Expression.Constant(errorOnTruncate, typeof(Func<string, Sql4CdsError>)));
+                        }
                     }
                     else if (toSqlType.Parameters[0].LiteralType != LiteralType.Max)
                     {
@@ -718,7 +721,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
                 }
 
-                if (targetCollation != null)
+                if (targetCollation != null && !targetCollation.Equals((fromSqlType as SqlDataTypeReferenceWithCollation)?.Collation))
                     expr = Expr.Call(() => ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), expr, Expression.Constant(targetCollation));
             }
 
