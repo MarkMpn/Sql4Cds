@@ -883,7 +883,7 @@ namespace MarkMpn.Sql4Cds.Engine
             print.Expression.Accept(subqueryVisitor);
 
             if (subqueryVisitor.Subqueries.Count > 0)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.Create(1046, print.Expression));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SubqueriesNotAllowed(print.Expression));
 
             // Check the expression for errors. Ensure it can be converted to a string
             var expr = print.Expression.Clone();
@@ -1179,7 +1179,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var ecc = new ExpressionCompilationContext(_nodeContext, null, null);
             var type = impersonate.ExecuteContext.Principal.GetType(ecc, out _);
 
-            if (type != typeof(SqlString) && type != typeof(SqlEntityReference))
+            if (type != typeof(SqlString) && type != typeof(SqlEntityReference) && type != typeof(SqlGuid))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTypeForStatement(impersonate.ExecuteContext.Principal, "Execute As"));
 
             IExecutionPlanNodeInternal source;
@@ -1249,6 +1249,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 }
             };
+
+            if (type != typeof(SqlString))
+            {
+                ((SelectScalarExpression)((QuerySpecification)selectStatement.QueryExpression).SelectElements[0]).Expression = new ConvertCall
+                {
+                    Parameter = impersonate.ExecuteContext.Principal,
+                    DataType = DataTypeHelpers.NVarChar(Int32.MaxValue, PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)
+                };
+            }
 
             var userIdSource = "systemuserid";
             var filterValueSource = "username";
