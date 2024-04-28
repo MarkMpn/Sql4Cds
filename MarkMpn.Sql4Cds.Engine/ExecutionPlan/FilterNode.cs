@@ -772,6 +772,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     !join.SemiJoin)
                     break;
 
+                // Only supported on regular database tables
+                var leftMeta = context.DataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name];
+                if (leftMeta.DataProviderId != null)
+                    break;
+
                 FetchLinkEntityType linkToAdd;
                 bool semiJoin;
                 string leftAlias;
