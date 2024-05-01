@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Mark Carrington")]
 [assembly: AssemblyProduct("MarkMpn.Sql4Cds")]
-[assembly: AssemblyCopyright("Copyright © 2019 - 2023 Mark Carrington")]
+[assembly: AssemblyCopyright("Copyright © 2019 - 2024 Mark Carrington")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
