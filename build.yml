@@ -103,7 +103,7 @@ steps:
       $cert.Import("$(CodeSigningCert.secureFilePath)", "$(CodeSigningCertPassword)", [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
       Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.18.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.18.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
       Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.19.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.19.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
-      Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.19.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
+      Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.20.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
 
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS 18 installer to pipeline
@@ -122,7 +122,7 @@ steps:
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS 20 installer to pipeline
   inputs:
-    targetPath: 'MarkMpn.Sql4Cds.SSMS.19.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi'
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.20.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi'
     artifact: 'SSMS20Installer'
     publishLocation: 'pipeline'
     
