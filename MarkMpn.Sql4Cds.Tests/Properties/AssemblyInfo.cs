@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("MarkMpn.Sql4Cds.Tests")]
-[assembly: AssemblyCopyright("Copyright ©  2021")]
+[assembly: AssemblyCopyright("Copyright © 2021 - 2024 Mark Carrington")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

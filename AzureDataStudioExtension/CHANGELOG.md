@@ -1,6 +1,6 @@
 # Change Log
 
-## [v9.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.1) - 2024-04-12
+## [v9.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.1) - 2024-05-02
 
 Added support for latest Fetch XML features
 Support `TRY`, `CATCH` &amp; `THROW` statements and related functions

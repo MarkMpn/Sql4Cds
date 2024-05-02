@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("MarkMpn.Sql4Cds.Engine.FetchXml.Tests")]
-[assembly: AssemblyCopyright("Copyright ©  2020")]
+[assembly: AssemblyCopyright("Copyright © 2020 - 2024 Mark Carrington")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
