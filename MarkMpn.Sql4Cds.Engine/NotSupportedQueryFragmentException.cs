@@ -30,6 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public NotSupportedQueryFragmentException(string message, TSqlFragment fragment, Exception innerException) : base(message, innerException)
         {
             Fragment = fragment;
+            Errors = new[] { Sql4CdsError.InternalError(message, fragment) };
         }
 
         /// <summary>

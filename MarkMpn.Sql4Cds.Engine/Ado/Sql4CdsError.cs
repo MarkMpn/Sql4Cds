@@ -106,6 +106,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return new Sql4CdsError(template.Class, template.Number, (string)ExpressionFunctions.FormatMessage(template.Message, null, values.Select(v => Collation.USEnglish.ToSqlString(v.ToString())).Cast<INullable>().ToArray()), fragment);
         }
 
+        internal static Sql4CdsError InternalError(string message, TSqlFragment fragment = null)
+        {
+            return new Sql4CdsError(16, 10337, message, fragment);
+        }
+
         internal static Sql4CdsError NotSupported(TSqlFragment fragment, string clause)
         {
             return Create(40517, fragment, (SqlInt32)clause.Length, Collation.USEnglish.ToSqlString(clause));

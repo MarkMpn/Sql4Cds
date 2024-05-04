@@ -40,14 +40,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (innerEx is FaultException<OrganizationServiceFault> innerFaultEx)
                         errors.Add(new Sql4CdsError(16, FaultCodeToSqlError(innerFaultEx.Detail), innerFaultEx.Message));
                     else
-                        errors.Add(new Sql4CdsError(16, 10337, innerEx.Message));
+                        errors.Add(Sql4CdsError.InternalError(innerEx.Message));
                 }
 
                 Errors = errors;
             }
             else
             {
-                Errors = new[] { new Sql4CdsError(16, 10337, message) };
+                Errors = new[] { Sql4CdsError.InternalError(message) };
             }
         }
 
