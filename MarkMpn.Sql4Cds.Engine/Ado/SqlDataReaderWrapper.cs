@@ -21,8 +21,8 @@ namespace MarkMpn.Sql4Cds.Engine
             _sqlCommand = sqlCommand;
             cancellationToken.Register(() => _sqlCommand.Cancel());
 
-            HandleException(() => _sqlDataReader = sqlCommand.ExecuteReader(behavior));
             _node = node;
+            HandleException(() => _sqlDataReader = sqlCommand.ExecuteReader(behavior));
 
             foreach (SqlParameter parameter in sqlCommand.Parameters)
                 _node.Parameters.Add(parameter.ParameterName);
