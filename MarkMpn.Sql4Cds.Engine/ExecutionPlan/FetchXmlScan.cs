@@ -747,7 +747,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                if (linkEntity.alias == null || linkEntity.Items == null)
+                    continue;
+
                 PrefixAliasedScalarAttributes(entity, linkEntity.Items, linkEntity.alias.EscapeIdentifier());
+            }
         }
 
         private Dictionary<string, List<ParameterizedCondition>> FindParameterizedConditions()

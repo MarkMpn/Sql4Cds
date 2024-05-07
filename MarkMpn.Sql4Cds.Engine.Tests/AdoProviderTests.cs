@@ -2049,5 +2049,31 @@ END CATCH";
                 Assert.AreEqual("Dapper", name);
             }
         }
+
+        [TestMethod]
+        public void IfExists()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                string message = null;
+
+                con.InfoMessage += (sender, e) =>
+                {
+                    message = e.Message.Message;
+                };
+
+                con.Execute(@"
+                    IF EXISTS(SELECT * FROM account WHERE name = 'Data8')
+                    BEGIN
+                        PRINT 'Exists'
+                    END
+                    ELSE
+                    BEGIN
+                        PRINT 'Not Exists'
+                    END");
+
+                Assert.AreEqual("Not Exists", message);
+            }
+        }
     }
 }

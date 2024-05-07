@@ -764,7 +764,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(r => r.Fault != null)
                 .ToList();
 
-            Interlocked.Add(ref count, resp.Responses.Count - errorResponses.Count);
+            Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
             Interlocked.Add(ref errorCount, errorResponses.Count);
 
             var error = errorResponses.FirstOrDefault(item => FilterErrors(context, req.Requests[item.RequestIndex], item.Fault));

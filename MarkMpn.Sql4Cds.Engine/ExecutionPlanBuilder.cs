@@ -4097,7 +4097,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (reference is NamedTableReference table)
             {
-                if (table.SchemaObject.Identifiers.Count == 1 && _cteSubplans.TryGetValue(table.SchemaObject.BaseIdentifier.Value, out var cteSubplan))
+                if (table.SchemaObject.Identifiers.Count == 1 && _cteSubplans != null && _cteSubplans.TryGetValue(table.SchemaObject.BaseIdentifier.Value, out var cteSubplan))
                 {
                     var aliasNode = (AliasNode)cteSubplan.Clone();
 

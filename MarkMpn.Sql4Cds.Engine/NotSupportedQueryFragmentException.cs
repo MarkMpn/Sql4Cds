@@ -30,15 +30,15 @@ namespace MarkMpn.Sql4Cds.Engine
         public NotSupportedQueryFragmentException(string message, TSqlFragment fragment, Exception innerException) : base(message, innerException)
         {
             Fragment = fragment;
+            Errors = new[] { Sql4CdsError.InternalError(message, fragment) };
         }
 
         /// <summary>
         /// Creates a new <see cref="NotSupportedQueryFragmentException"/>
         /// </summary>
         /// <param name="error">The error to return</param>
-        public NotSupportedQueryFragmentException(Sql4CdsError error) : this(error.Message)
+        public NotSupportedQueryFragmentException(Sql4CdsError error) : this(error, null)
         {
-            Errors = new[] { error };
         }
 
         /// <summary>
@@ -46,8 +46,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="error">The error to return</param>
         /// <param name="innerException">The original exception</param>
-        public NotSupportedQueryFragmentException(Sql4CdsError error, Exception innerException) : this(error.Message, error.Fragment, innerException)
+        public NotSupportedQueryFragmentException(Sql4CdsError error, Exception innerException) : base(error.Message, innerException)
         {
+            Fragment = error.Fragment;
             Errors = new[] { error };
         }
 
