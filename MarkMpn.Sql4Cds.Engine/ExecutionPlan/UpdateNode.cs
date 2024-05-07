@@ -150,7 +150,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmUpdate(confirmArgs);
                 if (confirmArgs.Cancel)
-                    throw new OperationCanceledException("UPDATE cancelled by user");
+                    throw new QueryExecutionException(new Sql4CdsError(11, 0, 0, null, null, 0, "UPDATE cancelled by user", null));
 
                 var isSysAdminOrBackOfficeIntegrationUser = new Lazy<bool>(() =>
                 {
@@ -415,10 +415,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (ex.Node == null)
                     ex.Node = this;
 
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
                 throw;
             }
             catch (Exception ex)

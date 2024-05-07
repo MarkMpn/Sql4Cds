@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmInsert(confirmArgs);
                 if (confirmArgs.Cancel)
-                    throw new OperationCanceledException("INSERT cancelled by user");
+                    throw new QueryExecutionException(new Sql4CdsError(11, 0, 0, null, null, 0, "INSERT cancelled by user", null));
 
                 using (_timer.Run())
                 {
@@ -164,10 +164,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (ex.Node == null)
                     ex.Node = this;
 
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
                 throw;
             }
             catch (Exception ex)
