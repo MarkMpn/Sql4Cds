@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     i++;
 
                     if (i == expression.Length)
-                        throw new JsonException($"Invalid JSON path - missing property name after '.' at end of '{expression}'");
+                        throw new JsonPathException(Sql4CdsError.JsonPathFormatError(expression[i], i + 1));
 
                     if (expression[i] == '"')
                     {
@@ -130,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         // Error
-                        throw new JsonException($"Invalid JSON path - invalid property name at index {i} of '{expression}'");
+                        throw new JsonPathException(Sql4CdsError.JsonPathFormatError(expression[i], i + 1));
                     }
                 }
                 else if (expression[i] == '[')
@@ -139,12 +139,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     var end = expression.IndexOf(']', i);
 
                     if (end == -1)
-                        throw new JsonException($"Invalid JSON path - missing closing bracket for indexer at index {i} of '{expression}'");
+                        throw new JsonPathException(Sql4CdsError.JsonPathFormatError('.', expression.Length));
 
                     var indexStr = expression.Substring(i + 1, end - i - 1);
 
                     if (!UInt32.TryParse(indexStr, out var index))
-                        throw new JsonException($"Invalid JSON path - invalid indexer at index {i} of '{expression}'");
+                        throw new JsonPathException(Sql4CdsError.JsonPathFormatError(expression[i+1], i + 2));
 
                     parts.Add(new ArrayElementJsonPathPart(index));
                     i = end ;
@@ -152,7 +152,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // Error
-                    throw new JsonException($"JSON path is not properly formatted. Unexpected character '{expression[i]}' is found at position {i}");
+                    throw new JsonPathException(Sql4CdsError.JsonPathFormatError(expression[i], i + 1));
                 }
             }
 
@@ -274,5 +274,17 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         Lax,
         Strict
+    }
+
+    class JsonPathException : ApplicationException, ISql4CdsErrorException
+    {
+        private readonly Sql4CdsError[] _errors;
+
+        public JsonPathException(Sql4CdsError error) : base(error.Message)
+        {
+            _errors = new[] { error };
+        }
+
+        public IReadOnlyList<Sql4CdsError> Errors => _errors;
     }
 }

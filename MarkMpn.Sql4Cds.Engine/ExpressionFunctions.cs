@@ -1181,7 +1181,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (message.IsNull)
                 return SqlString.Null;
 
-            var regex = new Regex("%(?<flag>[-+0# ])?(?<width>([0-9]+|\\*))?(\\.(?<precision>([0-9]+|\\*)))?(?<size>h|l)?(?<type>[diosuxX]|I64d|S_MSG)");
+            var regex = new Regex("%(?<flag>[-+0# ])?(?<width>([0-9]+|\\*))?(\\.(?<precision>([0-9]+|\\*)))?(?<size>h|l)?(?<type>[diosuxXc]|I64d|S_MSG)");
             var paramIndex = 0;
 
             T GetValue<T>()
@@ -1290,6 +1290,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     case "s":
                     case "S_MSG":
+                    case "c":
                         var strValue = GetValue<SqlString>();
 
                         if (strValue.IsNull)

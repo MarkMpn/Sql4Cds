@@ -387,6 +387,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(13611, fragment);
         }
 
+        internal static Sql4CdsError JsonPathFormatError(char c, int index)
+        {
+            return Create(13607, null, Collation.USEnglish.ToSqlString(c.ToString()), (SqlInt32)index);
+        }
+
         internal static Sql4CdsError XQueryMissingVariable(string name)
         {
             return Create(9501, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
