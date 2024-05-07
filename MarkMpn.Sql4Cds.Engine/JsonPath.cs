@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     i++;
 
                     if (i == expression.Length)
-                        throw new JsonPathException(Sql4CdsError.JsonPathFormatError(expression[i], i + 1));
+                        throw new JsonPathException(Sql4CdsError.JsonPathFormatError(expression[i - 1], i));
 
                     if (expression[i] == '"')
                     {

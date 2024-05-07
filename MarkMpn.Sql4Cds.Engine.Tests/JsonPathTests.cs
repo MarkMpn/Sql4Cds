@@ -86,35 +86,35 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnUnknownMode()
         {
             new JsonPath("laxtrict $.path.to.\"sub-object\"");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnExtraQuotes()
         {
             new JsonPath("laxtrict $.path.to.\"\"sub-object\"\"");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnMissingLeadingDollar()
         {
             new JsonPath("path.to.\"sub-object\"");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnDoublePeriod()
         {
             new JsonPath("$.path..to.\"sub-object\"");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnTrailingPeriod()
         {
             new JsonPath("$.path.to.\"sub-object\".");
@@ -139,28 +139,28 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnNegativeIndexer()
         {
             new JsonPath("$.path.to.\"sub-object\"[-1]");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnAlphaIndexer()
         {
             new JsonPath("$.path.to.\"sub-object\"[x]");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnMissingCloseBracket()
         {
             new JsonPath("$.path.to.\"sub-object\"[1");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnMissingOpeningBracket()
         {
             new JsonPath("$.path.to1]");
@@ -185,21 +185,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnDollarNotAtStart()
         {
             new JsonPath("$.path.$.to");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnUnquotedDollar()
         {
             new JsonPath("$.path$");
         }
 
         [TestMethod]
-        [ExpectedException(typeof(JsonException))]
+        [ExpectedException(typeof(JsonPathException))]
         public void FailsOnLeadingNumber()
         {
             new JsonPath("$.1path");
