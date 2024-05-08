@@ -1,6 +1,20 @@
 # Change Log
 
-## [v9.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v8.0.1) - 2024-05-02
+## [v9.0.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.0.1) - 2024-05-08
+
+Fixed `NullReferenceException` errors when:
+- executing a conditional `SELECT` query
+- retrieving results from a Fetch XML query using `IN` or `EXISTS`
+- handling an error returned from TDS Endpoint
+- handling internal errors such as `UPDATE` without `WHERE`
+
+Standardised errors on:
+- JSON path errors
+- DML statement cancellation
+
+Fixed filtering `audit` data on `changedata` attribute
+
+## [v9.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.0.0) - 2024-05-02
 
 Added support for latest Fetch XML features
 Support `TRY`, `CATCH` &amp; `THROW` statements and related functions

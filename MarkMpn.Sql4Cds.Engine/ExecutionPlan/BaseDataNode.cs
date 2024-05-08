@@ -523,7 +523,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
@@ -668,7 +668,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
@@ -695,7 +695,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
@@ -728,7 +728,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
@@ -775,7 +775,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
@@ -797,18 +797,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="targetEntityName">The base entity type of the FetchXML query</param>
         /// <param name="entityName">The entity type being filtered</param>
         /// <param name="items">The list of items in the FetchXML entity element</param>
+        /// <param name="attrName">The name of the attribute the filter will be applied on</param>
         /// <returns><c>true</c> if the filter cannot be applied, or <c>false</c> otherwise</returns>
         /// <remarks>
         /// The audit provider does not support filtering using the &lt;condition entityname="systemuser" .../&gt; syntax.
         /// See https://github.com/MarkMpn/Sql4Cds/issues/294
         /// </remarks>
-        private bool IsInvalidAuditFilter(string targetEntityName, string entityName, object[] items)
+        private bool IsInvalidAuditFilter(string targetEntityName, string entityName, object[] items, string attrName)
         {
             if (targetEntityName != "audit")
                 return false;
 
             if (entityName == "audit")
+            {
+                // Can't filter on the changedata attribute
+                if (attrName == "changedata")
+                    return true;
+
                 return false;
+            }
 
             // Audit can only have a single join.
             var join = items.OfType<FetchLinkEntityType>().Single();
