@@ -23,29 +23,17 @@ plugins or integrations by writing familiar SQL and converting it.
 Queries can also run using the preview TDS Endpoint. A wide range of SQL functionality is also built
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added support for latest Fetch XML features
-Support TRY, CATCH &amp; THROW statements and related functions
-Error handling consistency with SQL Server
-Improved performance with large numbers of expressions and large VALUES lists
-Generate the execution plan for each statement in a batch only when necessary, to allow initial statements to succeed regardless of errors in later statements
-Allow access to catalog views using TDS Endpoint
-Inproved EXECUTE AS support
-Handle missing values in XML .value() method
-Detect TDS Endpoint incompatibility with XML data type methods and error handling functions
-Fixed use of TOP 1 with IN expression
-Fixed escaping column names for SELECT and INSERT commands
-Improved setting a partylist attribute based on an EntityReference value
-Fixed sorting results for UNION
-Fold DISTINCT to data source for UNION
-Fold groupings without aggregates to DISTINCT
-Fixed folding filters through nested loops with outer references
-Fixed use of recursive CTE references within subquery
-Improved performance of CROSS APPLY and OUTER APPLY
-Improved query cancellation
+    <releaseNotes>Fixed NullReferenceException errors when:
+- executing a conditional SELECT query
+- retrieving results from a Fetch XML query using IN or EXISTS
+- handling an error returned from TDS Endpoint
+- handling internal errors such as UPDATE without WHERE
 
-Fixed opening the tool without a connection
-Improved copying results from grid
-Fixed formatting queries with trailing comments
+Standardised errors on:
+- JSON path errors
+- DML statement cancellation
+
+Fixed filtering audit data on changedata attribute
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
