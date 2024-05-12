@@ -263,7 +263,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!req.Requests.All(r => r is DeleteRequest))
                 return base.ExecuteMultiple(dataSource, org, meta, req);
 
-            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple"))
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider
+                // DeleteMultiple is only supported on elastic tables, even if other tables do define the message
+                /* || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple")*/)
             {
                 // Elastic tables can use DeleteMultiple for better performance than ExecuteMultiple
                 var entities = new EntityReferenceCollection();
