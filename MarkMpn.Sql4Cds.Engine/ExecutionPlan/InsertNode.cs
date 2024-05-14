@@ -130,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
                 }
 
-                // Check again that the update is allowed. Don't count any UI interaction in the execution time
+                // Check again that the insert is allowed. Don't count any UI interaction in the execution time
                 var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
                 if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
@@ -155,7 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         context,
                         out recordsAffected,
                         out message,
-                        LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, context.ParameterValues))
+                        r => SetIdentity(r, context.ParameterValues)
                         );
                 }
             }
@@ -177,19 +177,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Special cases for intersect entities
             if (LogicalName == "listmember")
             {
-                var listId = (Guid?)attributeAccessors["listid"](entity);
-                var entityId = (Guid?)attributeAccessors["entityid"](entity);
-
-                if (listId == null)
-                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = "listid" }, new Identifier { Value = "listmember" }, "Insert"));
-
-                if (entityId == null)
-                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = "entityid" }, new Identifier { Value = "listmember" }, "Insert"));
+                var listId = GetNotNull<Guid>("listid", entity, attributeAccessors);
+                var entityId = GetNotNull<Guid>("entityid", entity, attributeAccessors);
 
                 return new AddMemberListRequest
                 {
-                    ListId = listId.Value,
-                    EntityId = entityId.Value
+                    ListId = listId,
+                    EntityId = entityId
                 };
             }
             
@@ -199,20 +193,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // the relationship that this is the intersect entity for
                 var relationship = meta.ManyToManyRelationships.Single();
 
-                var e1 = (Guid?)attributeAccessors[relationship.Entity1IntersectAttribute](entity);
-                var e2 = (Guid?)attributeAccessors[relationship.Entity2IntersectAttribute](entity);
-
-                if (e1 == null)
-                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity1IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Insert"));
-
-                if (e2 == null)
-                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity2IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Insert"));
+                var e1 = GetNotNull<Guid>(relationship.Entity1IntersectAttribute, entity, attributeAccessors);
+                var e2 = GetNotNull<Guid>(relationship.Entity2IntersectAttribute, entity, attributeAccessors);
 
                 return new AssociateRequest
                 {
-                    Target = new EntityReference(relationship.Entity1LogicalName, e1.Value),
+                    Target = new EntityReference(relationship.Entity1LogicalName, e1),
                     Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
-                    RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, e2.Value) }
+                    RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, e2) }
+                };
+            }
+
+            if (LogicalName == "principalobjectaccess")
+            {
+                // Insert into principalobjectaccess is equivalent to a share
+                var objectId = GetNotNull<EntityReference>("objectid", entity, attributeAccessors);
+                var principalId = GetNotNull<EntityReference>("principalid", entity, attributeAccessors);
+                var accessRightsMask = GetNotNull<int>("accessrightsmask", entity, attributeAccessors);
+
+                return new GrantAccessRequest
+                {
+                    Target = objectId,
+                    PrincipalAccess = new PrincipalAccess
+                    {
+                        Principal = principalId,
+                        AccessMask = (AccessRights)accessRightsMask
+                    }
                 };
             }
 
@@ -237,6 +243,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return new CreateRequest { Target = insert };
+        }
+
+        private T GetNotNull<T>(string attribute, Entity entity, Dictionary<string, Func<Entity, object>> attributeAccessors)
+        {
+            var value = attributeAccessors[attribute](entity);
+
+            if (value == null)
+                throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = attribute }, new Identifier { Value = LogicalName }, "Insert"));
+
+            return (T)value;
         }
 
         protected override bool FilterErrors(NodeExecutionContext context, OrganizationRequest request, OrganizationServiceFault fault)
@@ -278,8 +294,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void SetIdentity(OrganizationResponse response, IDictionary<string, object> parameterValues)
         {
-            var create = (CreateResponse)response;
-            parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, LogicalName, create.id);
+            if (response is CreateResponse create)
+                parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, LogicalName, create.id);
         }
 
         protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)

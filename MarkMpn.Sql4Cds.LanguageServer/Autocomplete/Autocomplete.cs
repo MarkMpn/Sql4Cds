@@ -489,6 +489,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                                     var relationship = metadata.ManyToManyRelationships.Single();
                                     attributeFilter = a => a.LogicalName == relationship.Entity1IntersectAttribute || a.LogicalName == relationship.Entity2IntersectAttribute;
                                 }
+                                else if (metadata.LogicalName == "principalobjectaccess")
+                                {
+                                    attributeFilter = a => a.LogicalName == "objectid" || a.LogicalName == "objecttypecode" || a.LogicalName == "principalid" || a.LogicalName == "principaltypecode" || a.LogicalName == "accessrightsmask";
+                                }
                                 else
                                 {
                                     attributeFilter = a => a.IsValidForCreate != false && a.AttributeOf == null;

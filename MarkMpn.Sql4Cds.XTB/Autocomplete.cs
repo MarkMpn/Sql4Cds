@@ -488,6 +488,10 @@ namespace MarkMpn.Sql4Cds.XTB
                                     var relationship = metadata.ManyToManyRelationships.Single();
                                     attributeFilter = a => a.LogicalName == relationship.Entity1IntersectAttribute || a.LogicalName == relationship.Entity2IntersectAttribute;
                                 }
+                                else if (metadata.LogicalName == "principalobjectaccess")
+                                {
+                                    attributeFilter = a => a.LogicalName == "objectid" || a.LogicalName == "objecttypecode" || a.LogicalName == "principalid" || a.LogicalName == "principaltypecode" || a.LogicalName == "accessrightsmask";
+                                }
                                 else
                                 {
                                     attributeFilter = a => a.IsValidForCreate != false && a.AttributeOf == null;
@@ -1152,6 +1156,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 case AttributeTypeCode.String:
                 case AttributeTypeCode.Virtual:
+                case AttributeTypeCode.EntityName:
                     return 13;
 
                 case AttributeTypeCode.Uniqueidentifier:

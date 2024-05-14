@@ -1448,6 +1448,19 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = $"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when inserting values into the {metadata.LogicalName} table" };
                 }
+                else if (metadata.LogicalName == "principalobjectaccess")
+                {
+                    if (attr.LogicalName == "objecttypecode" || attr.LogicalName == "principaltypecode")
+                    {
+                        if (!virtualTypeAttributes.Add(colName))
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
+
+                        continue;
+                    }
+
+                    if (attr.LogicalName != "objectid" && attr.LogicalName != "principalid" && attr.LogicalName != "accessrightsmask")
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = "Only the objectid, principalid and accessrightsmask columns can be used when inserting values into the principalobjectaccess table" };
+                }
                 else
                 {
                     if (attr.IsValidForCreate == false)
@@ -1470,6 +1483,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity1IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity1IntersectAttribute} column to be set" };
                 if (!attributeNames.Contains(relationship.Entity2IntersectAttribute))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity2IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity2IntersectAttribute} column to be set" };
+            }
+            else if (metadata.LogicalName == "principalobjectaccess")
+            {
+                if (!attributeNames.Contains("objectid"))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "objectid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the objectid column to be set" };
+                if (!attributeNames.Contains("principalid"))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "principalid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the principalid column to be set" };
+                if (!attributeNames.Contains("accessrightsmask"))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "accessrightsmask" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the accessrightsmask column to be set" };
             }
 
             if (sourceColumns == null)
@@ -1531,24 +1553,40 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (attributeNames.Contains(targetAttrName))
                 {
-                    var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
-
-                    if (targetLookupAttribute == null)
-                        continue;
-
-                    if (targetLookupAttribute.Targets.Length > 1 &&
-                        !virtualTypeAttributes.Contains(targetAttrName + "type") &&
-                        targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                    // Special case for principalobjectaccess table
+                    if (metadata.LogicalName == "principalobjectaccess")
                     {
-                        // Special case: not required for listmember.entityid
-                        if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
+                        if ((targetAttrName == "objectid" || targetAttrName == "principalid") &&
+                            !virtualTypeAttributes.Contains(targetAttrName.Replace("id", "typecode")) &&
+                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                        {
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                            {
+                                Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetAttrName.Replace("id", "typecode")} column"
+                            };
+                        }
+                    }
+                    else
+                    {
+                        var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
+
+                        if (targetLookupAttribute == null)
                             continue;
 
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                        if (targetLookupAttribute.Targets.Length > 1 &&
+                            !virtualTypeAttributes.Contains(targetAttrName + "type") &&
+                            targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
+                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                         {
-                            Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
-                        };
+                            // Special case: not required for listmember.entityid
+                            if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
+                                continue;
+
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                            {
+                                Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                            };
+                        }
                     }
                 }
                 else if (virtualTypeAttributes.Contains(targetAttrName))
@@ -1651,6 +1689,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var primaryKey = targetMetadata.PrimaryIdAttribute;
             string secondaryKey = null;
+            var requiredFields = new List<string>();
 
             if (targetMetadata.LogicalName == "listmember")
             {
@@ -1668,27 +1707,24 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Elastic tables need the partitionid as part of the primary key
                 secondaryKey = "partitionid";
             }
-            
-            queryExpression.SelectElements.Add(new SelectScalarExpression
+            else if (targetMetadata.LogicalName == "principalobjectaccess")
             {
-                Expression = new ColumnReferenceExpression
-                {
-                    MultiPartIdentifier = new MultiPartIdentifier
-                    {
-                        Identifiers =
-                        {
-                            new Identifier { Value = targetAlias },
-                            new Identifier { Value = primaryKey }
-                        }
-                    }
-                },
-                ColumnName = new IdentifierOrValueExpression
-                {
-                    Identifier = new Identifier { Value = primaryKey }
-                }
-            });
+                primaryKey = "objectid";
+                secondaryKey = "principalid";
+            }
+
+            requiredFields.Add(primaryKey);
 
             if (secondaryKey != null)
+                requiredFields.Add(secondaryKey);
+
+            if (targetMetadata.LogicalName == "principalobjectaccess")
+            {
+                requiredFields.Add("objecttypecode");
+                requiredFields.Add("principaltypecode");
+            }
+
+            foreach (var field in requiredFields)
             {
                 queryExpression.SelectElements.Add(new SelectScalarExpression
                 {
@@ -1697,19 +1733,19 @@ namespace MarkMpn.Sql4Cds.Engine
                         MultiPartIdentifier = new MultiPartIdentifier
                         {
                             Identifiers =
-                        {
-                            new Identifier { Value = targetAlias },
-                            new Identifier { Value = secondaryKey }
-                        }
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = field }
+                            }
                         }
                     },
                     ColumnName = new IdentifierOrValueExpression
                     {
-                        Identifier = new Identifier { Value = secondaryKey }
+                        Identifier = new Identifier { Value = field }
                     }
                 });
             }
-            
+
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
             CopyDmlHintsToSelectStatement(hints, selectStatement);
 
@@ -1928,6 +1964,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!virtualTypeAttributes.Add(targetAttrName))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
                 }
+                else if (targetMetadata.LogicalName == "principalobjectaccess" &&
+                    targetAttrName.EndsWith("typecode", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!virtualTypeAttributes.Add(targetAttrName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
+                }
                 else
                 {
                     if (!attributes.TryGetValue(targetAttrName, out attr))
@@ -1945,6 +1987,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = "Only the listid and entityid columns can be used when updating values in the listmember table" };
+                    }
+                    else if (targetMetadata.LogicalName == "principalobjectaccess")
+                    {
+                        if (attr.LogicalName != "objectid" && attr.LogicalName != "principalid" && attr.LogicalName != "accessrightsmask")
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = "Only the objectid, principalid and accessrightsmask columns can be used when updating values in the principalobjectaccess table" };
                     }
                     else
                     {
@@ -1983,6 +2030,14 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 existingAttributes.Add("listid");
                 existingAttributes.Add("entityid");
+            }
+            else if (targetLogicalName == "principalobjectaccess")
+            {
+                existingAttributes.Add("objectid");
+                existingAttributes.Add("objecttypecode");
+                existingAttributes.Add("principalid");
+                existingAttributes.Add("principaltypecode");
+                existingAttributes.Add("accessrightsmask");
             }
 
             foreach (var existingAttribute in existingAttributes)
@@ -2073,8 +2128,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
-                        var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
-                        targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
+                        if (targetMetadata.LogicalName != "principalobjectaccess")
+                        {
+                            var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
+                            targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
+                        }
                     }
                     else
                     {
@@ -2169,6 +2227,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (virtualTypeAttributes.Contains(targetAttrName))
                 {
                     var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
+
+                    if (targetMetadata.LogicalName == "principalobjectaccess")
+                        idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 8) + "id";
 
                     if (!attributeNames.Contains(idAttrName))
                     {
