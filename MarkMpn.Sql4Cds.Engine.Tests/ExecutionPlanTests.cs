@@ -7396,5 +7396,38 @@ ORDER BY
 </fetch>");
             }
         }
+
+        [TestMethod]
+        public void DistinctUsesCustomPaging()
+        {
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select distinct
+account.name, contact.firstname
+from account
+left outer join contact ON account.accountid = contact.parentcustomerid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+<fetch distinct='true'>
+  <entity name='account'>
+    <attribute name='name' />
+    <link-entity name='contact' to='accountid' from='parentcustomerid' alias='contact' link-type='outer'>
+      <attribute name='firstname' />
+      <order attribute='firstname' />
+    </link-entity>
+    <order attribute='name' />
+  </entity>
+</fetch>");
+            Assert.IsTrue(fetch.UsingCustomPaging);
+        }
     }
 }
