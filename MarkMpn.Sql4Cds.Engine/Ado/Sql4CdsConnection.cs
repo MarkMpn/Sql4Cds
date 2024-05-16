@@ -29,7 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly IDictionary<string, DataSource> _dataSources;
         private readonly ChangeDatabaseOptionsWrapper _options;
         private readonly Dictionary<string, DataTypeReference> _globalVariableTypes;
-        private readonly Dictionary<string, object> _globalVariableValues;
+        private readonly Dictionary<string, INullable> _globalVariableValues;
         private readonly TelemetryClient _ai;
 
         /// <summary>
@@ -74,7 +74,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 ["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
                 ["@@ERROR"] = DataTypeHelpers.Int,
             };
-            _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            _globalVariableValues = new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase)
             {
                 ["@@IDENTITY"] = SqlEntityReference.Null,
                 ["@@ROWCOUNT"] = (SqlInt32)0,
@@ -291,7 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal Dictionary<string, DataTypeReference> GlobalVariableTypes => _globalVariableTypes;
 
-        internal Dictionary<string, object> GlobalVariableValues => _globalVariableValues;
+        internal Dictionary<string, INullable> GlobalVariableValues => _globalVariableValues;
 
         internal TelemetryClient TelemetryClient => _ai;
 

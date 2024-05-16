@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -71,14 +72,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (OuterReferences != null)
                 {
                     if (innerParameters == null)
-                        innerParameters = new Dictionary<string, object>();
+                        innerParameters = new Dictionary<string, INullable>();
                     else
-                        innerParameters = new Dictionary<string, object>(innerParameters);
+                        innerParameters = new Dictionary<string, INullable>(innerParameters);
 
                     foreach (var kvp in OuterReferences)
                     {
                         left.Attributes.TryGetValue(kvp.Key, out var outerValue);
-                        innerParameters[kvp.Value] = outerValue;
+                        innerParameters[kvp.Value] = (INullable)outerValue;
                     }
                 }
 

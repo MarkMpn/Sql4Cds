@@ -3714,7 +3714,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
             
-            var result = select.Execute(new NodeExecutionContext(_localDataSources, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
+            var result = select.Execute(new NodeExecutionContext(_localDataSources, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, INullable>(), null), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(result);
 
@@ -4192,7 +4192,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, selectConstantScan.Values.Count);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4246,7 +4246,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, selectConstantScan.Values.Count);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4304,7 +4304,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4338,7 +4338,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4430,7 +4430,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4464,7 +4464,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {

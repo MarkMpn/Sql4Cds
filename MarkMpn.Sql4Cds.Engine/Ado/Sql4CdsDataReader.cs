@@ -22,7 +22,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly IQueryExecutionOptions _options;
         private readonly CommandBehavior _behavior;
         private readonly Dictionary<string, DataTypeReference> _parameterTypes;
-        private readonly Dictionary<string, object> _parameterValues;
+        private readonly Dictionary<string, INullable> _parameterValues;
         private Dictionary<string, int> _labelIndexes;
         private int _recordsAffected;
         private int _instructionPointer;
@@ -57,7 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Close();
         }
 
-        internal Dictionary<string, object> ParameterValues => _parameterValues;
+        internal Dictionary<string, INullable> ParameterValues => _parameterValues;
 
         private Dictionary<string, int> LabelIndexes
         {
@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private bool ExecuteWithExceptionHandling(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
+        private bool ExecuteWithExceptionHandling(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, INullable> parameterValues)
         {
             while (true)
             {
@@ -109,7 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
+        private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, INullable> parameterValues)
         {
             IRootExecutionPlanNode logNode = null;
             var context = new NodeExecutionContext(_connection.DataSources, _options, parameterTypes, parameterValues, msg => _connection.OnInfoMessage(logNode, msg));

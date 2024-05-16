@@ -187,7 +187,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             Parent = this
                         };
 
-                        var partitionParameterValues = new Dictionary<string, object>
+                        var partitionParameterValues = new Dictionary<string, INullable>
                         {
                             ["@PartitionStart"] = minKey,
                             ["@PartitionEnd"] = maxKey

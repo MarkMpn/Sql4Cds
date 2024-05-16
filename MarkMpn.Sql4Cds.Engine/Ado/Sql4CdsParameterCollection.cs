@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -50,11 +51,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 .ToDictionary(param => param.FullParameterName, param => param.GetDataType(), StringComparer.OrdinalIgnoreCase);
         }
 
-        internal Dictionary<string, object> GetParameterValues()
+        internal Dictionary<string, INullable> GetParameterValues()
         {
             return _parameters
                 .Cast<Sql4CdsParameter>()
-                .ToDictionary(param => param.FullParameterName, param => (object) param.GetValue(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(param => param.FullParameterName, param => param.GetValue(), StringComparer.OrdinalIgnoreCase);
         }
 
         public override bool Contains(string value)

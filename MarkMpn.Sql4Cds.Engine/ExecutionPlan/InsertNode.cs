@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading;
@@ -292,7 +293,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        private void SetIdentity(OrganizationResponse response, IDictionary<string, object> parameterValues)
+        private void SetIdentity(OrganizationResponse response, IDictionary<string, INullable> parameterValues)
         {
             if (response is CreateResponse create)
                 parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, LogicalName, create.id);

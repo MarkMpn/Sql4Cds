@@ -54,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var entity in entities)
                 {
                     foreach (var variable in Variables)
-                        context.ParameterValues[variable.VariableName] = valueAccessors[variable.VariableName](entity);
+                        context.ParameterValues[variable.VariableName] = (INullable)valueAccessors[variable.VariableName](entity);
 
                     count++;
                 }

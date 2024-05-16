@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Text;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -105,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, DataSource> dataSources,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
-            IDictionary<string, object> parameterValues,
+            IDictionary<string, INullable> parameterValues,
             Action<Sql4CdsError> log)
             : base(dataSources, options, parameterTypes, log)
         {
@@ -115,7 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the current value of each parameter
         /// </summary>
-        public IDictionary<string, object> ParameterValues { get; }
+        public IDictionary<string, INullable> ParameterValues { get; }
 
         public Sql4CdsError Error { get; set; }
     }
@@ -191,7 +192,7 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, DataSource> dataSources,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
-            IDictionary<string, object> parameterValues,
+            IDictionary<string, INullable> parameterValues,
             Action<Sql4CdsError> log,
             Entity entity)
             : base(dataSources, options, parameterTypes, parameterValues, log)
