@@ -7400,7 +7400,6 @@ ORDER BY
         [TestMethod]
         public void DistinctUsesCustomPaging()
         {
-
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
             var query = @"

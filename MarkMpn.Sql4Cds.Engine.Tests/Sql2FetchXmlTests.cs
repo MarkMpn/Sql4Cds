@@ -538,11 +538,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
+                        <attribute name='contactid' />
                         <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
                             <attribute name='accountid' />
                             <attribute name='name' />
-                            <order attribute='name' />
+                            <order attribute='accountid' />
                         </link-entity>
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>
             ");
