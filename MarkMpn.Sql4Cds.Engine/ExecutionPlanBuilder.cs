@@ -3942,7 +3942,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (semiJoin && alias == null)
             {
                 var select = new SelectNode { Source = subNode };
-                select.ColumnSet.Add(new SelectColumn { SourceColumn = subqueryCol, OutputColumn = subqueryCol.SplitMultiPartIdentifier().Last() });
+                select.ColumnSet.Add(new SelectColumn { SourceColumn = innerKey, OutputColumn = innerKey.SplitMultiPartIdentifier().Last() });
                 alias = new AliasNode(select, new Identifier { Value = context.GetExpressionName() }, context);
                 subAlias = alias.Alias;
             }
@@ -4323,6 +4323,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Use a temporary NestedLoopNode to include the full schema available within this query so far to ensure columns are
                 // used from this query in preference to the outer query.
                 CaptureOuterReferences(outerSchema, new NestedLoopNode { LeftSource = lhs, RightSource = rhs }, join.SearchCondition, context, outerReferences);
+
+                // TODO: Convert any subqueries in the join criteria. For simplicity we'll always add the subquery nodes to the RHS of
+                // the join, but it could reference data from the LHS table. Capture this as outer references to use in a nested loop join.
+                //rhs = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
+                //rhs = ConvertExistsSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
 
                 var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                 join.SearchCondition.Accept(joinConditionVisitor);

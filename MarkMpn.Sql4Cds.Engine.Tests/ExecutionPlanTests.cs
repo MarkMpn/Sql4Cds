@@ -7428,5 +7428,107 @@ left outer join contact ON account.accountid = contact.parentcustomerid";
 </fetch>");
             Assert.IsTrue(fetch.UsingCustomPaging);
         }
+
+        [TestMethod]
+        public void NotExistWithJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select top 10 a2.name
+from account a2
+where not exists (
+    select top 10 a.accountid
+    from account a
+    inner join contact c on c.parentcustomerid = a.accountid
+    where a.accountid = a2.accountid
+)
+";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var filter = AssertNode<FilterNode>(top.Source);
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+
+            Assert.AreEqual("a2", fetch1.Alias);
+            AssertFetchXml(fetch1, @"
+<fetch>
+  <entity name='account'>
+    <attribute name='name' />
+    <attribute name='accountid' />
+    <order attribute='accountid' />
+  </entity>
+</fetch>");
+            Assert.IsFalse(fetch1.UsingCustomPaging);
+
+            Assert.AreEqual("Expr2", fetch2.Alias);
+            AssertFetchXml(fetch2, @"
+<fetch distinct='true'>
+  <entity name='contact'>
+    <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='a'>
+      <attribute name='accountid' />
+      <order attribute='accountid' />
+    </link-entity>
+  </entity>
+</fetch>");
+            Assert.IsTrue(fetch2.UsingCustomPaging);
+            Assert.AreEqual(1, fetch2.ColumnMappings.Count);
+            Assert.AreEqual("Expr2.accountid", fetch2.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("a.accountid", fetch2.ColumnMappings[0].SourceColumn);
+
+            Assert.AreEqual("a2.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("Expr2.accountid", join.RightAttribute.ToSql());
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.SemiJoin);
+            Assert.AreEqual(1, join.DefinedValues.Count);
+            Assert.AreEqual("Expr2.accountid", join.DefinedValues["Expr3"]);
+
+            Assert.AreEqual("Expr3 IS NULL", filter.Filter.ToSql());
+
+            Assert.AreEqual("10", top.Top.ToSql());
+
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("a2.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("name", select.ColumnSet[0].OutputColumn);
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaRHS()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.Exists))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND contact.firstname IN (SELECT new_name FROM new_customentity)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='account'>
+    <all-attributes />
+    <link-entity name='contact' to='accountid' from='parentcustomerid' alias='contact' link-type='inner'>
+      <all-attributes />
+      <link-entity name='new_customentity' to='firstname' from='new_name' link-type='exists' >
+    </link-entity>
+  </entity>
+</fetch>");
+            }
+        }
     }
 }

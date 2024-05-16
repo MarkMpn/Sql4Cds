@@ -987,6 +987,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
         {
+            var mapping = ColumnMappings.FirstOrDefault(m => m.OutputColumn == colName);
+            if (mapping != null)
+                colName = mapping.SourceColumn;
+
             var parts = colName.SplitMultiPartIdentifier();
 
             if (parts.Length == 1)
