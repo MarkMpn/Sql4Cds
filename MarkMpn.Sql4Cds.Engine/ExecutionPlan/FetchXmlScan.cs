@@ -198,6 +198,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
+            // Never need to do paging if we're enforcing a TOP constraint
+            if (FetchXml.top != null)
+                return false;
+
             // Custom paging is required if we have links to child entities, as standard Dataverse paging is applied at
             // the top-level entity only.
             // Custom paging can't be used with aggregate queries as doing so would affect the aggregate behaviour.
