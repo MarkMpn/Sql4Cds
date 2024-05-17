@@ -3835,7 +3835,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 query.Accept(new RewriteVisitor(rewrites));
 
             if (expression is ScalarExpression scalar && rewrites.ContainsKey(scalar))
-                return new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = rewrites[scalar] } } } };
+                return rewrites[scalar].ToColumnReference();
 
             return null;
         }
@@ -4326,8 +4326,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // TODO: Convert any subqueries in the join criteria. For simplicity we'll always add the subquery nodes to the RHS of
                 // the join, but it could reference data from the LHS table. Capture this as outer references to use in a nested loop join.
-                //rhs = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
-                //rhs = ConvertExistsSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
+                rhs = ConvertInSubqueries(rhs, hints, join.SearchCondition, context, outerSchema, outerReferences);
+                rhs = ConvertExistsSubqueries(rhs, hints, join.SearchCondition, context, outerSchema, outerReferences);
 
                 var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                 join.SearchCondition.Accept(joinConditionVisitor);

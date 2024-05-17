@@ -192,7 +192,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var definedValue in DefinedValues)
             {
                 innerSchema.ContainsColumn(definedValue.Value, out var innerColumn);
-                schema[definedValue.Key] = innerSchema.Schema[innerColumn];
+                schema[definedValue.Key] = innerSchema.Schema[innerColumn].Invisible().Calculated();
             }
 
             _lastLeftSchema = outerSchema;

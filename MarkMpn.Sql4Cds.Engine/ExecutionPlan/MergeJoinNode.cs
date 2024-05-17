@@ -17,6 +17,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class MergeJoinNode : FoldableJoinNode
     {
+        private SortNode _leftSort;
+        private SortNode _rightSort;
+
         [Description("Many to Many")]
         [Category("Merge Join")]
         public bool ManyToMany { get; private set; }
@@ -233,6 +236,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            // If we've previously added sort nodes to either input, remove them before trying to fold the query again
+            if (LeftSource == _leftSort)
+            {
+                LeftSource = _leftSort.Source;
+                _leftSort = null;
+            }
+
+            if (RightSource == _rightSort)
+            {
+                RightSource = _rightSort.Source;
+                _rightSort = null;
+            }
+
             var folded = base.FoldQuery(context, hints);
 
             if (folded != this)
@@ -289,7 +305,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return this;
 
             // Can't fold the join down into the FetchXML, so add a sort and try to fold that in instead
-            LeftSource = new SortNode
+            _leftSort = new SortNode
             {
                 Source = LeftSource,
                 Sorts =
@@ -300,10 +316,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(context, hints);
+            };
+            LeftSource = _leftSort.FoldQuery(context, hints);
             LeftSource.Parent = this;
 
-            RightSource = new SortNode
+            _rightSort = new SortNode
             {
                 Source = RightSource,
                 Sorts =
@@ -314,24 +331,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(context, hints);
+            };
+            RightSource = _rightSort.FoldQuery(context, hints);
             RightSource.Parent = this;
 
             // If we couldn't fold the sorts, it's probably faster to use a hash join instead if we only want partial results
-            var leftSort = LeftSource as SortNode;
-            var rightSort = RightSource as SortNode;
-
-            if (leftSort == null && rightSort == null)
+            if (LeftSource != _leftSort && RightSource != _rightSort)
                 return this;
 
-            hashJoin.LeftSource = leftSort?.Source ?? LeftSource;
-            hashJoin.RightSource = rightSort?.Source ?? RightSource;
-
+            hashJoin.LeftSource = (LeftSource == _leftSort) ? _leftSort.Source : LeftSource;
+            hashJoin.RightSource = (RightSource == _rightSort) ? _rightSort.Source : RightSource;
 
             var foldedHashJoin = hashJoin.FoldQuery(context, hints);
 
             if (Parent is TopNode ||
-                leftSort != null && rightSort != null)
+                LeftSource == _leftSort && RightSource == _rightSort)
                 return foldedHashJoin;
 
             LeftSource.Parent = this;

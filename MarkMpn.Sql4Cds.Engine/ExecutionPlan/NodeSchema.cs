@@ -157,6 +157,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return new ColumnDefinition(col.Type, true, col.IsCalculated, col.IsVisible);
         }
+
+        public static IColumnDefinition Invisible(this IColumnDefinition col)
+        {
+            return new ColumnDefinition(col.Type, col.IsNullable, col.IsCalculated, false);
+        }
+
+        public static IColumnDefinition Calculated(this IColumnDefinition col)
+        {
+            return new ColumnDefinition(col.Type, col.IsNullable, true, col.IsVisible);
+        }
     }
 
     /// <summary>

@@ -6780,10 +6780,13 @@ ORDER BY [union. all].eln";
 
             var sort = AssertNode<SortNode>(select.Source);
 
-            var join1 = AssertNode<HashJoinNode>(sort.Source);
+            var filter1 = AssertNode<FilterNode>(sort.Source);
+            Assert.AreEqual("[union. all].logicalname = a2.logicalname", filter1.Filter.ToSql());
+
+            var join1 = AssertNode<HashJoinNode>(filter1.Source);
             Assert.AreEqual("a2.entitylogicalname", join1.LeftAttribute.ToSql());
             Assert.AreEqual("[union. all].eln", join1.RightAttribute.ToSql());
-            Assert.AreEqual("[union. all].logicalname = a2.logicalname", join1.AdditionalJoinCriteria.ToSql());
+            Assert.IsNull(join1.AdditionalJoinCriteria);
 
             var mq1 = AssertNode<MetadataQueryNode>(join1.LeftSource);
             Assert.AreEqual("french", mq1.DataSource);
@@ -7499,9 +7502,37 @@ where not exists (
         }
 
         [TestMethod]
+        public void ScalarSubquery()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select top 10 * from (
+select fullname, (select name from account where accountid = parentcustomerid) from contact
+) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+<fetch top='10'>
+  <entity name='contact'>
+    <attribute name='fullname' />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='Expr2' link-type='outer'>
+      <attribute name='name' alias='Expr3' />
+    </link-entity>
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
         public void SubqueryInJoinCriteriaRHS()
         {
-            using (_localDataSource.EnableJoinOperator(JoinOperator.Exists))
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
                 var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
@@ -7520,11 +7551,44 @@ inner join contact ON account.accountid = contact.parentcustomerid AND contact.f
 
                 AssertFetchXml(fetch, @"
 <fetch>
-  <entity name='account'>
+  <entity name='contact'>
     <all-attributes />
-    <link-entity name='contact' to='accountid' from='parentcustomerid' alias='contact' link-type='inner'>
+    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
       <all-attributes />
-      <link-entity name='new_customentity' to='firstname' from='new_name' link-type='exists' >
+    </link-entity>
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaRHSCorrelatedExists()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SELECT * FROM new_customentity WHERE new_name = contact.firstname)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
     </link-entity>
   </entity>
 </fetch>");

@@ -108,6 +108,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
                 LhsKey = LhsExpression as ColumnReferenceExpression;
                 RhsKey = RhsExpression as ColumnReferenceExpression;
+                JoinCondition = node;
             }
         }
 
