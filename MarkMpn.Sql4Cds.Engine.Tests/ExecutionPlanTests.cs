@@ -7594,5 +7594,29 @@ inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SE
 </fetch>");
             }
         }
+
+        [TestMethod]
+        public void VirtualAttributeAliases()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select statecodename [state], parentcustomerid x, parentcustomeridname from contact";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <attribute name='statecode' />
+    <attribute name='parentcustomerid' />
+  </entity>
+</fetch>");
+        }
     }
 }

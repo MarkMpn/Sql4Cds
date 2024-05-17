@@ -167,6 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // 1. columns that have more than 1 alias
                 // 2. aliases that are invalid for FetchXML
                 // 3. attributes that are included via an <all-attributes/>
+                // 4. virtual ___name or ___type attributes
                 if (!hasStar)
                 {
                     var aliasedColumns = columnSet
@@ -178,9 +179,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             return new { Mapping = c, SourceColumn = sourceCol, Alias = c.OutputColumn };
                         })
-                        .GroupBy(c => c.SourceColumn, StringComparer.OrdinalIgnoreCase)
-                        .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple aliases for the same source column
+                        .Select(c =>
+                        {
+                            // Check which underlying attribute the data is coming from, handling virtual attributes
+                            var parts = c.SourceColumn.SplitMultiPartIdentifier();
+                            var entityName = fetchXml.Entity.name;
+                            var attrName = parts.Last();
+
+                            if (parts.Length > 1 && !parts[0].Equals(fetchXml.Alias))
+                                entityName = fetchXml.Entity.FindLinkEntity(parts[0])?.name;
+
+                            if (entityName == null)
+                                return null;
+
+                            var metadata = dataSource.Metadata;
+                            var meta = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                            var isVirtual = false;
+                            if (meta == null && (attrName.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attrName.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                var logicalName = attrName.Substring(0, attrName.Length - 4);
+                                meta = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                                isVirtual = true;
+                            }
+
+                            return new { c.Mapping, c.SourceColumn, c.Alias, meta?.LogicalName, IsVirtual = isVirtual };
+                        })
+                        .Where(c => c?.LogicalName != null) // Ignore attributes we can't find in the metadata
+                        .GroupBy(c => c.LogicalName, StringComparer.OrdinalIgnoreCase)
+                        .Where(g => g.Count() == 1) // Ignore attributes that appear multiple times, either as physical or virtual attributes
                         .Select(g => g.Single())
+                        .Where(c => c.IsVirtual == false) // Ignore virtual attributes
                         .GroupBy(c => c.Alias, StringComparer.OrdinalIgnoreCase)
                         .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple columns using the same alias
                         .Select(g => g.Single())
@@ -205,7 +233,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         .Select(c =>
                         {
                             var attr = fetchXml.AddAttribute(c.SourceColumn, null, dataSource.Metadata, out _, out var linkEntity);
-                            return new { Mapping = c.Mapping, SourceColumn = c.SourceColumn, Alias = c.Alias, Attr = attr, LinkEntity = linkEntity };
+                            return new { c.Mapping, c.SourceColumn, c.Alias, Attr = attr, LinkEntity = linkEntity };
                         })
                         .Where(c =>
                         {
