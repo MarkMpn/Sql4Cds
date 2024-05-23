@@ -165,6 +165,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foldedFilters |= ExpandFiltersOnColumnComparisons(context);
             foldedFilters |= FoldFiltersToDataSources(context, hints, subqueryConditions);
             foldedFilters |= FoldFiltersToInnerJoinSources(context, hints);
+            foldedFilters |= FoldFiltersToSpoolSource(context, hints);
+            foldedFilters |= FoldFiltersToNestedLoopCondition(context, hints);
 
             foreach (var addedLink in addedLinks)
             {
@@ -188,6 +190,60 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             StartupExpression = CheckStartupExpression();
 
             return this;
+        }
+
+        private bool FoldFiltersToNestedLoopCondition(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            if (Filter == null)
+                return false;
+
+            if (!(Source is NestedLoopNode loop))
+                return false;
+
+            // Can't move the filter to the loop condition if we're using any of the defined values created by the loop
+            if (Filter.GetColumns().Any(c => loop.DefinedValues.ContainsKey(c)))
+                return false;
+
+            if (loop.JoinCondition == null)
+            {
+                loop.JoinCondition = Filter;
+            }
+            else
+            {
+                loop.JoinCondition = new BooleanBinaryExpression
+                {
+                    FirstExpression = loop.JoinCondition,
+                    BinaryExpressionType = BooleanBinaryExpressionType.And,
+                    SecondExpression = Filter
+                };
+            }
+
+            Filter = null;
+            return true;
+        }
+
+        private bool FoldFiltersToSpoolSource(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            if (Filter == null)
+                return false;
+
+            if (!(Source is TableSpoolNode spool))
+                return false;
+
+            var usesVariables = Filter.GetVariables().Any();
+
+            if (usesVariables)
+                return false;
+
+            spool.Source = new FilterNode
+            {
+                Source = spool.Source,
+                Filter = Filter
+            };
+
+            Filter = null;
+
+            return true;
         }
 
         private bool FoldFiltersToInnerJoinSources(NodeCompilationContext context, IList<OptimizerHint> hints)
@@ -219,7 +275,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var rightContext = context;
 
-            if (join is NestedLoopNode loop)
+            if (join is NestedLoopNode loop && loop.OuterReferences != null)
             {
                 var innerParameterTypes = context.ParameterTypes
                     .Concat(loop.OuterReferences.Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type)))

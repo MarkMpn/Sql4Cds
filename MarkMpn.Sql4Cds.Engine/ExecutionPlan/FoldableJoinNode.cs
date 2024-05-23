@@ -507,6 +507,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
                 }
+
+                // Re-fold the FetchXML node to remove any filters that are now blank
+                leftFetch.FoldQuery(context, hints);
             }
 
             return true;

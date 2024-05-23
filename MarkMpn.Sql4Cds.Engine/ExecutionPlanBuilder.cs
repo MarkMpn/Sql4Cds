@@ -2684,7 +2684,7 @@ namespace MarkMpn.Sql4Cds.Engine
             });
         }
 
-        private IDataExecutionPlanNodeInternal ConvertInSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences)
+        private IDataExecutionPlanNodeInternal ConvertInSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
         {
             var visitor = new InSubqueryVisitor();
             query.Accept(visitor);
@@ -2692,141 +2692,143 @@ namespace MarkMpn.Sql4Cds.Engine
             if (visitor.InSubqueries.Count == 0)
                 return source;
 
+            foreach (var inSubquery in visitor.InSubqueries)
+                source = ConvertInSubquery(source, hints, query, inSubquery, context, outerSchema, outerReferences);
+
+            return source;
+        }
+
+        private IDataExecutionPlanNodeInternal ConvertInSubquery(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, InPredicate inSubquery, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
+        {
             var computeScalar = source as ComputeScalarNode;
-            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
             var schema = source.GetSchema(context);
 
-            foreach (var inSubquery in visitor.InSubqueries)
+            // Validate the LHS expression
+            inSubquery.Expression.GetType(GetExpressionContext(schema, context), out _);
+
+            // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
+            // LEFT JOIN source ON col1 = col2
+            // and the result is col2 IS NOT NULL
+
+            // Ensure the left hand side is a column
+            if (!(inSubquery.Expression is ColumnReferenceExpression lhsCol))
             {
-                // Validate the LHS expression
-                inSubquery.Expression.GetType(GetExpressionContext(schema, context), out _);
-
-                // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
-                // LEFT JOIN source ON col1 = col2
-                // and the result is col2 IS NOT NULL
-
-                // Ensure the left hand side is a column
-                if (!(inSubquery.Expression is ColumnReferenceExpression lhsCol))
+                if (computeScalar == null)
                 {
-                    if (computeScalar == null)
-                    {
-                        computeScalar = new ComputeScalarNode { Source = source };
-                        source = computeScalar;
-                    }
+                    computeScalar = new ComputeScalarNode { Source = source };
+                    source = computeScalar;
+                }
 
-                    var alias = context.GetExpressionName();
-                    computeScalar.Columns[alias] = inSubquery.Expression.Clone();
-                    lhsCol = alias.ToColumnReference();
+                var alias = context.GetExpressionName();
+                computeScalar.Columns[alias] = inSubquery.Expression.Clone();
+                lhsCol = alias.ToColumnReference();
+            }
+            else
+            {
+                // Normalize the LHS column
+                if (schema.ContainsColumn(lhsCol.GetColumnName(), out var lhsColNormalized))
+                    lhsCol = lhsColNormalized.ToColumnReference();
+            }
+
+            var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
+            var innerContext = new NodeCompilationContext(context, parameters);
+            var references = new Dictionary<string, string>();
+            var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
+
+            // Scalar subquery must return exactly one column and one row
+            if (innerQuery.ColumnSet.Count != 1)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.MultiColumnScalarSubquery(inSubquery.Subquery));
+
+            // Create the join
+            BaseJoinNode join;
+            var testColumn = innerQuery.ColumnSet[0].SourceColumn;
+
+            if (references.Count == 0)
+            {
+                if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, true, out var outputCol, out var merge))
+                {
+                    testColumn = outputCol;
+                    join = merge;
                 }
                 else
                 {
-                    // Normalize the LHS column
-                    if (schema.ContainsColumn(lhsCol.GetColumnName(), out var lhsColNormalized))
-                        lhsCol = lhsColNormalized.ToColumnReference();
-                }
-
-                var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-                var innerContext = new NodeCompilationContext(context, parameters);
-                var references = new Dictionary<string, string>();
-                var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-
-                // Scalar subquery must return exactly one column and one row
-                if (innerQuery.ColumnSet.Count != 1)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.MultiColumnScalarSubquery(inSubquery.Subquery));
-
-                // Create the join
-                BaseJoinNode join;
-                var testColumn = innerQuery.ColumnSet[0].SourceColumn;
-
-                if (references.Count == 0)
-                {
-                    if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, true, out var outputCol, out var merge))
+                    // We need the inner list to be distinct to avoid creating duplicates during the join
+                    var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
+                    if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                     {
-                        testColumn = outputCol;
-                        join = merge;
-                    }
-                    else
-                    {
-                        // We need the inner list to be distinct to avoid creating duplicates during the join
-                        var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
-                        if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
+                        innerQuery.Source = new DistinctNode
                         {
-                            innerQuery.Source = new DistinctNode
-                            {
-                                Source = innerQuery.Source,
-                                Columns = { innerQuery.ColumnSet[0].SourceColumn }
-                            };
-                        }
-
-                        // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
-                        // same table being used inside the IN subquery and elsewhere
-                        var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() }, context);
-
-                        testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
-                        join = new HashJoinNode
-                        {
-                            LeftSource = source,
-                            LeftAttribute = lhsCol.Clone(),
-                            RightSource = alias,
-                            RightAttribute = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = alias.Alias }, new Identifier { Value = alias.ColumnSet[0].OutputColumn } } } }
+                            Source = innerQuery.Source,
+                            Columns = { innerQuery.ColumnSet[0].SourceColumn }
                         };
                     }
 
-                    if (!join.SemiJoin)
-                    {
-                        // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
-                        var definedValue = context.GetExpressionName();
-                        join.SemiJoin = true;
-                        join.OutputRightSchema = false;
-                        join.DefinedValues[definedValue] = testColumn;
-                        testColumn = definedValue;
-                    }
-                }
-                else
-                {
-                    // We need to use nested loops for correlated subqueries
-                    // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
-                    // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
-                    // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
-                    // many rows are likely from the outer query to work out if this is going to be more efficient or not.
-                    if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
+                    // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
+                    // same table being used inside the IN subquery and elsewhere
+                    var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() }, context);
 
-                    var definedValue = context.GetExpressionName();
-
-                    join = new NestedLoopNode
+                    testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
+                    join = new HashJoinNode
                     {
                         LeftSource = source,
-                        RightSource = innerQuery.Source,
-                        OuterReferences = references,
-                        JoinCondition = new BooleanComparisonExpression
-                        {
-                            FirstExpression = lhsCol,
-                            ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
-                        },
-                        SemiJoin = true,
-                        OutputRightSchema = false,
-                        DefinedValues = { [definedValue] = innerQuery.ColumnSet[0].SourceColumn }
+                        LeftAttribute = lhsCol.Clone(),
+                        RightSource = alias,
+                        RightAttribute = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = alias.Alias }, new Identifier { Value = alias.ColumnSet[0].OutputColumn } } } }
                     };
-
-                    testColumn = definedValue;
                 }
 
-                join.JoinType = QualifiedJoinType.LeftOuter;
-
-                rewrites[inSubquery] = new BooleanIsNullExpression
+                if (!join.SemiJoin)
                 {
-                    IsNot = !inSubquery.NotDefined,
-                    Expression = testColumn.ToColumnReference()
+                    // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
+                    var definedValue = context.GetExpressionName();
+                    join.SemiJoin = true;
+                    join.OutputRightSchema = false;
+                    join.DefinedValues[definedValue] = testColumn;
+                    testColumn = definedValue;
+                }
+            }
+            else
+            {
+                // We need to use nested loops for correlated subqueries
+                // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
+                // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
+                // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
+                // many rows are likely from the outer query to work out if this is going to be more efficient or not.
+                if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
+                    InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
+
+                var definedValue = context.GetExpressionName();
+
+                join = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = innerQuery.Source,
+                    OuterReferences = references,
+                    JoinCondition = new BooleanComparisonExpression
+                    {
+                        FirstExpression = lhsCol,
+                        ComparisonType = BooleanComparisonType.Equals,
+                        SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                    },
+                    SemiJoin = true,
+                    OutputRightSchema = false,
+                    DefinedValues = { [definedValue] = innerQuery.ColumnSet[0].SourceColumn }
                 };
 
-                source = join;
+                testColumn = definedValue;
             }
 
+            join.JoinType = QualifiedJoinType.LeftOuter;
+
+            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
+            rewrites[inSubquery] = new BooleanIsNullExpression
+            {
+                IsNot = !inSubquery.NotDefined,
+                Expression = testColumn.ToColumnReference()
+            };
             query.Accept(new BooleanRewriteVisitor(rewrites));
 
-            return source;
+            return join;
         }
 
         private IDataExecutionPlanNodeInternal ConvertExistsSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
@@ -2837,138 +2839,140 @@ namespace MarkMpn.Sql4Cds.Engine
             if (visitor.ExistsSubqueries.Count == 0)
                 return source;
 
-            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
-            var schema = source.GetSchema(context);
-
             foreach (var existsSubquery in visitor.ExistsSubqueries)
-            {
-                // Each query of the format "EXISTS (SELECT * FROM source)" becomes a outer semi join
-                var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-                var innerContext = new NodeCompilationContext(context, parameters);
-                var references = new Dictionary<string, string>();
-                var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-                var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
-                var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
-
-                // Create the join
-                BaseJoinNode join;
-                string testColumn;
-                if (references.Count == 0)
-                {
-                    // We only need one record to check for EXISTS
-                    if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
-                    {
-                        innerQuery.Source = new TopNode
-                        {
-                            Source = innerQuery.Source,
-                            Top = new IntegerLiteral { Value = "1" }
-                        };
-                    }
-
-                    // We need a non-null value to use
-                    if (innerSchemaPrimaryKey == null)
-                    {
-                        innerSchemaPrimaryKey = context.GetExpressionName();
-
-                        if (!(innerQuery.Source is ComputeScalarNode computeScalar))
-                        {
-                            computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
-                            innerQuery.Source = computeScalar;
-                        }
-
-                        computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
-                    }
-
-                    // We can spool the results for reuse each time
-                    innerQuery.Source = new TableSpoolNode
-                    {
-                        Source = innerQuery.Source,
-                        SpoolType = SpoolType.Lazy
-                    };
-
-                    testColumn = context.GetExpressionName();
-
-                    join = new NestedLoopNode
-                    {
-                        LeftSource = source,
-                        RightSource = innerQuery.Source,
-                        JoinType = QualifiedJoinType.LeftOuter,
-                        SemiJoin = true,
-                        OutputRightSchema = false,
-                        OuterReferences = references,
-                        DefinedValues =
-                        {
-                            [testColumn] = innerSchemaPrimaryKey
-                        }
-                    };
-                }
-                else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, false, out testColumn, out var merge))
-                {
-                    join = merge;
-                }
-                else
-                {
-                    // We need to use nested loops for correlated subqueries
-                    // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
-                    // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
-                    // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
-                    // many rows are likely from the outer query to work out if this is going to be more efficient or not.
-                    if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
-
-                    // We only need one record to check for EXISTS
-                    if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
-                    {
-                        innerQuery.Source = new TopNode
-                        {
-                            Source = innerQuery.Source,
-                            Top = new IntegerLiteral { Value = "1" }
-                        };
-                    }
-
-                    // We need a non-null value to use
-                    if (innerSchemaPrimaryKey == null)
-                    {
-                        innerSchemaPrimaryKey = context.GetExpressionName();
-
-                        if (!(innerQuery.Source is ComputeScalarNode computeScalar))
-                        {
-                            computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
-                            innerQuery.Source = computeScalar;
-                        }
-
-                        computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
-                    }
-
-                    var definedValue = context.GetExpressionName();
-
-                    join = new NestedLoopNode
-                    {
-                        LeftSource = source,
-                        RightSource = innerQuery.Source,
-                        OuterReferences = references,
-                        SemiJoin = true,
-                        OutputRightSchema = false,
-                        DefinedValues = { [definedValue] = innerSchemaPrimaryKey }
-                    };
-
-                    testColumn = definedValue;
-                }
-
-                join.JoinType = QualifiedJoinType.LeftOuter;
-
-                rewrites[existsSubquery] = new BooleanIsNullExpression
-                {
-                    IsNot = true,
-                    Expression = testColumn.ToColumnReference()
-                };
-
-                source = join;
-            }
-
-            query.Accept(new BooleanRewriteVisitor(rewrites));
+                source = ConvertExistsSubquery(source, hints, query, existsSubquery, context, outerSchema, outerReferences);
 
             return source;
+        }
+
+        private IDataExecutionPlanNodeInternal ConvertExistsSubquery(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, ExistsPredicate existsSubquery, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
+        {
+            var schema = source.GetSchema(context);
+
+            // Each query of the format "EXISTS (SELECT * FROM source)" becomes a outer semi join
+            var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
+            var innerContext = new NodeCompilationContext(context, parameters);
+            var references = new Dictionary<string, string>();
+            var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
+            var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
+            var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
+
+            // Create the join
+            BaseJoinNode join;
+            string testColumn;
+            if (references.Count == 0)
+            {
+                // We only need one record to check for EXISTS
+                if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
+                {
+                    innerQuery.Source = new TopNode
+                    {
+                        Source = innerQuery.Source,
+                        Top = new IntegerLiteral { Value = "1" }
+                    };
+                }
+
+                // We need a non-null value to use
+                if (innerSchemaPrimaryKey == null)
+                {
+                    innerSchemaPrimaryKey = context.GetExpressionName();
+
+                    if (!(innerQuery.Source is ComputeScalarNode computeScalar))
+                    {
+                        computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
+                        innerQuery.Source = computeScalar;
+                    }
+
+                    computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
+                }
+
+                // We can spool the results for reuse each time
+                innerQuery.Source = new TableSpoolNode
+                {
+                    Source = innerQuery.Source,
+                    SpoolType = SpoolType.Lazy
+                };
+
+                testColumn = context.GetExpressionName();
+
+                join = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = innerQuery.Source,
+                    JoinType = QualifiedJoinType.LeftOuter,
+                    SemiJoin = true,
+                    OutputRightSchema = false,
+                    OuterReferences = references,
+                    DefinedValues =
+                    {
+                        [testColumn] = innerSchemaPrimaryKey
+                    }
+                };
+            }
+            else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, false, out testColumn, out var merge))
+            {
+                join = merge;
+            }
+            else
+            {
+                // We need to use nested loops for correlated subqueries
+                // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
+                // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
+                // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
+                // many rows are likely from the outer query to work out if this is going to be more efficient or not.
+                if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
+                    InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
+
+                // We only need one record to check for EXISTS
+                if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
+                {
+                    innerQuery.Source = new TopNode
+                    {
+                        Source = innerQuery.Source,
+                        Top = new IntegerLiteral { Value = "1" }
+                    };
+                }
+
+                // We need a non-null value to use
+                if (innerSchemaPrimaryKey == null)
+                {
+                    innerSchemaPrimaryKey = context.GetExpressionName();
+
+                    if (!(innerQuery.Source is ComputeScalarNode computeScalar))
+                    {
+                        computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
+                        innerQuery.Source = computeScalar;
+                    }
+
+                    computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
+                }
+
+                var definedValue = context.GetExpressionName();
+
+                join = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = innerQuery.Source,
+                    OuterReferences = references,
+                    SemiJoin = true,
+                    OutputRightSchema = false,
+                    DefinedValues = { [definedValue] = innerSchemaPrimaryKey }
+                };
+
+                testColumn = definedValue;
+            }
+
+            join.JoinType = QualifiedJoinType.LeftOuter;
+
+            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
+            rewrites[existsSubquery] = new BooleanIsNullExpression
+            {
+                IsNot = true,
+                Expression = testColumn.ToColumnReference()
+            };
+            query.Accept(new BooleanRewriteVisitor(rewrites));
+
+            return join;
         }
 
         private IDataExecutionPlanNodeInternal ConvertHavingClause(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, HavingClause havingClause, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query, INodeSchema nonAggregateSchema)
@@ -4324,11 +4328,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 // used from this query in preference to the outer query.
                 CaptureOuterReferences(outerSchema, new NestedLoopNode { LeftSource = lhs, RightSource = rhs }, join.SearchCondition, context, outerReferences);
 
-                // TODO: Convert any subqueries in the join criteria. For simplicity we'll always add the subquery nodes to the RHS of
-                // the join, but it could reference data from the LHS table. Capture this as outer references to use in a nested loop join.
-                rhs = ConvertInSubqueries(rhs, hints, join.SearchCondition, context, outerSchema, outerReferences);
-                rhs = ConvertExistsSubqueries(rhs, hints, join.SearchCondition, context, outerSchema, outerReferences);
-
                 var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                 join.SearchCondition.Accept(joinConditionVisitor);
 
@@ -4441,9 +4440,91 @@ namespace MarkMpn.Sql4Cds.Engine
                     };
                 }
 
-                // Validate the join condition
-                var joinSchema = joinNode.GetSchema(context);
-                join.SearchCondition.GetType(GetExpressionContext(joinSchema, context), out _);
+                BooleanExpression additionalCriteria = (joinNode as FoldableJoinNode)?.AdditionalJoinCriteria ?? (joinNode as NestedLoopNode)?.JoinCondition;
+
+                if (additionalCriteria != null)
+                {
+                    var where = new WhereClause { SearchCondition = additionalCriteria };
+
+                    if (join.QualifiedJoinType == QualifiedJoinType.Inner)
+                    {
+                        // Move any additional criteria to a filter node on the join results
+                        var result = (IDataExecutionPlanNodeInternal)joinNode;
+                        result = ConvertInSubqueries(result, hints, where, context, outerSchema, outerReferences);
+                        result = ConvertExistsSubqueries(result, hints, where, context, outerSchema, outerReferences);
+
+                        if (where.SearchCondition != null)
+                        {
+                            var joinSchema = result.GetSchema(context);
+                            where.SearchCondition.GetType(GetExpressionContext(joinSchema, context), out _);
+
+                            result = new FilterNode
+                            {
+                                Source = result,
+                                Filter = where.SearchCondition
+                            };
+                        }
+
+                        if (joinNode is FoldableJoinNode foldable)
+                            foldable.AdditionalJoinCriteria = null;
+                        else if (joinNode is NestedLoopNode nestedLoop)
+                            nestedLoop.JoinCondition = null;
+
+                        return result;
+                    }
+                    else
+                    {
+                        // Convert any subqueries in the join criteria. There may be multiple subqueries, and each one could reference data from
+                        // just the LHS, just the RHS, or both.
+                        // Subqueries that only reference the LHS data should be added to that path. Any others should be added to the RHS path,
+                        // including any required data from the LHS via an outer reference.
+                        var inSubqueries = new InSubqueryVisitor();
+                        where.Accept(inSubqueries);
+
+                        foreach (var subquery in inSubqueries.InSubqueries)
+                        {
+                            var cols = subquery.GetColumns();
+                            var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
+                            var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
+
+                            if (hasLhsCols && !hasRhsCols)
+                                joinNode.LeftSource = ConvertInSubquery(joinNode.LeftSource, hints, where, subquery, context, outerSchema, outerReferences);
+                            else if (!hasLhsCols && hasRhsCols)
+                                joinNode.RightSource = ConvertInSubquery(joinNode.RightSource, hints, where, subquery, context, outerSchema, outerReferences);
+                            else
+                                throw new NotImplementedException(); // TODO: Subqueries that reference both sides or neither side in an outer join
+                        }
+
+                        var existsSubqueries = new ExistsSubqueryVisitor();
+                        where.Accept(existsSubqueries);
+
+                        foreach (var subquery in existsSubqueries.ExistsSubqueries)
+                        {
+                            var cols = subquery.GetColumns();
+                            var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
+                            var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
+
+                            if (hasLhsCols && !hasRhsCols)
+                                joinNode.LeftSource = ConvertExistsSubquery(joinNode.LeftSource, hints, where, subquery, context, outerSchema, outerReferences);
+                            else if (!hasLhsCols && hasRhsCols)
+                                joinNode.RightSource = ConvertExistsSubquery(joinNode.RightSource, hints, where, subquery, context, outerSchema, outerReferences);
+                            else
+                                throw new NotImplementedException(); // TODO: Subqueries that reference both sides or neither side in an outer join
+                        }
+
+                        // Validate the remaining join condition
+                        if (where.SearchCondition != null)
+                        {
+                            var joinSchema = joinNode.GetSchema(context);
+                            where.SearchCondition.GetType(GetExpressionContext(joinSchema, context), out _);
+                        }
+
+                        if (joinNode is FoldableJoinNode foldable)
+                            foldable.AdditionalJoinCriteria = where.SearchCondition;
+                        else if (joinNode is NestedLoopNode nestedLoop)
+                            nestedLoop.JoinCondition = where.SearchCondition;
+                    }
+                }
 
                 return joinNode;
             }

@@ -7553,10 +7553,10 @@ inner join contact ON account.accountid = contact.parentcustomerid AND contact.f
 <fetch>
   <entity name='contact'>
     <all-attributes />
-    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
     <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
       <all-attributes />
     </link-entity>
+    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
   </entity>
 </fetch>");
             }
@@ -7586,10 +7586,130 @@ inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SE
 <fetch>
   <entity name='contact'>
     <all-attributes />
-    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
     <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
       <all-attributes />
     </link-entity>
+    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaLHS()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND account.name IN (SELECT new_name FROM new_customentity)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+      <link-entity name='new_customentity' to='name' from='new_name' link-type='in' />
+    </link-entity>
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaLHSCorrelatedExists()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SELECT * FROM new_customentity WHERE new_name = account.name)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+      <link-entity name='new_customentity' to='name' from='new_name' link-type='in' />
+    </link-entity>
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaLHSAndRHSInnerJoin()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND contact.fullname IN (SELECT new_name FROM new_customentity WHERE account.turnover = new_customentity.new_decimalprop)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var filter = AssertNode<FilterNode>(select.Source);
+                Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
+                var loop = AssertNode<NestedLoopNode>(filter.Source);
+                Assert.AreEqual(QualifiedJoinType.LeftOuter, loop.JoinType);
+                Assert.IsTrue(loop.SemiJoin);
+                Assert.AreEqual("contact.fullname = new_customentity.new_name", loop.JoinCondition.ToSql());
+                Assert.AreEqual(1, loop.OuterReferences.Count);
+                Assert.AreEqual("@Expr1", loop.OuterReferences["account.turnover"]);
+                Assert.AreEqual("new_customentity.new_name", loop.DefinedValues["Expr2"]);
+                var fetch1 = AssertNode<FetchXmlScan>(loop.LeftSource);
+                AssertFetchXml(fetch1, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+    </link-entity>
+  </entity>
+</fetch>");
+                var spool = AssertNode<IndexSpoolNode>(loop.RightSource);
+                Assert.AreEqual("new_customentity.new_decimalprop", spool.KeyColumn);
+                Assert.AreEqual("@Expr1", spool.SeekValue);
+                var fetch2 = AssertNode<FetchXmlScan>(spool.Source);
+                AssertFetchXml(fetch2, @"
+<fetch>
+  <entity name='new_customentity'>
+    <attribute name='new_name' />
+    <attribute name='new_decimalprop' />
+    <filter>
+      <condition attribute=""new_decimalprop"" operator=""not-null"" />
+    </filter>
   </entity>
 </fetch>");
             }
