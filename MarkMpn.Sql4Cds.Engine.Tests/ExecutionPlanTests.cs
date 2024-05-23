@@ -7716,6 +7716,65 @@ inner join contact ON account.accountid = contact.parentcustomerid AND contact.f
         }
 
         [TestMethod]
+        public void SubqueryInJoinCriteriaLHSAndRHSOuterJoin()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+left outer join contact ON account.accountid = contact.parentcustomerid AND contact.fullname IN (SELECT new_name FROM new_customentity WHERE account.turnover = new_customentity.new_decimalprop)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var loop1 = AssertNode<NestedLoopNode>(select.Source);
+                Assert.AreEqual(QualifiedJoinType.LeftOuter, loop1.JoinType);
+                Assert.AreEqual("account.accountid = contact.parentcustomerid\r\nAND Expr3 IS NOT NULL", loop1.JoinCondition.ToSql());
+                Assert.IsFalse(loop1.SemiJoin);
+                Assert.AreEqual(1, loop1.OuterReferences.Count);
+                Assert.AreEqual("@Expr1", loop1.OuterReferences["account.turnover"]);
+                var fetch1 = AssertNode<FetchXmlScan>(loop1.LeftSource);
+                AssertFetchXml(fetch1, @"
+<fetch>
+  <entity name='account'>
+    <all-attributes />
+  </entity>
+</fetch>");
+                var loop2 = AssertNode<NestedLoopNode>(loop1.RightSource);
+                Assert.AreEqual(1, loop2.DefinedValues.Count);
+                Assert.AreEqual("new_customentity.new_name", loop2.DefinedValues["Expr3"]);
+                var fetch2 = AssertNode<FetchXmlScan>(loop2.LeftSource);
+                AssertFetchXml(fetch2, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+  </entity>
+</fetch>");
+                var spool = AssertNode<IndexSpoolNode>(loop2.RightSource);
+                Assert.AreEqual("new_customentity.new_decimalprop", spool.KeyColumn);
+                Assert.AreEqual("@Expr1", spool.SeekValue);
+                var fetch3 = AssertNode<FetchXmlScan>(spool.Source);
+                AssertFetchXml(fetch2, @"
+<fetch>
+  <entity name='new_customentity'>
+    <attribute name='new_name' />
+    <attribute name='new_decimalprop' />
+    <filter>
+      <condition attribute=""new_decimalprop"" operator=""not-null"" />
+    </filter>
+  </entity>
+</fetch>");
+
+            }
+        }
+
+        [TestMethod]
         public void VirtualAttributeAliases()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);

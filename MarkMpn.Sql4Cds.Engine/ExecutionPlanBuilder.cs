@@ -4481,35 +4481,91 @@ namespace MarkMpn.Sql4Cds.Engine
                         var inSubqueries = new InSubqueryVisitor();
                         where.Accept(inSubqueries);
 
-                        foreach (var subquery in inSubqueries.InSubqueries)
-                        {
-                            var cols = subquery.GetColumns();
-                            var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
-                            var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
+                        var inSubqueryConversions = inSubqueries.InSubqueries
+                            .Select(subquery =>
+                            {
+                                var cols = subquery.GetColumns();
+                                var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
+                                var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
 
-                            if (hasLhsCols && !hasRhsCols)
-                                joinNode.LeftSource = ConvertInSubquery(joinNode.LeftSource, hints, where, subquery, context, outerSchema, outerReferences);
-                            else if (!hasLhsCols && hasRhsCols)
-                                joinNode.RightSource = ConvertInSubquery(joinNode.RightSource, hints, where, subquery, context, outerSchema, outerReferences);
-                            else
-                                throw new NotImplementedException(); // TODO: Subqueries that reference both sides or neither side in an outer join
-                        }
+                                return new
+                                {
+                                    Subquery = subquery,
+                                    HasLHSCols = hasLhsCols,
+                                    HasRHSCols = hasRhsCols
+                                };
+                            })
+                            .ToList();
 
                         var existsSubqueries = new ExistsSubqueryVisitor();
                         where.Accept(existsSubqueries);
 
-                        foreach (var subquery in existsSubqueries.ExistsSubqueries)
-                        {
-                            var cols = subquery.GetColumns();
-                            var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
-                            var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
+                        var existsSubqueryConversions = existsSubqueries.ExistsSubqueries
+                            .Select(subquery =>
+                            {
+                                var cols = subquery.GetColumns();
+                                var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
+                                var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
 
-                            if (hasLhsCols && !hasRhsCols)
-                                joinNode.LeftSource = ConvertExistsSubquery(joinNode.LeftSource, hints, where, subquery, context, outerSchema, outerReferences);
-                            else if (!hasLhsCols && hasRhsCols)
-                                joinNode.RightSource = ConvertExistsSubquery(joinNode.RightSource, hints, where, subquery, context, outerSchema, outerReferences);
+                                return new
+                                {
+                                    Subquery = subquery,
+                                    HasLHSCols = hasLhsCols,
+                                    HasRHSCols = hasRhsCols
+                                };
+                            })
+                            .ToList();
+
+                        if (joinNode is FoldableJoinNode foldable && (inSubqueryConversions.Any(s => s.HasLHSCols && s.HasRHSCols) || existsSubqueryConversions.Any(s => s.HasLHSCols && s.HasRHSCols)))
+                        {
+                            // We're currently using a hash- or merge-join, but we need to apply a subquery that requires data from both
+                            // sides of the join. Replace the join with a nested loop so we can apply the required outer references
+                            joinNode = new NestedLoopNode
+                            {
+                                LeftSource = foldable.LeftSource,
+                                RightSource = foldable.RightSource,
+                                JoinType = foldable.JoinType
+                            };
+
+                            // Need to add the original join condition back in
+                            where.SearchCondition = new BooleanBinaryExpression
+                            {
+                                FirstExpression = new BooleanComparisonExpression
+                                {
+                                    FirstExpression = foldable.LeftAttribute,
+                                    ComparisonType = BooleanComparisonType.Equals,
+                                    SecondExpression = foldable.RightAttribute
+                                },
+                                BinaryExpressionType = BooleanBinaryExpressionType.And,
+                                SecondExpression = where.SearchCondition
+                            };
+                        }
+
+                        var nestedLoopJoinNode = joinNode as NestedLoopNode;
+
+                        if (nestedLoopJoinNode != null && nestedLoopJoinNode.OuterReferences == null)
+                            nestedLoopJoinNode.OuterReferences = new Dictionary<string, string>();
+
+                        foreach (var subquery in inSubqueryConversions)
+                        {
+                            if (subquery.HasLHSCols && subquery.HasRHSCols)
+                                CaptureOuterReferences(lhsSchema, joinNode.RightSource, subquery.Subquery, context, nestedLoopJoinNode.OuterReferences);
+
+                            if (!subquery.HasRHSCols)
+                                joinNode.LeftSource = ConvertInSubquery(joinNode.LeftSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
                             else
-                                throw new NotImplementedException(); // TODO: Subqueries that reference both sides or neither side in an outer join
+                                joinNode.RightSource = ConvertInSubquery(joinNode.RightSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
+                        }
+
+                        foreach (var subquery in existsSubqueryConversions)
+                        {
+                            if (subquery.HasLHSCols && subquery.HasRHSCols)
+                                CaptureOuterReferences(lhsSchema, joinNode.RightSource, subquery.Subquery, context, nestedLoopJoinNode.OuterReferences);
+
+                            if (!subquery.HasRHSCols)
+                                joinNode.LeftSource = ConvertExistsSubquery(joinNode.LeftSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
+                            else
+                                joinNode.RightSource = ConvertExistsSubquery(joinNode.RightSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
                         }
 
                         // Validate the remaining join condition
@@ -4519,10 +4575,10 @@ namespace MarkMpn.Sql4Cds.Engine
                             where.SearchCondition.GetType(GetExpressionContext(joinSchema, context), out _);
                         }
 
-                        if (joinNode is FoldableJoinNode foldable)
-                            foldable.AdditionalJoinCriteria = where.SearchCondition;
-                        else if (joinNode is NestedLoopNode nestedLoop)
-                            nestedLoop.JoinCondition = where.SearchCondition;
+                        if (nestedLoopJoinNode != null)
+                            nestedLoopJoinNode.JoinCondition = where.SearchCondition;
+                        else
+                            ((FoldableJoinNode)joinNode).AdditionalJoinCriteria = where.SearchCondition;
                     }
                 }
 
