@@ -7746,27 +7746,31 @@ left outer join contact ON account.accountid = contact.parentcustomerid AND cont
     <all-attributes />
   </entity>
 </fetch>");
-                var loop2 = AssertNode<NestedLoopNode>(loop1.RightSource);
-                Assert.AreEqual(1, loop2.DefinedValues.Count);
-                Assert.AreEqual("new_customentity.new_name", loop2.DefinedValues["Expr3"]);
-                var fetch2 = AssertNode<FetchXmlScan>(loop2.LeftSource);
+                var merge = AssertNode<MergeJoinNode>(loop1.RightSource);
+                Assert.AreEqual(1, merge.DefinedValues.Count);
+                Assert.AreEqual("Expr2.new_name", merge.DefinedValues["Expr3"]);
+                var fetch2 = AssertNode<FetchXmlScan>(merge.LeftSource);
                 AssertFetchXml(fetch2, @"
 <fetch>
   <entity name='contact'>
     <all-attributes />
+    <order attribute='fullname' />
   </entity>
 </fetch>");
-                var spool = AssertNode<IndexSpoolNode>(loop2.RightSource);
+                var sort = AssertNode<SortNode>(merge.RightSource);
+                var distinct = AssertNode<DistinctNode>(sort.Source);
+                var alias = AssertNode<AliasNode>(distinct.Source);
+                var spool = AssertNode<IndexSpoolNode>(alias.Source);
                 Assert.AreEqual("new_customentity.new_decimalprop", spool.KeyColumn);
                 Assert.AreEqual("@Expr1", spool.SeekValue);
                 var fetch3 = AssertNode<FetchXmlScan>(spool.Source);
-                AssertFetchXml(fetch2, @"
+                AssertFetchXml(fetch3, @"
 <fetch>
   <entity name='new_customentity'>
     <attribute name='new_name' />
     <attribute name='new_decimalprop' />
     <filter>
-      <condition attribute=""new_decimalprop"" operator=""not-null"" />
+      <condition attribute='new_decimalprop' operator='not-null' />
     </filter>
   </entity>
 </fetch>");
