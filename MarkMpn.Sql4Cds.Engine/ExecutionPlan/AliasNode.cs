@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -21,6 +22,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="identifier">The alias to use for the subquery</param>
         public AliasNode(SelectNode select, Identifier identifier, NodeCompilationContext context)
         {
+            if (select == null)
+                return;
+
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
             Alias = identifier.Value;
@@ -74,6 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The schema that shold be used for expanding "*" columns
         /// </summary>
         [Browsable(false)]
+        [JsonIgnore]
         public INodeSchema LogicalSourceSchema { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)

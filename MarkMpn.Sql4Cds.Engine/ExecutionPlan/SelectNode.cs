@@ -11,6 +11,7 @@ using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata.Query;
+using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -40,6 +41,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The schema that should be used for expanding "*" columns
         /// </summary>
         [Browsable(false)]
+        [JsonIgnore]
         public INodeSchema LogicalSourceSchema { get; set; }
 
         [Browsable(false)]
