@@ -4523,7 +4523,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             joinNode = new NestedLoopNode
                             {
                                 LeftSource = foldable.LeftSource,
-                                RightSource = foldable.RightSource,
+                                RightSource = new TableSpoolNode { Source = foldable.RightSource },
                                 JoinType = foldable.JoinType
                             };
 

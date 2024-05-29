@@ -7749,7 +7749,8 @@ left outer join contact ON account.accountid = contact.parentcustomerid AND cont
                 var merge = AssertNode<MergeJoinNode>(loop1.RightSource);
                 Assert.AreEqual(1, merge.DefinedValues.Count);
                 Assert.AreEqual("Expr2.new_name", merge.DefinedValues["Expr3"]);
-                var fetch2 = AssertNode<FetchXmlScan>(merge.LeftSource);
+                var tableSpool = AssertNode<TableSpoolNode>(merge.LeftSource);
+                var fetch2 = AssertNode<FetchXmlScan>(tableSpool.Source);
                 AssertFetchXml(fetch2, @"
 <fetch>
   <entity name='contact'>
