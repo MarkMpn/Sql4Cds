@@ -1044,5 +1044,232 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("Joe", ((SqlString)results[2]["f.firstname"]).Value);
             Assert.IsTrue(((SqlString)results[2]["l.lastname"]).IsNull);
         }
+
+        [TestMethod]
+        public void FetchXmlSingleTablePrimaryKey()
+        {
+            var fetch = new FetchXmlScan
+            {
+                DataSource = _localDataSource.Name,
+                Alias = "account",
+                FetchXml = new FetchXml.FetchType
+                {
+                    Items = new object[]
+                    {
+                        new FetchXml.FetchEntityType
+                        {
+                            name = "account",
+                            Items = new object[]
+                            {
+                                new FetchXml.FetchAttributeType { name = "accountid" },
+                                new FetchXml.FetchAttributeType { name = "name" }
+                            }
+                        }
+                    }
+                }
+            };
+            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            Assert.AreEqual("account.accountid", schema.PrimaryKey);
+        }
+
+        [TestMethod]
+        public void FetchXmlChildTablePrimaryKey()
+        {
+            var fetch = new FetchXmlScan
+            {
+                DataSource = _localDataSource.Name,
+                Alias = "account",
+                FetchXml = new FetchXml.FetchType
+                {
+                    Items = new object[]
+                    {
+                        new FetchXml.FetchEntityType
+                        {
+                            name = "account",
+                            Items = new object[]
+                            {
+                                new FetchXml.FetchAttributeType { name = "accountid" },
+                                new FetchXml.FetchAttributeType { name = "name" },
+                                new FetchXml.FetchLinkEntityType
+                                {
+                                    name = "contact",
+                                    from = "parentcustomerid",
+                                    to = "accountid",
+                                    alias = "contact",
+                                    linktype = "inner",
+                                    Items = new object[]
+                                    {
+                                        new FetchXml.FetchAttributeType { name = "contactid" },
+                                        new FetchXml.FetchAttributeType { name = "fullname" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            Assert.AreEqual("contact.contactid", schema.PrimaryKey);
+        }
+
+        [TestMethod]
+        public void FetchXmlChildTableOuterJoinPrimaryKey()
+        {
+            var fetch = new FetchXmlScan
+            {
+                DataSource = _localDataSource.Name,
+                Alias = "account",
+                FetchXml = new FetchXml.FetchType
+                {
+                    Items = new object[]
+                    {
+                        new FetchXml.FetchEntityType
+                        {
+                            name = "account",
+                            Items = new object[]
+                            {
+                                new FetchXml.FetchAttributeType { name = "accountid" },
+                                new FetchXml.FetchAttributeType { name = "name" },
+                                new FetchXml.FetchLinkEntityType
+                                {
+                                    name = "contact",
+                                    from = "parentcustomerid",
+                                    to = "accountid",
+                                    alias = "contact",
+                                    linktype = "outer",
+                                    Items = new object[]
+                                    {
+                                        new FetchXml.FetchAttributeType { name = "contactid" },
+                                        new FetchXml.FetchAttributeType { name = "fullname" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            Assert.IsNull(schema.PrimaryKey);
+        }
+
+        [TestMethod]
+        public void FetchXmlParentTablePrimaryKey()
+        {
+            var fetch = new FetchXmlScan
+            {
+                DataSource = _localDataSource.Name,
+                Alias = "account",
+                FetchXml = new FetchXml.FetchType
+                {
+                    Items = new object[]
+                    {
+                        new FetchXml.FetchEntityType
+                        {
+                            name = "account",
+                            Items = new object[]
+                            {
+                                new FetchXml.FetchAttributeType { name = "accountid" },
+                                new FetchXml.FetchAttributeType { name = "name" },
+                                new FetchXml.FetchLinkEntityType
+                                {
+                                    name = "contact",
+                                    from = "contactid",
+                                    to = "primarycontactid",
+                                    alias = "contact",
+                                    linktype = "inner",
+                                    Items = new object[]
+                                    {
+                                        new FetchXml.FetchAttributeType { name = "contactid" },
+                                        new FetchXml.FetchAttributeType { name = "fullname" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            Assert.AreEqual("account.accountid", schema.PrimaryKey);
+        }
+
+        [TestMethod]
+        public void FetchXmlParentTableOuterJoinPrimaryKey()
+        {
+            var fetch = new FetchXmlScan
+            {
+                DataSource = _localDataSource.Name,
+                Alias = "account",
+                FetchXml = new FetchXml.FetchType
+                {
+                    Items = new object[]
+                    {
+                        new FetchXml.FetchEntityType
+                        {
+                            name = "account",
+                            Items = new object[]
+                            {
+                                new FetchXml.FetchAttributeType { name = "accountid" },
+                                new FetchXml.FetchAttributeType { name = "name" },
+                                new FetchXml.FetchLinkEntityType
+                                {
+                                    name = "contact",
+                                    from = "contactid",
+                                    to = "primarycontactid",
+                                    alias = "contact",
+                                    linktype = "inner",
+                                    Items = new object[]
+                                    {
+                                        new FetchXml.FetchAttributeType { name = "contactid" },
+                                        new FetchXml.FetchAttributeType { name = "fullname" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            Assert.AreEqual("account.accountid", schema.PrimaryKey);
+        }
+
+        [TestMethod]
+        public void FetchXmlChildTableFreeTextJoinPrimaryKey()
+        {
+            var fetch = new FetchXmlScan
+            {
+                DataSource = _localDataSource.Name,
+                Alias = "account",
+                FetchXml = new FetchXml.FetchType
+                {
+                    Items = new object[]
+                    {
+                        new FetchXml.FetchEntityType
+                        {
+                            name = "account",
+                            Items = new object[]
+                            {
+                                new FetchXml.FetchAttributeType { name = "accountid" },
+                                new FetchXml.FetchAttributeType { name = "name" },
+                                new FetchXml.FetchLinkEntityType
+                                {
+                                    name = "contact",
+                                    from = "fullname",
+                                    to = "name",
+                                    alias = "contact",
+                                    linktype = "inner",
+                                    Items = new object[]
+                                    {
+                                        new FetchXml.FetchAttributeType { name = "contactid" },
+                                        new FetchXml.FetchAttributeType { name = "fullname" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            Assert.IsNull(schema.PrimaryKey);
+        }
     }
 }
