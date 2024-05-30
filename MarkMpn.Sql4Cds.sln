@@ -50,9 +50,12 @@ Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "MarkMpn.Sql4Cds.SSMS.20.Set
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DebuggerVisualizer", "DebuggerVisualizer", "{395CF6D2-5DDE-4A42-81A8-B1C4FF20C736}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide", "MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide\MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide.csproj", "{17EE9908-59A4-4E81-85DD-2144B3BB4441}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide", "MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide\MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide.csproj", "{17EE9908-59A4-4E81-85DD-2144B3BB4441}"
+	ProjectSection(ProjectDependencies) = postProject
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE} = {65FD7411-5B94-443B-A4C3-A66082E0B0AE}
+	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide", "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide\MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide.csproj", "{65FD7411-5B94-443B-A4C3-A66082E0B0AE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide", "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide\MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide.csproj", "{65FD7411-5B94-443B-A4C3-A66082E0B0AE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

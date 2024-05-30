@@ -45,6 +45,7 @@ namespace MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide
             var splitter = new SplitContainer { Dock = DockStyle.Fill };
             splitter.Panel1.Controls.Add(control);
             splitter.Panel2.Controls.Add(propertyGrid);
+            splitter.FixedPanel = FixedPanel.Panel2;
             
             // Assign the MaskedTextBox control as the host control's child.
             host.Child = splitter;

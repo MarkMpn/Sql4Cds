@@ -24,7 +24,12 @@ namespace MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide
 
         public IEnumerable<IExecutionPlanNode> GetSources()
         {
-            throw new NotImplementedException();
+            yield return Source;
+        }
+
+        public override string ToString()
+        {
+            return "< Unknown Root >";
         }
     }
 }

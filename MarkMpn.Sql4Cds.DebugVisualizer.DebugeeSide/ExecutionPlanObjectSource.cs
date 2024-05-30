@@ -10,9 +10,20 @@ namespace MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide
         public override void GetData(object target, Stream outgoingData)
         {
             if (target is IRootExecutionPlanNode root)
+            {
                 WritePlan(outgoingData, root);
-            else
-                WritePlan(outgoingData, new UnknownRootNode { Source = (IExecutionPlanNode)target });
+            }
+            else if (target is IExecutionPlanNode node)
+            {
+                WritePlan(outgoingData, new UnknownRootNode { Source = node });
+            }
+            else if (target is Sql4CdsCommand cmd)
+            {
+                if (cmd.Plan != null)
+                    WritePlan(outgoingData, cmd.Plan.First());
+                else
+                    WritePlan(outgoingData, cmd.GeneratePlan(false).First());
+            }
         }
 
         private void WritePlan(Stream outgoingData, IRootExecutionPlanNode source)
