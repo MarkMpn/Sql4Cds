@@ -1,4 +1,5 @@
-﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+﻿using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.VisualStudio.Extensibility.DebuggerVisualizers;
 using Microsoft.VisualStudio.PlatformUI;
 //using Microsoft.Web.WebView2.Core;
@@ -27,14 +28,26 @@ namespace MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide
         private void QueryPlanUserControl_Loaded(object sender, RoutedEventArgs e)
         {
             // Create the interop host control.
-            System.Windows.Forms.Integration.WindowsFormsHost host =
-                new System.Windows.Forms.Integration.WindowsFormsHost();
+            var host = new System.Windows.Forms.Integration.WindowsFormsHost();
 
             // Create the control.
             var control = new MarkMpn.Sql4Cds.Controls.ExecutionPlanView { Plan = _plan };
+            control.Dock = DockStyle.Fill;
+            var propertyGrid = new PropertyGrid();
+            propertyGrid.Dock = DockStyle.Fill;
+            control.NodeSelected += (s, e) =>
+            {
+                if (control.Selected == null)
+                    propertyGrid.SelectedObject = null;
+                else
+                    propertyGrid.SelectedObject = new ExecutionPlanNodeTypeDescriptor(control.Selected, true, null);
+            };
+            var splitter = new SplitContainer { Dock = DockStyle.Fill };
+            splitter.Panel1.Controls.Add(control);
+            splitter.Panel2.Controls.Add(propertyGrid);
             
             // Assign the MaskedTextBox control as the host control's child.
-            host.Child = control;
+            host.Child = splitter;
 
             // Add the interop host control to the Grid
             // control's collection of child controls.
