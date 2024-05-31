@@ -2823,8 +2823,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var innerAlias = AssertNode<AliasNode>(loop.RightSource);
             var innerTop = AssertNode<TopNode>(innerAlias.Source);
-            var innerSort = AssertNode<SortNode>(innerTop.Source);
-            var innerIndexSpool = AssertNode<IndexSpoolNode>(innerSort.Source);
+            var innerIndexSpool = AssertNode<IndexSpoolNode>(innerTop.Source);
             Assert.AreEqual("contact.parentcustomerid", innerIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr1", innerIndexSpool.SeekValue);
             var innerFetch = AssertNode<FetchXmlScan>(innerIndexSpool.Source);
@@ -2837,6 +2836,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='parentcustomerid' operator='not-null' />
                         </filter>
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
         }
