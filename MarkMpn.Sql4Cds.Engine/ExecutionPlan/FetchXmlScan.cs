@@ -1220,7 +1220,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (linkEntity.from != childMeta.PrimaryIdAttribute)
                         {
-                            if (linkEntity.linktype == "inner")
+                            if (linkEntity.linktype == "inner" && linkEntity.to == meta.PrimaryIdAttribute && primaryKey == $"{alias}.{meta.PrimaryIdAttribute.EscapeIdentifier()}")
                                 primaryKey = $"{linkEntity.alias}.{childMeta.PrimaryIdAttribute.EscapeIdentifier()}";
                             else
                                 primaryKey = null;
