@@ -138,6 +138,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public virtual bool OrderByEntityNameAvailable { get; }
 
         /// <summary>
+        /// Indicates if the server can reliably page results when using <see cref="FetchXml.FetchType.UseRawOrderBy"/>
+        /// </summary>
+        public virtual bool UseRawOrderByReliable { get; }
+
+        /// <summary>
         /// Returns a list of join operators that are supported by the server
         /// </summary>
         public virtual List<JoinOperator> JoinOperatorsAvailable { get; }

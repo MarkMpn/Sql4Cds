@@ -1723,9 +1723,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
-                <fetch>
+                <fetch distinct='true'>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <link-entity name='contact' to='parentcustomerid' from='parentcustomerid' alias='c2' link-type='inner'>
                             <attribute name='contactid' />
                             <order attribute='contactid' />
@@ -1733,7 +1732,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='createdon' operator='lt' valueof='c2.createdon' />
                         </filter>
-                        <order attribute='contactid' />
                     </entity>
                 </fetch>");
 

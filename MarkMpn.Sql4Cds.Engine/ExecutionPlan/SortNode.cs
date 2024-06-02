@@ -387,7 +387,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 
                                 if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                                 {
-                                    if (useRawOrderBy == false)
+                                    if (useRawOrderBy == false || !dataSource.UseRawOrderByReliable)
                                         return this;
 
                                     useRawOrderBy = true;
@@ -437,7 +437,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             
                             if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                             {
-                                if (useRawOrderBy == false)
+                                if (useRawOrderBy == false || !dataSource.UseRawOrderByReliable)
                                     return this;
 
                                 useRawOrderBy = true;

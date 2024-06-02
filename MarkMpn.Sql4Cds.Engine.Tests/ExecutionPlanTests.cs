@@ -5330,13 +5330,14 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("new_customentity.new_optionsetvalue", sort.Sorts[0].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(sort.Source);
 
             AssertFetchXml(fetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true' useraworderby='1'>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
                     <entity name='new_customentity'>
                         <attribute name='new_optionsetvalue' />
-                        <order attribute='new_optionsetvalue' />
                     </entity>
                 </fetch>");
         }
@@ -7213,7 +7214,32 @@ inner join contact c on a.primarycontactid = c.contactid";
         }
 
         [TestMethod]
-        public void OrderByOptionSetValue()
+        public void OrderByOptionSetValueWithUseRawOrderBy()
+        {
+            using (_localDataSource.SetUseRawOrderByReliable(true))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch useraworderby='1'>
+                        <entity name='new_customentity'>
+                            <attribute name='new_customentityid' />
+                            <order attribute='new_optionsetvalue' />
+                        </entity>
+                    </fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void OrderByOptionSetValueWithoutUseRawOrderBy()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
@@ -7224,12 +7250,14 @@ inner join contact c on a.primarycontactid = c.contactid";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("new_customentity.new_optionsetvalue", sort.Sorts[0].Expression.ToSql());
+            var fetch = AssertNode<FetchXmlScan>(sort.Source);
             AssertFetchXml(fetch, @"
-                <fetch useraworderby='1'>
+                <fetch>
                     <entity name='new_customentity'>
                         <attribute name='new_customentityid' />
-                        <order attribute='new_optionsetvalue' />
+                        <attribute name='new_optionsetvalue' />
                     </entity>
                 </fetch>");
         }
@@ -7237,28 +7265,31 @@ inner join contact c on a.primarycontactid = c.contactid";
         [TestMethod]
         public void OrderByOptionSetValueAndName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            using (_localDataSource.SetUseRawOrderByReliable(true))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
-            var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue, new_optionsetvaluename";
+                var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue, new_optionsetvaluename";
 
-            var plans = planBuilder.Build(query, null, out _);
+                var plans = planBuilder.Build(query, null, out _);
 
-            Assert.AreEqual(1, plans.Length);
+                Assert.AreEqual(1, plans.Length);
 
-            var select = AssertNode<SelectNode>(plans[0]);
-            var sort = AssertNode<SortNode>(select.Source);
-            Assert.AreEqual(1, sort.PresortedCount);
-            Assert.AreEqual(2, sort.Sorts.Count);
-            Assert.AreEqual("new_customentity.new_optionsetvaluename", sort.Sorts[1].Expression.ToSql());
-            var fetch = AssertNode<FetchXmlScan>(sort.Source);
-            AssertFetchXml(fetch, @"
-                <fetch useraworderby='1'>
-                    <entity name='new_customentity'>
-                        <attribute name='new_customentityid' />
-                        <attribute name='new_optionsetvalue' />
-                        <order attribute='new_optionsetvalue' />
-                    </entity>
-                </fetch>");
+                var select = AssertNode<SelectNode>(plans[0]);
+                var sort = AssertNode<SortNode>(select.Source);
+                Assert.AreEqual(1, sort.PresortedCount);
+                Assert.AreEqual(2, sort.Sorts.Count);
+                Assert.AreEqual("new_customentity.new_optionsetvaluename", sort.Sorts[1].Expression.ToSql());
+                var fetch = AssertNode<FetchXmlScan>(sort.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch useraworderby='1'>
+                        <entity name='new_customentity'>
+                            <attribute name='new_customentityid' />
+                            <attribute name='new_optionsetvalue' />
+                            <order attribute='new_optionsetvalue' />
+                        </entity>
+                    </fetch>");
+            }
         }
 
         [TestMethod]
