@@ -279,7 +279,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var metadata = context.DataSources[fetchXml.DataSource].Metadata;
 
                 // Aggregates are not supported on archive data
-                if (fetchXml.FetchXml.DataSource != null)
+                if (fetchXml.FetchXml.DataSource == "retained")
                     canUseFetchXmlAggregate = false;
 
                 // FetchXML is translated to QueryExpression for virtual entities, which doesn't support aggregates

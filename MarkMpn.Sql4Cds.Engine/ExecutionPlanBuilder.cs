@@ -4257,7 +4257,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) &&
                     !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
-                    !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
+                    !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase) &&
+                    !(table.SchemaObject.SchemaIdentifier.Value.Equals("bin", StringComparison.OrdinalIgnoreCase) && dataSource.Metadata.RecycleBinEntities != null))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
 
                 // Validate the entity name
@@ -4308,6 +4309,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject)) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
 
                     fetchXmlScan.FetchXml.DataSource = "retained";
+                }
+                // Check if this should be using the recycle bin table
+                else if (table.SchemaObject.SchemaIdentifier?.Value.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (!dataSource.Metadata.RecycleBinEntities.Contains(meta.LogicalName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject)) { Suggestion = "Ensure restoring of deleted records is enabled for this table - see https://learn.microsoft.com/en-us/power-platform/admin/restore-deleted-table-records?WT.mc_id=DX-MVP-5004203" };
+
+                    fetchXmlScan.FetchXml.DataSource = "bin";
                 }
 
                 return fetchXmlScan;

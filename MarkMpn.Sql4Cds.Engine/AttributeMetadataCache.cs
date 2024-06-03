@@ -2,6 +2,7 @@
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,6 +22,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly IDictionary<string, EntityMetadata> _minimalMetadata;
         private readonly ISet<string> _minimalLoading;
         private readonly IDictionary<string, Exception> _invalidEntities;
+        private readonly Lazy<string[]> _recycleBinEntities;
 
         /// <summary>
         /// Creates a new <see cref="AttributeMetadataCache"/>
@@ -34,6 +36,46 @@ namespace MarkMpn.Sql4Cds.Engine
             _minimalMetadata = new Dictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
             _minimalLoading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _invalidEntities = new Dictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
+            _recycleBinEntities = new Lazy<string[]>(() =>
+            {
+                // Check the recyclebinconfig entity exists
+                try
+                {
+                    _ = this["recyclebinconfig"];
+                }
+                catch
+                {
+                    return null;
+                }
+
+                // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/restore-deleted-records?tabs=sdk#detect-which-tables-are-enabled-for-recycle-bin
+                var qry = new FetchExpression(@"
+                    <fetch>
+                      <entity name='recyclebinconfig'>
+                        <filter type='and'>
+                          <condition attribute='statecode'
+                            operator='eq'
+                            value='0' />
+                          <condition attribute='isreadyforrecyclebin'
+                            operator='eq'
+                            value='1' />
+                        </filter>
+                        <link-entity name='entity'
+                          from='entityid'
+                          to='extensionofrecordid'
+                          link-type='inner'
+                          alias='entity'>
+                          <attribute name='logicalname' />
+                          <order attribute='logicalname' />
+                        </link-entity>
+                      </entity>
+                    </fetch>");
+
+                var resp = _org.RetrieveMultiple(qry);
+                return resp.Entities
+                    .Select(e => e.GetAttributeValue<AliasedValue>("entity.logicalname").Value as string)
+                    .ToArray();
+            });
         }
 
         /// <inheritdoc cref="IAttributeMetadataCache.this{string}"/>
@@ -118,6 +160,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
+        /// <inheritdoc/>
         public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
         {
             if (_metadata.TryGetValue(logicalName, out metadata))
@@ -202,8 +245,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return false;
-            
         }
+
+        /// <inheritdoc/>
+        public string[] RecycleBinEntities => _recycleBinEntities.Value;
 
         public event EventHandler<MetadataLoadingEventArgs> MetadataLoading;
 

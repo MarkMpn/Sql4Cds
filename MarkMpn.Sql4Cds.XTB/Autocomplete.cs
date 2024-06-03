@@ -550,6 +550,12 @@ namespace MarkMpn.Sql4Cds.XTB
                                                     schemaName == "archive" &&
                                                     (e.IsRetentionEnabled == true || e.IsArchivalEnabled == true)
                                                 )
+                                                ||
+                                                (
+                                                    schemaName == "bin" &&
+                                                    instance.Metadata.RecycleBinEntities != null &&
+                                                    instance.Metadata.RecycleBinEntities.Contains(e.LogicalName)
+                                                )
                                             )
                                         );
 
@@ -769,6 +775,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
+                _dataSources.TryGetValue(instanceName, out var instance);
                 var lastPart = tableName;
 
                 if (parts == 1)
@@ -780,18 +787,18 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (parts == 1 || (parts == 2 && _dataSources.ContainsKey(schemaName)))
                 {
                     // Could be a schema name
-                    if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+                    var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
+                    if (instance?.Metadata?.RecycleBinEntities != null)
+                        schemaNames = schemaNames.Append("bin");
 
-                    if ("archive".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("archive", lastPartLength));
+                    schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
 
-                    if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
+                    foreach (var schema in schemaNames)
+                        list.Add(new SchemaAutocompleteItem(schema, lastPartLength));
                 }
 
                 // Could be a table name
-                if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Entities != null)
+                if (instance?.Entities != null)
                 {
                     IEnumerable<EntityMetadata> entities;
                     IEnumerable<Message> messages = Array.Empty<Message>();
@@ -816,6 +823,11 @@ namespace MarkMpn.Sql4Cds.XTB
                             // Suggest TVFs
                             messages = instance.Messages.GetAllMessages();
                         }
+                    }
+                    else if (schemaName.Equals("bin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Suggest tables that are enabled for the recycle bin
+                        entities = instance.Entities.Where(e => instance.Metadata.RecycleBinEntities != null && instance.Metadata.RecycleBinEntities.Contains(e.LogicalName));
                     }
                     else
                     {
@@ -853,6 +865,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
+                _dataSources.TryGetValue(instanceName, out var instance);
                 var lastPart = tableName;
 
                 if (parts == 1)
@@ -864,18 +877,18 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (parts == 1 || parts == 2)
                 {
                     // Could be a schema name
-                    if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+                    var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
+                    if (instance?.Metadata?.RecycleBinEntities != null)
+                        schemaNames = schemaNames.Append("bin");
 
-                    if ("archive".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("archive", lastPartLength));
+                    schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
 
-                    if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
+                    foreach (var schema in schemaNames)
+                        list.Add(new SchemaAutocompleteItem(schema, lastPartLength));
                 }
 
                 // Could be a sproc name
-                if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Messages != null)
+                if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && instance?.Messages != null)
                     list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, lastPartLength)));
             }
 
@@ -1480,7 +1493,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             public override string ToolTipText
             {
-                get => Text == "metadata" ? "Schema containing the metadata information" : "Schema containing the data tables";
+                get => Text == "metadata" ? "Schema containing the metadata information" :
+                       Text == "archive" ? "Schema containing long-term retention tables" :
+                       Text == "bin" ? "Schema containing recycle bin tables" :
+                       "Schema containing the data tables";
                 set => base.ToolTipText = value;
             }
         }
