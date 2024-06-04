@@ -163,11 +163,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (attrMetadata is StringAttributeMetadata str)
                 {
-                    // MaxLength validation is applied on write, but existing values could be up to DatabaseLength
-                    var maxLengthSetting = write || str.DatabaseLength == null || str.DatabaseLength == 0 ? str.MaxLength : str.DatabaseLength;
+                    // MaxLength validation is applied on write, but existing values could be up to DatabaseLength / 2
+                    maxLength = str.MaxLength ?? maxLength;
 
-                    if (maxLengthSetting != null)
-                        maxLength = maxLengthSetting.Value;
+                    if (!write && str.DatabaseLength != null && str.DatabaseLength.Value / 2 > maxLength)
+                        maxLength = str.DatabaseLength.Value / 2;
                 }
 
                 return DataTypeHelpers.NVarChar(maxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
