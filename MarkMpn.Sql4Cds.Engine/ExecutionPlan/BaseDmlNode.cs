@@ -488,6 +488,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             );
                         }
 
+                        if (lookupAttr != null && lookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) && mappings.TryGetValue(destAttributeName + "pid", out var partitionIdColumn))
+                        {
+                            var partitionIdExpr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(partitionIdColumn));
+                            partitionIdExpr = Expression.Convert(partitionIdExpr, schema.Schema[partitionIdColumn].Type.ToNetType(out _));
+                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, schema.Schema[partitionIdColumn].Type, DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit));
+                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, typeof(string));
+                            convertedExpr = Expr.Call(() => CreateElasticEntityReference(Expr.Arg<EntityReference>(), Expr.Arg<string>(), Expr.Arg<IAttributeMetadataCache>()), convertedExpr, partitionIdExpr, Expression.Constant(dataSource.Metadata));
+                        }
+
                         destType = typeof(EntityReference);
                     }
                     else
@@ -554,6 +563,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException("Cannot convert null ObjectTypeCode to EntityReference");
 
             return attributeMetadataCache[otc.Value].LogicalName;
+        }
+
+        private static EntityReference CreateElasticEntityReference(EntityReference entityReference, string partitionId, IAttributeMetadataCache metadata)
+        {
+            if (entityReference == null)
+                return null;
+
+            if (partitionId == null)
+                return entityReference;
+
+            var meta = metadata[entityReference.LogicalName];
+            var keys = new KeyAttributeCollection
+            {
+                [meta.PrimaryIdAttribute] = entityReference.Id,
+                ["partitionid"] = partitionId
+            };
+
+            return new EntityReference(entityReference.LogicalName, keys);
         }
 
         /// <summary>

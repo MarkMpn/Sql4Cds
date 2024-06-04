@@ -1410,6 +1410,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var virtualPidAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var schema = sourceColumns == null ? null : ((IDataExecutionPlanNodeInternal)source).GetSchema(_nodeContext);
 
             // Check all target columns are valid for create
@@ -1425,6 +1426,18 @@ namespace MarkMpn.Sql4Cds.Engine
                     lookupAttr.Targets.Length > 1)
                 {
                     if (!virtualTypeAttributes.Add(colName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
+
+                    continue;
+                }
+
+                // Could be a virtual ___pid attribute
+                if (colName.EndsWith("pid", StringComparison.OrdinalIgnoreCase) &&
+                    attributes.TryGetValue(colName.Substring(0, colName.Length - 3), out attr) &&
+                    attr is LookupAttributeMetadata elasticLookupAttr &&
+                    elasticLookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider))
+                {
+                    if (!virtualPidAttributes.Add(colName))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
 
                     continue;
@@ -1521,6 +1534,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         targetName = colName;
                         targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
                     }
+                    else if (virtualPidAttributes.Contains(colName))
+                    {
+                        targetName = colName;
+                        targetType = DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                    }
                     else
                     {
                         var attr = attributes[colName];
@@ -1579,12 +1597,23 @@ namespace MarkMpn.Sql4Cds.Engine
                             (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                         {
                             // Special case: not required for listmember.entityid
-                            if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
-                                continue;
+                            if (metadata.LogicalName != "listmember" || targetLookupAttribute.LogicalName != "entityid")
+                            {
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                                {
+                                    Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                                };
+                            }
+                        }
 
+                        // If the lookup references an elastic table we also need the pid column
+                        if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
+                            !virtualPidAttributes.Contains(targetAttrName + "pid") &&
+                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var elasticLookupType) != null && elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                        {
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
                             {
-                                Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                                Suggestion = $"Inserting values into an elastic lookup field requires setting the associated pid column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}pid column"
                             };
                         }
                     }
@@ -1598,6 +1627,18 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
                         {
                             Suggestion = $"Inserting values into a polymorphic type field requires setting the associated ID column as well\r\nAdd a value for the {idAttrName} column"
+                        };
+                    }
+                }
+                else if (virtualPidAttributes.Contains(targetAttrName))
+                {
+                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 3);
+
+                    if (!attributeNames.Contains(idAttrName))
+                    {
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                        {
+                            Suggestion = $"Inserting values into an elastic lookup field requires setting the associated ID column as well\r\nAdd a value for the {idAttrName} column"
                         };
                     }
                 }
@@ -1903,6 +1944,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var virtualPidAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var existingAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var useStateTransitions = !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
             var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
@@ -1968,6 +2010,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     targetAttrName.EndsWith("typecode", StringComparison.OrdinalIgnoreCase))
                 {
                     if (!virtualTypeAttributes.Add(targetAttrName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
+                }
+                else if (targetAttrName.EndsWith("pid", StringComparison.OrdinalIgnoreCase) &&
+                    attributes.TryGetValue(targetAttrName.Substring(0, targetAttrName.Length - 3), out attr) &&
+                    attr is LookupAttributeMetadata elasticLookupAttr &&
+                    elasticLookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider))
+                {
+                    if (!virtualPidAttributes.Add(targetAttrName))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
                 }
                 else
@@ -2068,7 +2118,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, existingAttributes, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, hints);
+            var updateNode = ConvertSetClause(update.SetClauses, existingAttributes, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, virtualPidAttributes, hints);
             updateNode.StateTransitions = stateTransitions;
 
             return updateNode;
@@ -2096,7 +2146,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, HashSet<string> existingAttributes, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, IList<OptimizerHint> queryHints)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, HashSet<string> existingAttributes, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, HashSet<string> virtualPidAttributes, IList<OptimizerHint> queryHints)
         {
             var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
@@ -2223,6 +2273,17 @@ namespace MarkMpn.Sql4Cds.Engine
                             Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
                         };
                     }
+
+                    // If the lookup references an elastic table we also need the pid column
+                    if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
+                        !virtualPidAttributes.Contains(targetAttrName + "pid") &&
+                        (!sourceTypes.TryGetValue(targetAttrName, out var elasticLookupType) || elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral))
+                    {
+                        throw new NotSupportedQueryFragmentException("Updating an elastic lookup field requires setting the associated pid column as well", assignment.Column)
+                        {
+                            Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}pid column"
+                        };
+                    }
                 }
                 else if (virtualTypeAttributes.Contains(targetAttrName))
                 {
@@ -2234,6 +2295,18 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!attributeNames.Contains(idAttrName))
                     {
                         throw new NotSupportedQueryFragmentException("Updating a polymorphic type field requires setting the associated ID column as well", assignment.Column)
+                        {
+                            Suggestion = $"Add a SET clause for the {idAttrName} column"
+                        };
+                    }
+                }
+                else if (virtualPidAttributes.Contains(targetAttrName))
+                {
+                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 3);
+
+                    if (!attributeNames.Contains(idAttrName))
+                    {
+                        throw new NotSupportedQueryFragmentException("Updating an elastic lookup field requires setting the associated ID column as well", assignment.Column)
                         {
                             Suggestion = $"Add a SET clause for the {idAttrName} column"
                         };

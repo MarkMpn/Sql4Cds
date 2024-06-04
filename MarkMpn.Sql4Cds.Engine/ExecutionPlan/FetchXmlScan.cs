@@ -1304,6 +1304,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
                     AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "type"), (attrMetadata.LogicalName + "type").EscapeIdentifier(), DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull); ;
+
+                if (lookup.Targets != null && lookup.Targets.Any(logicalName => dataSource.Metadata[logicalName].DataProviderId == DataProviders.ElasticDataProvider))
+                    AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "pid"), (attrMetadata.LogicalName + "pid").EscapeIdentifier(), DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
             }
         }
 
