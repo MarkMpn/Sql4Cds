@@ -57,7 +57,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     Messages = c.Value.MessageCache
                 });
             }
-            var ac = new Autocomplete(acds, con.DataSource.Name);
+            var ac = new Autocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
             var suggestions = ac.GetSuggestions(doc, pos);
             return suggestions
                 .Select(s => new CompletionItem
@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     Messages = c.Value.MessageCache
                 });
             }
-            var ac = new Autocomplete(acds, con.DataSource.Name);
+            var ac = new Autocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
             var suggestions = ac.GetSuggestions(doc, pos);
             var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && doc.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
 

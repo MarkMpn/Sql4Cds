@@ -437,7 +437,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 
-                var suggestions = new Autocomplete(autocompleteDataSources, _con.ConnectionName).GetSuggestions(text, wordEnd.Index - 1).ToList();
+                var suggestions = new Autocomplete(autocompleteDataSources, _con.ConnectionName, Settings.Instance.ColumnOrdering).GetSuggestions(text, wordEnd.Index - 1).ToList();
                 var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && text.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
 
                 if (exactSuggestions.Count == 1)
@@ -553,7 +553,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 
-                var suggestions = new Autocomplete(autocompleteDataSources, _control.Connection.ConnectionName).GetSuggestions(text, pos).ToList();
+                var suggestions = new Autocomplete(autocompleteDataSources, _control.Connection.ConnectionName, Settings.Instance.ColumnOrdering).GetSuggestions(text, pos).ToList();
 
                 if (suggestions.Count == 0)
                     yield break;

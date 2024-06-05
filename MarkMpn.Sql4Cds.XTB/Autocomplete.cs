@@ -11,6 +11,7 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 using static MarkMpn.Sql4Cds.XTB.FunctionMetadata;
 
 namespace MarkMpn.Sql4Cds.XTB
@@ -22,16 +23,19 @@ namespace MarkMpn.Sql4Cds.XTB
     {
         private readonly IDictionary<string, AutocompleteDataSource> _dataSources;
         private readonly string _primaryDataSource;
+        private readonly ColumnOrdering _columnOrdering;
 
         /// <summary>
         /// Creates a new <see cref="Autocomplete"/>
         /// </summary>
         /// <param name="entities">The list of entities available to use in the query</param>
         /// <param name="metadata">The cache of metadata about each entity</param>
-        public Autocomplete(IDictionary<string, AutocompleteDataSource> dataSources, string primaryDataSource)
+        /// <param name="columnOrdering">The order that columns are passed to table-valued functions or stored procedures</param>
+        public Autocomplete(IDictionary<string, AutocompleteDataSource> dataSources, string primaryDataSource, ColumnOrdering columnOrdering)
         {
             _dataSources = dataSources;
             _primaryDataSource = primaryDataSource;
+            _columnOrdering = columnOrdering;
         }
 
         /// <summary>
@@ -770,7 +774,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     // Show TVF list
                     if (fromClause && ds.Messages != null)
-                        list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, currentLength)));
+                        list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, currentLength)));
                 }
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
@@ -840,7 +844,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     if (fromClause)
                     {
                         messages = messages.Where(e => e.IsValidAsTableValuedFunction() && e.Name.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
-                        list.AddRange(messages.Select(e => new TVFAutocompleteItem(e, lastPartLength)));
+                        list.AddRange(messages.Select(e => new TVFAutocompleteItem(e, _columnOrdering, lastPartLength)));
                     }
                 }
             }
@@ -861,7 +865,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
 
                 if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Messages != null)
-                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, currentLength)));
+                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, currentLength)));
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
@@ -889,7 +893,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 // Could be a sproc name
                 if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && instance?.Messages != null)
-                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, lastPartLength)));
+                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, lastPartLength)));
             }
 
             list.Sort();
@@ -1231,7 +1235,7 @@ namespace MarkMpn.Sql4Cds.XTB
             public static string GetSqlTypeName(Type type)
             {
                 if (type == typeof(string))
-                    return "NNVARCHAR(MAX)";
+                    return "NVARCHAR(MAX)";
 
                 if (type == typeof(int))
                     return "INT";
@@ -1538,10 +1542,12 @@ namespace MarkMpn.Sql4Cds.XTB
         class TVFAutocompleteItem : SqlAutocompleteItem
         {
             private readonly Message _message;
+            private readonly ColumnOrdering _columnOrdering;
 
-            public TVFAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 25)
+            public TVFAutocompleteItem(Message message, ColumnOrdering columnOrdering, int replaceLength) : base(message.Name, replaceLength, 25)
             {
                 _message = message;
+                _columnOrdering = columnOrdering;
             }
 
             public TVFAutocompleteItem(Message message, string alias, int replaceLength) : base(alias, replaceLength, 25)
@@ -1557,7 +1563,18 @@ namespace MarkMpn.Sql4Cds.XTB
 
             public override string ToolTipText
             {
-                get => _message.Name + "(" + String.Join(", ", _message.InputParameters.Select(p => p.Name + " " + GetSqlTypeName(p.Type))) + ")";
+                get
+                {
+                    var parameters = _message.InputParameters
+                        .Where(p => p.Type != typeof(PagingInfo));
+
+                    if (_columnOrdering == ColumnOrdering.Alphabetical)
+                        parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+                    else
+                        parameters = parameters.OrderBy(p => p.Position);
+
+                    return _message.Name + "(" + String.Join(", ", parameters.Select(p => p.Name + " " + GetSqlTypeName(p.Type))) + ")";
+                }
                 set => base.ToolTipText = value;
             }
 
@@ -1570,10 +1587,12 @@ namespace MarkMpn.Sql4Cds.XTB
         class SprocAutocompleteItem : SqlAutocompleteItem
         {
             private readonly Message _message;
+            private readonly ColumnOrdering _columnOrdering;
 
-            public SprocAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 26)
+            public SprocAutocompleteItem(Message message, ColumnOrdering columnOrdering, int replaceLength) : base(message.Name, replaceLength, 26)
             {
                 _message = message;
+                _columnOrdering = columnOrdering;
             }
 
             public override string ToolTipTitle
@@ -1584,7 +1603,18 @@ namespace MarkMpn.Sql4Cds.XTB
 
             public override string ToolTipText
             {
-                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]"))));
+                get
+                {
+                    var parameters = _message.InputParameters
+                        .Where(p => p.Type != typeof(PagingInfo));
+
+                    if (_columnOrdering == ColumnOrdering.Alphabetical)
+                        parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+                    else
+                        parameters = parameters.OrderBy(p => p.Position);
+
+                    return _message.Name + " " + String.Join(", ", parameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]"))));
+                }
                 set => base.ToolTipText = value;
             }
         }
