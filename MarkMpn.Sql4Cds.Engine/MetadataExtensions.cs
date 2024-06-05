@@ -15,6 +15,20 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         public static int EntityLogicalNameMaxLength { get; } = 64;
 
+        public static string[] VirtualLookupAttributeSuffixes { get; } = new[] { "name", "type", "pid" };
+
+        public static AttributeMetadata FindBaseAttributeFromVirtualAttribute(this EntityMetadata entity, string virtualAttributeLogicalName, out string suffix)
+        {
+            var matchingSuffix = VirtualLookupAttributeSuffixes.SingleOrDefault(s => virtualAttributeLogicalName.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+            suffix = matchingSuffix;
+
+            if (suffix == null)
+                return null;
+
+            return entity.Attributes
+                .SingleOrDefault(a => a.LogicalName.Equals(virtualAttributeLogicalName.Substring(0, virtualAttributeLogicalName.Length - matchingSuffix.Length), StringComparison.OrdinalIgnoreCase));
+        }
+
         public static Type GetAttributeType(this AttributeMetadata attrMetadata)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)

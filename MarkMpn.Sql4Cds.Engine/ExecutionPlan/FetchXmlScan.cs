@@ -702,6 +702,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var typeSuffix = AddSuffix(attribute.Key, "type");
                 var nameSuffix = AddSuffix(attribute.Key, "name");
 
+                // NOTE: pid for elastic lookup values is exposed as a separate column in the returned entity already
+
                 if (!entity.Contains(typeSuffix))
                     entity[typeSuffix] = ((EntityReference)attribute.Value).LogicalName;
 
@@ -1007,11 +1009,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 linkEntity = null;
 
                 var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
-                {
-                    var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                }
+
+                if (meta == null)
+                    meta = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
 
                 if (meta != null)
                     attr.name = meta.LogicalName;
@@ -1040,11 +1040,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 linkEntity = Entity.FindLinkEntity(entityName);
 
                 var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
-                {
-                    var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                }
+                if (meta == null)
+                    meta = metadata[linkEntity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
 
                 if (meta != null)
                     attr.name = meta.LogicalName;

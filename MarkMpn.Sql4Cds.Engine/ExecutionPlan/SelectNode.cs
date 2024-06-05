@@ -197,11 +197,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var metadata = dataSource.Metadata;
                             var meta = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
                             var isVirtual = false;
-                            if (meta == null && (attrName.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attrName.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
+                            if (meta == null)
                             {
-                                var logicalName = attrName.Substring(0, attrName.Length - 4);
-                                meta = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                                isVirtual = true;
+                                meta = metadata[entityName].FindBaseAttributeFromVirtualAttribute(attrName, out _);
+                                if (meta != null)
+                                    isVirtual = true;
                             }
 
                             return new { c.Mapping, c.SourceColumn, c.Alias, meta?.LogicalName, IsVirtual = isVirtual };
