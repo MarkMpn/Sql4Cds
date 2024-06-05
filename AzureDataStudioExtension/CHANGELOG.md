@@ -1,5 +1,21 @@
 # Change Log
 
+## [v9.1.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.1.0) - 2024-06-06
+
+Enabled access to recycle bin records via the `bin` schema
+Enabled `INSERT`, `UPDATE` and `DELETE` statements on `principalobjectaccess` table
+Enabled use of subqueries within `ON` clause of `JOIN` statements
+Added support for `___pid` virtual column for lookups to elastic tables
+Improved folding of queries using index spools
+Improved primary key calculation when using joins on non-key columns
+Apply column order setting to parameters for stored procedures and table-valued functions
+Fixed error with DeleteMultiple requests
+Fixed paging error with `DISTINCT` queries causing results to be limited to 50,000 records
+Fixed paging errors when sorting by optionset values causing some results to be skipped
+Fixed errors when using joins inside `[NOT] EXISTS` subqueries
+Fixed incorrect results when applying aliases to `___name` and `___type` virtual columns
+Fixed max length calculation for string columns
+
 ## [v9.0.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.0.1) - 2024-05-08
 
 Fixed `NullReferenceException` errors when:
