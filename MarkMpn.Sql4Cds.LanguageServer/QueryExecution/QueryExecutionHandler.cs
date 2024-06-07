@@ -451,6 +451,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 IsError = true
                             }
                         });
+
+                        await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
+                        {
+                            OwnerUri = request.OwnerUri,
+                            Message = new ResultMessage
+                            {
+                                BatchId = batchSummary.Id,
+                                Time = DateTime.UtcNow.ToString("o"),
+                                Message = sql4CdsError.Message,
+                                IsError = true
+                            }
+                        });
                     }
                 }
 
@@ -574,7 +586,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
             if (error is AggregateException aggregateException)
                 msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex, rootException)).Where(m => !String.IsNullOrEmpty(m)));
-            else if (rootException != null && rootException.Message == error.Message)
+            else if (rootException != null && rootException.Errors.Any(err => err.Message == error.Message))
                 msg = "";
             else
                 msg = error.Message;

@@ -15,6 +15,7 @@ Fixed paging errors when sorting by optionset values causing some results to be 
 Fixed errors when using joins inside `[NOT] EXISTS` subqueries
 Fixed incorrect results when applying aliases to `___name` and `___type` virtual columns
 Fixed max length calculation for string columns
+Fixed display of error messages
 
 ## [v9.0.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.0.1) - 2024-05-08
 
