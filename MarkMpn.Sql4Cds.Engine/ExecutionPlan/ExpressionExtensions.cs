@@ -652,14 +652,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var lhs = bin.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out _, out var lhsCacheKey);
             var rhs = bin.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out _, out var rhsCacheKey);
 
+            if (createExpression)
+            {
+                lhs = Expression.IsTrue(lhs);
+                rhs = Expression.IsTrue(rhs);
+            }
+
+            Expression binary;
+
             if (bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
             {
                 cacheKey = lhsCacheKey + " AND " + rhsCacheKey;
-                return createExpression ? Expression.AndAlso(lhs, rhs) : null;
+                binary = createExpression ? Expression.AndAlso(lhs, rhs) : null;
+            }
+            else
+            {
+                cacheKey = lhsCacheKey + " OR " + rhsCacheKey;
+                binary = createExpression ? Expression.OrElse(lhs, rhs) : null;
             }
 
-            cacheKey = lhsCacheKey + " OR " + rhsCacheKey;
-            return createExpression ? Expression.OrElse(lhs, rhs) : null;
+            if (createExpression)
+                binary = Expression.Convert(binary, typeof(SqlBoolean));
+
+            return binary;
         }
 
         private static Expression ToExpression(BooleanParenthesisExpression paren, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
@@ -813,6 +828,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expr = Expression.Divide(lhs, rhs);
 
                     expr = Expression.TryCatch(expr, Expression.Catch(typeof(DivideByZeroException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), Expr.Call(() => Sql4CdsError.DivideByZero())), expr.Type)));
+                    //expr = Expression.Invoke(Expression.Lambda(expr));
                     break;
 
                 case BinaryExpressionType.Modulo:
@@ -1888,7 +1904,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var value = not.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             cacheKey = "NOT " + cacheKey;
-            return createExpression ? Expression.Not(value) : null;
+            return createExpression ? Expression.Convert(Expression.IsFalse(value), typeof(SqlBoolean)) : null;
         }
 
         private static readonly Dictionary<SqlDataTypeOption, Type> _typeMapping = new Dictionary<SqlDataTypeOption, Type>
