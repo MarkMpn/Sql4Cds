@@ -295,6 +295,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (leftFetch.FetchXml.DataSource == "retained" || rightFetch.FetchXml.DataSource == "retained")
                 return false;
 
+            // Can't join with different schemas
+            if (leftFetch.FetchXml.DataSource != rightFetch.FetchXml.DataSource)
+                return false;
+
             // If one source is distinct and the other isn't, joining the two won't produce the expected results
             if (leftFetch.FetchXml.distinct ^ rightFetch.FetchXml.distinct)
                 return false;
