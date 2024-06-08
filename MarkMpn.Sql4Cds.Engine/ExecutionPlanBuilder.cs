@@ -1393,7 +1393,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Source = source
             };
 
-            ValidateDMLSchema(target);
+            ValidateDMLSchema(target, false);
 
             // Validate the entity name
             EntityMetadata metadata;
@@ -1647,7 +1647,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private void ValidateDMLSchema(NamedTableReference target)
+        private void ValidateDMLSchema(NamedTableReference target, bool allowBin)
         {
             if (String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value))
                 return;
@@ -1660,6 +1660,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (target.SchemaObject.SchemaIdentifier.Value.Equals("metadata", StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Metadata tables are read-only" };
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("bin", StringComparison.OrdinalIgnoreCase))
+            {
+                if (allowBin)
+                    return;
+
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Recycle bin tables are valid for SELECT and DELETE only" };
+            }
 
             throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "All data tables are in the 'dbo' schema" };
         }
@@ -1691,8 +1699,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            ValidateDMLSchema(target);
-
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
@@ -1713,6 +1719,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+
+            ValidateDMLSchema(deleteTarget.Target, true);
 
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
@@ -1752,6 +1760,116 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 primaryKey = "objectid";
                 secondaryKey = "principalid";
+            }
+
+            if (deleteTarget.TargetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                // Deleting from the recycle bin needs to be translated to deleting the associated records from the deleteditemreference table
+                if (dataSource.Metadata.RecycleBinEntities == null || !dataSource.Metadata.RecycleBinEntities.Contains(targetLogicalName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Ensure restoring of deleted records is enabled for this table - see https://learn.microsoft.com/en-us/power-platform/admin/restore-deleted-table-records?WT.mc_id=DX-MVP-5004203" };
+
+                // We need to join the recycle bin entry to the deleteditemreference table to get the actual record to delete. We can only
+                // do this on a single ID field, so reject any deletes that need composite keys
+                if (secondaryKey != null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete, "Recycle bin records using a composite key cannot be deleted directly. Delete the associated record from the dbo.deleteitemreference table instead"));
+
+                queryExpression.SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = primaryKey }
+                            }
+                        }
+                    },
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = new Identifier { Value = primaryKey }
+                    }
+                });
+
+                queryExpression = new QuerySpecification
+                {
+                    FromClause = new FromClause
+                    {
+                        TableReferences =
+                        {
+                            new QualifiedJoin
+                            {
+                                FirstTableReference = new NamedTableReference
+                                {
+                                    SchemaObject = new SchemaObjectName
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = "deleteditemreference" }
+                                        }
+                                    }
+                                },
+                                SecondTableReference = new QueryDerivedTable
+                                {
+                                    QueryExpression = queryExpression,
+                                    Alias = new Identifier { Value = targetLogicalName }
+                                },
+                                QualifiedJoinType = QualifiedJoinType.Inner,
+                                SearchCondition = new BooleanComparisonExpression
+                                {
+                                    FirstExpression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = targetLogicalName },
+                                                new Identifier { Value = primaryKey }
+                                            }
+                                        }
+                                    },
+                                    ComparisonType = BooleanComparisonType.Equals,
+                                    SecondExpression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = "deleteditemreference" },
+                                                new Identifier { Value = "deletedobject" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    WhereClause = new WhereClause
+                    {
+                        SearchCondition = new BooleanComparisonExpression
+                        {
+                            FirstExpression = new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier { Value = "deleteditemreference" },
+                                        new Identifier { Value = "deletedobjecttype" }
+                                    }
+                                }
+                            },
+                            ComparisonType = BooleanComparisonType.Equals,
+                            SecondExpression = new IntegerLiteral { Value = targetMetadata.ObjectTypeCode.ToString() }
+                        }
+                    }
+                };
+
+                primaryKey = "deleteditemreferenceid";
+                secondaryKey = null;
+                targetMetadata = dataSource.Metadata["deleteditemreference"];
+                targetAlias = "deleteditemreference";
             }
 
             requiredFields.Add(primaryKey);
@@ -1844,8 +1962,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            ValidateDMLSchema(target);
-
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
@@ -1866,6 +1982,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+
+            ValidateDMLSchema(updateTarget.Target, false);
 
             var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
             var targetLogicalName = updateTarget.TargetEntityName;
