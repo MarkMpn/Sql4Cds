@@ -1,6 +1,6 @@
 # Change Log
 
-## [v9.1.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.1.0) - 2024-06-06
+## [v9.1.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.1.0) - 2024-06-10
 
 Enabled access to recycle bin records via the `bin` schema
 Enabled `INSERT`, `UPDATE` and `DELETE` statements on `principalobjectaccess` table
@@ -16,6 +16,7 @@ Fixed errors when using joins inside `[NOT] EXISTS` subqueries
 Fixed incorrect results when applying aliases to `___name` and `___type` virtual columns
 Fixed max length calculation for string columns
 Fixed display of error messages
+Fixed "invalid program" errors when combining type conversions with `AND` or `OR`
 
 ## [v9.0.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.0.1) - 2024-05-08
 
