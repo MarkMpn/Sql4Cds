@@ -61,11 +61,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public static Type GetType(this TSqlFragment expr, ExpressionCompilationContext context, out DataTypeReference sqlType)
         {
             ToExpression(expr, context, false, out _, out sqlType, out var cacheKey);
-            var details = _cache.GetOrAdd(cacheKey, __ =>
+            var details = _intermediateCache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = ToExpression(expr, context, true, out var parameters, out _, out _);
-                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(converted), parameters).Compile();
-                return new CompiledExpression<object>(expr, converted, compiled);
+                return new IntermediateExpression(converted, parameters);
             });
             return details.Converted.Type;
         }
@@ -82,8 +81,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var details = _cache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = ToExpression(expr, context, true, out var parameters, out _, out _);
-                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(converted), parameters).Compile();
-                return new CompiledExpression<object>(expr, converted, compiled);
+                var folded = FoldLambdas(converted, parameters);
+                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(folded), parameters).Compile();
+                return new CompiledExpression<object>(expr, folded, compiled);
             });
             return eec => details.Compiled(eec, expr);
         }
@@ -100,8 +100,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var details = _boolCache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = ToExpression(b, context, true, out var parameters, out _, out _);
-                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, bool>>(Expression.IsTrue(converted), parameters).Compile();
-                return new CompiledExpression<bool>(b, converted, compiled);
+                var folded = FoldLambdas(converted, parameters);
+                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, bool>>(Expression.IsTrue(folded), parameters).Compile();
+                return new CompiledExpression<bool>(b, folded, compiled);
             });
 
             return eec => details.Compiled(eec, b);
@@ -2514,6 +2515,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             throw new ArgumentOutOfRangeException(nameof(type));
+        }
+
+        private static Expression FoldLambdas(Expression expression, ParameterExpression[] parameters)
+        {
+            var visitor = new LambdaVisitor(parameters);
+            return visitor.Visit(expression);
+        }
+
+        class LambdaVisitor : ExpressionVisitor
+        {
+            private ParameterExpression[] _parameters;
+            private Dictionary<ParameterExpression, Expression> _parameterRewrites;
+
+            public LambdaVisitor(ParameterExpression[] parameters)
+            {
+                _parameters = parameters;
+                _parameterRewrites = new Dictionary<ParameterExpression, Expression>();
+            }
+
+            protected override Expression VisitInvocation(InvocationExpression node)
+            {
+                if (!(node.Expression is LambdaExpression lambda))
+                    return base.VisitInvocation(node);
+
+                if (node.Arguments.Count != 2)
+                    return base.VisitInvocation(node);
+
+                if (node.Arguments[0].Type != typeof(ExpressionExecutionContext))
+                    return base.VisitInvocation(node);
+
+                if (!typeof(TSqlFragment).IsAssignableFrom(node.Arguments[1].Type))
+                    return base.VisitInvocation(node);
+
+                _parameterRewrites[lambda.Parameters[0]] = Visit(node.Arguments[0]);
+                _parameterRewrites[lambda.Parameters[1]] = Visit(node.Arguments[1]);
+
+                return Visit(lambda.Body);
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node)
+            {
+                if (_parameterRewrites.TryGetValue(node, out var replacement))
+                    return replacement;
+
+                return base.VisitParameter(node);
+            }
         }
     }
 }
