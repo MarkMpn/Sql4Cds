@@ -91,6 +91,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             return _defaultCache.TryGetValue(logicalName, out metadata);
         }
 
+        public string[] RecycleBinEntities => _defaultCache.RecycleBinEntities;
+
         public EntityMetadata[] GetAutocompleteEntities()
         {
             if (_cacheUnavailable && _autocompleteCache == null)

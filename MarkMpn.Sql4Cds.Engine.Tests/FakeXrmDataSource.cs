@@ -29,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         private bool _columnComparisonAvailable = true;
         private bool _orderByEntityNameAvailable = false;
+        private bool _useRawOrderByReliable = false;
         private List<JoinOperator> _joinOperators;
 
         public FakeXrmDataSource()
@@ -42,6 +43,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         public override List<JoinOperator> JoinOperatorsAvailable => _joinOperators;
 
+        public override bool UseRawOrderByReliable => _useRawOrderByReliable;
+
         public IDisposable SetColumnComparison(bool enable)
         {
             var original = _columnComparisonAvailable;
@@ -52,6 +55,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var original = _orderByEntityNameAvailable;
             return new Reset(this, x => x._orderByEntityNameAvailable = enable, x => x._orderByEntityNameAvailable = original);
+        }
+
+        public IDisposable SetUseRawOrderByReliable(bool enable)
+        {
+            var original = _useRawOrderByReliable;
+            return new Reset(this, x => x._useRawOrderByReliable = enable, x => x._useRawOrderByReliable = original);
         }
 
         public IDisposable EnableJoinOperator(JoinOperator op)

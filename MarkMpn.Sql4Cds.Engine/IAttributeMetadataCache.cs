@@ -83,5 +83,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </ul>
         /// </remarks>
         bool TryGetMinimalData(string logicalName, out EntityMetadata metadata);
+
+        /// <summary>
+        /// Returns a list of entity logical names that are enabled for recycle bin access
+        /// </summary>
+        string[] RecycleBinEntities { get; }
     }
 }

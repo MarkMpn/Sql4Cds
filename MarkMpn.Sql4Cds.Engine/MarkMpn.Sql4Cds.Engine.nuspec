@@ -11,17 +11,21 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed NullReferenceException errors when:
-- executing a conditional SELECT query
-- retrieving results from a Fetch XML query using IN or EXISTS
-- handling an error returned from TDS Endpoint
-- handling internal errors such as UPDATE without WHERE
-
-Standardised errors on:
-- JSON path errors
-- DML statement cancellation
-
-Fixed filtering audit data on changedata attribute
+    <releaseNotes>Enabled access to recycle bin records via the `bin` schema
+Enabled `INSERT`, `UPDATE` and `DELETE` statements on `principalobjectaccess` table
+Enabled use of subqueries within `ON` clause of `JOIN` statements
+Added support for `___pid` virtual column for lookups to elastic tables
+Improved folding of queries using index spools
+Improved primary key calculation when using joins on non-key columns
+Apply column order setting to parameters for stored procedures and table-valued functions
+Fixed error with DeleteMultiple requests
+Fixed paging error with `DISTINCT` queries causing results to be limited to 50,000 records
+Fixed paging errors when sorting by optionset values causing some results to be skipped
+Fixed errors when using joins inside `[NOT] EXISTS` subqueries
+Fixed incorrect results when applying aliases to `___name` and `___type` virtual columns
+Fixed max length calculation for string columns
+Added debug visualizer to inspect query plans within Visual Studio
+Fixed "invalid program" errors when combining type conversions with `AND` or `OR` in .NET Core applications
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

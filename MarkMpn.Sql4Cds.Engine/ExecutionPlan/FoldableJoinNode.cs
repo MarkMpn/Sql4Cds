@@ -51,6 +51,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            // For inner joins, additional join criteria are eqivalent to doing the join without them and then applying the filter
+            // We've already got logic in the Filter node for efficiently folding those queries, so split them out and let it do
+            // what it can
+            if (JoinType == QualifiedJoinType.Inner && AdditionalJoinCriteria != null)
+            {
+                var filter = new FilterNode
+                {
+                    Source = this,
+                    Filter = AdditionalJoinCriteria
+                };
+                AdditionalJoinCriteria = null;
+                return filter.FoldQuery(context, hints);
+            }
+
             LeftSource = LeftSource.FoldQuery(context, hints);
             LeftSource.Parent = this;
             RightSource = RightSource.FoldQuery(context, hints);
@@ -281,6 +295,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (leftFetch.FetchXml.DataSource == "retained" || rightFetch.FetchXml.DataSource == "retained")
                 return false;
 
+            // Can't join with different schemas
+            if (leftFetch.FetchXml.DataSource != rightFetch.FetchXml.DataSource)
+                return false;
+
             // If one source is distinct and the other isn't, joining the two won't produce the expected results
             if (leftFetch.FetchXml.distinct ^ rightFetch.FetchXml.distinct)
                 return false;
@@ -428,7 +446,76 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // We might have previously folded a sort to the FetchXML that is no longer valid as we require custom paging
             if (leftFetch.RequiresCustomPaging(context.DataSources))
                 leftFetch.RemoveSorts();
-            
+
+            // We might have previously folded a not-null condition that is no longer required as it is implicit in the join
+            var unnecessaryNotNullColumns = new List<string>();
+            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)
+                unnecessaryNotNullColumns.Add(LeftAttribute.GetColumnName());
+            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
+                unnecessaryNotNullColumns.Add(RightAttribute.GetColumnName());
+
+            if (unnecessaryNotNullColumns != null)
+            {
+                var finalSchema = leftFetch.GetSchema(context);
+
+                foreach (var col in unnecessaryNotNullColumns)
+                {
+                    if (!finalSchema.ContainsColumn(col, out var normalizedCol))
+                        continue;
+
+                    var parts = normalizedCol.SplitMultiPartIdentifier();
+
+                    if (parts[0] == leftFetch.Alias)
+                    {
+                        foreach (var entityFilter in leftFetch.Entity.Items.OfType<filter>())
+                        {
+                            if (entityFilter.type != filterType.and)
+                                continue;
+
+                            foreach (var condition in entityFilter.Items.OfType<condition>().ToList())
+                            {
+                                if (condition.entityname == null && condition.attribute == parts[1] && condition.@operator == @operator.notnull)
+                                    entityFilter.Items = entityFilter.Items.Except(new[] { condition }).ToArray();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        foreach (var entityFilter in leftFetch.Entity.Items.OfType<filter>())
+                        {
+                            if (entityFilter.type != filterType.and)
+                                continue;
+
+                            foreach (var condition in entityFilter.Items.OfType<condition>().ToList())
+                            {
+                                if (condition.entityname == parts[0] && condition.attribute == parts[1] && condition.@operator == @operator.notnull)
+                                    entityFilter.Items = entityFilter.Items.Except(new[] { condition }).ToArray();
+                            }
+                        }
+
+                        var link = leftFetch.Entity.FindLinkEntity(parts[0]);
+
+                        if (link?.Items != null)
+                        {
+                            foreach (var linkFilter in link.Items.OfType<filter>())
+                            {
+                                if (linkFilter.type != filterType.and)
+                                    continue;
+
+                                foreach (var condition in linkFilter.Items.OfType<condition>().ToList())
+                                {
+                                    if (condition.attribute == parts[1] && condition.@operator == @operator.notnull)
+                                        linkFilter.Items = linkFilter.Items.Except(new[] { condition }).ToArray();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Re-fold the FetchXML node to remove any filters that are now blank
+                leftFetch.FoldQuery(context, hints);
+            }
+
             return true;
         }
 

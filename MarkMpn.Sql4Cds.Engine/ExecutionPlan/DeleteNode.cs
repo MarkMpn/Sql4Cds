@@ -142,6 +142,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         primaryKey = relationship.Entity1IntersectAttribute;
                         secondaryKey = relationship.Entity2IntersectAttribute;
                     }
+                    else if (meta.LogicalName == "principalobjectaccess")
+                    {
+                        primaryKey = "objectid";
+                        secondaryKey = "principalid";
+                    }
                     else if (meta.DataProviderId == DataProviders.ElasticDataProvider)
                     {
                         secondaryKey = "partitionid";
@@ -154,6 +159,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (secondaryKey != null)
                         fullMappings[secondaryKey] = SecondaryIdSource;
+                    
+                    if (meta.LogicalName == "principalobjectaccess")
+                    {
+                        fullMappings["objecttypecode"] = PrimaryIdSource.Replace("id", "typecode");
+                        fullMappings["principaltypecode"] = SecondaryIdSource.Replace("id", "typecode");
+                    }
 
                     var attributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings, schema, dateTimeKind, entities);
                     primaryIdAccessor = attributeAccessors[primaryKey];
@@ -204,6 +215,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity, Func<Entity,object> primaryIdAccessor, Func<Entity,object> secondaryIdAccessor)
         {
+            if (meta.LogicalName == "principalobjectaccess")
+            {
+                return new RevokeAccessRequest
+                {
+                    Target = (EntityReference)primaryIdAccessor(entity),
+                    Revokee = (EntityReference)secondaryIdAccessor(entity)
+                };
+            }
+
             var id = (Guid)primaryIdAccessor(entity);
 
             // Special case messages for intersect entities
@@ -263,7 +283,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!req.Requests.All(r => r is DeleteRequest))
                 return base.ExecuteMultiple(dataSource, org, meta, req);
 
-            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple"))
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider
+                // DeleteMultiple is only supported on elastic tables, even if other tables do define the message
+                /* || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple")*/)
             {
                 // Elastic tables can use DeleteMultiple for better performance than ExecuteMultiple
                 var entities = new EntityReferenceCollection();

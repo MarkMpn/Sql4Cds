@@ -29,6 +29,13 @@ namespace MarkMpn.Sql4Cds.Engine
         private bool _cancelledManually;
         private string _lastDatabase;
 
+        static Sql4CdsCommand()
+        {
+            // Ensure the FetchXmlScan class is loaded - avoids multithreading issues when using the custom debug visualizer
+            // on the command object.
+            new FetchXmlScan();
+        }
+
         public Sql4CdsCommand(Sql4CdsConnection connection) : this(connection, string.Empty)
         {
         }

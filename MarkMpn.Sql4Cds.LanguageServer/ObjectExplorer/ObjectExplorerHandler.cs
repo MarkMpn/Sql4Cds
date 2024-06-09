@@ -113,6 +113,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                         });
                     }
 
+                    if (session.DataSource.Metadata.RecycleBinEntities != null)
+                    {
+                        nodes.Add(new NodeInfo
+                        {
+                            IsLeaf = false,
+                            Label = "Recycle Bin",
+                            NodePath = request.NodePath + "/Bin",
+                            NodeType = "Folder",
+                        });
+                    }
+
                     nodes.Add(new NodeInfo
                     {
                         IsLeaf = false,
@@ -203,6 +214,26 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                                 });
                             }
                         }
+                    }
+                }
+                else if (url.AbsolutePath == "/Bin")
+                {
+                    foreach (var entity in session.DataSource.Metadata.RecycleBinEntities)
+                    {
+                        nodes.Add(new NodeInfo
+                        {
+                            IsLeaf = false,
+                            Label = entity,
+                            NodePath = request.NodePath + "/" + entity,
+                            NodeType = "Table",
+                            Metadata = new ObjectMetadata
+                            {
+                                Urn = request.NodePath + "/" + entity,
+                                MetadataType = MetadataType.Table,
+                                Schema = "bin",
+                                Name = entity
+                            }
+                        });
                     }
                 }
                 else if (url.AbsolutePath.StartsWith("/Tables/") && url.AbsolutePath.Split('/').Length == 3)
@@ -373,6 +404,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             });
 
             return true;
+        }
+
+        private bool HasEntity(DataSourceWithInfo dataSource, string logicalName)
+        {
+            try
+            {
+                return dataSource.Metadata[logicalName] != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private bool HandleRefresh(RefreshParams args)

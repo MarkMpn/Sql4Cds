@@ -400,6 +400,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!attributes.TryGetValue(destAttributeName, out var attr) || attr.AttributeOf != null)
                     continue;
 
+                if (metadata.LogicalName == "principalobjectaccess" && (attr.LogicalName == "objecttypecode" || attr.LogicalName == "principaltypecode"))
+                    continue;
+
                 var sourceSqlType = schema.Schema[sourceColumnName].Type;
                 var destType = attr.GetAttributeType();
                 var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(dataSource, true);
@@ -425,8 +428,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expr = Expression.Convert(expr, sourceSqlType.ToNetType(out _));
 
                     Expression convertedExpr;
+                    var lookupAttr = attr as LookupAttributeMetadata;
 
-                    if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList && metadata.IsIntersect != true)
+                    if (lookupAttr != null && lookupAttr.AttributeType != AttributeTypeCode.PartyList && metadata.IsIntersect != true ||
+                        metadata.LogicalName == "principalobjectaccess" && (attr.LogicalName == "objectid" || attr.LogicalName == "principalid"))
                     {
                         if (sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference))
                         {
@@ -443,13 +448,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             Expression targetExpr;
 
-                            if (lookupAttr.Targets.Length == 1)
+                            if (lookupAttr != null && lookupAttr.Targets.Length == 1)
                             {
                                 targetExpr = Expression.Constant(lookupAttr.Targets[0]);
                             }
                             else
                             {
-                                var sourceTargetColumnName = mappings[destAttributeName + "type"];
+                                var typeColName = destAttributeName + "type";
+
+                                if (metadata.LogicalName == "principalobjectaccess" && (attr.LogicalName == "objectid" || attr.LogicalName == "principalid"))
+                                    typeColName = destAttributeName.Replace("id", "typecode");
+
+                                var sourceTargetColumnName = mappings[typeColName];
                                 var sourceTargetType = schema.Schema[sourceTargetColumnName].Type;
 
                                 targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
@@ -476,6 +486,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 targetExpr,
                                 convertedExpr
                             );
+                        }
+
+                        if (lookupAttr != null && lookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) && mappings.TryGetValue(destAttributeName + "pid", out var partitionIdColumn))
+                        {
+                            var partitionIdExpr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(partitionIdColumn));
+                            partitionIdExpr = Expression.Convert(partitionIdExpr, schema.Schema[partitionIdColumn].Type.ToNetType(out _));
+                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, schema.Schema[partitionIdColumn].Type, DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit));
+                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, typeof(string));
+                            convertedExpr = Expr.Call(() => CreateElasticEntityReference(Expr.Arg<EntityReference>(), Expr.Arg<string>(), Expr.Arg<IAttributeMetadataCache>()), convertedExpr, partitionIdExpr, Expression.Constant(dataSource.Metadata));
                         }
 
                         destType = typeof(EntityReference);
@@ -544,6 +563,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException("Cannot convert null ObjectTypeCode to EntityReference");
 
             return attributeMetadataCache[otc.Value].LogicalName;
+        }
+
+        private static EntityReference CreateElasticEntityReference(EntityReference entityReference, string partitionId, IAttributeMetadataCache metadata)
+        {
+            if (entityReference == null)
+                return null;
+
+            if (partitionId == null)
+                return entityReference;
+
+            var meta = metadata[entityReference.LogicalName];
+            var keys = new KeyAttributeCollection
+            {
+                [meta.PrimaryIdAttribute] = entityReference.Id,
+                ["partitionid"] = partitionId
+            };
+
+            return new EntityReference(entityReference.LogicalName, keys);
         }
 
         /// <summary>

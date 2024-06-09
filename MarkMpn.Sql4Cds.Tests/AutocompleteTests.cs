@@ -38,7 +38,7 @@ namespace MarkMpn.Sql4Cds.Tests
                     Messages = new StubMessageCache()
                 }
             };
-            _autocomplete = new Autocomplete(dataSources, "local");
+            _autocomplete = new Autocomplete(dataSources, "local", ColumnOrdering.Strict);
         }
 
         [TestMethod]

@@ -2823,8 +2823,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var innerAlias = AssertNode<AliasNode>(loop.RightSource);
             var innerTop = AssertNode<TopNode>(innerAlias.Source);
-            var innerSort = AssertNode<SortNode>(innerTop.Source);
-            var innerIndexSpool = AssertNode<IndexSpoolNode>(innerSort.Source);
+            var innerIndexSpool = AssertNode<IndexSpoolNode>(innerTop.Source);
             Assert.AreEqual("contact.parentcustomerid", innerIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr1", innerIndexSpool.SeekValue);
             var innerFetch = AssertNode<FetchXmlScan>(innerIndexSpool.Source);
@@ -2837,6 +2836,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='parentcustomerid' operator='not-null' />
                         </filter>
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
         }
@@ -3714,7 +3714,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
             
-            var result = select.Execute(new NodeExecutionContext(_localDataSources, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), null), CommandBehavior.Default);
+            var result = select.Execute(new NodeExecutionContext(_localDataSources, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, INullable>(), null), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(result);
 
@@ -4192,7 +4192,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, selectConstantScan.Values.Count);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4246,7 +4246,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, selectConstantScan.Values.Count);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4304,7 +4304,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4338,7 +4338,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4430,7 +4430,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -4464,7 +4464,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var parameterValues = new Dictionary<string, object>();
+            var parameterValues = new Dictionary<string, INullable>();
 
             foreach (var plan in plans)
             {
@@ -5330,13 +5330,14 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("new_customentity.new_optionsetvalue", sort.Sorts[0].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(sort.Source);
 
             AssertFetchXml(fetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true' useraworderby='1'>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
                     <entity name='new_customentity'>
                         <attribute name='new_optionsetvalue' />
-                        <order attribute='new_optionsetvalue' />
                     </entity>
                 </fetch>");
         }
@@ -6780,10 +6781,13 @@ ORDER BY [union. all].eln";
 
             var sort = AssertNode<SortNode>(select.Source);
 
-            var join1 = AssertNode<HashJoinNode>(sort.Source);
+            var filter1 = AssertNode<FilterNode>(sort.Source);
+            Assert.AreEqual("[union. all].logicalname = a2.logicalname", filter1.Filter.ToSql());
+
+            var join1 = AssertNode<HashJoinNode>(filter1.Source);
             Assert.AreEqual("a2.entitylogicalname", join1.LeftAttribute.ToSql());
             Assert.AreEqual("[union. all].eln", join1.RightAttribute.ToSql());
-            Assert.AreEqual("[union. all].logicalname = a2.logicalname", join1.AdditionalJoinCriteria.ToSql());
+            Assert.IsNull(join1.AdditionalJoinCriteria);
 
             var mq1 = AssertNode<MetadataQueryNode>(join1.LeftSource);
             Assert.AreEqual("french", mq1.DataSource);
@@ -7210,7 +7214,32 @@ inner join contact c on a.primarycontactid = c.contactid";
         }
 
         [TestMethod]
-        public void OrderByOptionSetValue()
+        public void OrderByOptionSetValueWithUseRawOrderBy()
+        {
+            using (_localDataSource.SetUseRawOrderByReliable(true))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch useraworderby='1'>
+                        <entity name='new_customentity'>
+                            <attribute name='new_customentityid' />
+                            <order attribute='new_optionsetvalue' />
+                        </entity>
+                    </fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void OrderByOptionSetValueWithoutUseRawOrderBy()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
@@ -7221,12 +7250,14 @@ inner join contact c on a.primarycontactid = c.contactid";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("new_customentity.new_optionsetvalue", sort.Sorts[0].Expression.ToSql());
+            var fetch = AssertNode<FetchXmlScan>(sort.Source);
             AssertFetchXml(fetch, @"
-                <fetch useraworderby='1'>
+                <fetch>
                     <entity name='new_customentity'>
                         <attribute name='new_customentityid' />
-                        <order attribute='new_optionsetvalue' />
+                        <attribute name='new_optionsetvalue' />
                     </entity>
                 </fetch>");
         }
@@ -7234,28 +7265,31 @@ inner join contact c on a.primarycontactid = c.contactid";
         [TestMethod]
         public void OrderByOptionSetValueAndName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            using (_localDataSource.SetUseRawOrderByReliable(true))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
 
-            var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue, new_optionsetvaluename";
+                var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue, new_optionsetvaluename";
 
-            var plans = planBuilder.Build(query, null, out _);
+                var plans = planBuilder.Build(query, null, out _);
 
-            Assert.AreEqual(1, plans.Length);
+                Assert.AreEqual(1, plans.Length);
 
-            var select = AssertNode<SelectNode>(plans[0]);
-            var sort = AssertNode<SortNode>(select.Source);
-            Assert.AreEqual(1, sort.PresortedCount);
-            Assert.AreEqual(2, sort.Sorts.Count);
-            Assert.AreEqual("new_customentity.new_optionsetvaluename", sort.Sorts[1].Expression.ToSql());
-            var fetch = AssertNode<FetchXmlScan>(sort.Source);
-            AssertFetchXml(fetch, @"
-                <fetch useraworderby='1'>
-                    <entity name='new_customentity'>
-                        <attribute name='new_customentityid' />
-                        <attribute name='new_optionsetvalue' />
-                        <order attribute='new_optionsetvalue' />
-                    </entity>
-                </fetch>");
+                var select = AssertNode<SelectNode>(plans[0]);
+                var sort = AssertNode<SortNode>(select.Source);
+                Assert.AreEqual(1, sort.PresortedCount);
+                Assert.AreEqual(2, sort.Sorts.Count);
+                Assert.AreEqual("new_customentity.new_optionsetvaluename", sort.Sorts[1].Expression.ToSql());
+                var fetch = AssertNode<FetchXmlScan>(sort.Source);
+                AssertFetchXml(fetch, @"
+                    <fetch useraworderby='1'>
+                        <entity name='new_customentity'>
+                            <attribute name='new_customentityid' />
+                            <attribute name='new_optionsetvalue' />
+                            <order attribute='new_optionsetvalue' />
+                        </entity>
+                    </fetch>");
+            }
         }
 
         [TestMethod]
@@ -7395,6 +7429,409 @@ ORDER BY
   </entity>
 </fetch>");
             }
+        }
+
+        [TestMethod]
+        public void DistinctUsesCustomPaging()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select distinct
+account.name, contact.firstname
+from account
+left outer join contact ON account.accountid = contact.parentcustomerid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+<fetch distinct='true'>
+  <entity name='account'>
+    <attribute name='name' />
+    <link-entity name='contact' to='accountid' from='parentcustomerid' alias='contact' link-type='outer'>
+      <attribute name='firstname' />
+      <order attribute='firstname' />
+    </link-entity>
+    <order attribute='name' />
+  </entity>
+</fetch>");
+            Assert.IsTrue(fetch.UsingCustomPaging);
+        }
+
+        [TestMethod]
+        public void NotExistWithJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select top 10 a2.name
+from account a2
+where not exists (
+    select top 10 a.accountid
+    from account a
+    inner join contact c on c.parentcustomerid = a.accountid
+    where a.accountid = a2.accountid
+)
+";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var filter = AssertNode<FilterNode>(top.Source);
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+
+            Assert.AreEqual("a2", fetch1.Alias);
+            AssertFetchXml(fetch1, @"
+<fetch>
+  <entity name='account'>
+    <attribute name='name' />
+    <attribute name='accountid' />
+    <order attribute='accountid' />
+  </entity>
+</fetch>");
+            Assert.IsFalse(fetch1.UsingCustomPaging);
+
+            Assert.AreEqual("Expr2", fetch2.Alias);
+            AssertFetchXml(fetch2, @"
+<fetch distinct='true'>
+  <entity name='contact'>
+    <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='a'>
+      <attribute name='accountid' />
+      <order attribute='accountid' />
+    </link-entity>
+  </entity>
+</fetch>");
+            Assert.IsTrue(fetch2.UsingCustomPaging);
+            Assert.AreEqual(1, fetch2.ColumnMappings.Count);
+            Assert.AreEqual("Expr2.accountid", fetch2.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("a.accountid", fetch2.ColumnMappings[0].SourceColumn);
+
+            Assert.AreEqual("a2.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("Expr2.accountid", join.RightAttribute.ToSql());
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.SemiJoin);
+            Assert.AreEqual(1, join.DefinedValues.Count);
+            Assert.AreEqual("Expr2.accountid", join.DefinedValues["Expr3"]);
+
+            Assert.AreEqual("Expr3 IS NULL", filter.Filter.ToSql());
+
+            Assert.AreEqual("10", top.Top.ToSql());
+
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("a2.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("name", select.ColumnSet[0].OutputColumn);
+        }
+
+        [TestMethod]
+        public void ScalarSubquery()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select top 10 * from (
+select fullname, (select name from account where accountid = parentcustomerid) from contact
+) a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+<fetch top='10'>
+  <entity name='contact'>
+    <attribute name='fullname' />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='Expr2' link-type='outer'>
+      <attribute name='name' alias='Expr3' />
+    </link-entity>
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaRHS()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND contact.firstname IN (SELECT new_name FROM new_customentity)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+    </link-entity>
+    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaRHSCorrelatedExists()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SELECT * FROM new_customentity WHERE new_name = contact.firstname)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+    </link-entity>
+    <link-entity name='new_customentity' to='firstname' from='new_name' link-type='in' />
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaLHS()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND account.name IN (SELECT new_name FROM new_customentity)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+      <link-entity name='new_customentity' to='name' from='new_name' link-type='in' />
+    </link-entity>
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaLHSCorrelatedExists()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SELECT * FROM new_customentity WHERE new_name = account.name)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+                AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+      <link-entity name='new_customentity' to='name' from='new_name' link-type='in' />
+    </link-entity>
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaLHSAndRHSInnerJoin()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+inner join contact ON account.accountid = contact.parentcustomerid AND contact.fullname IN (SELECT new_name FROM new_customentity WHERE account.turnover = new_customentity.new_decimalprop)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var filter = AssertNode<FilterNode>(select.Source);
+                Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
+                var loop = AssertNode<NestedLoopNode>(filter.Source);
+                Assert.AreEqual(QualifiedJoinType.LeftOuter, loop.JoinType);
+                Assert.IsTrue(loop.SemiJoin);
+                Assert.AreEqual("contact.fullname = new_customentity.new_name", loop.JoinCondition.ToSql());
+                Assert.AreEqual(1, loop.OuterReferences.Count);
+                Assert.AreEqual("@Expr1", loop.OuterReferences["account.turnover"]);
+                Assert.AreEqual("new_customentity.new_name", loop.DefinedValues["Expr2"]);
+                var fetch1 = AssertNode<FetchXmlScan>(loop.LeftSource);
+                AssertFetchXml(fetch1, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <link-entity name='account' to='parentcustomerid' from='accountid' alias='account' link-type='inner'>
+      <all-attributes />
+    </link-entity>
+  </entity>
+</fetch>");
+                var spool = AssertNode<IndexSpoolNode>(loop.RightSource);
+                Assert.AreEqual("new_customentity.new_decimalprop", spool.KeyColumn);
+                Assert.AreEqual("@Expr1", spool.SeekValue);
+                var fetch2 = AssertNode<FetchXmlScan>(spool.Source);
+                AssertFetchXml(fetch2, @"
+<fetch>
+  <entity name='new_customentity'>
+    <attribute name='new_name' />
+    <attribute name='new_decimalprop' />
+    <filter>
+      <condition attribute=""new_decimalprop"" operator=""not-null"" />
+    </filter>
+  </entity>
+</fetch>");
+            }
+        }
+
+        [TestMethod]
+        public void SubqueryInJoinCriteriaLHSAndRHSOuterJoin()
+        {
+            using (_localDataSource.EnableJoinOperator(JoinOperator.In))
+            {
+                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+                var query = @"
+select
+*
+from account
+left outer join contact ON account.accountid = contact.parentcustomerid AND contact.fullname IN (SELECT new_name FROM new_customentity WHERE account.turnover = new_customentity.new_decimalprop)";
+
+                var plans = planBuilder.Build(query, null, out _);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var loop1 = AssertNode<NestedLoopNode>(select.Source);
+                Assert.AreEqual(QualifiedJoinType.LeftOuter, loop1.JoinType);
+                Assert.AreEqual("account.accountid = contact.parentcustomerid\r\nAND Expr3 IS NOT NULL", loop1.JoinCondition.ToSql());
+                Assert.IsFalse(loop1.SemiJoin);
+                Assert.AreEqual(1, loop1.OuterReferences.Count);
+                Assert.AreEqual("@Expr1", loop1.OuterReferences["account.turnover"]);
+                var fetch1 = AssertNode<FetchXmlScan>(loop1.LeftSource);
+                AssertFetchXml(fetch1, @"
+<fetch>
+  <entity name='account'>
+    <all-attributes />
+  </entity>
+</fetch>");
+                var merge = AssertNode<MergeJoinNode>(loop1.RightSource);
+                Assert.AreEqual(1, merge.DefinedValues.Count);
+                Assert.AreEqual("Expr2.new_name", merge.DefinedValues["Expr3"]);
+                var tableSpool = AssertNode<TableSpoolNode>(merge.LeftSource);
+                var fetch2 = AssertNode<FetchXmlScan>(tableSpool.Source);
+                AssertFetchXml(fetch2, @"
+<fetch>
+  <entity name='contact'>
+    <all-attributes />
+    <order attribute='fullname' />
+  </entity>
+</fetch>");
+                var sort = AssertNode<SortNode>(merge.RightSource);
+                var distinct = AssertNode<DistinctNode>(sort.Source);
+                var alias = AssertNode<AliasNode>(distinct.Source);
+                var spool = AssertNode<IndexSpoolNode>(alias.Source);
+                Assert.AreEqual("new_customentity.new_decimalprop", spool.KeyColumn);
+                Assert.AreEqual("@Expr1", spool.SeekValue);
+                var fetch3 = AssertNode<FetchXmlScan>(spool.Source);
+                AssertFetchXml(fetch3, @"
+<fetch>
+  <entity name='new_customentity'>
+    <attribute name='new_name' />
+    <attribute name='new_decimalprop' />
+    <filter>
+      <condition attribute='new_decimalprop' operator='not-null' />
+    </filter>
+  </entity>
+</fetch>");
+
+            }
+        }
+
+        [TestMethod]
+        public void VirtualAttributeAliases()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+select statecodename [state], parentcustomerid x, parentcustomeridname from contact";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='contact'>
+    <attribute name='statecode' />
+    <attribute name='parentcustomerid' />
+  </entity>
+</fetch>");
         }
     }
 }

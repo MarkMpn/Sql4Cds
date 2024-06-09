@@ -21,5 +21,10 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             // Do not recurse into subqueries
         }
+
+        public override void ExplicitVisit(FromClause node)
+        {
+            // Do not recurse into data sources
+        }
     }
 }

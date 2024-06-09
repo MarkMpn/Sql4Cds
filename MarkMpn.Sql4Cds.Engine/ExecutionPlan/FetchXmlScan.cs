@@ -20,7 +20,7 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class FetchXmlScan : BaseDataNode, IFetchXmlExecutionPlanNode
+    class FetchXmlScan : BaseDataNode, IFetchXmlExecutionPlanNode, IExecutionPlanNodeWarning
     {
         class ParameterizedCondition
         {
@@ -44,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            public void SetValue(object value, IQueryExecutionOptions options)
+            public void SetValue(INullable value, IQueryExecutionOptions options)
             {
                 if (value == null || (value is INullable nullable && nullable.IsNull))
                 {
@@ -58,28 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!_filter.Items.Contains(_condition))
                         _filter.Items = _filter.Items.Except(new[] { _contradiction }).Concat(new[] { _condition }).ToArray();
 
-                    var formatted = value.ToString();
-
-                    if (value is SqlDate d)
-                        value = (SqlDateTime)d;
-                    else if (value is SqlDateTime2 dt2)
-                        value = (SqlDateTime)dt2;
-                    else if (value is SqlTime t)
-                        value = (SqlDateTime)t;
-                    else if (value is SqlDateTimeOffset dto)
-                        value = (SqlDateTime)dto;
-
-                    if (value is SqlDateTime dt)
-                    {
-                        DateTimeOffset dto;
-
-                        if (options.UseLocalTimeZone)
-                            dto = new DateTimeOffset(dt.Value, TimeZoneInfo.Local.GetUtcOffset(dt.Value));
-                        else
-                            dto = new DateTimeOffset(dt.Value, TimeSpan.Zero);
-
-                        formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
-                    }
+                    var formatted = FetchXmlScan.FormatConditionValue(value, options);
 
                     if (_value != null)
                         _value.Value = formatted;
@@ -111,7 +90,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool _resetPage;
         private string _startingPage;
         private List<KeyValuePair<string, string>> _pagingFields;
-        private List<SqlEntityReference> _lastPageValues;
+        private List<INullable> _lastPageValues;
+        private bool _missingPagingCookie;
 
         public FetchXmlScan()
         {
@@ -213,16 +193,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("A list of additional columns that should be included in the schema")]
         public List<SelectColumn> ColumnMappings { get; } = new List<SelectColumn>();
 
+        [Browsable(false)]
+        public string Warning => _missingPagingCookie && RowsOut == 50_000 ? "Using legacy paging - results may be incomplete" : null;
+
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
-            // Custom paging is required if we have links to child entities, as standard Dataverse paging is applied at
-            // the top-level entity only.
-            // Custom paging can't be used with distinct queries, as the primary key fields required to implement the paging
-            // may not be included.
-            // It also can't be used with aggregate queries as doing so would affect the aggregae behaviour.
-            if (FetchXml.distinct)
+            // Never need to do paging if we're enforcing a TOP constraint
+            if (FetchXml.top != null)
                 return false;
 
+            // Custom paging is required if we have links to child entities, as standard Dataverse paging is applied at
+            // the top-level entity only.
+            // Custom paging can't be used with aggregate queries as doing so would affect the aggregate behaviour.
             if (FetchXml.aggregate)
                 return false;
 
@@ -231,14 +213,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var linkEntity in Entity.GetLinkEntities())
             {
-                // Link entities used for filtering do not require paging
+                // Link entities used for filtering do not require custom paging
                 if (linkEntity.linktype == "exists" || linkEntity.linktype == "in")
                     continue;
+
+                // Sorts on link entities always require custom paging
+                if (linkEntity.Items?.OfType<FetchOrderType>().Any() == true)
+                    return true;
 
                 if (HasSingleRecordFilter(linkEntity, dataSource.Metadata[linkEntity.name].PrimaryIdAttribute))
                     continue;
 
-                // Parental lookups do not require paging
+                // Parental lookups do not require custom paging
                 if (linkEntity.from == dataSource.Metadata[linkEntity.name].PrimaryIdAttribute)
                     continue;
 
@@ -330,7 +316,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else
             {
-                _lastPageValues = new List<SqlEntityReference>();
+                _lastPageValues = new List<INullable>();
             }
 
             var req = new RetrieveMultipleRequest { Query = new FetchExpression(Serialize(FetchXml)) };
@@ -422,11 +408,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         FetchXml.page = (Int32.Parse(FetchXml.page, CultureInfo.InvariantCulture) + 1).ToString();
 
                     FetchXml.pagingcookie = res.PagingCookie;
+                    _missingPagingCookie = String.IsNullOrEmpty(res.PagingCookie);
                 }
                 else
                 {
                     pagingFilter = new filter { type = filterType.or };
-                    AddPagingFilters(pagingFilter);
+                    AddPagingFilters(pagingFilter, context.Options);
                     Entity.AddItem(pagingFilter);
                 }
 
@@ -504,7 +491,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 VerifyFilterValueTypes(linkEntity.name, linkEntity.Items, dataSource);
         }
 
-        private void AddPagingFilters(filter filter)
+        private void AddPagingFilters(filter filter, IQueryExecutionOptions options)
         {
             for (var i = 0; i < _pagingFields.Count; i++)
             {
@@ -516,14 +503,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 for (var j = 0; j < i; j++)
                 {
                     var subParts = _pagingFields[j].Key.ToColumnReference().MultiPartIdentifier.Identifiers;
-                    subFilter.AddItem(new condition { entityname = j == 0 ? null : subParts[0].Value, attribute = subParts[1].Value, @operator = _lastPageValues[j].IsNull ? @operator.@null : @operator.eq, value = _lastPageValues[j].IsNull ? null : _lastPageValues[j].Id.ToString() });
+                    subFilter.AddItem(new condition { entityname = subParts[0].Value == Alias ? null : subParts[0].Value, attribute = subParts[1].Value, @operator = _lastPageValues[j].IsNull ? @operator.@null : @operator.eq, value = _lastPageValues[j].IsNull ? null : FormatConditionValue(_lastPageValues[j], options) });
                 }
 
                 var parts = _pagingFields[i].Key.ToColumnReference().MultiPartIdentifier.Identifiers;
-                subFilter.AddItem(new condition { entityname = i == 0 ? null : parts[0].Value, attribute = parts[1].Value, @operator = @operator.gt, value = _lastPageValues[i].Id.ToString() });
+                subFilter.AddItem(new condition { entityname = parts[0].Value == Alias ? null : parts[0].Value, attribute = parts[1].Value, @operator = @operator.gt, value = FormatConditionValue(_lastPageValues[i], options) });
 
                 filter.AddItem(subFilter);
             }
+        }
+
+        private static string FormatConditionValue(INullable value, IQueryExecutionOptions options)
+        {
+            var formatted = value.ToString();
+
+            if (value is SqlDate d)
+                value = (SqlDateTime)d;
+            else if (value is SqlDateTime2 dt2)
+                value = (SqlDateTime)dt2;
+            else if (value is SqlTime t)
+                value = (SqlDateTime)t;
+            else if (value is SqlDateTimeOffset dto)
+                value = (SqlDateTime)dto;
+
+            if (value is SqlDateTime dt)
+            {
+                DateTimeOffset dto;
+
+                if (options.UseLocalTimeZone)
+                    dto = new DateTimeOffset(dt.Value, TimeZoneInfo.Local.GetUtcOffset(dt.Value));
+                else
+                    dto = new DateTimeOffset(dt.Value, TimeSpan.Zero);
+
+                formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
+            }
+
+            return formatted;
         }
 
         /// <summary>
@@ -687,6 +702,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var typeSuffix = AddSuffix(attribute.Key, "type");
                 var nameSuffix = AddSuffix(attribute.Key, "name");
 
+                // NOTE: pid for elastic lookup values is exposed as a separate column in the returned entity already
+
                 if (!entity.Contains(typeSuffix))
                     entity[typeSuffix] = ((EntityReference)attribute.Value).LogicalName;
 
@@ -729,7 +746,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastPageValues.Clear();
 
                 foreach (var pagingField in _pagingFields)
-                    _lastPageValues.Add((SqlEntityReference)entity[pagingField.Value]);
+                    _lastPageValues.Add((INullable)entity[pagingField.Value]);
             }
         }
 
@@ -972,6 +989,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
         {
+            var mapping = ColumnMappings.FirstOrDefault(m => m.OutputColumn == colName);
+            if (mapping != null)
+                colName = mapping.SourceColumn;
+
             var parts = colName.SplitMultiPartIdentifier();
 
             if (parts.Length == 1)
@@ -988,11 +1009,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 linkEntity = null;
 
                 var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
-                {
-                    var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                }
+
+                if (meta == null)
+                    meta = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
 
                 if (meta != null)
                     attr.name = meta.LogicalName;
@@ -1021,11 +1040,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 linkEntity = Entity.FindLinkEntity(entityName);
 
                 var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
-                {
-                    var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                }
+                if (meta == null)
+                    meta = metadata[linkEntity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
 
                 if (meta != null)
                     attr.name = meta.LogicalName;
@@ -1201,7 +1217,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (linkEntity.from != childMeta.PrimaryIdAttribute)
                         {
-                            if (linkEntity.linktype == "inner")
+                            if (linkEntity.linktype == "inner" && linkEntity.to == meta.PrimaryIdAttribute && primaryKey == $"{alias}.{meta.PrimaryIdAttribute.EscapeIdentifier()}")
                                 primaryKey = $"{linkEntity.alias}.{childMeta.PrimaryIdAttribute.EscapeIdentifier()}";
                             else
                                 primaryKey = null;
@@ -1285,6 +1301,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
                     AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "type"), (attrMetadata.LogicalName + "type").EscapeIdentifier(), DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull); ;
+
+                if (lookup.Targets != null && lookup.Targets.Any(logicalName => dataSource.Metadata[logicalName].DataProviderId == DataProviders.ElasticDataProvider))
+                    AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "pid"), (attrMetadata.LogicalName + "pid").EscapeIdentifier(), DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
             }
         }
 
@@ -1840,16 +1859,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (RequiresCustomPaging(context.DataSources))
             {
-                RemoveSorts();
+                _pagingFields = new List<KeyValuePair<string, string>>();
+                _lastPageValues = new List<INullable>();
 
-                _pagingFields = new List<KeyValuePair<string,string>>();
-                _lastPageValues = new List<SqlEntityReference>();
+                if (FetchXml.distinct)
+                {
+                    // Distinct queries should already be sorted by each attribute being returned
+                    AddAllDistinctAttributes(Entity, dataSource);
 
-                // Ensure the primary key of each entity is included
-                AddPrimaryIdAttribute(Entity, dataSource);
+                    foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
+                        AddAllDistinctAttributes(linkEntity, dataSource);
+                }
+                else
+                {
+                    RemoveSorts();
 
-                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
-                    AddPrimaryIdAttribute(linkEntity, dataSource);
+                    // Ensure the primary key of each entity is included
+                    AddPrimaryIdAttribute(Entity, dataSource);
+
+                    foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
+                        AddPrimaryIdAttribute(linkEntity, dataSource);
+                }
             }
 
             NormalizeAttributes(context.DataSources);
@@ -1888,6 +1918,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 items = items.Concat(new object[] { new FetchOrderType { attribute = metadata.PrimaryIdAttribute } }).ToArray();
 
             return items;
+        }
+
+        private void AddAllDistinctAttributes(FetchEntityType entity, DataSource dataSource)
+        {
+            AddAllDistinctAttributes(entity.Items, Alias, dataSource.Metadata[entity.name]);
+        }
+
+        private void AddAllDistinctAttributes(FetchLinkEntityType linkEntity, DataSource dataSource)
+        {
+            AddAllDistinctAttributes(linkEntity.Items, linkEntity.alias, dataSource.Metadata[linkEntity.name]);
+        }
+
+        private void AddAllDistinctAttributes(object[] items, string alias, EntityMetadata metadata)
+        {
+            if (items == null)
+                return;
+
+            // If we have the primary key, we don't need to worry about any other attributes
+            var allAttrs = items.OfType<allattributes>().Any();
+            var primaryIdAttr = items.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == metadata.PrimaryIdAttribute);
+
+            if (allAttrs || primaryIdAttr != null)
+            {
+                _pagingFields.Add(new KeyValuePair<string, string>(alias + "." + metadata.PrimaryIdAttribute, alias + "." + (primaryIdAttr?.alias ?? metadata.PrimaryIdAttribute)));
+            }
+            else
+            {
+                foreach (var attr in items.OfType<FetchAttributeType>())
+                    _pagingFields.Add(new KeyValuePair<string, string>(alias + "." + attr.name, alias + "." + (attr.alias ?? attr.name)));
+            }
         }
 
         private bool HasAttribute(object[] items)

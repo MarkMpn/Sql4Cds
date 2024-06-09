@@ -1393,7 +1393,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Source = source
             };
 
-            ValidateDMLSchema(target);
+            ValidateDMLSchema(target, false);
 
             // Validate the entity name
             EntityMetadata metadata;
@@ -1410,6 +1410,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var virtualPidAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var schema = sourceColumns == null ? null : ((IDataExecutionPlanNodeInternal)source).GetSchema(_nodeContext);
 
             // Check all target columns are valid for create
@@ -1425,6 +1426,18 @@ namespace MarkMpn.Sql4Cds.Engine
                     lookupAttr.Targets.Length > 1)
                 {
                     if (!virtualTypeAttributes.Add(colName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
+
+                    continue;
+                }
+
+                // Could be a virtual ___pid attribute
+                if (colName.EndsWith("pid", StringComparison.OrdinalIgnoreCase) &&
+                    attributes.TryGetValue(colName.Substring(0, colName.Length - 3), out attr) &&
+                    attr is LookupAttributeMetadata elasticLookupAttr &&
+                    elasticLookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider))
+                {
+                    if (!virtualPidAttributes.Add(colName))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
 
                     continue;
@@ -1448,6 +1461,19 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = $"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when inserting values into the {metadata.LogicalName} table" };
                 }
+                else if (metadata.LogicalName == "principalobjectaccess")
+                {
+                    if (attr.LogicalName == "objecttypecode" || attr.LogicalName == "principaltypecode")
+                    {
+                        if (!virtualTypeAttributes.Add(colName))
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
+
+                        continue;
+                    }
+
+                    if (attr.LogicalName != "objectid" && attr.LogicalName != "principalid" && attr.LogicalName != "accessrightsmask")
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = "Only the objectid, principalid and accessrightsmask columns can be used when inserting values into the principalobjectaccess table" };
+                }
                 else
                 {
                     if (attr.IsValidForCreate == false)
@@ -1470,6 +1496,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity1IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity1IntersectAttribute} column to be set" };
                 if (!attributeNames.Contains(relationship.Entity2IntersectAttribute))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity2IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity2IntersectAttribute} column to be set" };
+            }
+            else if (metadata.LogicalName == "principalobjectaccess")
+            {
+                if (!attributeNames.Contains("objectid"))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "objectid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the objectid column to be set" };
+                if (!attributeNames.Contains("principalid"))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "principalid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the principalid column to be set" };
+                if (!attributeNames.Contains("accessrightsmask"))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "accessrightsmask" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the accessrightsmask column to be set" };
             }
 
             if (sourceColumns == null)
@@ -1498,6 +1533,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         targetName = colName;
                         targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                    }
+                    else if (virtualPidAttributes.Contains(colName))
+                    {
+                        targetName = colName;
+                        targetType = DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
                     }
                     else
                     {
@@ -1531,24 +1571,51 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (attributeNames.Contains(targetAttrName))
                 {
-                    var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
-
-                    if (targetLookupAttribute == null)
-                        continue;
-
-                    if (targetLookupAttribute.Targets.Length > 1 &&
-                        !virtualTypeAttributes.Contains(targetAttrName + "type") &&
-                        targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                    // Special case for principalobjectaccess table
+                    if (metadata.LogicalName == "principalobjectaccess")
                     {
-                        // Special case: not required for listmember.entityid
-                        if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
+                        if ((targetAttrName == "objectid" || targetAttrName == "principalid") &&
+                            !virtualTypeAttributes.Contains(targetAttrName.Replace("id", "typecode")) &&
+                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                        {
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                            {
+                                Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetAttrName.Replace("id", "typecode")} column"
+                            };
+                        }
+                    }
+                    else
+                    {
+                        var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
+
+                        if (targetLookupAttribute == null)
                             continue;
 
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                        if (targetLookupAttribute.Targets.Length > 1 &&
+                            !virtualTypeAttributes.Contains(targetAttrName + "type") &&
+                            targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
+                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                         {
-                            Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
-                        };
+                            // Special case: not required for listmember.entityid
+                            if (metadata.LogicalName != "listmember" || targetLookupAttribute.LogicalName != "entityid")
+                            {
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                                {
+                                    Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                                };
+                            }
+                        }
+
+                        // If the lookup references an elastic table we also need the pid column
+                        if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
+                            !virtualPidAttributes.Contains(targetAttrName + "pid") &&
+                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var elasticLookupType) != null && elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                        {
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                            {
+                                Suggestion = $"Inserting values into an elastic lookup field requires setting the associated pid column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}pid column"
+                            };
+                        }
                     }
                 }
                 else if (virtualTypeAttributes.Contains(targetAttrName))
@@ -1563,12 +1630,24 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
                 }
+                else if (virtualPidAttributes.Contains(targetAttrName))
+                {
+                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 3);
+
+                    if (!attributeNames.Contains(idAttrName))
+                    {
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                        {
+                            Suggestion = $"Inserting values into an elastic lookup field requires setting the associated ID column as well\r\nAdd a value for the {idAttrName} column"
+                        };
+                    }
+                }
             }
 
             return node;
         }
 
-        private void ValidateDMLSchema(NamedTableReference target)
+        private void ValidateDMLSchema(NamedTableReference target, bool allowBin)
         {
             if (String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value))
                 return;
@@ -1581,6 +1660,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (target.SchemaObject.SchemaIdentifier.Value.Equals("metadata", StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Metadata tables are read-only" };
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("bin", StringComparison.OrdinalIgnoreCase))
+            {
+                if (allowBin)
+                    return;
+
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Recycle bin tables are valid for SELECT and DELETE only" };
+            }
 
             throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "All data tables are in the 'dbo' schema" };
         }
@@ -1612,8 +1699,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            ValidateDMLSchema(target);
-
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
@@ -1635,6 +1720,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
 
+            ValidateDMLSchema(deleteTarget.Target, true);
+
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
 
@@ -1651,6 +1738,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var primaryKey = targetMetadata.PrimaryIdAttribute;
             string secondaryKey = null;
+            var requiredFields = new List<string>();
 
             if (targetMetadata.LogicalName == "listmember")
             {
@@ -1668,27 +1756,134 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Elastic tables need the partitionid as part of the primary key
                 secondaryKey = "partitionid";
             }
-            
-            queryExpression.SelectElements.Add(new SelectScalarExpression
+            else if (targetMetadata.LogicalName == "principalobjectaccess")
             {
-                Expression = new ColumnReferenceExpression
+                primaryKey = "objectid";
+                secondaryKey = "principalid";
+            }
+
+            if (deleteTarget.TargetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                // Deleting from the recycle bin needs to be translated to deleting the associated records from the deleteditemreference table
+                if (dataSource.Metadata.RecycleBinEntities == null || !dataSource.Metadata.RecycleBinEntities.Contains(targetLogicalName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = "Ensure restoring of deleted records is enabled for this table - see https://learn.microsoft.com/en-us/power-platform/admin/restore-deleted-table-records?WT.mc_id=DX-MVP-5004203" };
+
+                // We need to join the recycle bin entry to the deleteditemreference table to get the actual record to delete. We can only
+                // do this on a single ID field, so reject any deletes that need composite keys
+                if (secondaryKey != null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete, "Recycle bin records using a composite key cannot be deleted directly. Delete the associated record from the dbo.deleteitemreference table instead"));
+
+                queryExpression.SelectElements.Add(new SelectScalarExpression
                 {
-                    MultiPartIdentifier = new MultiPartIdentifier
+                    Expression = new ColumnReferenceExpression
                     {
-                        Identifiers =
+                        MultiPartIdentifier = new MultiPartIdentifier
                         {
-                            new Identifier { Value = targetAlias },
-                            new Identifier { Value = primaryKey }
+                            Identifiers =
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = primaryKey }
+                            }
+                        }
+                    },
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = new Identifier { Value = primaryKey }
+                    }
+                });
+
+                queryExpression = new QuerySpecification
+                {
+                    FromClause = new FromClause
+                    {
+                        TableReferences =
+                        {
+                            new QualifiedJoin
+                            {
+                                FirstTableReference = new NamedTableReference
+                                {
+                                    SchemaObject = new SchemaObjectName
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = "deleteditemreference" }
+                                        }
+                                    }
+                                },
+                                SecondTableReference = new QueryDerivedTable
+                                {
+                                    QueryExpression = queryExpression,
+                                    Alias = new Identifier { Value = targetLogicalName }
+                                },
+                                QualifiedJoinType = QualifiedJoinType.Inner,
+                                SearchCondition = new BooleanComparisonExpression
+                                {
+                                    FirstExpression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = targetLogicalName },
+                                                new Identifier { Value = primaryKey }
+                                            }
+                                        }
+                                    },
+                                    ComparisonType = BooleanComparisonType.Equals,
+                                    SecondExpression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = "deleteditemreference" },
+                                                new Identifier { Value = "deletedobject" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    WhereClause = new WhereClause
+                    {
+                        SearchCondition = new BooleanComparisonExpression
+                        {
+                            FirstExpression = new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier { Value = "deleteditemreference" },
+                                        new Identifier { Value = "deletedobjecttype" }
+                                    }
+                                }
+                            },
+                            ComparisonType = BooleanComparisonType.Equals,
+                            SecondExpression = new IntegerLiteral { Value = targetMetadata.ObjectTypeCode.ToString() }
                         }
                     }
-                },
-                ColumnName = new IdentifierOrValueExpression
-                {
-                    Identifier = new Identifier { Value = primaryKey }
-                }
-            });
+                };
+
+                primaryKey = "deleteditemreferenceid";
+                secondaryKey = null;
+                targetMetadata = dataSource.Metadata["deleteditemreference"];
+                targetAlias = "deleteditemreference";
+            }
+
+            requiredFields.Add(primaryKey);
 
             if (secondaryKey != null)
+                requiredFields.Add(secondaryKey);
+
+            if (targetMetadata.LogicalName == "principalobjectaccess")
+            {
+                requiredFields.Add("objecttypecode");
+                requiredFields.Add("principaltypecode");
+            }
+
+            foreach (var field in requiredFields)
             {
                 queryExpression.SelectElements.Add(new SelectScalarExpression
                 {
@@ -1697,19 +1892,19 @@ namespace MarkMpn.Sql4Cds.Engine
                         MultiPartIdentifier = new MultiPartIdentifier
                         {
                             Identifiers =
-                        {
-                            new Identifier { Value = targetAlias },
-                            new Identifier { Value = secondaryKey }
-                        }
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = field }
+                            }
                         }
                     },
                     ColumnName = new IdentifierOrValueExpression
                     {
-                        Identifier = new Identifier { Value = secondaryKey }
+                        Identifier = new Identifier { Value = field }
                     }
                 });
             }
-            
+
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
             CopyDmlHintsToSelectStatement(hints, selectStatement);
 
@@ -1767,8 +1962,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            ValidateDMLSchema(target);
-
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
@@ -1789,6 +1982,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+
+            ValidateDMLSchema(updateTarget.Target, false);
 
             var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
             var targetLogicalName = updateTarget.TargetEntityName;
@@ -1867,6 +2062,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var virtualPidAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var existingAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var useStateTransitions = !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
             var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
@@ -1928,6 +2124,20 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!virtualTypeAttributes.Add(targetAttrName))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
                 }
+                else if (targetMetadata.LogicalName == "principalobjectaccess" &&
+                    targetAttrName.EndsWith("typecode", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!virtualTypeAttributes.Add(targetAttrName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
+                }
+                else if (targetAttrName.EndsWith("pid", StringComparison.OrdinalIgnoreCase) &&
+                    attributes.TryGetValue(targetAttrName.Substring(0, targetAttrName.Length - 3), out attr) &&
+                    attr is LookupAttributeMetadata elasticLookupAttr &&
+                    elasticLookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider))
+                {
+                    if (!virtualPidAttributes.Add(targetAttrName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
+                }
                 else
                 {
                     if (!attributes.TryGetValue(targetAttrName, out attr))
@@ -1945,6 +2155,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = "Only the listid and entityid columns can be used when updating values in the listmember table" };
+                    }
+                    else if (targetMetadata.LogicalName == "principalobjectaccess")
+                    {
+                        if (attr.LogicalName != "objectid" && attr.LogicalName != "principalid" && attr.LogicalName != "accessrightsmask")
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = "Only the objectid, principalid and accessrightsmask columns can be used when updating values in the principalobjectaccess table" };
                     }
                     else
                     {
@@ -1984,6 +2199,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 existingAttributes.Add("listid");
                 existingAttributes.Add("entityid");
             }
+            else if (targetLogicalName == "principalobjectaccess")
+            {
+                existingAttributes.Add("objectid");
+                existingAttributes.Add("objecttypecode");
+                existingAttributes.Add("principalid");
+                existingAttributes.Add("principaltypecode");
+                existingAttributes.Add("accessrightsmask");
+            }
 
             foreach (var existingAttribute in existingAttributes)
             {
@@ -2013,7 +2236,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, existingAttributes, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, hints);
+            var updateNode = ConvertSetClause(update.SetClauses, existingAttributes, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, virtualPidAttributes, hints);
             updateNode.StateTransitions = stateTransitions;
 
             return updateNode;
@@ -2041,7 +2264,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, HashSet<string> existingAttributes, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, IList<OptimizerHint> queryHints)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, HashSet<string> existingAttributes, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, HashSet<string> virtualPidAttributes, IList<OptimizerHint> queryHints)
         {
             var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
@@ -2073,8 +2296,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
-                        var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
-                        targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
+                        if (targetMetadata.LogicalName != "principalobjectaccess")
+                        {
+                            var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
+                            targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
+                        }
                     }
                     else
                     {
@@ -2165,14 +2391,40 @@ namespace MarkMpn.Sql4Cds.Engine
                             Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
                         };
                     }
+
+                    // If the lookup references an elastic table we also need the pid column
+                    if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
+                        !virtualPidAttributes.Contains(targetAttrName + "pid") &&
+                        (!sourceTypes.TryGetValue(targetAttrName, out var elasticLookupType) || elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral))
+                    {
+                        throw new NotSupportedQueryFragmentException("Updating an elastic lookup field requires setting the associated pid column as well", assignment.Column)
+                        {
+                            Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}pid column"
+                        };
+                    }
                 }
                 else if (virtualTypeAttributes.Contains(targetAttrName))
                 {
                     var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
 
+                    if (targetMetadata.LogicalName == "principalobjectaccess")
+                        idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 8) + "id";
+
                     if (!attributeNames.Contains(idAttrName))
                     {
                         throw new NotSupportedQueryFragmentException("Updating a polymorphic type field requires setting the associated ID column as well", assignment.Column)
+                        {
+                            Suggestion = $"Add a SET clause for the {idAttrName} column"
+                        };
+                    }
+                }
+                else if (virtualPidAttributes.Contains(targetAttrName))
+                {
+                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 3);
+
+                    if (!attributeNames.Contains(idAttrName))
+                    {
+                        throw new NotSupportedQueryFragmentException("Updating an elastic lookup field requires setting the associated ID column as well", assignment.Column)
                         {
                             Suggestion = $"Add a SET clause for the {idAttrName} column"
                         };
@@ -2623,7 +2875,7 @@ namespace MarkMpn.Sql4Cds.Engine
             });
         }
 
-        private IDataExecutionPlanNodeInternal ConvertInSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences)
+        private IDataExecutionPlanNodeInternal ConvertInSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
         {
             var visitor = new InSubqueryVisitor();
             query.Accept(visitor);
@@ -2631,141 +2883,143 @@ namespace MarkMpn.Sql4Cds.Engine
             if (visitor.InSubqueries.Count == 0)
                 return source;
 
+            foreach (var inSubquery in visitor.InSubqueries)
+                source = ConvertInSubquery(source, hints, query, inSubquery, context, outerSchema, outerReferences);
+
+            return source;
+        }
+
+        private IDataExecutionPlanNodeInternal ConvertInSubquery(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, InPredicate inSubquery, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
+        {
             var computeScalar = source as ComputeScalarNode;
-            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
             var schema = source.GetSchema(context);
 
-            foreach (var inSubquery in visitor.InSubqueries)
+            // Validate the LHS expression
+            inSubquery.Expression.GetType(GetExpressionContext(schema, context), out _);
+
+            // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
+            // LEFT JOIN source ON col1 = col2
+            // and the result is col2 IS NOT NULL
+
+            // Ensure the left hand side is a column
+            if (!(inSubquery.Expression is ColumnReferenceExpression lhsCol))
             {
-                // Validate the LHS expression
-                inSubquery.Expression.GetType(GetExpressionContext(schema, context), out _);
-
-                // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
-                // LEFT JOIN source ON col1 = col2
-                // and the result is col2 IS NOT NULL
-
-                // Ensure the left hand side is a column
-                if (!(inSubquery.Expression is ColumnReferenceExpression lhsCol))
+                if (computeScalar == null)
                 {
-                    if (computeScalar == null)
-                    {
-                        computeScalar = new ComputeScalarNode { Source = source };
-                        source = computeScalar;
-                    }
+                    computeScalar = new ComputeScalarNode { Source = source };
+                    source = computeScalar;
+                }
 
-                    var alias = context.GetExpressionName();
-                    computeScalar.Columns[alias] = inSubquery.Expression.Clone();
-                    lhsCol = alias.ToColumnReference();
+                var alias = context.GetExpressionName();
+                computeScalar.Columns[alias] = inSubquery.Expression.Clone();
+                lhsCol = alias.ToColumnReference();
+            }
+            else
+            {
+                // Normalize the LHS column
+                if (schema.ContainsColumn(lhsCol.GetColumnName(), out var lhsColNormalized))
+                    lhsCol = lhsColNormalized.ToColumnReference();
+            }
+
+            var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
+            var innerContext = new NodeCompilationContext(context, parameters);
+            var references = new Dictionary<string, string>();
+            var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
+
+            // Scalar subquery must return exactly one column and one row
+            if (innerQuery.ColumnSet.Count != 1)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.MultiColumnScalarSubquery(inSubquery.Subquery));
+
+            // Create the join
+            BaseJoinNode join;
+            var testColumn = innerQuery.ColumnSet[0].SourceColumn;
+
+            if (references.Count == 0)
+            {
+                if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, true, out var outputCol, out var merge))
+                {
+                    testColumn = outputCol;
+                    join = merge;
                 }
                 else
                 {
-                    // Normalize the LHS column
-                    if (schema.ContainsColumn(lhsCol.GetColumnName(), out var lhsColNormalized))
-                        lhsCol = lhsColNormalized.ToColumnReference();
-                }
-
-                var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-                var innerContext = new NodeCompilationContext(context, parameters);
-                var references = new Dictionary<string, string>();
-                var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-
-                // Scalar subquery must return exactly one column and one row
-                if (innerQuery.ColumnSet.Count != 1)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.MultiColumnScalarSubquery(inSubquery.Subquery));
-
-                // Create the join
-                BaseJoinNode join;
-                var testColumn = innerQuery.ColumnSet[0].SourceColumn;
-
-                if (references.Count == 0)
-                {
-                    if (UseMergeJoin(source, innerQuery.Source, context, references, testColumn, lhsCol.GetColumnName(), true, true, out var outputCol, out var merge))
+                    // We need the inner list to be distinct to avoid creating duplicates during the join
+                    var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
+                    if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                     {
-                        testColumn = outputCol;
-                        join = merge;
-                    }
-                    else
-                    {
-                        // We need the inner list to be distinct to avoid creating duplicates during the join
-                        var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
-                        if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
+                        innerQuery.Source = new DistinctNode
                         {
-                            innerQuery.Source = new DistinctNode
-                            {
-                                Source = innerQuery.Source,
-                                Columns = { innerQuery.ColumnSet[0].SourceColumn }
-                            };
-                        }
-
-                        // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
-                        // same table being used inside the IN subquery and elsewhere
-                        var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() }, context);
-
-                        testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
-                        join = new HashJoinNode
-                        {
-                            LeftSource = source,
-                            LeftAttribute = lhsCol.Clone(),
-                            RightSource = alias,
-                            RightAttribute = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = alias.Alias }, new Identifier { Value = alias.ColumnSet[0].OutputColumn } } } }
+                            Source = innerQuery.Source,
+                            Columns = { innerQuery.ColumnSet[0].SourceColumn }
                         };
                     }
 
-                    if (!join.SemiJoin)
-                    {
-                        // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
-                        var definedValue = context.GetExpressionName();
-                        join.SemiJoin = true;
-                        join.OutputRightSchema = false;
-                        join.DefinedValues[definedValue] = testColumn;
-                        testColumn = definedValue;
-                    }
-                }
-                else
-                {
-                    // We need to use nested loops for correlated subqueries
-                    // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
-                    // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
-                    // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
-                    // many rows are likely from the outer query to work out if this is going to be more efficient or not.
-                    if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
+                    // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
+                    // same table being used inside the IN subquery and elsewhere
+                    var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() }, context);
 
-                    var definedValue = context.GetExpressionName();
-
-                    join = new NestedLoopNode
+                    testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
+                    join = new HashJoinNode
                     {
                         LeftSource = source,
-                        RightSource = innerQuery.Source,
-                        OuterReferences = references,
-                        JoinCondition = new BooleanComparisonExpression
-                        {
-                            FirstExpression = lhsCol,
-                            ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
-                        },
-                        SemiJoin = true,
-                        OutputRightSchema = false,
-                        DefinedValues = { [definedValue] = innerQuery.ColumnSet[0].SourceColumn }
+                        LeftAttribute = lhsCol.Clone(),
+                        RightSource = alias,
+                        RightAttribute = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = alias.Alias }, new Identifier { Value = alias.ColumnSet[0].OutputColumn } } } }
                     };
-
-                    testColumn = definedValue;
                 }
 
-                join.JoinType = QualifiedJoinType.LeftOuter;
-
-                rewrites[inSubquery] = new BooleanIsNullExpression
+                if (!join.SemiJoin)
                 {
-                    IsNot = !inSubquery.NotDefined,
-                    Expression = testColumn.ToColumnReference()
+                    // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
+                    var definedValue = context.GetExpressionName();
+                    join.SemiJoin = true;
+                    join.OutputRightSchema = false;
+                    join.DefinedValues[definedValue] = testColumn;
+                    testColumn = definedValue;
+                }
+            }
+            else
+            {
+                // We need to use nested loops for correlated subqueries
+                // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
+                // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
+                // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
+                // many rows are likely from the outer query to work out if this is going to be more efficient or not.
+                if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
+                    InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
+
+                var definedValue = context.GetExpressionName();
+
+                join = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = innerQuery.Source,
+                    OuterReferences = references,
+                    JoinCondition = new BooleanComparisonExpression
+                    {
+                        FirstExpression = lhsCol,
+                        ComparisonType = BooleanComparisonType.Equals,
+                        SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                    },
+                    SemiJoin = true,
+                    OutputRightSchema = false,
+                    DefinedValues = { [definedValue] = innerQuery.ColumnSet[0].SourceColumn }
                 };
 
-                source = join;
+                testColumn = definedValue;
             }
 
+            join.JoinType = QualifiedJoinType.LeftOuter;
+
+            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
+            rewrites[inSubquery] = new BooleanIsNullExpression
+            {
+                IsNot = !inSubquery.NotDefined,
+                Expression = testColumn.ToColumnReference()
+            };
             query.Accept(new BooleanRewriteVisitor(rewrites));
 
-            return source;
+            return join;
         }
 
         private IDataExecutionPlanNodeInternal ConvertExistsSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
@@ -2776,138 +3030,140 @@ namespace MarkMpn.Sql4Cds.Engine
             if (visitor.ExistsSubqueries.Count == 0)
                 return source;
 
-            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
-            var schema = source.GetSchema(context);
-
             foreach (var existsSubquery in visitor.ExistsSubqueries)
-            {
-                // Each query of the format "EXISTS (SELECT * FROM source)" becomes a outer semi join
-                var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-                var innerContext = new NodeCompilationContext(context, parameters);
-                var references = new Dictionary<string, string>();
-                var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-                var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
-                var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
-
-                // Create the join
-                BaseJoinNode join;
-                string testColumn;
-                if (references.Count == 0)
-                {
-                    // We only need one record to check for EXISTS
-                    if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
-                    {
-                        innerQuery.Source = new TopNode
-                        {
-                            Source = innerQuery.Source,
-                            Top = new IntegerLiteral { Value = "1" }
-                        };
-                    }
-
-                    // We need a non-null value to use
-                    if (innerSchemaPrimaryKey == null)
-                    {
-                        innerSchemaPrimaryKey = context.GetExpressionName();
-
-                        if (!(innerQuery.Source is ComputeScalarNode computeScalar))
-                        {
-                            computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
-                            innerQuery.Source = computeScalar;
-                        }
-
-                        computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
-                    }
-
-                    // We can spool the results for reuse each time
-                    innerQuery.Source = new TableSpoolNode
-                    {
-                        Source = innerQuery.Source,
-                        SpoolType = SpoolType.Lazy
-                    };
-
-                    testColumn = context.GetExpressionName();
-
-                    join = new NestedLoopNode
-                    {
-                        LeftSource = source,
-                        RightSource = innerQuery.Source,
-                        JoinType = QualifiedJoinType.LeftOuter,
-                        SemiJoin = true,
-                        OutputRightSchema = false,
-                        OuterReferences = references,
-                        DefinedValues =
-                        {
-                            [testColumn] = innerSchemaPrimaryKey
-                        }
-                    };
-                }
-                else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, false, out testColumn, out var merge))
-                {
-                    join = merge;
-                }
-                else
-                {
-                    // We need to use nested loops for correlated subqueries
-                    // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
-                    // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
-                    // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
-                    // many rows are likely from the outer query to work out if this is going to be more efficient or not.
-                    if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
-
-                    // We only need one record to check for EXISTS
-                    if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
-                    {
-                        innerQuery.Source = new TopNode
-                        {
-                            Source = innerQuery.Source,
-                            Top = new IntegerLiteral { Value = "1" }
-                        };
-                    }
-
-                    // We need a non-null value to use
-                    if (innerSchemaPrimaryKey == null)
-                    {
-                        innerSchemaPrimaryKey = context.GetExpressionName();
-
-                        if (!(innerQuery.Source is ComputeScalarNode computeScalar))
-                        {
-                            computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
-                            innerQuery.Source = computeScalar;
-                        }
-
-                        computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
-                    }
-
-                    var definedValue = context.GetExpressionName();
-
-                    join = new NestedLoopNode
-                    {
-                        LeftSource = source,
-                        RightSource = innerQuery.Source,
-                        OuterReferences = references,
-                        SemiJoin = true,
-                        OutputRightSchema = false,
-                        DefinedValues = { [definedValue] = innerSchemaPrimaryKey }
-                    };
-
-                    testColumn = definedValue;
-                }
-
-                join.JoinType = QualifiedJoinType.LeftOuter;
-
-                rewrites[existsSubquery] = new BooleanIsNullExpression
-                {
-                    IsNot = true,
-                    Expression = testColumn.ToColumnReference()
-                };
-
-                source = join;
-            }
-
-            query.Accept(new BooleanRewriteVisitor(rewrites));
+                source = ConvertExistsSubquery(source, hints, query, existsSubquery, context, outerSchema, outerReferences);
 
             return source;
+        }
+
+        private IDataExecutionPlanNodeInternal ConvertExistsSubquery(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, ExistsPredicate existsSubquery, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
+        {
+            var schema = source.GetSchema(context);
+
+            // Each query of the format "EXISTS (SELECT * FROM source)" becomes a outer semi join
+            var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
+            var innerContext = new NodeCompilationContext(context, parameters);
+            var references = new Dictionary<string, string>();
+            var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
+            var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
+            var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
+
+            // Create the join
+            BaseJoinNode join;
+            string testColumn;
+            if (references.Count == 0)
+            {
+                // We only need one record to check for EXISTS
+                if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
+                {
+                    innerQuery.Source = new TopNode
+                    {
+                        Source = innerQuery.Source,
+                        Top = new IntegerLiteral { Value = "1" }
+                    };
+                }
+
+                // We need a non-null value to use
+                if (innerSchemaPrimaryKey == null)
+                {
+                    innerSchemaPrimaryKey = context.GetExpressionName();
+
+                    if (!(innerQuery.Source is ComputeScalarNode computeScalar))
+                    {
+                        computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
+                        innerQuery.Source = computeScalar;
+                    }
+
+                    computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
+                }
+
+                // We can spool the results for reuse each time
+                innerQuery.Source = new TableSpoolNode
+                {
+                    Source = innerQuery.Source,
+                    SpoolType = SpoolType.Lazy
+                };
+
+                testColumn = context.GetExpressionName();
+
+                join = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = innerQuery.Source,
+                    JoinType = QualifiedJoinType.LeftOuter,
+                    SemiJoin = true,
+                    OutputRightSchema = false,
+                    OuterReferences = references,
+                    DefinedValues =
+                    {
+                        [testColumn] = innerSchemaPrimaryKey
+                    }
+                };
+            }
+            else if (UseMergeJoin(source, innerQuery.Source, context, references, null, null, true, false, out testColumn, out var merge))
+            {
+                join = merge;
+            }
+            else
+            {
+                // We need to use nested loops for correlated subqueries
+                // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
+                // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
+                // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
+                // many rows are likely from the outer query to work out if this is going to be more efficient or not.
+                if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
+                    InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, context, references.Values.ToArray());
+
+                // We only need one record to check for EXISTS
+                if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
+                {
+                    innerQuery.Source = new TopNode
+                    {
+                        Source = innerQuery.Source,
+                        Top = new IntegerLiteral { Value = "1" }
+                    };
+                }
+
+                // We need a non-null value to use
+                if (innerSchemaPrimaryKey == null)
+                {
+                    innerSchemaPrimaryKey = context.GetExpressionName();
+
+                    if (!(innerQuery.Source is ComputeScalarNode computeScalar))
+                    {
+                        computeScalar = new ComputeScalarNode { Source = innerQuery.Source };
+                        innerQuery.Source = computeScalar;
+                    }
+
+                    computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
+                }
+
+                var definedValue = context.GetExpressionName();
+
+                join = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = innerQuery.Source,
+                    OuterReferences = references,
+                    SemiJoin = true,
+                    OutputRightSchema = false,
+                    DefinedValues = { [definedValue] = innerSchemaPrimaryKey }
+                };
+
+                testColumn = definedValue;
+            }
+
+            join.JoinType = QualifiedJoinType.LeftOuter;
+
+            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
+            rewrites[existsSubquery] = new BooleanIsNullExpression
+            {
+                IsNot = true,
+                Expression = testColumn.ToColumnReference()
+            };
+            query.Accept(new BooleanRewriteVisitor(rewrites));
+
+            return join;
         }
 
         private IDataExecutionPlanNodeInternal ConvertHavingClause(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, HavingClause havingClause, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query, INodeSchema nonAggregateSchema)
@@ -3774,7 +4030,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 query.Accept(new RewriteVisitor(rewrites));
 
             if (expression is ScalarExpression scalar && rewrites.ContainsKey(scalar))
-                return new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = rewrites[scalar] } } } };
+                return rewrites[scalar].ToColumnReference();
 
             return null;
         }
@@ -3881,7 +4137,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (semiJoin && alias == null)
             {
                 var select = new SelectNode { Source = subNode };
-                select.ColumnSet.Add(new SelectColumn { SourceColumn = subqueryCol, OutputColumn = subqueryCol.SplitMultiPartIdentifier().Last() });
+                select.ColumnSet.Add(new SelectColumn { SourceColumn = innerKey, OutputColumn = innerKey.SplitMultiPartIdentifier().Last() });
                 alias = new AliasNode(select, new Identifier { Value = context.GetExpressionName() }, context);
                 subAlias = alias.Alias;
             }
@@ -4192,7 +4448,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) &&
                     !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
-                    !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
+                    !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase) &&
+                    !(table.SchemaObject.SchemaIdentifier.Value.Equals("bin", StringComparison.OrdinalIgnoreCase) && dataSource.Metadata.RecycleBinEntities != null))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
 
                 // Validate the entity name
@@ -4243,6 +4500,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject)) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
 
                     fetchXmlScan.FetchXml.DataSource = "retained";
+                }
+                // Check if this should be using the recycle bin table
+                else if (table.SchemaObject.SchemaIdentifier?.Value.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (!dataSource.Metadata.RecycleBinEntities.Contains(meta.LogicalName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject)) { Suggestion = "Ensure restoring of deleted records is enabled for this table - see https://learn.microsoft.com/en-us/power-platform/admin/restore-deleted-table-records?WT.mc_id=DX-MVP-5004203" };
+
+                    fetchXmlScan.FetchXml.DataSource = "bin";
                 }
 
                 return fetchXmlScan;
@@ -4375,9 +4640,147 @@ namespace MarkMpn.Sql4Cds.Engine
                     };
                 }
 
-                // Validate the join condition
-                var joinSchema = joinNode.GetSchema(context);
-                join.SearchCondition.GetType(GetExpressionContext(joinSchema, context), out _);
+                BooleanExpression additionalCriteria = (joinNode as FoldableJoinNode)?.AdditionalJoinCriteria ?? (joinNode as NestedLoopNode)?.JoinCondition;
+
+                if (additionalCriteria != null)
+                {
+                    var where = new WhereClause { SearchCondition = additionalCriteria };
+
+                    if (join.QualifiedJoinType == QualifiedJoinType.Inner)
+                    {
+                        // Move any additional criteria to a filter node on the join results
+                        var result = (IDataExecutionPlanNodeInternal)joinNode;
+                        result = ConvertInSubqueries(result, hints, where, context, outerSchema, outerReferences);
+                        result = ConvertExistsSubqueries(result, hints, where, context, outerSchema, outerReferences);
+
+                        if (where.SearchCondition != null)
+                        {
+                            var joinSchema = result.GetSchema(context);
+                            where.SearchCondition.GetType(GetExpressionContext(joinSchema, context), out _);
+
+                            result = new FilterNode
+                            {
+                                Source = result,
+                                Filter = where.SearchCondition
+                            };
+                        }
+
+                        if (joinNode is FoldableJoinNode foldable)
+                            foldable.AdditionalJoinCriteria = null;
+                        else if (joinNode is NestedLoopNode nestedLoop)
+                            nestedLoop.JoinCondition = null;
+
+                        return result;
+                    }
+                    else
+                    {
+                        // Convert any subqueries in the join criteria. There may be multiple subqueries, and each one could reference data from
+                        // just the LHS, just the RHS, or both.
+                        // Subqueries that only reference the LHS data should be added to that path. Any others should be added to the RHS path,
+                        // including any required data from the LHS via an outer reference.
+                        var inSubqueries = new InSubqueryVisitor();
+                        where.Accept(inSubqueries);
+
+                        var inSubqueryConversions = inSubqueries.InSubqueries
+                            .Select(subquery =>
+                            {
+                                var cols = subquery.GetColumns();
+                                var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
+                                var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
+
+                                return new
+                                {
+                                    Subquery = subquery,
+                                    HasLHSCols = hasLhsCols,
+                                    HasRHSCols = hasRhsCols
+                                };
+                            })
+                            .ToList();
+
+                        var existsSubqueries = new ExistsSubqueryVisitor();
+                        where.Accept(existsSubqueries);
+
+                        var existsSubqueryConversions = existsSubqueries.ExistsSubqueries
+                            .Select(subquery =>
+                            {
+                                var cols = subquery.GetColumns();
+                                var hasLhsCols = cols.Any(c => lhsSchema.ContainsColumn(c, out _));
+                                var hasRhsCols = cols.Any(c => rhsSchema.ContainsColumn(c, out _));
+
+                                return new
+                                {
+                                    Subquery = subquery,
+                                    HasLHSCols = hasLhsCols,
+                                    HasRHSCols = hasRhsCols
+                                };
+                            })
+                            .ToList();
+
+                        if (joinNode is FoldableJoinNode foldable && (inSubqueryConversions.Any(s => s.HasLHSCols && s.HasRHSCols) || existsSubqueryConversions.Any(s => s.HasLHSCols && s.HasRHSCols)))
+                        {
+                            // We're currently using a hash- or merge-join, but we need to apply a subquery that requires data from both
+                            // sides of the join. Replace the join with a nested loop so we can apply the required outer references
+                            joinNode = new NestedLoopNode
+                            {
+                                LeftSource = foldable.LeftSource,
+                                RightSource = new TableSpoolNode { Source = foldable.RightSource },
+                                JoinType = foldable.JoinType
+                            };
+
+                            // Need to add the original join condition back in
+                            where.SearchCondition = new BooleanBinaryExpression
+                            {
+                                FirstExpression = new BooleanComparisonExpression
+                                {
+                                    FirstExpression = foldable.LeftAttribute,
+                                    ComparisonType = BooleanComparisonType.Equals,
+                                    SecondExpression = foldable.RightAttribute
+                                },
+                                BinaryExpressionType = BooleanBinaryExpressionType.And,
+                                SecondExpression = where.SearchCondition
+                            };
+                        }
+
+                        var nestedLoopJoinNode = joinNode as NestedLoopNode;
+
+                        if (nestedLoopJoinNode != null && nestedLoopJoinNode.OuterReferences == null)
+                            nestedLoopJoinNode.OuterReferences = new Dictionary<string, string>();
+
+                        foreach (var subquery in inSubqueryConversions)
+                        {
+                            if (subquery.HasLHSCols && subquery.HasRHSCols)
+                                CaptureOuterReferences(lhsSchema, joinNode.RightSource, subquery.Subquery, context, nestedLoopJoinNode.OuterReferences);
+
+                            if (!subquery.HasRHSCols)
+                                joinNode.LeftSource = ConvertInSubquery(joinNode.LeftSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
+                            else
+                                joinNode.RightSource = ConvertInSubquery(joinNode.RightSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
+                        }
+
+                        foreach (var subquery in existsSubqueryConversions)
+                        {
+                            if (subquery.HasLHSCols && subquery.HasRHSCols)
+                                CaptureOuterReferences(lhsSchema, joinNode.RightSource, subquery.Subquery, context, nestedLoopJoinNode.OuterReferences);
+
+                            if (!subquery.HasRHSCols)
+                                joinNode.LeftSource = ConvertExistsSubquery(joinNode.LeftSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
+                            else
+                                joinNode.RightSource = ConvertExistsSubquery(joinNode.RightSource, hints, where, subquery.Subquery, context, outerSchema, outerReferences);
+                        }
+
+                        // Validate the remaining join condition
+                        if (where.SearchCondition != null)
+                        {
+                            var joinSchema = joinNode.GetSchema(context);
+                            where.SearchCondition.GetType(GetExpressionContext(joinSchema, context), out _);
+                        }
+
+                        if (nestedLoopJoinNode != null)
+                            nestedLoopJoinNode.JoinCondition = where.SearchCondition;
+                        else
+                            ((FoldableJoinNode)joinNode).AdditionalJoinCriteria = where.SearchCondition;
+                    }
+                }
 
                 return joinNode;
             }

@@ -125,6 +125,13 @@ steps:
     targetPath: 'MarkMpn.Sql4Cds.SSMS.20.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi'
     artifact: 'SSMS20Installer'
     publishLocation: 'pipeline'
+
+- task: PublishPipelineArtifact@1
+  displayName: Publish Debug Visualizer installer to pipeline
+  inputs:
+    targetPath: 'MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide\bin\$(buildConfiguration)\net472\MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide.vsix'
+    artifact: 'DebugVisualizer'
+    publishLocation: 'pipeline'
     
 - task: PublishPipelineArtifact@1
   displayName: Publish version file to pipeline

@@ -662,6 +662,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var catchOverflowExceptionBlock = Expression.Catch(typeof(OverflowException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), overflowError), targetType));
                 
                 expr = Expression.TryCatch(expr, catchFormatExceptionBlock, catchOverflowExceptionBlock);
+                //expr = Expression.Invoke(Expression.Lambda(expr));
             }
 
             if (toSqlType == null)
@@ -1374,6 +1375,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var block = Expression.Block(destType, variables, body);
                 var catchBlock = Expression.Catch(typeof(ArgumentException), block);
                 parsedValue = Expression.TryCatch(parsedValue, catchBlock);
+                //parsedValue = Expression.Invoke(Expression.Lambda(parsedValue));
 
                 expression = Expression.Condition(nullCheck, nullValue, parsedValue);
             }
@@ -1395,6 +1397,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var block = Expression.Block(destType, variables, body);
                 var catchBlock = Expression.Catch(typeof(ArgumentException), block);
                 expression = Expression.TryCatch(expression, catchBlock);
+                //expression = Expression.Invoke(Expression.Lambda(expression));
             }
             else if (expression.Type == typeof(SqlInt32) && destType == typeof(OptionSetValue))
             {

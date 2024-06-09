@@ -15,6 +15,20 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         public static int EntityLogicalNameMaxLength { get; } = 64;
 
+        public static string[] VirtualLookupAttributeSuffixes { get; } = new[] { "name", "type", "pid" };
+
+        public static AttributeMetadata FindBaseAttributeFromVirtualAttribute(this EntityMetadata entity, string virtualAttributeLogicalName, out string suffix)
+        {
+            var matchingSuffix = VirtualLookupAttributeSuffixes.SingleOrDefault(s => virtualAttributeLogicalName.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+            suffix = matchingSuffix;
+
+            if (suffix == null)
+                return null;
+
+            return entity.Attributes
+                .SingleOrDefault(a => a.LogicalName.Equals(virtualAttributeLogicalName.Substring(0, virtualAttributeLogicalName.Length - matchingSuffix.Length), StringComparison.OrdinalIgnoreCase));
+        }
+
         public static Type GetAttributeType(this AttributeMetadata attrMetadata)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
@@ -163,11 +177,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (attrMetadata is StringAttributeMetadata str)
                 {
-                    // MaxLength validation is applied on write, but existing values could be up to DatabaseLength
-                    var maxLengthSetting = write || str.DatabaseLength == null || str.DatabaseLength == 0 ? str.MaxLength : str.DatabaseLength;
+                    // MaxLength validation is applied on write, but existing values could be up to DatabaseLength / 2
+                    maxLength = str.MaxLength ?? maxLength;
 
-                    if (maxLengthSetting != null)
-                        maxLength = maxLengthSetting.Value;
+                    if (!write && str.DatabaseLength != null && str.DatabaseLength.Value / 2 > maxLength)
+                        maxLength = str.DatabaseLength.Value / 2;
                 }
 
                 return DataTypeHelpers.NVarChar(maxLength, dataSource.DefaultCollation, CollationLabel.Implicit);

@@ -24,6 +24,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public string TargetDataSource { get; private set; }
 
+        public string TargetSchema { get; private set; }
+
         public string TargetEntityName { get; private set; }
 
         public string TargetAliasName { get; private set; }
@@ -41,6 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 _ambiguous = _foundAlias;
 
                 TargetDataSource = node.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource;
+                TargetSchema = node.SchemaObject.SchemaIdentifier?.Value;
                 TargetEntityName = node.SchemaObject.BaseIdentifier.Value;
                 TargetAliasName = node.Alias.Value;
                 Target = node;
@@ -55,6 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     _ambiguous = true;
 
                 TargetDataSource = node.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource;
+                TargetSchema = node.SchemaObject.SchemaIdentifier?.Value;
                 TargetEntityName = node.SchemaObject.BaseIdentifier.Value;
                 TargetAliasName = node.Alias?.Value ?? _search.BaseIdentifier.Value;
                 Target = node;

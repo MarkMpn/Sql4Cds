@@ -12,6 +12,8 @@ using XrmToolBox.Extensibility;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using System.Threading.Tasks;
+using Microsoft.Xrm.Sdk.Query;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -72,13 +74,25 @@ namespace MarkMpn.Sql4Cds.XTB
             return imageList.Images.OfType<Image>();
         }
 
-        private TreeNode[] LoadEntities(TreeNode parent, bool archival)
+        enum EntityType
+        {
+            Regular,
+            Archive,
+            RecycleBin
+        }
+
+        private TreeNode[] LoadEntities(TreeNode parent, EntityType entityType)
         {
             var connection = GetService(parent);
             var metadata = EntityCache.GetEntities(connection.MetadataCacheLoader, connection.ServiceClient);
+            var recycleBinEntities = _dataSources[connection.ConnectionName].Metadata.RecycleBinEntities;
 
             return metadata
-                .Where(e => !archival || e.IsArchivalEnabled == true || e.IsRetentionEnabled == true)
+                .Where(e =>
+                    entityType == EntityType.Regular ||
+                    (entityType == EntityType.Archive && (e.IsArchivalEnabled == true || e.IsRetentionEnabled == true)) ||
+                    (entityType == EntityType.RecycleBin && recycleBinEntities.Contains(e.LogicalName))
+                )
                 .OrderBy(e => e.LogicalName)
                 .Select(e =>
                 {
@@ -89,14 +103,28 @@ namespace MarkMpn.Sql4Cds.XTB
                     SetIcon(attrsNode, "Folder");
                     AddVirtualChildNodes(attrsNode, LoadAttributes);
 
-                    if (!archival)
+                    if (entityType != EntityType.Archive)
                     {
                         var relsNode = node.Nodes.Add("Relationships");
                         SetIcon(relsNode, "Folder");
                         AddVirtualChildNodes(relsNode, LoadRelationships);
                     }
 
-                    parent.Tag = archival ? "archive" : "dbo";
+                    switch (entityType)
+                    {
+                        case EntityType.Regular:
+                            parent.Tag = "dbo";
+                            break;
+
+                        case EntityType.Archive:
+                            parent.Tag = "archive";
+                            break;
+
+                        case EntityType.RecycleBin:
+                            parent.Tag = "bin";
+                            break;
+                    }
+
                     return node;
                 })
                 .ToArray();
@@ -142,13 +170,20 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             var entitiesNode = conNode.Nodes.Add("Entities");
             SetIcon(entitiesNode, "Folder");
-            AddVirtualChildNodes(entitiesNode, parent => LoadEntities(parent, false));
+            AddVirtualChildNodes(entitiesNode, parent => LoadEntities(parent, EntityType.Regular));
 
             if (new Uri(con.OrganizationServiceUrl).Host.EndsWith(".dynamics.com"))
             {
                 var archivalNode = conNode.Nodes.Add("Long Term Retention");
                 SetIcon(archivalNode, "Folder");
-                AddVirtualChildNodes(archivalNode, parent => LoadEntities(parent, true));
+                AddVirtualChildNodes(archivalNode, parent => LoadEntities(parent, EntityType.Archive));
+            }
+
+            if (_dataSources[con.ConnectionName].Metadata.RecycleBinEntities != null)
+            {
+                var recycleBinNode = conNode.Nodes.Add("Recycle Bin");
+                SetIcon(recycleBinNode, "Folder");
+                AddVirtualChildNodes(recycleBinNode, parent => LoadEntities(parent, EntityType.RecycleBin));
             }
 
             var metadataNode = conNode.Nodes.Add("Metadata");

@@ -597,6 +597,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='firstname' />
                         <attribute name='lastname' />
                         <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }

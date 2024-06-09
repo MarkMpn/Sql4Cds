@@ -61,11 +61,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public static Type GetType(this TSqlFragment expr, ExpressionCompilationContext context, out DataTypeReference sqlType)
         {
             ToExpression(expr, context, false, out _, out sqlType, out var cacheKey);
-            var details = _cache.GetOrAdd(cacheKey, __ =>
+            var details = _intermediateCache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = ToExpression(expr, context, true, out var parameters, out _, out _);
-                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(converted), parameters).Compile();
-                return new CompiledExpression<object>(expr, converted, compiled);
+                return new IntermediateExpression(converted, parameters);
             });
             return details.Converted.Type;
         }
@@ -82,8 +81,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var details = _cache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = ToExpression(expr, context, true, out var parameters, out _, out _);
-                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(converted), parameters).Compile();
-                return new CompiledExpression<object>(expr, converted, compiled);
+                var folded = FoldLambdas(converted, parameters);
+                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, object>>(Expr.Box(folded), parameters).Compile();
+                return new CompiledExpression<object>(expr, folded, compiled);
             });
             return eec => details.Compiled(eec, expr);
         }
@@ -100,8 +100,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var details = _boolCache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = ToExpression(b, context, true, out var parameters, out _, out _);
-                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, bool>>(Expression.IsTrue(converted), parameters).Compile();
-                return new CompiledExpression<bool>(b, converted, compiled);
+                var folded = FoldLambdas(converted, parameters);
+                var compiled = Expression.Lambda<Func<ExpressionExecutionContext, TSqlFragment, bool>>(Expression.IsTrue(folded), parameters).Compile();
+                return new CompiledExpression<bool>(b, folded, compiled);
             });
 
             return eec => details.Compiled(eec, b);
@@ -652,14 +653,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var lhs = bin.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out _, out var lhsCacheKey);
             var rhs = bin.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out _, out var rhsCacheKey);
 
+            if (createExpression)
+            {
+                lhs = Expression.IsTrue(lhs);
+                rhs = Expression.IsTrue(rhs);
+            }
+
+            Expression binary;
+
             if (bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
             {
                 cacheKey = lhsCacheKey + " AND " + rhsCacheKey;
-                return createExpression ? Expression.AndAlso(lhs, rhs) : null;
+                binary = createExpression ? Expression.AndAlso(lhs, rhs) : null;
+            }
+            else
+            {
+                cacheKey = lhsCacheKey + " OR " + rhsCacheKey;
+                binary = createExpression ? Expression.OrElse(lhs, rhs) : null;
             }
 
-            cacheKey = lhsCacheKey + " OR " + rhsCacheKey;
-            return createExpression ? Expression.OrElse(lhs, rhs) : null;
+            if (createExpression)
+                binary = Expression.Convert(binary, typeof(SqlBoolean));
+
+            return binary;
         }
 
         private static Expression ToExpression(BooleanParenthesisExpression paren, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
@@ -813,6 +829,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expr = Expression.Divide(lhs, rhs);
 
                     expr = Expression.TryCatch(expr, Expression.Catch(typeof(DivideByZeroException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), Expr.Call(() => Sql4CdsError.DivideByZero())), expr.Type)));
+                    //expr = Expression.Invoke(Expression.Lambda(expr));
                     break;
 
                 case BinaryExpressionType.Modulo:
@@ -1888,7 +1905,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var value = not.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             cacheKey = "NOT " + cacheKey;
-            return createExpression ? Expression.Not(value) : null;
+            return createExpression ? Expression.Convert(Expression.IsFalse(value), typeof(SqlBoolean)) : null;
         }
 
         private static readonly Dictionary<SqlDataTypeOption, Type> _typeMapping = new Dictionary<SqlDataTypeOption, Type>
@@ -2015,10 +2032,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = convert.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, sqlType, style, styleType, styleCacheKey, convert, out cacheKey);
+            return Convert(context, value, valueType, valueCacheKey, sqlType, style, styleType, styleCacheKey, convert, "CONVERT", out cacheKey);
         }
 
-        private static Expression Convert(ExpressionCompilationContext context, Expression value, DataTypeReference valueType, string valueCacheKey, DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, out string cacheKey)
+        private static Expression Convert(ExpressionCompilationContext context, Expression value, DataTypeReference valueType, string valueCacheKey, DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
         {
             if (sqlType is SqlDataTypeReference sqlTargetType &&
                 sqlTargetType.SqlDataTypeOption.IsStringType())
@@ -2042,7 +2059,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            cacheKey = $"CONVERT({GetTypeKey(sqlType, true)}, {valueCacheKey}";
+            cacheKey = $"{cacheKeyRoot}({GetTypeKey(sqlType, true)}, {valueCacheKey}";
             if (styleCacheKey != null)
                 cacheKey += ", " + styleCacheKey;
             cacheKey += ")";
@@ -2055,7 +2072,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var value = cast.InvokeSubExpression(x => x.Parameter, x => x.Parameter, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
             sqlType = cast.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, sqlType, null, null, null, cast, out cacheKey);
+            return Convert(context, value, valueType, valueCacheKey, sqlType, null, null, null, cast, "CAST", out cacheKey);
         }
 
         private static readonly Regex _containsParser = new Regex("^\\S+( OR \\S+)*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -2498,6 +2515,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             throw new ArgumentOutOfRangeException(nameof(type));
+        }
+
+        private static Expression FoldLambdas(Expression expression, ParameterExpression[] parameters)
+        {
+            var visitor = new LambdaVisitor(parameters);
+            return visitor.Visit(expression);
+        }
+
+        class LambdaVisitor : ExpressionVisitor
+        {
+            private ParameterExpression[] _parameters;
+            private Dictionary<ParameterExpression, Expression> _parameterRewrites;
+
+            public LambdaVisitor(ParameterExpression[] parameters)
+            {
+                _parameters = parameters;
+                _parameterRewrites = new Dictionary<ParameterExpression, Expression>();
+            }
+
+            protected override Expression VisitInvocation(InvocationExpression node)
+            {
+                if (!(node.Expression is LambdaExpression lambda))
+                    return base.VisitInvocation(node);
+
+                if (node.Arguments.Count != 2)
+                    return base.VisitInvocation(node);
+
+                if (node.Arguments[0].Type != typeof(ExpressionExecutionContext))
+                    return base.VisitInvocation(node);
+
+                if (!typeof(TSqlFragment).IsAssignableFrom(node.Arguments[1].Type))
+                    return base.VisitInvocation(node);
+
+                _parameterRewrites[lambda.Parameters[0]] = Visit(node.Arguments[0]);
+                _parameterRewrites[lambda.Parameters[1]] = Visit(node.Arguments[1]);
+
+                return Visit(lambda.Body);
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node)
+            {
+                if (_parameterRewrites.TryGetValue(node, out var replacement))
+                    return replacement;
+
+                return base.VisitParameter(node);
+            }
         }
     }
 }

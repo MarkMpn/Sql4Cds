@@ -241,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Allow folding sorts around filters and Compute Scalar (so long as sort is not on a calculated field)
-            // Can fold to the outer input of a nested loop join
+            // Can fold to the outer input of a nested loop join and sources of spools
             var source = Source;
             var fetchXml = Source as FetchXmlScan;
 
@@ -253,6 +253,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     source = computeScalar.Source;
                 else if (source is NestedLoopNode nestedLoop)
                     source = nestedLoop.LeftSource;
+                else if (source is TableSpoolNode tableSpool)
+                    source = tableSpool.Source;
+                else if (source is IndexSpoolNode indexSpool)
+                    source = indexSpool.Source;
                 else
                     break;
 
@@ -383,7 +387,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 
                                 if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                                 {
-                                    if (useRawOrderBy == false)
+                                    if (useRawOrderBy == false || !dataSource.UseRawOrderByReliable)
                                         return this;
 
                                     useRawOrderBy = true;
@@ -433,7 +437,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             
                             if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                             {
-                                if (useRawOrderBy == false)
+                                if (useRawOrderBy == false || !dataSource.UseRawOrderByReliable)
                                     return this;
 
                                 useRawOrderBy = true;

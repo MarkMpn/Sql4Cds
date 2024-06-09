@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk.Metadata;
+using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -15,6 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The parent of this node
         /// </summary>
         [Browsable(false)]
+        [JsonIgnore]
         public IExecutionPlanNode Parent { get; set; }
 
         /// <summary>

@@ -208,6 +208,8 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 return _cache.TryGetValue(logicalName, out metadata);
             }
+
+            public string[] RecycleBinEntities => throw new NotImplementedException();
         }
     }
 }

@@ -301,5 +301,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return _inner.TryGetMinimalData(logicalName, out metadata);
         }
+
+        /// <inheritdoc/>
+        public string[] RecycleBinEntities => _inner.RecycleBinEntities;
     }
 }

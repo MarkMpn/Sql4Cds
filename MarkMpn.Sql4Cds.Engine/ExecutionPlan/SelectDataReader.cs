@@ -17,12 +17,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private readonly IDisposable _timer;
         private readonly INodeSchema _schema;
         private readonly IEnumerator<Entity> _source;
-        private readonly IDictionary<string, object> _parameterValues;
+        private readonly IDictionary<string, INullable> _parameterValues;
         private Entity _row;
         private bool _closed;
         private int _rowCount;
 
-        public SelectDataReader(List<SelectColumn> columnSet, IDisposable timer, INodeSchema schema, IEnumerable<Entity> source, IDictionary<string, object> parameterValues)
+        public SelectDataReader(List<SelectColumn> columnSet, IDisposable timer, INodeSchema schema, IEnumerable<Entity> source, IDictionary<string, INullable> parameterValues)
         {
             _columnSet = columnSet;
             _timer = timer;

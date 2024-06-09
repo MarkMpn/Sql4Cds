@@ -268,6 +268,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     });
                                 }
                             }
+                            else if (meta.LogicalName == "principalobjectaccess")
+                            {
+                                var objectIdPrev = preImage.GetAttributeValue<EntityReference>("objectid");
+                                var principalIdPrev = preImage.GetAttributeValue<EntityReference>("principalid");
+                                var accessMaskPrev = (AccessRights)preImage.GetAttributeValue<int>("accessrightsmask");
+                                var objectIdNew = update.GetAttributeValue<EntityReference>("objectid") ?? objectIdPrev;
+                                var principalIdNew = update.GetAttributeValue<EntityReference>("principalid") ?? principalIdPrev;
+                                var accessMaskNew = (AccessRights?)update.GetAttributeValue<int>("accessrightsmask") ?? accessMaskPrev;
+
+                                // Check if we need to remove any previous share permissions
+                                if (!objectIdPrev.Equals(objectIdNew) || !principalIdPrev.Equals(principalIdNew) || (accessMaskNew & accessMaskPrev) != accessMaskPrev)
+                                {
+                                    requests.Add(new RevokeAccessRequest
+                                    {
+                                        Target = objectIdPrev,
+                                        Revokee = principalIdPrev
+                                    });
+                                }
+
+                                // Check if we need to add any new share permissions
+                                if (accessMaskNew != AccessRights.None)
+                                {
+                                    requests.Add(new GrantAccessRequest
+                                    {
+                                        Target = objectIdNew,
+                                        PrincipalAccess = new PrincipalAccess
+                                        {
+                                            Principal = principalIdNew,
+                                            AccessMask = accessMaskNew
+                                        }
+                                    });
+                                }
+                            }
                             else
                             {
                                 var updateRequest = new UpdateRequest { Target = update };

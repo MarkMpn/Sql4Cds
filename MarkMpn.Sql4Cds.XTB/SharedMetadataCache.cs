@@ -11,6 +11,9 @@ using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
+    /// <summary>
+    /// An <see cref="IAttributeMetadataCache"/> implementation that uses the metadata cache provided by XrmToolBox where possible
+    /// </summary>
     class SharedMetadataCache : IAttributeMetadataCache
     {
         private readonly ConnectionDetail _connection;
@@ -28,6 +31,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _innerCache = new AttributeMetadataCache(org);
         }
 
+        /// <inheritdoc />
         public EntityMetadata this[string name]
         {
             get
@@ -44,6 +48,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        /// <inheritdoc />
         public EntityMetadata this[int otc]
         {
             get
@@ -60,6 +65,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        /// <inheritdoc />
         public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
         {
             if (!CacheReady)
@@ -70,6 +76,7 @@ namespace MarkMpn.Sql4Cds.XTB
             return _entitiesByName.TryGetValue(logicalName, out metadata);
         }
 
+        /// <inheritdoc />
         public bool TryGetValue(string logicalName, out EntityMetadata metadata)
         {
             if (!CacheReady)
@@ -79,6 +86,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
             return _entitiesByName.TryGetValue(logicalName, out metadata);
         }
+
+        /// <inheritdoc />
+        public string[] RecycleBinEntities => _innerCache.RecycleBinEntities;
 
         private  bool CacheReady
         {

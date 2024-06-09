@@ -93,6 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case -2147086332:
                 case -2147187954: return 547;
                 case 409: // Elastic tables use HTTP status codes instead of the standard web service error codes
+                case -2147220950:
                 case -2147220937: return 2627;
             }
 

@@ -11,6 +11,7 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 using static MarkMpn.Sql4Cds.XTB.FunctionMetadata;
 
 namespace MarkMpn.Sql4Cds.XTB
@@ -22,16 +23,19 @@ namespace MarkMpn.Sql4Cds.XTB
     {
         private readonly IDictionary<string, AutocompleteDataSource> _dataSources;
         private readonly string _primaryDataSource;
+        private readonly ColumnOrdering _columnOrdering;
 
         /// <summary>
         /// Creates a new <see cref="Autocomplete"/>
         /// </summary>
         /// <param name="entities">The list of entities available to use in the query</param>
         /// <param name="metadata">The cache of metadata about each entity</param>
-        public Autocomplete(IDictionary<string, AutocompleteDataSource> dataSources, string primaryDataSource)
+        /// <param name="columnOrdering">The order that columns are passed to table-valued functions or stored procedures</param>
+        public Autocomplete(IDictionary<string, AutocompleteDataSource> dataSources, string primaryDataSource, ColumnOrdering columnOrdering)
         {
             _dataSources = dataSources;
             _primaryDataSource = primaryDataSource;
+            _columnOrdering = columnOrdering;
         }
 
         /// <summary>
@@ -432,7 +436,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             if (tables.TryGetValue(targetTable, out var tableName))
                             {
                                 if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
-                                    return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true)).OrderBy(a => a), currentWord);
+                                    return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance.Metadata)).OrderBy(a => a), currentWord);
                             }
                         }
 
@@ -455,14 +459,14 @@ namespace MarkMpn.Sql4Cds.XTB
                                         if (instance.Messages.TryGetValue(messageName, out var message) &&
                                             message.IsValidAsTableValuedFunction())
                                         {
-                                            return FilterList(GetMessageOutputAttributes(message, instance).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false)).OrderBy(a => a), currentWord);
+                                            return FilterList(GetMessageOutputAttributes(message, instance).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false, instance.Metadata)).OrderBy(a => a), currentWord);
                                         }
                                     }
                                     else
                                     {
                                         // Table
                                         if (instance.Metadata.TryGetMinimalData((schemaName == "metadata" ? "metadata." : "") + tableName, out var metadata))
-                                            return FilterList(metadata.Attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false)).OrderBy(a => a), currentWord);
+                                            return FilterList(metadata.Attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false, instance.Metadata)).OrderBy(a => a), currentWord);
                                     }
                                 }
                             }
@@ -488,11 +492,15 @@ namespace MarkMpn.Sql4Cds.XTB
                                     var relationship = metadata.ManyToManyRelationships.Single();
                                     attributeFilter = a => a.LogicalName == relationship.Entity1IntersectAttribute || a.LogicalName == relationship.Entity2IntersectAttribute;
                                 }
+                                else if (metadata.LogicalName == "principalobjectaccess")
+                                {
+                                    attributeFilter = a => a.LogicalName == "objectid" || a.LogicalName == "objecttypecode" || a.LogicalName == "principalid" || a.LogicalName == "principaltypecode" || a.LogicalName == "accessrightsmask";
+                                }
                                 else
                                 {
                                     attributeFilter = a => a.IsValidForCreate != false && a.AttributeOf == null;
                                 }
-                                return FilterList(metadata.Attributes.Where(attributeFilter).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true)).OrderBy(a => a), currentWord);
+                                return FilterList(metadata.Attributes.Where(attributeFilter).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance.Metadata)).OrderBy(a => a), currentWord);
                             }
                         }
                         else
@@ -504,6 +512,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             // * variables
                             var items = new List<SqlAutocompleteItem>();
                             var attributes = new List<AttributeMetadata>();
+                            var instance = default(AutocompleteDataSource);
 
                             foreach (var table in tables)
                             {
@@ -513,7 +522,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                     var messageName = table.Value.Substring(0, table.Value.Length - 1);
 
                                     if (TryParseTableName(messageName, out var instanceName, out var schemaName, out var tableName) &&
-                                        _dataSources.TryGetValue(instanceName, out var instance) &&
+                                        _dataSources.TryGetValue(instanceName, out instance) &&
                                         (String.IsNullOrEmpty(schemaName) || schemaName == "dbo") &&
                                         instance.Messages.TryGetValue(messageName, out var message) &&
                                         message.IsValidAsTableValuedFunction())
@@ -527,7 +536,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 else
                                 {
                                     // Table
-                                    if (TryParseTableName(table.Value, out var instanceName, out var schemaName, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance))
+                                    if (TryParseTableName(table.Value, out var instanceName, out var schemaName, out var tableName) && _dataSources.TryGetValue(instanceName, out instance))
                                     {
                                         var entity = instance.Entities.SingleOrDefault(e =>
                                             e.LogicalName == tableName &&
@@ -546,6 +555,12 @@ namespace MarkMpn.Sql4Cds.XTB
                                                     schemaName == "archive" &&
                                                     (e.IsRetentionEnabled == true || e.IsArchivalEnabled == true)
                                                 )
+                                                ||
+                                                (
+                                                    schemaName == "bin" &&
+                                                    instance.Metadata.RecycleBinEntities != null &&
+                                                    instance.Metadata.RecycleBinEntities.Contains(e.LogicalName)
+                                                )
                                             )
                                         );
 
@@ -558,7 +573,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 }
                             }
 
-                            items.AddRange(attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).SelectMany(g => AttributeAutocompleteItem.CreateList(g.Single(), currentLength, false)));
+                            items.AddRange(attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).SelectMany(g => AttributeAutocompleteItem.CreateList(g.Single(), currentLength, false, instance.Metadata)));
 
                             items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
 
@@ -568,7 +583,6 @@ namespace MarkMpn.Sql4Cds.XTB
                             {
                                 // Check if there are any applicable filter operator functions that match the type of the current attribute
                                 var identifiers = prevPrevWord.Split('.');
-                                var instance = default(AutocompleteDataSource);
                                 var entity = default(EntityMetadata);
                                 var attribute = default(AttributeMetadata);
                                 
@@ -760,11 +774,12 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     // Show TVF list
                     if (fromClause && ds.Messages != null)
-                        list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, currentLength)));
+                        list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, currentLength)));
                 }
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
+                _dataSources.TryGetValue(instanceName, out var instance);
                 var lastPart = tableName;
 
                 if (parts == 1)
@@ -776,18 +791,18 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (parts == 1 || (parts == 2 && _dataSources.ContainsKey(schemaName)))
                 {
                     // Could be a schema name
-                    if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+                    var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
+                    if (instance?.Metadata?.RecycleBinEntities != null)
+                        schemaNames = schemaNames.Append("bin");
 
-                    if ("archive".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("archive", lastPartLength));
+                    schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
 
-                    if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
+                    foreach (var schema in schemaNames)
+                        list.Add(new SchemaAutocompleteItem(schema, lastPartLength));
                 }
 
                 // Could be a table name
-                if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Entities != null)
+                if (instance?.Entities != null)
                 {
                     IEnumerable<EntityMetadata> entities;
                     IEnumerable<Message> messages = Array.Empty<Message>();
@@ -813,6 +828,11 @@ namespace MarkMpn.Sql4Cds.XTB
                             messages = instance.Messages.GetAllMessages();
                         }
                     }
+                    else if (schemaName.Equals("bin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Suggest tables that are enabled for the recycle bin
+                        entities = instance.Entities.Where(e => instance.Metadata.RecycleBinEntities != null && instance.Metadata.RecycleBinEntities.Contains(e.LogicalName));
+                    }
                     else
                     {
                         entities = Array.Empty<EntityMetadata>();
@@ -824,7 +844,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     if (fromClause)
                     {
                         messages = messages.Where(e => e.IsValidAsTableValuedFunction() && e.Name.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
-                        list.AddRange(messages.Select(e => new TVFAutocompleteItem(e, lastPartLength)));
+                        list.AddRange(messages.Select(e => new TVFAutocompleteItem(e, _columnOrdering, lastPartLength)));
                     }
                 }
             }
@@ -845,10 +865,11 @@ namespace MarkMpn.Sql4Cds.XTB
                     list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
 
                 if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Messages != null)
-                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, currentLength)));
+                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, currentLength)));
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
+                _dataSources.TryGetValue(instanceName, out var instance);
                 var lastPart = tableName;
 
                 if (parts == 1)
@@ -860,19 +881,19 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (parts == 1 || parts == 2)
                 {
                     // Could be a schema name
-                    if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+                    var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
+                    if (instance?.Metadata?.RecycleBinEntities != null)
+                        schemaNames = schemaNames.Append("bin");
 
-                    if ("archive".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("archive", lastPartLength));
+                    schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
 
-                    if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
-                        list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
+                    foreach (var schema in schemaNames)
+                        list.Add(new SchemaAutocompleteItem(schema, lastPartLength));
                 }
 
                 // Could be a sproc name
-                if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Messages != null)
-                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, lastPartLength)));
+                if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && instance?.Messages != null)
+                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, lastPartLength)));
             }
 
             list.Sort();
@@ -1152,6 +1173,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 case AttributeTypeCode.String:
                 case AttributeTypeCode.Virtual:
+                case AttributeTypeCode.EntityName:
                     return 13;
 
                 case AttributeTypeCode.Uniqueidentifier:
@@ -1213,7 +1235,7 @@ namespace MarkMpn.Sql4Cds.XTB
             public static string GetSqlTypeName(Type type)
             {
                 if (type == typeof(string))
-                    return "NNVARCHAR(MAX)";
+                    return "NVARCHAR(MAX)";
 
                 if (type == typeof(int))
                     return "INT";
@@ -1475,7 +1497,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             public override string ToolTipText
             {
-                get => Text == "metadata" ? "Schema containing the metadata information" : "Schema containing the data tables";
+                get => Text == "metadata" ? "Schema containing the metadata information" :
+                       Text == "archive" ? "Schema containing long-term retention tables" :
+                       Text == "bin" ? "Schema containing recycle bin tables" :
+                       "Schema containing the data tables";
                 set => base.ToolTipText = value;
             }
         }
@@ -1517,10 +1542,12 @@ namespace MarkMpn.Sql4Cds.XTB
         class TVFAutocompleteItem : SqlAutocompleteItem
         {
             private readonly Message _message;
+            private readonly ColumnOrdering _columnOrdering;
 
-            public TVFAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 25)
+            public TVFAutocompleteItem(Message message, ColumnOrdering columnOrdering, int replaceLength) : base(message.Name, replaceLength, 25)
             {
                 _message = message;
+                _columnOrdering = columnOrdering;
             }
 
             public TVFAutocompleteItem(Message message, string alias, int replaceLength) : base(alias, replaceLength, 25)
@@ -1536,7 +1563,18 @@ namespace MarkMpn.Sql4Cds.XTB
 
             public override string ToolTipText
             {
-                get => _message.Name + "(" + String.Join(", ", _message.InputParameters.Select(p => p.Name + " " + GetSqlTypeName(p.Type))) + ")";
+                get
+                {
+                    var parameters = _message.InputParameters
+                        .Where(p => p.Type != typeof(PagingInfo));
+
+                    if (_columnOrdering == ColumnOrdering.Alphabetical)
+                        parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+                    else
+                        parameters = parameters.OrderBy(p => p.Position);
+
+                    return _message.Name + "(" + String.Join(", ", parameters.Select(p => p.Name + " " + GetSqlTypeName(p.Type))) + ")";
+                }
                 set => base.ToolTipText = value;
             }
 
@@ -1549,10 +1587,12 @@ namespace MarkMpn.Sql4Cds.XTB
         class SprocAutocompleteItem : SqlAutocompleteItem
         {
             private readonly Message _message;
+            private readonly ColumnOrdering _columnOrdering;
 
-            public SprocAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 26)
+            public SprocAutocompleteItem(Message message, ColumnOrdering columnOrdering, int replaceLength) : base(message.Name, replaceLength, 26)
             {
                 _message = message;
+                _columnOrdering = columnOrdering;
             }
 
             public override string ToolTipTitle
@@ -1563,7 +1603,18 @@ namespace MarkMpn.Sql4Cds.XTB
 
             public override string ToolTipText
             {
-                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]"))));
+                get
+                {
+                    var parameters = _message.InputParameters
+                        .Where(p => p.Type != typeof(PagingInfo));
+
+                    if (_columnOrdering == ColumnOrdering.Alphabetical)
+                        parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+                    else
+                        parameters = parameters.OrderBy(p => p.Position);
+
+                    return _message.Name + " " + String.Join(", ", parameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]"))));
+                }
                 set => base.ToolTipText = value;
             }
         }
@@ -1655,15 +1706,21 @@ namespace MarkMpn.Sql4Cds.XTB
                 _virtualSuffix = virtualSuffix;
             }
 
-            public static IEnumerable<AttributeAutocompleteItem> CreateList(AttributeMetadata attribute, int replaceLength, bool writeable)
+            public static IEnumerable<AttributeAutocompleteItem> CreateList(AttributeMetadata attribute, int replaceLength, bool writeable, IAttributeMetadataCache metadata)
             {
                 yield return new AttributeAutocompleteItem(attribute, replaceLength);
 
                 if (!writeable && (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata || attribute is LookupAttributeMetadata))
                     yield return new AttributeAutocompleteItem(attribute, replaceLength, "name");
 
-                if (attribute is LookupAttributeMetadata lookup && lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList && (lookup.EntityLogicalName != "listmember" || lookup.LogicalName != "entityid"))
-                    yield return new AttributeAutocompleteItem(attribute, replaceLength, "type");
+                if (attribute is LookupAttributeMetadata lookup)
+                {
+                    if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList && (lookup.EntityLogicalName != "listmember" || lookup.LogicalName != "entityid"))
+                        yield return new AttributeAutocompleteItem(attribute, replaceLength, "type");
+
+                    if (lookup.Targets != null && metadata.TryGetMinimalData(lookup.EntityLogicalName, out var entity) && entity.Attributes.Any(a => a.LogicalName == attribute.LogicalName + "pid"))
+                        yield return new AttributeAutocompleteItem(attribute, replaceLength, "pid");
+                }
             }
 
             public override string ToolTipTitle
@@ -1682,6 +1739,8 @@ namespace MarkMpn.Sql4Cds.XTB
                         description += $"\r\n\r\nThis attribute holds the display name of the {_attribute.LogicalName} field";
                     else if (_virtualSuffix == "type")
                         description += $"\r\n\r\nThis attribute holds the logical name of the type of record referenced by the {_attribute.LogicalName} field";
+                    else if (_virtualSuffix == "pid")
+                        description += $"\r\n\r\nThis attribute holds the partition id of the record referenced by the {_attribute.LogicalName} field";
                     else if (_attribute.AttributeType == AttributeTypeCode.Picklist)
                         description += "\r\n\r\nThis attribute holds the underlying integer value of the field";
                     else if (_attribute.AttributeType == AttributeTypeCode.Lookup || _attribute.AttributeType == AttributeTypeCode.Customer || _attribute.AttributeType == AttributeTypeCode.Owner)

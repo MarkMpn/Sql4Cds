@@ -851,15 +851,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
             string attributeSuffix = null;
 
-            if (attribute == null && (attrName.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attrName.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
+            if (attribute == null)
             {
-                attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName.Substring(0, attrName.Length - 4), StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                attribute = meta.FindBaseAttributeFromVirtualAttribute(attrName, out attributeSuffix);
 
                 if (attribute != null)
-                {
-                    attributeSuffix = attrName.Substring(attrName.Length - 4).ToLower();
                     attrName = attribute.LogicalName;
-                }
             }
 
             // Can't fold LIKE queries for non-string fields - the server will try to convert the value to the type of
@@ -1084,7 +1081,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (attribute is LookupAttributeMetadata lookupAttr)
                 {
-                    // Check the real name of the underlying virtual attribute. We use the consistent suffixes "name" and "type" but
+                    // Check the real name of the underlying virtual attribute. We use the consistent suffixes "name", "type" and "pid" but
                     // it's not always the same under the hood.
                     if (attributeSuffix == "name")
                     {
@@ -1097,21 +1094,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             .OrderBy(a => a.LogicalName == attrName + "name" ? 0 : 1)
                             .FirstOrDefault();
                     }
-                    else
+                    else if (attributeSuffix == "type")
                     {
                         attribute = meta.Attributes
                             .SingleOrDefault(a => a.AttributeOf == attrName && a.AttributeType == AttributeTypeCode.EntityName);
+                    }
+                    else
+                    {
+                        attribute = meta.Attributes
+                            .OfType<StringAttributeMetadata>()
+                            .Where(a => a.AttributeOf == attrName && a.AttributeType == AttributeTypeCode.String && a.YomiOf == null)
+                            .OrderBy(a => a.LogicalName == attrName + "pid" ? 0 : 1)
+                            .FirstOrDefault();
                     }
 
                     if (attribute != null)
                     {
                         attrName = attribute.LogicalName;
 
-                        if (attributeSuffix == "name")
+                        if (attributeSuffix == "name" || attributeSuffix == "pid")
                         {
                             virtualAttributeHandled = true;
                         }
-                        else
+                        else if (attributeSuffix == "type")
                         {
                             // Type attributes can only handle a limited set of operators
                             if (op == @operator.@null || op == @operator.notnull || op == @operator.eq || op == @operator.ne || op == @operator.@in || op == @operator.notin)

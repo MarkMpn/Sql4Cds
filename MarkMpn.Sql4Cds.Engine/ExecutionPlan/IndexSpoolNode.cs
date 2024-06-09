@@ -80,14 +80,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (KeyColumn != null && SeekValue != null)
             {
                 // Index and seek values must be the same type
-                var indexType = Source.GetSchema(context).Schema[KeyColumn].Type;
+                var indexCol = Source.GetSchema(context).Schema[KeyColumn];
                 var seekType = context.ParameterTypes[SeekValue];
 
-                if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, context.PrimaryDataSource, null, null, out var consistentType))
-                    throw new QueryExecutionException($"No type conversion available for {indexType.ToSql()} and {seekType.ToSql()}");
+                if (!SqlTypeConverter.CanMakeConsistentTypes(indexCol.Type, seekType, context.PrimaryDataSource, null, null, out var consistentType))
+                    throw new QueryExecutionException(Sql4CdsError.TypeClash(null, indexCol.Type, seekType));
 
-                _keySelector = SqlTypeConverter.GetConversion(indexType, consistentType);
+                _keySelector = SqlTypeConverter.GetConversion(indexCol.Type, consistentType);
                 _seekSelector = SqlTypeConverter.GetConversion(seekType, consistentType);
+
+                if (!WithStack && indexCol.IsNullable)
+                {
+                    // Try to fold a NOT NULL filter into the source - we'll never match a null value with an equality operator
+                    Source = new FilterNode
+                    {
+                        Source = Source,
+                        Filter = new BooleanIsNullExpression
+                        {
+                            Expression = KeyColumn.ToColumnReference(),
+                            IsNot = true
+                        }
+                    }.FoldQuery(context, hints);
+                }
             }
 
             if (WithStack)
@@ -168,7 +182,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Check for any other filters or link-entities
             if (spooledRecursiveFetchXml.Entity.GetLinkEntities().Any() ||
                 spooledRecursiveFetchXml.Entity.Items != null && spooledRecursiveFetchXml.Entity.Items.OfType<filter>().Any())
-                return this;
+            {
+                // We might have added a not-null filter on the key column, so ignore that
+                var filters = spooledRecursiveFetchXml.Entity.Items.OfType<filter>().ToArray();
+                if (filters.Length != 1 ||
+                    filters[0].Items.Length != 1 ||
+                    !(filters[0].Items[0] is condition condition) ||
+                    condition.attribute != adaptiveSpool.KeyColumn.SplitMultiPartIdentifier().Last() ||
+                    condition.@operator != @operator.notnull)
+                {
+                    return this;
+                }
+            }
 
             // Check there are no extra calculated columns
             if (initialDepthCompute.Columns.Count != 1 || incrementDepthCompute.Columns.Count != 1)

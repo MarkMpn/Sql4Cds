@@ -531,19 +531,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Check the number and type of input parameters matches
             var expectedInputParameters = new List<MessageParameter>();
-            var pagingInfoPosition = -1;
 
             for (var i = 0; i < message.InputParameters.Count; i++)
             {
                 if (message.InputParameters[i].Type == typeof(PagingInfo))
-                {
-                    pagingInfoPosition = i;
                     node.PagingParameter = message.InputParameters[i].Name;
-                }
                 else
-                {
                     expectedInputParameters.Add(message.InputParameters[i]);
-                }
             }
 
             // Check we have the right number of parameters
@@ -555,6 +549,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (expectedInputParameters.Count < tvf.Parameters.Count)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.TooManyArguments(tvf.SchemaObject, false));
+
+            expectedInputParameters.Sort((x, y) =>
+            {
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    return String.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+                else
+                    return x.Position.CompareTo(y.Position);
+            });
 
             // Add the parameter values to the node, including any required type conversions
             for (var i = 0; i < expectedInputParameters.Count; i++)
@@ -612,20 +614,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Check the number and type of input parameters matches
             var expectedInputParameters = new List<MessageParameter>();
-            var pagingInfoPosition = -1;
 
             for (var i = 0; i < message.InputParameters.Count; i++)
             {
                 if (message.InputParameters[i].Type == typeof(PagingInfo))
-                {
-                    pagingInfoPosition = i;
                     node.PagingParameter = message.InputParameters[i].Name;
-                }
                 else
-                {
                     expectedInputParameters.Add(message.InputParameters[i]);
-                }
             }
+
+            expectedInputParameters.Sort((x, y) =>
+            {
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    return String.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+                else
+                    return x.Position.CompareTo(y.Position);
+            });
 
             // Add the parameter values to the node, including any required type conversions
             var usedParamName = false;
@@ -645,15 +649,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (sproc.Parameters[i].Variable == null)
                 {
-                    var paramIndex = i;
-
-                    if (pagingInfoPosition != -1 && i >= pagingInfoPosition)
-                        paramIndex++;
-
-                    if (paramIndex >= message.InputParameters.Count)
+                    if (i >= expectedInputParameters.Count)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.TooManyArguments(sproc.ProcedureReference.ProcedureReference.Name, true));
 
-                    targetParamName = message.InputParameters[paramIndex].Name;
+                    targetParamName = expectedInputParameters[i].Name;
                 }
                 else
                 {

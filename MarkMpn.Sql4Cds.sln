@@ -48,6 +48,15 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.SSMS.20", "
 EndProject
 Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "MarkMpn.Sql4Cds.SSMS.20.Setup", "MarkMpn.Sql4Cds.SSMS.20.Setup\MarkMpn.Sql4Cds.SSMS.20.Setup.wixproj", "{FE9EF004-BD77-49DA-85B5-D51DAEB76274}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DebuggerVisualizer", "DebuggerVisualizer", "{395CF6D2-5DDE-4A42-81A8-B1C4FF20C736}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide", "MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide\MarkMpn.Sql4Cds.DebugVisualizer.DebuggerSide.csproj", "{17EE9908-59A4-4E81-85DD-2144B3BB4441}"
+	ProjectSection(ProjectDependencies) = postProject
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE} = {65FD7411-5B94-443B-A4C3-A66082E0B0AE}
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide", "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide\MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide.csproj", "{65FD7411-5B94-443B-A4C3-A66082E0B0AE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -232,9 +241,37 @@ Global
 		{FE9EF004-BD77-49DA-85B5-D51DAEB76274}.Release|arm64.Build.0 = Release|x86
 		{FE9EF004-BD77-49DA-85B5-D51DAEB76274}.Release|x86.ActiveCfg = Release|x86
 		{FE9EF004-BD77-49DA-85B5-D51DAEB76274}.Release|x86.Build.0 = Release|x86
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Debug|arm64.Build.0 = Debug|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Debug|x86.Build.0 = Debug|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Release|arm64.ActiveCfg = Release|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Release|arm64.Build.0 = Release|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Release|x86.ActiveCfg = Release|Any CPU
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441}.Release|x86.Build.0 = Release|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Debug|arm64.Build.0 = Debug|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Debug|x86.Build.0 = Debug|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Release|arm64.ActiveCfg = Release|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Release|arm64.Build.0 = Release|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Release|x86.ActiveCfg = Release|Any CPU
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{17EE9908-59A4-4E81-85DD-2144B3BB4441} = {395CF6D2-5DDE-4A42-81A8-B1C4FF20C736}
+		{65FD7411-5B94-443B-A4C3-A66082E0B0AE} = {395CF6D2-5DDE-4A42-81A8-B1C4FF20C736}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5E960561-7FE2-4022-964B-57E990767108}
