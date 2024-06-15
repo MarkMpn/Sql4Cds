@@ -553,6 +553,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!String.IsNullOrEmpty(attr2?.AttributeOf))
                         return false;
 
+                    // If we need to use cross-table column comparisons, check the server supports it
+                    if (!entityAlias.Equals(entityAlias2, StringComparison.OrdinalIgnoreCase) && !dataSource.CrossTableColumnComparisonAvailable)
+                        return false;
+
                     // We can use valueof="alias.attribute", but the alias of the root entity isn't visible. Swap the comparison round
                     // so that it can be added to the root entity and reference the value from the link entity.
                     if (!entityAlias.Equals(entityAlias2, StringComparison.OrdinalIgnoreCase) && entityAlias2.Equals(targetEntityAlias, StringComparison.OrdinalIgnoreCase))

@@ -87,6 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             JoinOperatorsAvailable = joinOperators;
             ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
+            CrossTableColumnComparisonAvailable = version >= new Version("9.2");
             OrderByEntityNameAvailable = version >= new Version("9.1.0.25249");
         }
 
@@ -131,6 +132,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if the server supports column comparison conditions in FetchXML
         /// </summary>
         public virtual bool ColumnComparisonAvailable { get; }
+
+        /// <summary>
+        /// Indicates if the server supports column comparison conditions across tables in FetchXML
+        /// </summary>
+        public virtual bool CrossTableColumnComparisonAvailable { get; }
 
         /// <summary>
         /// Indicates if the server supports ordering by link-entities in FetchXML
