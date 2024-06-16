@@ -174,7 +174,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (message.OutputParameters.All(f => f.IsScalarType()))
             {
                 foreach (var value in message.OutputParameters)
-                    AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType(dataSource)); // TODO: How are OSV and ER fields represented?
+                    AddSchemaColumn(value.Name, value.GetSqlDataType(dataSource));
             }
             else
             {
@@ -556,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var f = expectedInputParameters[i];
                 var sourceExpression = tvf.Parameters[i];
                 sourceExpression.GetType(context, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType(context.PrimaryDataSource);
+                var expectedType = f.GetSqlDataType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(tvf.Parameters[f.Position], sourceType, expectedType));
@@ -658,7 +658,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var sourceExpression = sproc.Parameters[i].ParameterValue;
                 sourceExpression.GetType(context, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType(context.PrimaryDataSource);
+                var expectedType = targetParam.GetSqlDataType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                 {

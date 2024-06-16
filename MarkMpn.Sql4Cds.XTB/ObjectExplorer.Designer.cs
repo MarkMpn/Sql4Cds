@@ -54,15 +54,15 @@
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.clipboardToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.executeToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.insertToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.updateToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.deleteToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem5 = new System.Windows.Forms.ToolStripSeparator();
-            this.executeToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripMenuItem3 = new System.Windows.Forms.ToolStripMenuItem();
             this.functionContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripMenuItem();
             this.procedureContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.toolStripMenuItem3 = new System.Windows.Forms.ToolStripMenuItem();
             this.tsqlContextMenuStrip.SuspendLayout();
             this.serverContextMenuStrip.SuspendLayout();
             this.toolStrip1.SuspendLayout();
@@ -228,7 +228,7 @@
             this.selectTop1000RowsToolStripMenuItem,
             this.scriptTableasToolStripMenuItem});
             this.tableContextMenuStrip.Name = "tableContextMenuStrip";
-            this.tableContextMenuStrip.Size = new System.Drawing.Size(186, 70);
+            this.tableContextMenuStrip.Size = new System.Drawing.Size(186, 48);
             this.tableContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.tableContextMenuStrip_Opening);
             // 
             // selectTop1000RowsToolStripMenuItem
@@ -255,6 +255,7 @@
             this.toolStripMenuItem5,
             this.executeToToolStripMenuItem});
             this.scriptAsTypeContextMenuStrip.Name = "tableContextMenuStrip";
+            this.scriptAsTypeContextMenuStrip.OwnerItem = this.toolStripMenuItem4;
             this.scriptAsTypeContextMenuStrip.Size = new System.Drawing.Size(137, 120);
             // 
             // selectToToolStripMenuItem
@@ -273,6 +274,7 @@
             this.fileToolStripMenuItem,
             this.clipboardToolStripMenuItem});
             this.scriptAsTargetsContextMenuStrip.Name = "scriptTableAsTargetsContextMenuStrip";
+            this.scriptAsTargetsContextMenuStrip.OwnerItem = this.deleteToToolStripMenuItem;
             this.scriptAsTargetsContextMenuStrip.Size = new System.Drawing.Size(215, 76);
             // 
             // newQueryEditorWindowToolStripMenuItem
@@ -304,6 +306,14 @@
             this.clipboardToolStripMenuItem.Text = "Clipboard";
             this.clipboardToolStripMenuItem.Click += new System.EventHandler(this.clipboardToolStripMenuItem_Click);
             // 
+            // executeToToolStripMenuItem
+            // 
+            this.executeToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.executeToToolStripMenuItem.Name = "executeToToolStripMenuItem";
+            this.executeToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.executeToToolStripMenuItem.Text = "EXECUTE To";
+            this.executeToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            // 
             // insertToToolStripMenuItem
             // 
             this.insertToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
@@ -333,13 +343,12 @@
             this.toolStripMenuItem5.Name = "toolStripMenuItem5";
             this.toolStripMenuItem5.Size = new System.Drawing.Size(133, 6);
             // 
-            // executeToToolStripMenuItem
+            // toolStripMenuItem3
             // 
-            this.executeToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
-            this.executeToToolStripMenuItem.Name = "executeToToolStripMenuItem";
-            this.executeToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
-            this.executeToToolStripMenuItem.Text = "EXECUTE To";
-            this.executeToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            this.toolStripMenuItem3.DropDown = this.scriptAsTypeContextMenuStrip;
+            this.toolStripMenuItem3.Name = "toolStripMenuItem3";
+            this.toolStripMenuItem3.Size = new System.Drawing.Size(212, 22);
+            this.toolStripMenuItem3.Text = "Script Stored Procedure as";
             // 
             // functionContextMenuStrip
             // 
@@ -347,6 +356,7 @@
             this.toolStripMenuItem4});
             this.functionContextMenuStrip.Name = "tableContextMenuStrip";
             this.functionContextMenuStrip.Size = new System.Drawing.Size(169, 26);
+            this.functionContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.functionContextMenuStrip_Opening);
             // 
             // toolStripMenuItem4
             // 
@@ -360,14 +370,8 @@
             this.procedureContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripMenuItem3});
             this.procedureContextMenuStrip.Name = "tableContextMenuStrip";
-            this.procedureContextMenuStrip.Size = new System.Drawing.Size(213, 26);
-            // 
-            // toolStripMenuItem3
-            // 
-            this.toolStripMenuItem3.DropDown = this.scriptAsTypeContextMenuStrip;
-            this.toolStripMenuItem3.Name = "toolStripMenuItem3";
-            this.toolStripMenuItem3.Size = new System.Drawing.Size(212, 22);
-            this.toolStripMenuItem3.Text = "Script Stored Procedure as";
+            this.procedureContextMenuStrip.Size = new System.Drawing.Size(213, 48);
+            this.procedureContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.procedureContextMenuStrip_Opening);
             // 
             // ObjectExplorer
             // 

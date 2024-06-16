@@ -1250,29 +1250,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 return CompareText.CompareTo(other.CompareText);
             }
 
-            public static string GetSqlTypeName(Type type)
-            {
-                if (type == typeof(string))
-                    return "NVARCHAR(MAX)";
-
-                if (type == typeof(int))
-                    return "INT";
-
-                if (type == typeof(decimal))
-                    return "NUMERIC(10, 4)";
-
-                if (type == typeof(Guid))
-                    return "UNIQUEIDENTIFIER";
-
-                if (type == typeof(DateTime))
-                    return "DATETIME";
-
-                if (type == typeof(bool))
-                    return "BIT";
-
-                return type.Name;
-            }
-
             public static string EscapeIdentifier(string identifier)
             {
                 var id = new Microsoft.SqlServer.TransactSql.ScriptDom.Identifier { Value = identifier };
@@ -1591,7 +1568,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     else
                         parameters = parameters.OrderBy(p => p.Position);
 
-                    return _message.Name + "(" + String.Join(", ", parameters.Select(p => p.Name + " " + GetSqlTypeName(p.Type))) + ")";
+                    return _message.Name + "(" + String.Join(", ", parameters.Select(p => p.Name + " " + p.GetSqlDataType(null).ToSql())) + ")";
                 }
                 set => base.ToolTipText = value;
             }
@@ -1631,7 +1608,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     else
                         parameters = parameters.OrderBy(p => p.Position);
 
-                    return _message.Name + " " + String.Join(", ", parameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]"))));
+                    return _message.Name + " " + String.Join(", ", parameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + " OUTPUT]"))));
                 }
                 set => base.ToolTipText = value;
             }
@@ -1650,13 +1627,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             public override string ToolTipTitle
             {
-                get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + GetSqlTypeName(_parameter.Type) + ")";
+                get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + _parameter.GetSqlDataType(null).ToSql() + ")";
                 set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
-                get => _message.Name + " " + string.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : (_message.InputParameters.Count == 0 ? "" : ",") + " " + string.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]")));
+                get => _message.Name + " " + string.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : (_message.InputParameters.Count == 0 ? "" : ",") + " " + string.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + " OUTPUT]")));
                 set => base.ToolTipText = value;
             }
         }

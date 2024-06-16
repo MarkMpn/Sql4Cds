@@ -236,7 +236,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 return "uniqueidentifier";
 
             if (type == typeof(EntityReference))
-                return "[MarkMpn.Sql4Cds.Engine.SqlEntityReference]";
+                return "EntityReference";
 
             if (type == typeof(double))
                 return "double";

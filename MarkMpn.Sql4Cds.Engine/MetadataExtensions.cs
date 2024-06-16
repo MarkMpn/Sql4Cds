@@ -11,14 +11,33 @@ using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// Extension methods to convert from Dataverse metadata to SQL schema
+    /// </summary>
     public static class MetadataExtensions
     {
+        /// <summary>
+        /// The maximum length of an attribute which contains an entity logical name
+        /// </summary>
         public static int EntityLogicalNameMaxLength { get; } = 64;
 
+        /// <summary>
+        /// The maximum length of an optionset label value
+        /// </summary>
         private const int LabelMaxLength = 200;
 
+        /// <summary>
+        /// The suffixes that can be used for virtual attributes
+        /// </summary>
         public static string[] VirtualLookupAttributeSuffixes { get; } = new[] { "name", "type", "pid" };
 
+        /// <summary>
+        /// Gets the base attribute (optionset, lookup etc.) from the name of a virtual attribute (___name, ___type etc.)
+        /// </summary>
+        /// <param name="entity">The entity the attribute is in</param>
+        /// <param name="virtualAttributeLogicalName">The name of the virtual attribute to get the details for</param>
+        /// <param name="suffix">The suffix of the virtual attribute</param>
+        /// <returns>The metadata of the underlying attribute, or <see langword="null"/> if no virtual attribute is found</returns>
         public static AttributeMetadata FindBaseAttributeFromVirtualAttribute(this EntityMetadata entity, string virtualAttributeLogicalName, out string suffix)
         {
             var matchingSuffix = VirtualLookupAttributeSuffixes.SingleOrDefault(s => virtualAttributeLogicalName.EndsWith(s, StringComparison.OrdinalIgnoreCase));
@@ -31,6 +50,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 .SingleOrDefault(a => a.LogicalName.Equals(virtualAttributeLogicalName.Substring(0, virtualAttributeLogicalName.Length - matchingSuffix.Length), StringComparison.OrdinalIgnoreCase));
         }
 
+        /// <summary>
+        /// Gets the virtual attributes from a base attribute
+        /// </summary>
+        /// <param name="attrMetadata">The underlying base attribute to get the virtual attributes for</param>
+        /// <param name="dataSource">The datasource that the attribute is from</param>
+        /// <param name="writeable">Indicates whether to get readable or writeable virtual attributes</param>
+        /// <returns>A sequence of virtual attributes that are based on this attribute</returns>
         public static IEnumerable<VirtualAttribute> GetVirtualAttributes(this AttributeMetadata attrMetadata, DataSource dataSource, bool writeable)
         {
             if (!writeable)
@@ -52,22 +78,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (lookup.Targets != null && lookup.Targets.Any(logicalName => dataSource.Metadata[logicalName].DataProviderId == DataProviders.ElasticDataProvider))
                     yield return new VirtualAttribute("pid", DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
             }
-        }
-
-        public class VirtualAttribute
-        {
-            public VirtualAttribute(string suffix, DataTypeReference dataType, bool? notNull)
-            {
-                Suffix = suffix;
-                DataType = dataType;
-                NotNull = notNull;
-            }
-
-            public string Suffix { get; }
-
-            public DataTypeReference DataType { get; }
-
-            public bool? NotNull { get; }
         }
 
         public static Type GetAttributeType(this AttributeMetadata attrMetadata)
@@ -239,5 +249,39 @@ namespace MarkMpn.Sql4Cds.Engine
 
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
+    }
+
+    /// <summary>
+    /// Contains the details of a virtual attribute
+    /// </summary>
+    public class VirtualAttribute
+    {
+        /// <summary>
+        /// Creates a new <see cref="VirtualAttribute"/>
+        /// </summary>
+        /// <param name="suffix">The suffix for this virtual attribute</param>
+        /// <param name="dataType">The SQL data type of this virtual attribute</param>
+        /// <param name="notNull">Indicates if this virtual attribute is known to be nullable or not-nullable</param>
+        internal VirtualAttribute(string suffix, DataTypeReference dataType, bool? notNull)
+        {
+            Suffix = suffix;
+            DataType = dataType;
+            NotNull = notNull;
+        }
+
+        /// <summary>
+        /// The suffix for this virtual attribute, e.g. "name", "type", "pid"
+        /// </summary>
+        public string Suffix { get; }
+
+        /// <summary>
+        /// The SQL data type for this virtual attribute
+        /// </summary>
+        public DataTypeReference DataType { get; }
+
+        /// <summary>
+        /// Indicates if this attribute is known to be nullable, not-nullable or whether it should inherit its nullability from the base attribute
+        /// </summary>
+        public bool? NotNull { get; }
     }
 }

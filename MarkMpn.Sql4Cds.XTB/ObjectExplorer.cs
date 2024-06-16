@@ -210,6 +210,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     n.Tag = msg;
                     n.ImageIndex = 25;
                     n.SelectedImageIndex = 25;
+                    n.ContextMenuStrip = functionContextMenuStrip;
                 }
 
                 if (msg.IsValidAsStoredProcedure())
@@ -218,6 +219,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     n.Tag = msg;
                     n.ImageIndex = 26;
                     n.SelectedImageIndex = 26;
+                    n.ContextMenuStrip = procedureContextMenuStrip;
                 }
             }
 
@@ -718,6 +720,135 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                     deleteToToolStripMenuItem.Enabled = true;
                     return;
             }
+        }
+
+        private void functionContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var tvf = (Engine.Message)treeView.SelectedNode.Tag;
+            selectToToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(tvf));
+
+            selectToToolStripMenuItem.Enabled = true;
+            insertToToolStripMenuItem.Enabled = false;
+            updateToToolStripMenuItem.Enabled = false;
+            deleteToToolStripMenuItem.Enabled = false;
+            executeToToolStripMenuItem.Enabled = false;
+        }
+
+        private void procedureContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var sproc = (Engine.Message)treeView.SelectedNode.Tag;
+            executeToToolStripMenuItem.Tag = (Func<string>)(() => GenerateExecuteQuery(sproc));
+
+            selectToToolStripMenuItem.Enabled = false;
+            insertToToolStripMenuItem.Enabled = false;
+            updateToToolStripMenuItem.Enabled = false;
+            deleteToToolStripMenuItem.Enabled = false;
+            executeToToolStripMenuItem.Enabled = true;
+        }
+
+        private string GenerateSelectQuery(Engine.Message tvf)
+        {
+            var querySpec = new QuerySpecification();
+            querySpec.SelectElements.Add(new SelectScalarExpression { Expression = new ColumnReferenceExpression { ColumnType = ColumnType.Wildcard } });
+            var tvfReference = new SchemaObjectFunctionTableReference
+            {
+                SchemaObject = new SchemaObjectName
+                {
+                    Identifiers =
+                    {
+                        new Identifier { Value = tvf.Name }
+                    }
+                }
+            };
+            querySpec.FromClause = new FromClause
+            {
+                TableReferences = { tvfReference }
+            };
+
+            foreach (var param in tvf.InputParameters)
+            {
+                tvfReference.Parameters.Add(new VariableReference
+                {
+                    Name = $"<@{param.Name}, {param.GetSqlDataType(null).ToSql()}>"
+                });
+            }
+
+            var select = new SelectStatement
+            {
+                QueryExpression = querySpec
+            };
+
+            return querySpec.ToSql();
+        }
+
+        private string GenerateExecuteQuery(Engine.Message sproc)
+        {
+            var batch = new TSqlBatch();
+            var declare = new DeclareVariableStatement();
+            batch.Statements.Add(declare);
+
+            declare.Declarations.Add(new DeclareVariableElement
+            {
+                VariableName = new Identifier { Value = "@RC" },
+                DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int }
+            });
+
+            foreach (var param in sproc.InputParameters.Concat(sproc.OutputParameters))
+            {
+                declare.Declarations.Add(new DeclareVariableElement
+                {
+                    VariableName = new Identifier { Value = $"@{param.Name}" },
+                    DataType = param.GetSqlDataType(null)
+                });
+            }
+
+            var exec = new ExecuteStatement
+            {
+                ExecuteSpecification = new ExecuteSpecification
+                {
+                    Variable = new VariableReference { Name = "@RC" },
+                    ExecutableEntity = new ExecutableProcedureReference
+                    {
+                        ProcedureReference = new ProcedureReferenceName
+                        {
+                            ProcedureReference = new ProcedureReference
+                            {
+                                Name = new SchemaObjectName
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier { Value = "dbo" },
+                                        new Identifier { Value = sproc.Name }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            foreach (var param in sproc.InputParameters)
+            {
+                exec.ExecuteSpecification.ExecutableEntity.Parameters.Add(new ExecuteParameter
+                {
+                    Variable = new VariableReference { Name = $"@{param.Name}" },
+                    ParameterValue = new VariableReference { Name = $"@{param.Name}" }
+                });
+            }
+
+            foreach (var param in sproc.OutputParameters)
+            {
+                exec.ExecuteSpecification.ExecutableEntity.Parameters.Add(new ExecuteParameter
+                {
+                    Variable = new VariableReference { Name = $"@{param.Name}" },
+                    ParameterValue = new VariableReference { Name = $"@{param.Name}" },
+                    IsOutput = true
+                });
+            }
+
+            batch.Statements.Add(exec);
+
+            return batch.ToSql();
         }
 
         private string GenerateSelectQuery(string schema, EntityMetadata metadata, int? top)
