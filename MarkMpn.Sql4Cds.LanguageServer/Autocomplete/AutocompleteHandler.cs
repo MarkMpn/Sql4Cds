@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Admin;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
@@ -42,20 +43,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             var pos = lines.Take(request.Position.Line).Sum(line => line.Length + 1) + request.Position.Character - 1;
             var con = _con.GetConnection(request.TextDocument.Uri.ToString());
             var cons = _con.GetAllConnections();
-            var acds = new Dictionary<string, AutocompleteDataSource>();
+            var acds = new Dictionary<string, DataSource>();
 
             if (con == null)
                 return Array.Empty<CompletionItem>();
 
             foreach (var c in cons)
             {
-                acds.Add(c.Key, new AutocompleteDataSource
-                {
-                    Name = c.Value.Name,
-                    Entities = ((CachedMetadata)((DataSourceWithInfo)c.Value).Metadata).GetAutocompleteEntities(),
-                    Metadata = c.Value.Metadata,
-                    Messages = c.Value.MessageCache
-                });
+                var clone = c.Value.Clone();
+                clone.Metadata = new MetaMetadataCache(c.Value.Metadata);
+                acds.Add(c.Key, clone);
             }
             var ac = new Autocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
             var suggestions = ac.GetSuggestions(doc, pos);
@@ -83,20 +80,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             var con = _con.GetConnection(request.TextDocument.Uri.ToString());
             var cons = _con.GetAllConnections();
-            var acds = new Dictionary<string, AutocompleteDataSource>();
+            var acds = new Dictionary<string, DataSource>();
 
             if (con == null)
                 return null;
 
             foreach (var c in cons)
             {
-                acds.Add(c.Key, new AutocompleteDataSource
-                {
-                    Name = c.Value.Name,
-                    Entities = ((CachedMetadata)((DataSourceWithInfo)c.Value).Metadata).GetAutocompleteEntities(),
-                    Metadata = c.Value.Metadata,
-                    Messages = c.Value.MessageCache
-                });
+                var clone = c.Value.Clone();
+                clone.Metadata = new MetaMetadataCache(c.Value.Metadata);
+                acds.Add(c.Key, clone);
             }
             var ac = new Autocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
             var suggestions = ac.GetSuggestions(doc, pos);

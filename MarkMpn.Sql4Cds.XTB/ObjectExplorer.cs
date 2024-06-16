@@ -253,6 +253,8 @@ namespace MarkMpn.Sql4Cds.XTB
             var logicalName = parent.Parent.Text;
 
             var metadata = (EntityMetadata)parent.Parent.Tag;
+            var connection = GetService(parent);
+            var dataSource = _dataSources[connection.ConnectionName];
             
             if (metadata.Attributes == null)
                 metadata = _dataSources[GetService(parent).ConnectionName].Metadata[logicalName];
@@ -268,20 +270,12 @@ namespace MarkMpn.Sql4Cds.XTB
                     var nodes = new List<TreeNode>();
                     nodes.Add(node);
 
-                    if (a is EnumAttributeMetadata || a is BooleanAttributeMetadata || a is LookupAttributeMetadata)
+                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, false))
                     {
-                        var nameNode = new TreeNode(a.LogicalName + "name");
-                        nameNode.Tag = a;
-                        SetIcon(nameNode, "Text");
-                        nodes.Add(nameNode);
-                    }
-
-                    if (a is LookupAttributeMetadata lookup && lookup.Targets.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    {
-                        var typeNode = new TreeNode(a.LogicalName + "type");
-                        typeNode.Tag = a;
-                        SetIcon(typeNode, "Text");
-                        nodes.Add(typeNode);
+                        var virtualNode = new TreeNode(a.LogicalName + virtualAttr.Suffix);
+                        virtualNode.Tag = a;
+                        SetIcon(virtualNode, "Text");
+                        nodes.Add(virtualNode);
                     }
 
                     return nodes;

@@ -247,5 +247,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new Collation(lcid, !ci, !ai);
         }
+
+        public DataSource Clone()
+        {
+            return (DataSource)MemberwiseClone();
+        }
     }
 }

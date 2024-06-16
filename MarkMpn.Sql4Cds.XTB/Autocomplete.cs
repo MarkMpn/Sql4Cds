@@ -21,7 +21,7 @@ namespace MarkMpn.Sql4Cds.XTB
     /// </summary>
     public class Autocomplete
     {
-        private readonly IDictionary<string, AutocompleteDataSource> _dataSources;
+        private readonly IDictionary<string, DataSource> _dataSources;
         private readonly string _primaryDataSource;
         private readonly ColumnOrdering _columnOrdering;
 
@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.XTB
         /// <param name="entities">The list of entities available to use in the query</param>
         /// <param name="metadata">The cache of metadata about each entity</param>
         /// <param name="columnOrdering">The order that columns are passed to table-valued functions or stored procedures</param>
-        public Autocomplete(IDictionary<string, AutocompleteDataSource> dataSources, string primaryDataSource, ColumnOrdering columnOrdering)
+        public Autocomplete(IDictionary<string, DataSource> dataSources, string primaryDataSource, ColumnOrdering columnOrdering)
         {
             _dataSources = dataSources;
             _primaryDataSource = primaryDataSource;
@@ -294,7 +294,7 @@ namespace MarkMpn.Sql4Cds.XTB
                         // Start loading all the appropriate metadata in the background
                         foreach (var table in tables.Values)
                         {
-                            if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Entities.Any(e => e.LogicalName.Equals(tableName, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
+                            if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.GetAllEntities().Any(e => e.LogicalName.Equals(tableName, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
                                 instance.Metadata.TryGetMinimalData(table, out _);
                         }
                     }
@@ -307,7 +307,7 @@ namespace MarkMpn.Sql4Cds.XTB
                         if (TryParseTableName(sprocName, out var instanceName, out var schemaName, out sprocName) &&
                             _dataSources.TryGetValue(instanceName, out var instance) &&
                             schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
-                            instance.Messages.TryGetValue(sprocName, out var message) &&
+                            instance.MessageCache.TryGetValue(sprocName, out var message) &&
                             message.IsValidAsStoredProcedure())
                         {
                             var availableParameters = message.InputParameters
@@ -362,10 +362,10 @@ namespace MarkMpn.Sql4Cds.XTB
                                 if (TryParseTableName(table.Value, out var instanceName, out var schemaName, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData((schemaName == "metadata" ? "metadata." : "") + tableName, out var metadata))
                                 {
                                     if (metadata.OneToManyRelationships != null)
-                                        joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{(instanceName == _primaryDataSource ? "" : (SqlAutocompleteItem.EscapeIdentifier(instance.Name) + "." + (schemaName == "dbo" ? "dbo." : "")))}{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}", true, instance.Entities, instance.Metadata, currentLength)));
+                                        joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{(instanceName == _primaryDataSource ? "" : (SqlAutocompleteItem.EscapeIdentifier(instance.Name) + "." + (schemaName == "dbo" ? "dbo." : "")))}{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}", true, instance.Metadata, currentLength)));
                                     
                                     if (metadata.ManyToOneRelationships != null)
-                                        joinSuggestions.AddRange(metadata.ManyToOneRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{(instanceName == _primaryDataSource ? "" : (SqlAutocompleteItem.EscapeIdentifier(instance.Name) + "." + (schemaName == "dbo" ? "dbo." : "")))}{rel.ReferencedEntity}{GetUniqueTableAlias(rel.ReferencedEntity, tables)} ON {table.Key}.{rel.ReferencingAttribute} = {GetUniqueTableName(rel.ReferencedEntity, tables)}.{rel.ReferencedAttribute}", false, instance.Entities, instance.Metadata, currentLength)));
+                                        joinSuggestions.AddRange(metadata.ManyToOneRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{(instanceName == _primaryDataSource ? "" : (SqlAutocompleteItem.EscapeIdentifier(instance.Name) + "." + (schemaName == "dbo" ? "dbo." : "")))}{rel.ReferencedEntity}{GetUniqueTableAlias(rel.ReferencedEntity, tables)} ON {table.Key}.{rel.ReferencingAttribute} = {GetUniqueTableName(rel.ReferencedEntity, tables)}.{rel.ReferencedAttribute}", false, instance.Metadata, currentLength)));
                                 }
                             }
 
@@ -384,10 +384,10 @@ namespace MarkMpn.Sql4Cds.XTB
                                 additionalSuggestions = new List<SqlAutocompleteItem>();
 
                                 if (newTableMetadata.OneToManyRelationships != null)
-                                    ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.OneToManyRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencingEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencingAttribute} = {prevPrevWord}.{rel.ReferencedAttribute}", false, instance.Entities, instance.Metadata, currentLength))));
+                                    ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.OneToManyRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencingEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencingAttribute} = {prevPrevWord}.{rel.ReferencedAttribute}", false, instance.Metadata, currentLength))));
 
                                 if (newTableMetadata.ManyToOneRelationships != null)
-                                    ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.ManyToOneRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencedEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencedAttribute} = {prevPrevWord}.{rel.ReferencingAttribute}", true, instance.Entities, instance.Metadata, currentLength))));
+                                    ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.ManyToOneRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencedEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencedAttribute} = {prevPrevWord}.{rel.ReferencingAttribute}", true, instance.Metadata, currentLength))));
 
                                 ((List<SqlAutocompleteItem>)additionalSuggestions).Sort();
                             }
@@ -404,7 +404,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 {
                                     if (TryParseTableName(table.Value, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance))
                                     {
-                                        var entity = instance.Entities.SingleOrDefault(e => e.LogicalName == tableName);
+                                        var entity = instance.Metadata.GetAllEntities().SingleOrDefault(e => e.LogicalName == tableName);
 
                                         if (entity != null)
                                             suggestions.Add(new EntityAutocompleteItem(entity, table.Key, instance.Metadata, currentLength));
@@ -436,7 +436,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             if (tables.TryGetValue(targetTable, out var tableName))
                             {
                                 if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
-                                    return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance.Metadata)).OrderBy(a => a), currentWord);
+                                    return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance)).OrderBy(a => a), currentWord);
                             }
                         }
 
@@ -456,17 +456,17 @@ namespace MarkMpn.Sql4Cds.XTB
                                     {
                                         // TVF
                                         var messageName = tableName.Substring(0, tableName.Length - 1);
-                                        if (instance.Messages.TryGetValue(messageName, out var message) &&
+                                        if (instance.MessageCache.TryGetValue(messageName, out var message) &&
                                             message.IsValidAsTableValuedFunction())
                                         {
-                                            return FilterList(GetMessageOutputAttributes(message, instance).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false, instance.Metadata)).OrderBy(a => a), currentWord);
+                                            return FilterList(GetMessageOutputAttributes(message, instance).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false, instance)).OrderBy(a => a), currentWord);
                                         }
                                     }
                                     else
                                     {
                                         // Table
                                         if (instance.Metadata.TryGetMinimalData((schemaName == "metadata" ? "metadata." : "") + tableName, out var metadata))
-                                            return FilterList(metadata.Attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false, instance.Metadata)).OrderBy(a => a), currentWord);
+                                            return FilterList(metadata.Attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false, instance)).OrderBy(a => a), currentWord);
                                     }
                                 }
                             }
@@ -500,7 +500,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 {
                                     attributeFilter = a => a.IsValidForCreate != false && a.AttributeOf == null;
                                 }
-                                return FilterList(metadata.Attributes.Where(attributeFilter).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance.Metadata)).OrderBy(a => a), currentWord);
+                                return FilterList(metadata.Attributes.Where(attributeFilter).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance)).OrderBy(a => a), currentWord);
                             }
                         }
                         else
@@ -512,7 +512,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             // * variables
                             var items = new List<SqlAutocompleteItem>();
                             var attributes = new List<AttributeMetadata>();
-                            var instance = default(AutocompleteDataSource);
+                            var instance = default(DataSource);
 
                             foreach (var table in tables)
                             {
@@ -524,7 +524,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                     if (TryParseTableName(messageName, out var instanceName, out var schemaName, out var tableName) &&
                                         _dataSources.TryGetValue(instanceName, out instance) &&
                                         (String.IsNullOrEmpty(schemaName) || schemaName == "dbo") &&
-                                        instance.Messages.TryGetValue(messageName, out var message) &&
+                                        instance.MessageCache.TryGetValue(messageName, out var message) &&
                                         message.IsValidAsTableValuedFunction())
                                     {
                                         if (!Guid.TryParse(table.Key, out _))
@@ -538,7 +538,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                     // Table
                                     if (TryParseTableName(table.Value, out var instanceName, out var schemaName, out var tableName) && _dataSources.TryGetValue(instanceName, out instance))
                                     {
-                                        var entity = instance.Entities.SingleOrDefault(e =>
+                                        var entity = instance.Metadata.GetAllEntities().SingleOrDefault(e =>
                                             e.LogicalName == tableName &&
                                             (
                                                 (
@@ -573,7 +573,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 }
                             }
 
-                            items.AddRange(attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).SelectMany(g => AttributeAutocompleteItem.CreateList(g.Single(), currentLength, false, instance.Metadata)));
+                            items.AddRange(attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).SelectMany(g => AttributeAutocompleteItem.CreateList(g.Single(), currentLength, false, instance)));
 
                             items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
 
@@ -646,12 +646,12 @@ namespace MarkMpn.Sql4Cds.XTB
                                         if (lookupAttr?.Targets == null || lookupAttr.Targets.Length == 0)
                                         {
                                             // Could be any entity name, show them all
-                                            items.AddRange(instance.Entities.Select(e => new EntityNameAutocompleteItem(e, currentLength)));
+                                            items.AddRange(instance.Metadata.GetAllEntities().Select(e => new EntityNameAutocompleteItem(e, currentLength)));
                                         }
                                         else
                                         {
                                             // Can only be one of the allowed entity types
-                                            items.AddRange(instance.Entities.Where(e => lookupAttr.Targets.Contains(e.LogicalName)).Select(e => new EntityNameAutocompleteItem(e, currentLength)));
+                                            items.AddRange(instance.Metadata.GetAllEntities().Where(e => lookupAttr.Targets.Contains(e.LogicalName)).Select(e => new EntityNameAutocompleteItem(e, currentLength)));
                                         }
                                     }
                                     else if (attribute is EnumAttributeMetadata enumAttr)
@@ -687,7 +687,7 @@ namespace MarkMpn.Sql4Cds.XTB
             return Array.Empty<SqlAutocompleteItem>();
         }
 
-        private List<AttributeMetadata> GetMessageOutputAttributes(Message message, AutocompleteDataSource instance)
+        private List<AttributeMetadata> GetMessageOutputAttributes(Message message, DataSource instance)
         {
             var attributes = new List<AttributeMetadata>();
 
@@ -703,13 +703,13 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 if (message.OutputParameters[0].Type == typeof(AuditDetail) || message.OutputParameters[0].Type == typeof(AuditDetailCollection))
                 {
-                    otc = instance.Entities.SingleOrDefault(e => e.LogicalName == "audit")?.ObjectTypeCode;
+                    otc = instance.Metadata.GetAllEntities().SingleOrDefault(e => e.LogicalName == "audit")?.ObjectTypeCode;
                     audit = true;
                 }
 
                 if (otc != null)
                 {
-                    var entity = instance.Entities.SingleOrDefault(e => e.ObjectTypeCode == otc);
+                    var entity = instance.Metadata.GetAllEntities().SingleOrDefault(e => e.ObjectTypeCode == otc);
 
                     if (entity != null)
                     {
@@ -769,12 +769,12 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (_dataSources.TryGetValue(_primaryDataSource, out var ds))
                 {
                     // Show table list
-                    if (ds.Entities != null)
-                        list.AddRange(ds.Entities.Select(x => new EntityAutocompleteItem(x, ds.Metadata, currentLength, false)));
+                    if (ds.Metadata != null)
+                        list.AddRange(ds.Metadata.GetAllEntities().Select(x => new EntityAutocompleteItem(x, ds.Metadata, currentLength, false)));
 
                     // Show TVF list
-                    if (fromClause && ds.Messages != null)
-                        list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, currentLength)));
+                    if (fromClause && ds.MessageCache != null)
+                        list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, currentLength)));
                 }
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
@@ -802,7 +802,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 }
 
                 // Could be a table name
-                if (instance?.Entities != null)
+                if (instance?.Metadata != null)
                 {
                     IEnumerable<EntityMetadata> entities;
                     IEnumerable<Message> messages = Array.Empty<Message>();
@@ -810,12 +810,12 @@ namespace MarkMpn.Sql4Cds.XTB
                     if (schemaName.Equals("metadata", StringComparison.OrdinalIgnoreCase))
                     {
                         // Suggest metadata tables
-                        entities = instance.Entities.Where(e => e.DataProviderId == MetaMetadataCache.ProviderId);
+                        entities = instance.Metadata.GetAllEntities().Where(e => e.DataProviderId == MetaMetadataCache.ProviderId);
                     }
                     else if (String.IsNullOrEmpty(schemaName) || schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) || schemaName.Equals("archive", StringComparison.OrdinalIgnoreCase))
                     {
                         // Suggest entity tables
-                        entities = instance.Entities.Where(e => e.DataProviderId != MetaMetadataCache.ProviderId);
+                        entities = instance.Metadata.GetAllEntities().Where(e => e.DataProviderId != MetaMetadataCache.ProviderId);
 
                         if (schemaName.Equals("archive", StringComparison.OrdinalIgnoreCase))
                         {
@@ -825,13 +825,13 @@ namespace MarkMpn.Sql4Cds.XTB
                         else
                         {
                             // Suggest TVFs
-                            messages = instance.Messages.GetAllMessages();
+                            messages = instance.MessageCache.GetAllMessages();
                         }
                     }
                     else if (schemaName.Equals("bin", StringComparison.OrdinalIgnoreCase))
                     {
                         // Suggest tables that are enabled for the recycle bin
-                        entities = instance.Entities.Where(e => instance.Metadata.RecycleBinEntities != null && instance.Metadata.RecycleBinEntities.Contains(e.LogicalName));
+                        entities = instance.Metadata.GetAllEntities().Where(e => instance.Metadata.RecycleBinEntities != null && instance.Metadata.RecycleBinEntities.Contains(e.LogicalName));
                     }
                     else
                     {
@@ -864,8 +864,8 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (_dataSources.Count > 1)
                     list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
 
-                if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Messages != null)
-                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, currentLength)));
+                if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.MessageCache != null)
+                    list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, currentLength)));
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
@@ -892,8 +892,8 @@ namespace MarkMpn.Sql4Cds.XTB
                 }
 
                 // Could be a sproc name
-                if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && instance?.Messages != null)
-                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, lastPartLength)));
+                if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && instance?.MessageCache != null)
+                    list.AddRange(instance.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, lastPartLength)));
             }
 
             list.Sort();
@@ -1463,9 +1463,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
         class InstanceAutocompleteItem : SqlAutocompleteItem
         {
-            private readonly AutocompleteDataSource _dataSource;
+            private readonly DataSource _dataSource;
 
-            public InstanceAutocompleteItem(AutocompleteDataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, 5)
+            public InstanceAutocompleteItem(DataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, 5)
             {
                 _dataSource = dataSource;
             }
@@ -1650,9 +1650,9 @@ namespace MarkMpn.Sql4Cds.XTB
             private readonly string _lhs;
             private readonly IAttributeMetadataCache _metadata;
 
-            public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, EntityMetadata[] entities, IAttributeMetadataCache metadata, int replaceLength) : base(join, replaceLength, oneToMany ? 19 : 18)
+            public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, IAttributeMetadataCache metadata, int replaceLength) : base(join, replaceLength, oneToMany ? 19 : 18)
             {
-                _rhs = entities.SingleOrDefault(e => e.LogicalName == relationship.ReferencingEntity);
+                _rhs = metadata.GetAllEntities().SingleOrDefault(e => e.LogicalName == relationship.ReferencingEntity);
                 _lhs = relationship.ReferencedEntity;
 
                 if (!oneToMany && metadata.TryGetMinimalData(relationship.ReferencingEntity, out _rhs))
@@ -1706,21 +1706,12 @@ namespace MarkMpn.Sql4Cds.XTB
                 _virtualSuffix = virtualSuffix;
             }
 
-            public static IEnumerable<AttributeAutocompleteItem> CreateList(AttributeMetadata attribute, int replaceLength, bool writeable, IAttributeMetadataCache metadata)
+            public static IEnumerable<AttributeAutocompleteItem> CreateList(AttributeMetadata attribute, int replaceLength, bool writeable, DataSource dataSource)
             {
                 yield return new AttributeAutocompleteItem(attribute, replaceLength);
 
-                if (!writeable && (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata || attribute is LookupAttributeMetadata))
-                    yield return new AttributeAutocompleteItem(attribute, replaceLength, "name");
-
-                if (attribute is LookupAttributeMetadata lookup)
-                {
-                    if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList && (lookup.EntityLogicalName != "listmember" || lookup.LogicalName != "entityid"))
-                        yield return new AttributeAutocompleteItem(attribute, replaceLength, "type");
-
-                    if (lookup.Targets != null && metadata.TryGetMinimalData(lookup.EntityLogicalName, out var entity) && entity.Attributes.Any(a => a.LogicalName == attribute.LogicalName + "pid"))
-                        yield return new AttributeAutocompleteItem(attribute, replaceLength, "pid");
-                }
+                foreach (var virtualAttr in attribute.GetVirtualAttributes(dataSource, writeable))
+                    yield return new AttributeAutocompleteItem(attribute, replaceLength, virtualAttr.Suffix);
             }
 
             public override string ToolTipTitle
@@ -1928,13 +1919,5 @@ namespace MarkMpn.Sql4Cds.XTB
                 set { }
             }
         }
-    }
-
-    public class AutocompleteDataSource
-    {
-        public string Name { get; set; }
-        public EntityMetadata[] Entities { get; set; }
-        public IAttributeMetadataCache Metadata { get; set; }
-        public IMessageCache Messages { get; set; }
     }
 }
