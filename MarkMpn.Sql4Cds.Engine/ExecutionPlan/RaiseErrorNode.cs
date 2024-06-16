@@ -103,6 +103,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             try
             {
+                _executionCount++;
+
                 var ecc = new ExpressionCompilationContext(context, null, null);
                 var eec = new ExpressionExecutionContext(context);
 
