@@ -11,9 +11,11 @@ using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    static class MetadataExtensions
+    public static class MetadataExtensions
     {
         public static int EntityLogicalNameMaxLength { get; } = 64;
+
+        private const int LabelMaxLength = 200;
 
         public static string[] VirtualLookupAttributeSuffixes { get; } = new[] { "name", "type", "pid" };
 
@@ -27,6 +29,45 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return entity.Attributes
                 .SingleOrDefault(a => a.LogicalName.Equals(virtualAttributeLogicalName.Substring(0, virtualAttributeLogicalName.Length - matchingSuffix.Length), StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static IEnumerable<VirtualAttribute> GetVirtualAttributes(this AttributeMetadata attrMetadata, DataSource dataSource, bool writeable)
+        {
+            if (!writeable)
+            {
+                if (attrMetadata is MultiSelectPicklistAttributeMetadata)
+                    yield return new VirtualAttribute("name", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), null);
+                else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
+                    yield return new VirtualAttribute("name", DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
+            }
+
+            if (attrMetadata is LookupAttributeMetadata lookup)
+            {
+                if (!writeable)
+                    yield return new VirtualAttribute("name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), null);
+
+                if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
+                    yield return new VirtualAttribute("type", DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
+
+                if (lookup.Targets != null && lookup.Targets.Any(logicalName => dataSource.Metadata[logicalName].DataProviderId == DataProviders.ElasticDataProvider))
+                    yield return new VirtualAttribute("pid", DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
+            }
+        }
+
+        public class VirtualAttribute
+        {
+            public VirtualAttribute(string suffix, DataTypeReference dataType, bool? notNull)
+            {
+                Suffix = suffix;
+                DataType = dataType;
+                NotNull = notNull;
+            }
+
+            public string Suffix { get; }
+
+            public DataTypeReference DataType { get; }
+
+            public bool? NotNull { get; }
         }
 
         public static Type GetAttributeType(this AttributeMetadata attrMetadata)

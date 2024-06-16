@@ -206,16 +206,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource, false));
 
                     // Add standard virtual attributes
-                    if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-
-                    if (attrMetadata is LookupAttributeMetadata lookup)
-                    {
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-
-                        if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                            AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-                    }
+                    foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
+                        AddSchemaColumn(attrMetadata.LogicalName + virtualAttr.Suffix, virtualAttr.DataType);
                 }
 
                 if (audit)
