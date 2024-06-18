@@ -310,6 +310,15 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="Resources\ScriptManager.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ExportScript.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Copy.png" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Resources\Copilot.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

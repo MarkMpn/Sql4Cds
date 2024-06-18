@@ -210,6 +210,8 @@ namespace MarkMpn.Sql4Cds.XTB
             }
 
             public string[] RecycleBinEntities => throw new NotImplementedException();
+
+            public IEnumerable<EntityMetadata> GetAllEntities() => throw new NotImplementedException();
         }
     }
 }

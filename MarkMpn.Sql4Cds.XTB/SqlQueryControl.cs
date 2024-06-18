@@ -440,16 +440,10 @@ namespace MarkMpn.Sql4Cds.XTB
                     .Cast<XtbDataSource>()
                     .Select(ds =>
                     {
-                        EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
-
-                        var metaEntities = MetaMetadataCache.GetMetadata();
-
-                        if (entities == null)
-                            entities = metaEntities.ToArray();
-                        else
-                            entities = entities.Concat(metaEntities).ToArray();
-
-                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata), Messages = ds.MessageCache };
+                        EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out _);
+                        var clone = ds.Clone();
+                        clone.Metadata = new MetaMetadataCache(ds.Metadata);
+                        return clone;
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -556,16 +550,10 @@ namespace MarkMpn.Sql4Cds.XTB
                     .Cast<XtbDataSource>()
                     .Select(ds =>
                     {
-                        EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
-
-                        var metaEntities = MetaMetadataCache.GetMetadata();
-
-                        if (entities == null)
-                            entities = metaEntities.ToArray();
-                        else
-                            entities = entities.Concat(metaEntities).ToArray();
-
-                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata), Messages = ds.MessageCache };
+                        EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out _);
+                        var clone = ds.Clone();
+                        clone.Metadata = new MetaMetadataCache(ds.Metadata);
+                        return clone;
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 

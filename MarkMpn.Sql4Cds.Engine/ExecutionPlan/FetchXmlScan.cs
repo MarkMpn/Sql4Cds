@@ -75,7 +75,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public const int LabelMaxLength = 200;
         private static readonly XmlSerializer _serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
         private Dictionary<string, List<ParameterizedCondition>> _parameterizedConditions;
@@ -1290,21 +1289,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             // Add standard virtual attributes
-            if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "name"), (attrMetadata.LogicalName + "name").EscapeIdentifier(), DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
-            else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "name"), (attrMetadata.LogicalName + "name").EscapeIdentifier(), DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
-
-            if (attrMetadata is LookupAttributeMetadata lookup)
-            {
-                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "name"), (attrMetadata.LogicalName + "name").EscapeIdentifier(), DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
-
-                if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "type"), (attrMetadata.LogicalName + "type").EscapeIdentifier(), DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull); ;
-
-                if (lookup.Targets != null && lookup.Targets.Any(logicalName => dataSource.Metadata[logicalName].DataProviderId == DataProviders.ElasticDataProvider))
-                    AddSchemaAttribute(schema, aliases, AddSuffix(fullName, "pid"), (attrMetadata.LogicalName + "pid").EscapeIdentifier(), DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
-            }
+            foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), virtualAttr.DataType, virtualAttr.NotNull ?? notNull);
         }
 
         private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, bool notNull)
