@@ -600,8 +600,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 },
                                 new condition
                                 {
-                                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                                    attribute = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items),
+                                    entityname = StandardizeAlias(entityAlias2, targetEntityAlias, items),
+                                    attribute = RemoveAttributeAlias(attrName2, entityAlias2, targetEntityAlias, items),
                                     @operator = @operator.notnull
                                 }
                             }
@@ -611,7 +611,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (op == @operator.eq && type == BooleanComparisonType.IsNotDistinctFrom)
                     {
                         // FetchXML eq operator does not match records where both fields are null.
-                        // This matches the logic for =, but IS DISTINCT FROM also allows nulls to match
+                        // This matches the logic for =, but IS NOT DISTINCT FROM also allows nulls to match
                         filter = new filter
                         {
                             type = filterType.or,
@@ -631,8 +631,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                         },
                                         new condition
                                         {
-                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                                            attribute = RemoveAttributeAlias(attrName2, entityAlias, targetEntityAlias, items),
+                                            entityname = StandardizeAlias(entityAlias2, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName2, entityAlias2, targetEntityAlias, items),
                                             @operator = @operator.@null
                                         }
                                     }
