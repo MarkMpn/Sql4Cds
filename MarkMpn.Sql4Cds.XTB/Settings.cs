@@ -66,6 +66,12 @@ namespace MarkMpn.Sql4Cds.XTB
         public ColumnOrdering ColumnOrdering { get; set; } = ColumnOrdering.Alphabetical;
 
         public string DockLayout { get; set; }
+
+        public string OpenAIEndpoint { get; set; }
+
+        public string OpenAIKey { get; set; }
+
+        public string AssistantID { get; set; }
     }
 
     public class TabContent

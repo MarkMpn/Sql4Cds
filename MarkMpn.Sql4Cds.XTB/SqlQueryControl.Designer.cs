@@ -31,6 +31,7 @@
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SqlQueryControl));
             this.splitContainer = new System.Windows.Forms.SplitContainer();
+            this.environmentHighlightLabel = new System.Windows.Forms.Label();
             this.tabControl = new System.Windows.Forms.TabControl();
             this.resultsTabPage = new System.Windows.Forms.TabPage();
             this.resultsFlowLayoutPanel = new System.Windows.Forms.FlowLayoutPanel();
@@ -56,7 +57,8 @@
             this.rowsLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.backgroundWorker = new System.ComponentModel.BackgroundWorker();
             this.timer = new System.Windows.Forms.Timer(this.components);
-            this.environmentHighlightLabel = new System.Windows.Forms.Label();
+            this.copilotSplitContainer = new System.Windows.Forms.SplitContainer();
+            this.copilotWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
             this.splitContainer.Panel1.SuspendLayout();
             this.splitContainer.Panel2.SuspendLayout();
@@ -66,18 +68,23 @@
             this.fetchXmlTabPage.SuspendLayout();
             this.gridContextMenuStrip.SuspendLayout();
             this.statusStrip.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.copilotSplitContainer)).BeginInit();
+            this.copilotSplitContainer.Panel2.SuspendLayout();
+            this.copilotSplitContainer.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.copilotWebView)).BeginInit();
             this.SuspendLayout();
             // 
             // splitContainer
             // 
             this.splitContainer.Dock = System.Windows.Forms.DockStyle.Fill;
             this.splitContainer.Location = new System.Drawing.Point(0, 0);
-            this.splitContainer.Margin = new System.Windows.Forms.Padding(2);
+            this.splitContainer.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.splitContainer.Name = "splitContainer";
             this.splitContainer.Orientation = System.Windows.Forms.Orientation.Horizontal;
             // 
             // splitContainer.Panel1
             // 
+            this.splitContainer.Panel1.Controls.Add(this.copilotSplitContainer);
             this.splitContainer.Panel1.Controls.Add(this.environmentHighlightLabel);
             // 
             // splitContainer.Panel2
@@ -85,10 +92,24 @@
             this.splitContainer.Panel2.AutoScroll = true;
             this.splitContainer.Panel2.Controls.Add(this.tabControl);
             this.splitContainer.Panel2Collapsed = true;
-            this.splitContainer.Size = new System.Drawing.Size(595, 452);
+            this.splitContainer.Size = new System.Drawing.Size(793, 561);
             this.splitContainer.SplitterDistance = 190;
             this.splitContainer.SplitterWidth = 2;
             this.splitContainer.TabIndex = 0;
+            // 
+            // environmentHighlightLabel
+            // 
+            this.environmentHighlightLabel.BackColor = System.Drawing.Color.Red;
+            this.environmentHighlightLabel.Dock = System.Windows.Forms.DockStyle.Top;
+            this.environmentHighlightLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.environmentHighlightLabel.ForeColor = System.Drawing.Color.White;
+            this.environmentHighlightLabel.Location = new System.Drawing.Point(0, 0);
+            this.environmentHighlightLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            this.environmentHighlightLabel.Name = "environmentHighlightLabel";
+            this.environmentHighlightLabel.Size = new System.Drawing.Size(793, 28);
+            this.environmentHighlightLabel.TabIndex = 0;
+            this.environmentHighlightLabel.Text = "Environment Name";
+            this.environmentHighlightLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // tabControl
             // 
@@ -98,18 +119,20 @@
             this.tabControl.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tabControl.ImageList = this.imageList;
             this.tabControl.Location = new System.Drawing.Point(0, 0);
+            this.tabControl.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.tabControl.Name = "tabControl";
             this.tabControl.SelectedIndex = 0;
-            this.tabControl.Size = new System.Drawing.Size(150, 46);
+            this.tabControl.Size = new System.Drawing.Size(200, 57);
             this.tabControl.TabIndex = 0;
             // 
             // resultsTabPage
             // 
             this.resultsTabPage.Controls.Add(this.resultsFlowLayoutPanel);
             this.resultsTabPage.ImageIndex = 0;
-            this.resultsTabPage.Location = new System.Drawing.Point(4, 23);
+            this.resultsTabPage.Location = new System.Drawing.Point(4, 25);
+            this.resultsTabPage.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.resultsTabPage.Name = "resultsTabPage";
-            this.resultsTabPage.Size = new System.Drawing.Size(142, 19);
+            this.resultsTabPage.Size = new System.Drawing.Size(192, 28);
             this.resultsTabPage.TabIndex = 0;
             this.resultsTabPage.Text = "Results";
             this.resultsTabPage.UseVisualStyleBackColor = true;
@@ -122,7 +145,7 @@
             this.resultsFlowLayoutPanel.Location = new System.Drawing.Point(0, 0);
             this.resultsFlowLayoutPanel.Margin = new System.Windows.Forms.Padding(0);
             this.resultsFlowLayoutPanel.Name = "resultsFlowLayoutPanel";
-            this.resultsFlowLayoutPanel.Size = new System.Drawing.Size(142, 19);
+            this.resultsFlowLayoutPanel.Size = new System.Drawing.Size(192, 28);
             this.resultsFlowLayoutPanel.TabIndex = 2;
             this.resultsFlowLayoutPanel.WrapContents = false;
             this.resultsFlowLayoutPanel.ClientSizeChanged += new System.EventHandler(this.ResizeLayoutPanel);
@@ -131,9 +154,10 @@
             // 
             this.fetchXmlTabPage.Controls.Add(this.fetchXMLFlowLayoutPanel);
             this.fetchXmlTabPage.ImageIndex = 1;
-            this.fetchXmlTabPage.Location = new System.Drawing.Point(4, 23);
+            this.fetchXmlTabPage.Location = new System.Drawing.Point(4, 25);
+            this.fetchXmlTabPage.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.fetchXmlTabPage.Name = "fetchXmlTabPage";
-            this.fetchXmlTabPage.Size = new System.Drawing.Size(142, 19);
+            this.fetchXmlTabPage.Size = new System.Drawing.Size(192, 28);
             this.fetchXmlTabPage.TabIndex = 2;
             this.fetchXmlTabPage.Text = "Execution Plan";
             this.fetchXmlTabPage.UseVisualStyleBackColor = true;
@@ -146,7 +170,7 @@
             this.fetchXMLFlowLayoutPanel.Location = new System.Drawing.Point(0, 0);
             this.fetchXMLFlowLayoutPanel.Margin = new System.Windows.Forms.Padding(0);
             this.fetchXMLFlowLayoutPanel.Name = "fetchXMLFlowLayoutPanel";
-            this.fetchXMLFlowLayoutPanel.Size = new System.Drawing.Size(142, 19);
+            this.fetchXMLFlowLayoutPanel.Size = new System.Drawing.Size(192, 28);
             this.fetchXMLFlowLayoutPanel.TabIndex = 1;
             this.fetchXMLFlowLayoutPanel.WrapContents = false;
             this.fetchXMLFlowLayoutPanel.ClientSizeChanged += new System.EventHandler(this.ResizeLayoutPanel);
@@ -154,10 +178,11 @@
             // messagesTabPage
             // 
             this.messagesTabPage.ImageIndex = 2;
-            this.messagesTabPage.Location = new System.Drawing.Point(4, 23);
+            this.messagesTabPage.Location = new System.Drawing.Point(4, 25);
+            this.messagesTabPage.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.messagesTabPage.Name = "messagesTabPage";
-            this.messagesTabPage.Padding = new System.Windows.Forms.Padding(3);
-            this.messagesTabPage.Size = new System.Drawing.Size(142, 19);
+            this.messagesTabPage.Padding = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.messagesTabPage.Size = new System.Drawing.Size(192, 28);
             this.messagesTabPage.TabIndex = 1;
             this.messagesTabPage.Text = "Messages";
             this.messagesTabPage.UseVisualStyleBackColor = true;
@@ -180,7 +205,7 @@
             this.copyRecordUrlToolStripMenuItem,
             this.createSELECTStatementToolStripMenuItem});
             this.gridContextMenuStrip.Name = "gridContextMenuStrip";
-            this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 142);
+            this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 120);
             this.gridContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.gridContextMenuStrip_Opening);
             // 
             // copyToolStripMenuItem
@@ -236,10 +261,11 @@
             this.orgNameLabel,
             this.timerLabel,
             this.rowsLabel});
-            this.statusStrip.Location = new System.Drawing.Point(0, 452);
+            this.statusStrip.Location = new System.Drawing.Point(0, 561);
             this.statusStrip.Name = "statusStrip";
+            this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 19, 0);
             this.statusStrip.ShowItemToolTips = true;
-            this.statusStrip.Size = new System.Drawing.Size(595, 22);
+            this.statusStrip.Size = new System.Drawing.Size(793, 22);
             this.statusStrip.SizingGrip = false;
             this.statusStrip.TabIndex = 1;
             this.statusStrip.Text = "statusStrip1";
@@ -249,7 +275,7 @@
             this.toolStripStatusLabel.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.ConnectFilled_grey_16x;
             this.toolStripStatusLabel.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.toolStripStatusLabel.Name = "toolStripStatusLabel";
-            this.toolStripStatusLabel.Size = new System.Drawing.Size(130, 17);
+            this.toolStripStatusLabel.Size = new System.Drawing.Size(323, 17);
             this.toolStripStatusLabel.Spring = true;
             this.toolStripStatusLabel.Text = "Connected";
             this.toolStripStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -323,27 +349,40 @@
             this.timer.Interval = 1000;
             this.timer.Tick += new System.EventHandler(this.timer_Tick);
             // 
-            // environmentHighlightLabel
+            // copilotSplitContainer
             // 
-            this.environmentHighlightLabel.BackColor = System.Drawing.Color.Red;
-            this.environmentHighlightLabel.Dock = System.Windows.Forms.DockStyle.Top;
-            this.environmentHighlightLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.environmentHighlightLabel.ForeColor = System.Drawing.Color.White;
-            this.environmentHighlightLabel.Location = new System.Drawing.Point(0, 0);
-            this.environmentHighlightLabel.Name = "environmentHighlightLabel";
-            this.environmentHighlightLabel.Size = new System.Drawing.Size(595, 23);
-            this.environmentHighlightLabel.TabIndex = 0;
-            this.environmentHighlightLabel.Text = "Environment Name";
-            this.environmentHighlightLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.copilotSplitContainer.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.copilotSplitContainer.FixedPanel = System.Windows.Forms.FixedPanel.Panel2;
+            this.copilotSplitContainer.Location = new System.Drawing.Point(0, 28);
+            this.copilotSplitContainer.Name = "copilotSplitContainer";
+            // 
+            // copilotSplitContainer.Panel2
+            // 
+            this.copilotSplitContainer.Panel2.Controls.Add(this.copilotWebView);
+            this.copilotSplitContainer.Size = new System.Drawing.Size(793, 533);
+            this.copilotSplitContainer.SplitterDistance = 600;
+            this.copilotSplitContainer.TabIndex = 1;
+            // 
+            // copilotWebView
+            // 
+            this.copilotWebView.AllowExternalDrop = true;
+            this.copilotWebView.CreationProperties = null;
+            this.copilotWebView.DefaultBackgroundColor = System.Drawing.Color.White;
+            this.copilotWebView.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.copilotWebView.Location = new System.Drawing.Point(0, 0);
+            this.copilotWebView.Name = "copilotWebView";
+            this.copilotWebView.Size = new System.Drawing.Size(189, 533);
+            this.copilotWebView.TabIndex = 0;
+            this.copilotWebView.ZoomFactor = 1D;
             // 
             // SqlQueryControl
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(595, 474);
+            this.ClientSize = new System.Drawing.Size(793, 583);
             this.Controls.Add(this.splitContainer);
             this.Controls.Add(this.statusStrip);
-            this.Margin = new System.Windows.Forms.Padding(2);
+            this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Name = "SqlQueryControl";
             this.splitContainer.Panel1.ResumeLayout(false);
             this.splitContainer.Panel2.ResumeLayout(false);
@@ -355,6 +394,10 @@
             this.gridContextMenuStrip.ResumeLayout(false);
             this.statusStrip.ResumeLayout(false);
             this.statusStrip.PerformLayout();
+            this.copilotSplitContainer.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.copilotSplitContainer)).EndInit();
+            this.copilotSplitContainer.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.copilotWebView)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -389,5 +432,7 @@
         private System.Windows.Forms.ToolStripMenuItem createSELECTStatementToolStripMenuItem;
         private System.Windows.Forms.Label environmentHighlightLabel;
         private System.Windows.Forms.ToolStripMenuItem copyRecordUrlToolStripMenuItem;
+        private System.Windows.Forms.SplitContainer copilotSplitContainer;
+        private Microsoft.Web.WebView2.WinForms.WebView2 copilotWebView;
     }
 }

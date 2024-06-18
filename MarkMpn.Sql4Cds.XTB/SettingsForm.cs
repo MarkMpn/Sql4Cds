@@ -44,6 +44,9 @@ namespace MarkMpn.Sql4Cds.XTB
             simpleSqlRadioButton.Checked = !settings.UseNativeSqlConversion;
             nativeSqlRadioButton.Checked = settings.UseNativeSqlConversion;
             schemaColumnOrderingCheckbox.Checked = settings.ColumnOrdering == ColumnOrdering.Strict;
+            openAiEndpointTextBox.Text = settings.OpenAIEndpoint;
+            openAiKeyTextBox.Text = settings.OpenAIKey;
+            assistantIdTextBox.Text = settings.AssistantID;
 
             SetSqlStyle(simpleSqlScintilla);
             SetSqlStyle(nativeSqlScintilla);
@@ -123,6 +126,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.UseNativeSqlConversion = nativeSqlRadioButton.Checked;
                 _settings.FetchXml2SqlOptions = _fetchXml2SqlOptions;
                 _settings.ColumnOrdering = schemaColumnOrderingCheckbox.Checked ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
+                _settings.OpenAIEndpoint = openAiEndpointTextBox.Text;
+                _settings.OpenAIKey = openAiKeyTextBox.Text;
+                _settings.AssistantID = assistantIdTextBox.Text;
             }
         }
 

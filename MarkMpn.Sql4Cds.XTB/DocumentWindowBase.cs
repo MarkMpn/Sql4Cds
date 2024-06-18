@@ -9,7 +9,7 @@ using System.Windows.Forms;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
-    public abstract class DocumentWindowBase : WeifenLuo.WinFormsUI.Docking.DockContent, IDocumentWindow
+    public class DocumentWindowBase : WeifenLuo.WinFormsUI.Docking.DockContent, IDocumentWindow
     {
         private bool _modified;
         private string _displayName;
@@ -88,9 +88,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 Content = tab.Query;
         }
 
-        protected abstract string Type { get; }
+        protected virtual string Type { get; }
 
-        public abstract string Content { get; set; }
+        public virtual string Content { get; set; }
 
         public void Open(string filename)
         {

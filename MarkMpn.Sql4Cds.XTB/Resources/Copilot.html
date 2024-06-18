@@ -1,0 +1,160 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <style type="text/css">
+        html, body {
+            height: 100%;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 14px;
+            margin: 0;
+            padding: 4px;
+            background-color: #f4f4f4;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        #result {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px;
+        }
+            #result .block {
+                border-radius: 4px;
+                box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
+                width: 80%;
+                padding: 10px;
+                background-color: white;
+            }
+            #result .question {
+                margin-top: 10px;
+                margin-left: auto;
+                display: flex;
+                width: 80%;
+            }
+                #result .question .block {
+                    margin-right: 10px;
+                }
+            #result .answer {
+                margin-top: 10px;
+                margin-right: auto;
+                display: flex;
+                width: 80%;
+            }
+                #result .answer .block {
+                    margin-left: 10px;
+                }
+                    #result .answer .block pre {
+                        overflow-x: auto;
+                        position: relative;
+                    }
+                    #result .answer .block div:has(>pre) {
+                        position: relative;
+                    }
+
+        #copilot {
+            box-sizing: border-box;
+            font-family: inherit;
+            background-color: white;
+            padding: 4px;
+            border-radius: 4px;
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
+        }
+        #send {
+            height: 16px;
+            width: 16px;
+            fill: #727272;
+            display: block;
+            margin-left: auto;
+            cursor: pointer;
+        }
+        #send:hover {
+            fill: #0078d4;
+        }
+
+        .copyCode {
+            fill: white;
+            position: absolute;
+            right: 0;
+            height: 16px;
+            width: 16px;
+            cursor: pointer;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="result"></div>
+        <div id="controls">
+            <textarea id="copilot" placeholder="Enter your question here, e.g. &quot;Summarize the open opportunities by salesperson&quot; or &quot;Explain this query&quot;" style="width: 100%; height: 100px"></textarea>
+            <svg id="send" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" focusable="false"><path d="M1997 960L18 1843l220-883L18 77l1979 883zM206 301l149 598h1190L206 301zm147 726l-147 592 1327-592H353z"></path></svg>
+        </div>
+    </div>
+
+    <div style="display: none">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="userIcon" style="height: 24px; width: 24px"><path d="M2048 1536v128h-646l211 211-90 90-365-365 365-365 90 90-211 211h646zm-756-433l-88 93q-89-84-201-128t-235-44q-88 0-170 23t-153 64-129 100-100 130-65 153-23 170H0q0-117 35-229t101-207 157-169 203-113q-56-36-100-83t-76-103-47-118-17-130q0-106 40-199t109-163T568 40 768 0q106 0 199 40t163 109 110 163 40 200q0 137-63 248t-177 186q70 26 133 66t119 91zM384 512q0 80 30 149t82 122 122 83 150 30q79 0 149-30t122-82 83-122 30-150q0-79-30-149t-82-122-123-83-149-30q-80 0-149 30t-122 82-83 123-30 149z"></path></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="botIcon" style="height: 24px; width: 24px"><path d="M768 1024H640V896h128v128zm512 0h-128V896h128v128zm512-128v256h-128v320q0 40-15 75t-41 61-61 41-75 15h-264l-440 376v-376H448q-40 0-75-15t-61-41-41-61-15-75v-320H128V896h128V704q0-40 15-75t41-61 61-41 75-15h448V303q-29-17-46-47t-18-64q0-27 10-50t27-40 41-28 50-10q27 0 50 10t40 27 28 41 10 50q0 34-17 64t-47 47v209h448q40 0 75 15t61 41 41 61 15 75v192h128zm-256-192q0-26-19-45t-45-19H448q-26 0-45 19t-19 45v768q0 26 19 45t45 19h448v226l264-226h312q26 0 45-19t19-45V704zm-851 462q55 55 126 84t149 30q78 0 149-29t126-85l90 91q-73 73-167 112t-198 39q-103 0-197-39t-168-112l90-91z"></path></svg>
+    </div>
+
+    <script type="text/javascript">
+        const result = document.getElementById('result');
+        const copilot = document.getElementById('copilot');
+        const send = document.getElementById('send');
+        const user = document.getElementById('userIcon');
+        const bot = document.getElementById('botIcon');
+
+        handler = async () => {
+            const question = copilot.value;
+            if (question) {
+                const div = document.createElement('div');
+                div.className = 'question';
+                const block = document.createElement('div');
+                block.className = 'block';
+                block.textContent = question;
+                div.appendChild(block);
+                const icon = user.cloneNode(true);
+                div.appendChild(icon);
+                result.appendChild(div);
+                copilot.value = '';
+                div.scrollIntoView();
+
+                const responses = await window.chrome.webview.hostObjects.sql4cds.SendMessage(question);
+
+                responses.forEach(response => {
+                    const div = document.createElement('div');
+                    div.className = 'answer';
+                    const block = document.createElement('div');
+                    block.className = 'block';
+                    block.innerHTML = response;
+                    const icon = bot.cloneNode(true);
+                    div.appendChild(icon);
+                    div.appendChild(block);
+                    result.appendChild(div);
+                    div.scrollIntoView();
+
+                    block.querySelector(".copyCode").addEventListener('click', e => {
+                        const code = e.target.parentNode.querySelector("pre").textContent;
+                        navigator.clipboard.writeText(code);
+                    });
+                });
+            }
+        };
+
+        send.addEventListener('click', handler);
+        copilot.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handler();
+            }
+        });
+    </script>
+</body>
+</html>

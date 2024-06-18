@@ -9,23 +9,36 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.ServiceModel;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Web;
 using System.Windows.Forms;
 using AutocompleteMenuNS;
+using Azure.AI.OpenAI.Assistants;
+using Azure.Core;
+using Azure.Identity;
+using Markdig;
 using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
+using Microsoft.Extensions.Azure;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
+using Newtonsoft.Json;
 using ScintillaNET;
 using xrmtb.XrmToolBox.Controls.Controls;
+using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -37,6 +50,8 @@ namespace MarkMpn.Sql4Cds.XTB
             public bool Execute { get; set; }
             public bool IncludeFetchXml { get; set; }
             public int Offset { get; set; }
+            public ManualResetEventSlim Event { get; set; }
+            public List<string> Result { get; set; }
         }
 
         class QueryException : ApplicationException
@@ -116,13 +131,14 @@ namespace MarkMpn.Sql4Cds.XTB
             _progressHost = new ToolStripControlHost(progressImage) { Visible = false };
             statusStrip.Items.Insert(0, _progressHost);
 
-            splitContainer.Panel1.Controls.Add(_editor);
-            splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
+            copilotSplitContainer.Panel1.Controls.Add(_editor);
             Icon = _sqlIcon;
 
             Connect();
 
             ChangeConnection(con);
+
+            _ = InitCopilot();
         }
 
         protected override string Type => "SQL";
@@ -589,6 +605,21 @@ namespace MarkMpn.Sql4Cds.XTB
             backgroundWorker.RunWorkerAsync(_params);
         }
 
+        internal List<string> Execute(string sql)
+        {
+            if (Connection == null)
+                throw new InvalidOperationException("Not connected");
+
+            if (backgroundWorker.IsBusy)
+                throw new InvalidOperationException("Another query is already executing");
+
+            var ev = new ManualResetEventSlim(false);
+            _params = new ExecuteParams { Sql = sql, Execute = true, IncludeFetchXml = false, Offset = 0, Event = ev, Result = new List<string>() };
+            Execute(() => backgroundWorker.RunWorkerAsync(_params));
+            ev.Wait();
+            return _params.Result;
+        }
+
         public bool Busy => backgroundWorker.IsBusy;
 
         public event EventHandler BusyChanged;
@@ -843,7 +874,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
-            _editor.Focus();
+            if (_params.Event != null)
+                _params.Event.Set();
+            else
+                _editor.Focus();
         }
 
         private IRootExecutionPlanNode GetRootNode(IExecutionPlanNode node)
@@ -917,6 +951,12 @@ namespace MarkMpn.Sql4Cds.XTB
         private void AddMessage(int index, int length, string message, MessageType messageType)
         {
             message = message.Trim();
+
+            if (_params.Event != null)
+            {
+                _params.Result.Add(JsonConvert.SerializeObject(new { messageType, message }));
+                return;
+            }
 
             var scintilla = (Scintilla)messagesTabPage.Controls[0];
             var line = scintilla.Lines.Count - 1;
@@ -1081,174 +1121,218 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             if (results != null)
             {
-                var grid = new DataGridView();
-
-                grid.AllowUserToAddRows = false;
-                grid.AllowUserToDeleteRows = false;
-                grid.AllowUserToOrderColumns = true;
-                grid.AllowUserToResizeRows = false;
-                grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
-                grid.AutoGenerateColumns = false;
-                grid.BackgroundColor = SystemColors.Window;
-                grid.BorderStyle = BorderStyle.None;
-                grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
-                grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
-                grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-                grid.EnableHeadersVisualStyles = false;
-                grid.ReadOnly = true;
-                grid.RowHeadersWidth = 24;
-                grid.ShowEditingIcon = false;
-                grid.ContextMenuStrip = gridContextMenuStrip;
-                grid.DataSource = results;
-
-                foreach (DataColumn col in results.Columns)
+                if (_params.Event != null)
                 {
-                    grid.Columns.Add(new DataGridViewTextBoxColumn
+                    var rows = new List<Dictionary<string, object>>(results.Rows.Count);
+
+                    foreach (DataRow row in results.Rows)
                     {
-                        DataPropertyName = col.ColumnName,
-                        HeaderText = col.Caption,
-                        ValueType = col.DataType,
-                        FillWeight = 1,
-                    });
-                }
+                        var dict = new Dictionary<string, object>();
 
-                if (_linkFont == null)
-                    _linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
+                        for (var i = 0; i < results.Columns.Count; i++)
+                            dict[results.Columns[i].ColumnName] = row[i];
 
-                grid.CellFormatting += FormatCell;
-
-                var specialPaintingChars = new[] { '\r', '\n', '\t' };
-                grid.CellPainting += (s, e) =>
-                {
-                    if (e.Value is string str && str.IndexOfAny(specialPaintingChars) != -1)
-                    {
-                        e.PaintBackground(e.ClipBounds, true);
-
-                        var gv = (DataGridView)s;
-                        var text = str.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
-                        var rect = e.CellBounds;
-                        rect.X += BorderThickness(e.AdvancedBorderStyle.Left);
-                        rect.Y += BorderThickness(e.AdvancedBorderStyle.Top);
-                        rect.Width -= BorderThickness(e.AdvancedBorderStyle.Right) + BorderThickness(e.AdvancedBorderStyle.Left) + gv.Columns[e.ColumnIndex].DividerWidth;
-                        rect.Height -= BorderThickness(e.AdvancedBorderStyle.Bottom) + BorderThickness(e.AdvancedBorderStyle.Top) + gv.Rows[e.RowIndex].DividerHeight;
-                        rect.X += e.CellStyle.Padding.Left;
-                        rect.Y += e.CellStyle.Padding.Top;
-                        rect.Width -= e.CellStyle.Padding.Horizontal + e.CellStyle.Padding.Left;
-                        rect.Height -= e.CellStyle.Padding.Vertical + e.CellStyle.Padding.Top;
-                        var selected = (e.State & DataGridViewElementStates.Selected) != 0;
-                        var textFormatFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.EndEllipsis;
-                        TextRenderer.DrawText(e.Graphics, text, e.CellStyle.Font, rect, selected ? e.CellStyle.SelectionForeColor : e.CellStyle.ForeColor, textFormatFlags);
-                        e.Handled = true;
+                        rows.Add(dict);
                     }
-                };
 
-                grid.CellMouseEnter += (s, e) =>
+                    var json = JsonConvert.SerializeObject(rows);
+                    _params.Result.Add(json);
+                }
+                else
                 {
-                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
-                        return;
+                    var grid = new DataGridView();
 
-                    var gv = (DataGridView)s;
-                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+                    grid.AllowUserToAddRows = false;
+                    grid.AllowUserToDeleteRows = false;
+                    grid.AllowUserToOrderColumns = true;
+                    grid.AllowUserToResizeRows = false;
+                    grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
+                    grid.AutoGenerateColumns = false;
+                    grid.BackgroundColor = SystemColors.Window;
+                    grid.BorderStyle = BorderStyle.None;
+                    grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
+                    grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
+                    grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+                    grid.EnableHeadersVisualStyles = false;
+                    grid.ReadOnly = true;
+                    grid.RowHeadersWidth = 24;
+                    grid.ShowEditingIcon = false;
+                    grid.ContextMenuStrip = gridContextMenuStrip;
+                    grid.DataSource = results;
 
-                    if (cell.Value is SqlEntityReference er && !er.IsNull ||
-                        cell.Value is SqlXml xml && !xml.IsNull)
-                        gv.Cursor = Cursors.Hand;
-                    else
-                        gv.Cursor = Cursors.Default;
-                };
-
-                grid.CellMouseLeave += (s, e) =>
-                {
-                    var gv = (DataGridView)s;
-                    gv.Cursor = Cursors.Default;
-                };
-
-                grid.CellMouseDown += (s, e) =>
-                {
-                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
-                        return;
-
-                    if (e.Button != MouseButtons.Right)
-                        return;
-
-                    var gv = (DataGridView)s;
-                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
-
-                    if (cell.Selected)
-                        return;
-
-                    gv.CurrentCell = cell;
-                };
-
-                grid.CellContentDoubleClick += (s, e) =>
-                {
-                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
-                        return;
-
-                    var gv = (DataGridView)s;
-                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
-
-                    if (cell.Value is SqlEntityReference er && !er.IsNull)
-                        OpenRecord(er);
-                    else if (cell.Value is SqlXml xml && !xml.IsNull)
-                        ShowFetchXML(xml.Value);
-                };
-
-                if (Settings.Instance.AutoSizeColumns)
-                    grid.DataBindingComplete += (s, e) => ((DataGridView)s).AutoResizeColumns();
-
-                grid.RowPostPaint += (s, e) =>
-                {
-                    var rowIdx = (e.RowIndex + 1).ToString();
-
-                    var centerFormat = new System.Drawing.StringFormat()
+                    foreach (DataColumn col in results.Columns)
                     {
-                        Alignment = StringAlignment.Far,
-                        LineAlignment = StringAlignment.Center,
-                        FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
-                        Trimming = StringTrimming.EllipsisCharacter
+                        grid.Columns.Add(new DataGridViewTextBoxColumn
+                        {
+                            DataPropertyName = col.ColumnName,
+                            HeaderText = col.Caption,
+                            ValueType = col.DataType,
+                            FillWeight = 1,
+                        });
+                    }
+
+                    if (_linkFont == null)
+                        _linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
+
+                    grid.CellFormatting += FormatCell;
+
+                    var specialPaintingChars = new[] { '\r', '\n', '\t' };
+                    grid.CellPainting += (s, e) =>
+                    {
+                        if (e.Value is string str && str.IndexOfAny(specialPaintingChars) != -1)
+                        {
+                            e.PaintBackground(e.ClipBounds, true);
+
+                            var gv = (DataGridView)s;
+                            var text = str.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
+                            var rect = e.CellBounds;
+                            rect.X += BorderThickness(e.AdvancedBorderStyle.Left);
+                            rect.Y += BorderThickness(e.AdvancedBorderStyle.Top);
+                            rect.Width -= BorderThickness(e.AdvancedBorderStyle.Right) + BorderThickness(e.AdvancedBorderStyle.Left) + gv.Columns[e.ColumnIndex].DividerWidth;
+                            rect.Height -= BorderThickness(e.AdvancedBorderStyle.Bottom) + BorderThickness(e.AdvancedBorderStyle.Top) + gv.Rows[e.RowIndex].DividerHeight;
+                            rect.X += e.CellStyle.Padding.Left;
+                            rect.Y += e.CellStyle.Padding.Top;
+                            rect.Width -= e.CellStyle.Padding.Horizontal + e.CellStyle.Padding.Left;
+                            rect.Height -= e.CellStyle.Padding.Vertical + e.CellStyle.Padding.Top;
+                            var selected = (e.State & DataGridViewElementStates.Selected) != 0;
+                            var textFormatFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.EndEllipsis;
+                            TextRenderer.DrawText(e.Graphics, text, e.CellStyle.Font, rect, selected ? e.CellStyle.SelectionForeColor : e.CellStyle.ForeColor, textFormatFlags);
+                            e.Handled = true;
+                        }
                     };
 
-                    var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth - 2, e.RowBounds.Height);
-                    e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
-                };
+                    grid.CellMouseEnter += (s, e) =>
+                    {
+                        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                            return;
 
-                var rowCount = results.Rows.Count;
+                        var gv = (DataGridView)s;
+                        var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
 
-                AddResult(grid, rowCount);
+                        if (cell.Value is SqlEntityReference er && !er.IsNull ||
+                            cell.Value is SqlXml xml && !xml.IsNull)
+                            gv.Cursor = Cursors.Hand;
+                        else
+                            gv.Cursor = Cursors.Default;
+                    };
+
+                    grid.CellMouseLeave += (s, e) =>
+                    {
+                        var gv = (DataGridView)s;
+                        gv.Cursor = Cursors.Default;
+                    };
+
+                    grid.CellMouseDown += (s, e) =>
+                    {
+                        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                            return;
+
+                        if (e.Button != MouseButtons.Right)
+                            return;
+
+                        var gv = (DataGridView)s;
+                        var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                        if (cell.Selected)
+                            return;
+
+                        gv.CurrentCell = cell;
+                    };
+
+                    grid.CellContentDoubleClick += (s, e) =>
+                    {
+                        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                            return;
+
+                        var gv = (DataGridView)s;
+                        var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                        if (cell.Value is SqlEntityReference er && !er.IsNull)
+                            OpenRecord(er);
+                        else if (cell.Value is SqlXml xml && !xml.IsNull)
+                            ShowFetchXML(xml.Value);
+                    };
+
+                    if (Settings.Instance.AutoSizeColumns)
+                        grid.DataBindingComplete += (s, e) => ((DataGridView)s).AutoResizeColumns();
+
+                    grid.RowPostPaint += (s, e) =>
+                    {
+                        var rowIdx = (e.RowIndex + 1).ToString();
+
+                        var centerFormat = new System.Drawing.StringFormat()
+                        {
+                            Alignment = StringAlignment.Far,
+                            LineAlignment = StringAlignment.Center,
+                            FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
+                            Trimming = StringTrimming.EllipsisCharacter
+                        };
+
+                        var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth - 2, e.RowBounds.Height);
+                        e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
+                    };
+
+                    var rowCount = results.Rows.Count;
+
+                    AddResult(grid, rowCount);
+                }
             }
             else if (msg != null)
             {
-                AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, MessageType.Info);
+                if (_params.Event != null)
+                    _params.Result.Add(JsonConvert.SerializeObject(msg));
+                else
+                    AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, MessageType.Info);
             }
             else if (args.IncludeFetchXml)
             {
-                var plan = new Panel();
-                var fetchLabel = new System.Windows.Forms.Label
+                if (_params.Event != null)
                 {
-                    Text = query.Sql,
-                    AutoSize = false,
-                    Dock = DockStyle.Top,
-                    Height = 32,
-                    BorderStyle = BorderStyle.FixedSingle,
-                    Padding = new Padding(4),
-                    BackColor = SystemColors.Info,
-                    ForeColor = SystemColors.InfoText,
-                    AutoEllipsis = true,
-                    UseMnemonic = false
-                };
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources.ToDictionary(kvp => kvp.Key, kvp => (Engine.DataSource)kvp.Value) };
-                planView.Plan = query;
-                planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected, !args.Execute);
-                planView.DoubleClick += (s, e) =>
-                {
-                    if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
-                        ShowFetchXML(fetchXml.FetchXmlString);
-                };
-                plan.Controls.Add(planView);
-                plan.Controls.Add(fetchLabel);
+                    var fetchXmlNodes = GetAllNodes(query).OfType<IFetchXmlExecutionPlanNode>();
 
-                AddExecutionPlan(plan);
+                    foreach (var node in fetchXmlNodes)
+                        _params.Result.Add(JsonConvert.SerializeObject(node.FetchXmlString));
+                }
+                else
+                {
+                    var plan = new Panel();
+                    var fetchLabel = new System.Windows.Forms.Label
+                    {
+                        Text = query.Sql,
+                        AutoSize = false,
+                        Dock = DockStyle.Top,
+                        Height = 32,
+                        BorderStyle = BorderStyle.FixedSingle,
+                        Padding = new Padding(4),
+                        BackColor = SystemColors.Info,
+                        ForeColor = SystemColors.InfoText,
+                        AutoEllipsis = true,
+                        UseMnemonic = false
+                    };
+                    var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources.ToDictionary(kvp => kvp.Key, kvp => (Engine.DataSource)kvp.Value) };
+                    planView.Plan = query;
+                    planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected, !args.Execute);
+                    planView.DoubleClick += (s, e) =>
+                    {
+                        if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
+                            ShowFetchXML(fetchXml.FetchXmlString);
+                    };
+                    plan.Controls.Add(planView);
+                    plan.Controls.Add(fetchLabel);
+
+                    AddExecutionPlan(plan);
+                }
+            }
+        }
+
+        private IEnumerable<IExecutionPlanNode> GetAllNodes(IExecutionPlanNode node)
+        {
+            foreach (var source in node.GetSources())
+            {
+                yield return source;
+
+                foreach (var subSource in GetAllNodes(source))
+                    yield return subSource;
             }
         }
 
@@ -1374,7 +1458,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {
             toolStripStatusLabel.Image = null;
-            toolStripStatusLabel.Text = (string) e.UserState;
+            toolStripStatusLabel.Text = (string)e.UserState;
         }
 
         private void timer_Tick(object sender, EventArgs e)
@@ -1839,6 +1923,146 @@ namespace MarkMpn.Sql4Cds.XTB
                 container = control as IContainerControl;
             }
             return control;
+        }
+
+        private async Task InitCopilot()
+        {
+            await copilotWebView.EnsureCoreWebView2Async();
+            copilotWebView.Source = new Uri(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Copilot.html"));
+            copilotWebView.CoreWebView2.AddHostObjectToScript("sql4cds", new CopilotScriptObject(this));
+        }
+    }
+
+    [ClassInterface(ClassInterfaceType.AutoDual)]
+    [ComVisible(true)]
+    public class CopilotScriptObject
+    {
+        private readonly SqlQueryControl _control;
+        private readonly MarkdownPipeline _markdownPipeline;
+        private AssistantsClient _assistant;
+        private AssistantThread _assistantThread;
+        private string _lastMessage;
+
+        internal CopilotScriptObject(SqlQueryControl control)
+        {
+            _markdownPipeline = new MarkdownPipelineBuilder()
+                .UseAdvancedExtensions()
+                .UseSqlCodeBlockHandling()
+                .Build();
+            _control = control;
+        }
+
+        public async Task<string[]> SendMessage(string request)
+        {
+            if (_assistant == null)
+            {
+                _assistant = new AssistantsClient(new Uri(Settings.Instance.OpenAIEndpoint), new Azure.AzureKeyCredential(Settings.Instance.OpenAIKey));
+            }
+
+            if (_assistantThread == null)
+            {
+                _assistantThread = await _assistant.CreateThreadAsync();
+            }
+
+            ThreadMessage message = await _assistant.CreateMessageAsync(
+                _assistantThread.Id,
+                MessageRole.User,
+                request);
+
+            ThreadRun run = await _assistant.CreateRunAsync(_assistantThread.Id, new CreateRunOptions(Settings.Instance.AssistantID));
+
+            do
+            {
+                if (run.RequiredAction is SubmitToolOutputsAction submitToolOutputs)
+                {
+                    var toolOutputs = new List<ToolOutput>();
+                    var dataSource = _control.DataSources[_control.Connection.ConnectionName];
+
+                    foreach (var func in submitToolOutputs.ToolCalls.OfType<RequiredFunctionToolCall>())
+                    {
+                        var args = JsonConvert.DeserializeObject<Dictionary<string, string>>(func.Arguments);
+
+                        switch (func.Name)
+                        {
+                            case "list_tables":
+                                
+                                var entities = ((RetrieveAllEntitiesResponse)dataSource.Connection.Execute(new RetrieveAllEntitiesRequest() { EntityFilters = Microsoft.Xrm.Sdk.Metadata.EntityFilters.Entity })).EntityMetadata;
+                                var response = entities.ToDictionary(e => e.LogicalName, e => new { displayName = e.DisplayName?.UserLocalizedLabel?.Label, description = e.Description?.UserLocalizedLabel?.Label });
+                                toolOutputs.Add(new ToolOutput(func, JsonConvert.SerializeObject(response, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })));
+                                break;
+
+                            case "get_columns_in_table":
+                                var entity = args["table_name"];
+                                dataSource.Metadata.TryGetValue(entity, out var metadata);
+
+                                if (metadata == null)
+                                {
+                                    toolOutputs.Add(new ToolOutput(func, JsonConvert.SerializeObject(new { success = false, error = $"The table '{entity}' does not exist in this environment" })));
+                                }
+                                else
+                                {
+                                    var columns = metadata.Attributes.ToDictionary(a => a.LogicalName, a => new { displayName = a.DisplayName?.UserLocalizedLabel?.Label, description = a.Description?.UserLocalizedLabel?.Label, type = a.AttributeTypeName?.Value });
+                                    toolOutputs.Add(new ToolOutput(func, JsonConvert.SerializeObject(columns, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })));
+                                }
+                                break;
+
+                            case "get_current_query":
+                                toolOutputs.Add(new ToolOutput(func, _control.Sql));
+                                break;
+
+                            case "execute_query":
+                                // Check if the user has seen this query in the previous message
+                                var query = args["query"];
+                                if (_lastMessage == null || !_lastMessage.Contains(query))
+                                {
+                                    toolOutputs.Add(new ToolOutput(func, JsonConvert.SerializeObject(new { success = false, error = "User has not been shown this query yet. Confirm with the user if they want to run it first." })));
+                                }
+                                else
+                                {
+                                    var results = await Task.Run(() => _control.Execute(query));
+
+                                    if (results.Count == 1)
+                                        toolOutputs.Add(new ToolOutput(func, results[0]));
+                                    else
+                                        toolOutputs.Add(new ToolOutput(func, JsonConvert.SerializeObject(results)));
+                                }
+                                break;
+
+                            default:
+                                break;
+                        }
+                    }
+
+                    run = await _assistant.SubmitToolOutputsToRunAsync(run, toolOutputs);
+                }
+
+                do
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(0.5));
+                    run = await _assistant.GetRunAsync(_assistantThread.Id, run.Id);
+                }
+                while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress);
+            } while (run.Status == RunStatus.RequiresAction);
+
+            PageableList<ThreadMessage> messagePages = await _assistant.GetMessagesAsync(_assistantThread.Id);
+            var messages = messagePages.Data;
+
+            var passedInputMessage = false;
+            var responses = new List<string>();
+
+            foreach (var threadMessage in messages.Reverse().SkipWhile(msg => { if (passedInputMessage) return false; if (msg.Id == message.Id) passedInputMessage = true; return true; }))
+            {
+                foreach (var contentItem in threadMessage.ContentItems)
+                {
+                    if (contentItem is MessageTextContent textItem)
+                    {
+                        responses.Add(Markdown.ToHtml(textItem.Text, _markdownPipeline));
+                        _lastMessage = textItem.Text;
+                    }
+                }
+            }
+
+            return responses.ToArray();
         }
     }
 }
