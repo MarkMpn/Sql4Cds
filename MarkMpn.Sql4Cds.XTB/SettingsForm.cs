@@ -47,6 +47,7 @@ namespace MarkMpn.Sql4Cds.XTB
             openAiEndpointTextBox.Text = settings.OpenAIEndpoint;
             openAiKeyTextBox.Text = settings.OpenAIKey;
             assistantIdTextBox.Text = settings.AssistantID;
+            allowCopilotSelectQueriesCheckBox.Checked = settings.AllowCopilotSelectQueries;
 
             SetSqlStyle(simpleSqlScintilla);
             SetSqlStyle(nativeSqlScintilla);
@@ -129,6 +130,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.OpenAIEndpoint = openAiEndpointTextBox.Text;
                 _settings.OpenAIKey = openAiKeyTextBox.Text;
                 _settings.AssistantID = assistantIdTextBox.Text;
+                _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
             }
         }
 

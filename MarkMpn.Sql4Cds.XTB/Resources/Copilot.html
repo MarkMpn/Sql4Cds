@@ -58,14 +58,50 @@
                     #result .answer .block div:has(>pre) {
                         position: relative;
                     }
-
-        #copilot {
-            box-sizing: border-box;
-            font-family: inherit;
+            #result .suggestion {
+                margin-top: 10px;
+                margin-right: auto;
+                display: flex;
+                width: 80%;
+            }
+                #result .suggestion .block {
+                    margin-left: 10px;
+                }
+                #result .suggestion.info .block {
+                    background-color: #f1faf1;
+                }
+                #result .suggestion.warning .block {
+                    background-color: #fff9f5;
+                }
+        button {
+            display: block;
             background-color: white;
+            border: 1px solid #0078d4;
+            border-radius: 4px;
+            padding: 4px;
+            cursor: pointer;
+        }
+        #controls {
             padding: 4px;
             border-radius: 4px;
             box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
+            border: solid 1px #727272;
+            background-color: white;
+        }
+        #copilot {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            min-height: 60px;
+            outline: none;
+        }
+        #copilot:empty::before {
+            content: "Enter your question here";
+            color: #727272;
+            cursor: text;
+        }
+        #copilot:focus:empty::before {
+            content: "";
         }
         #send {
             height: 16px;
@@ -78,6 +114,10 @@
         #send:hover {
             fill: #0078d4;
         }
+        #send.disabled {
+            fill: #727272 !important;
+            cursor: not-allowed;
+        }
 
         .copyCode {
             fill: white;
@@ -88,20 +128,31 @@
             cursor: pointer;
             z-index: 1;
         }
+
+        #processing {
+            color: #0078d4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <div id="result"></div>
         <div id="controls">
-            <textarea id="copilot" placeholder="Enter your question here, e.g. &quot;Summarize the open opportunities by salesperson&quot; or &quot;Explain this query&quot;" style="width: 100%; height: 100px"></textarea>
-            <svg id="send" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" focusable="false"><path d="M1997 960L18 1843l220-883L18 77l1979 883zM206 301l149 598h1190L206 301zm147 726l-147 592 1327-592H353z"></path></svg>
+            <span id="copilot" role="textbox" contenteditable></span>
+            <svg id="send" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048"><path d="M1997 960L18 1843l220-883L18 77l1979 883zM206 301l149 598h1190L206 301zm147 726l-147 592 1327-592H353z"></path></svg>
         </div>
     </div>
 
     <div style="display: none">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="userIcon" style="height: 24px; width: 24px"><path d="M2048 1536v128h-646l211 211-90 90-365-365 365-365 90 90-211 211h646zm-756-433l-88 93q-89-84-201-128t-235-44q-88 0-170 23t-153 64-129 100-100 130-65 153-23 170H0q0-117 35-229t101-207 157-169 203-113q-56-36-100-83t-76-103-47-118-17-130q0-106 40-199t109-163T568 40 768 0q106 0 199 40t163 109 110 163 40 200q0 137-63 248t-177 186q70 26 133 66t119 91zM384 512q0 80 30 149t82 122 122 83 150 30q79 0 149-30t122-82 83-122 30-150q0-79-30-149t-82-122-123-83-149-30q-80 0-149 30t-122 82-83 123-30 149z"></path></svg>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="botIcon" style="height: 24px; width: 24px"><path d="M768 1024H640V896h128v128zm512 0h-128V896h128v128zm512-128v256h-128v320q0 40-15 75t-41 61-61 41-75 15h-264l-440 376v-376H448q-40 0-75-15t-61-41-41-61-15-75v-320H128V896h128V704q0-40 15-75t41-61 61-41 75-15h448V303q-29-17-46-47t-18-64q0-27 10-50t27-40 41-28 50-10q27 0 50 10t40 27 28 41 10 50q0 34-17 64t-47 47v209h448q40 0 75 15t61 41 41 61 15 75v192h128zm-256-192q0-26-19-45t-45-19H448q-26 0-45 19t-19 45v768q0 26 19 45t45 19h448v226l264-226h312q26 0 45-19t19-45V704zm-851 462q55 55 126 84t149 30q78 0 149-29t126-85l90 91q-73 73-167 112t-198 39q-103 0-197-39t-168-112l90-91z"></path></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="userIcon" style="min-height: 24px; min-width: 24px; height: 24px; width: 24px"><path d="M2048 1536v128h-646l211 211-90 90-365-365 365-365 90 90-211 211h646zm-756-433l-88 93q-89-84-201-128t-235-44q-88 0-170 23t-153 64-129 100-100 130-65 153-23 170H0q0-117 35-229t101-207 157-169 203-113q-56-36-100-83t-76-103-47-118-17-130q0-106 40-199t109-163T568 40 768 0q106 0 199 40t163 109 110 163 40 200q0 137-63 248t-177 186q70 26 133 66t119 91zM384 512q0 80 30 149t82 122 122 83 150 30q79 0 149-30t122-82 83-122 30-150q0-79-30-149t-82-122-123-83-149-30q-80 0-149 30t-122 82-83 123-30 149z"></path></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="botIcon" style="min-height: 24px; min-width: 24px; height: 24px; width: 24px"><path d="M768 1024H640V896h128v128zm512 0h-128V896h128v128zm512-128v256h-128v320q0 40-15 75t-41 61-61 41-75 15h-264l-440 376v-376H448q-40 0-75-15t-61-41-41-61-15-75v-320H128V896h128V704q0-40 15-75t41-61 61-41 75-15h448V303q-29-17-46-47t-18-64q0-27 10-50t27-40 41-28 50-10q27 0 50 10t40 27 28 41 10 50q0 34-17 64t-47 47v209h448q40 0 75 15t61 41 41 61 15 75v192h128zm-256-192q0-26-19-45t-45-19H448q-26 0-45 19t-19 45v768q0 26 19 45t45 19h448v226l264-226h312q26 0 45-19t19-45V704zm-851 462q55 55 126 84t149 30q78 0 149-29t126-85l90 91q-73 73-167 112t-198 39q-103 0-197-39t-168-112l90-91z"></path></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="info" style="min-height: 24px; min-width: 24px; height: 24px; width: 24px; fill: #0078d4"><path d="M960 1920q-133 0-255-34t-230-96-194-150-150-195-97-229T0 960q0-133 34-255t96-230 150-194 195-150 229-97T960 0q133 0 255 34t230 96 194 150 150 195 97 229 34 256q0 133-34 255t-96 230-150 194-195 150-229 97-256 34zm0-1792q-115 0-221 30t-198 84-169 130-130 168-84 199-30 221q0 114 30 220t84 199 130 169 168 130 199 84 221 30q114 0 220-30t199-84 169-130 130-168 84-199 30-221q0-114-30-220t-84-199-130-169-168-130-199-84-221-30zm-64 640h128v640H896V768zm0-256h128v128H896V512z"></path></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" id="warning" style="min-height: 24px; min-width: 24px; height: 24px; width: 24px; fill: #bc4b09"><path d="M1920 1920H0L960 0l960 1920zM207 1792h1506L960 286 207 1792zm817-1024v640H896V768h128zm-128 768h128v128H896v-128z"></path></svg>
     </div>
 
     <script type="text/javascript">
@@ -110,9 +161,10 @@
         const send = document.getElementById('send');
         const user = document.getElementById('userIcon');
         const bot = document.getElementById('botIcon');
+        var processing;
 
         handler = async () => {
-            const question = copilot.value;
+            const question = copilot.innerText;
             if (question) {
                 const div = document.createElement('div');
                 div.className = 'question';
@@ -123,28 +175,10 @@
                 const icon = user.cloneNode(true);
                 div.appendChild(icon);
                 result.appendChild(div);
-                copilot.value = '';
-                div.scrollIntoView();
+                copilot.innerHTML = '';
+                div.scrollIntoView(false);
 
-                const responses = await window.chrome.webview.hostObjects.sql4cds.SendMessage(question);
-
-                responses.forEach(response => {
-                    const div = document.createElement('div');
-                    div.className = 'answer';
-                    const block = document.createElement('div');
-                    block.className = 'block';
-                    block.innerHTML = response;
-                    const icon = bot.cloneNode(true);
-                    div.appendChild(icon);
-                    div.appendChild(block);
-                    result.appendChild(div);
-                    div.scrollIntoView();
-
-                    block.querySelector(".copyCode").addEventListener('click', e => {
-                        const code = e.target.parentNode.querySelector("pre").textContent;
-                        navigator.clipboard.writeText(code);
-                    });
-                });
+                sendMessage(question);
             }
         };
 
@@ -155,6 +189,103 @@
                 handler();
             }
         });
+
+        updateMessage = function (id, content) {
+            var block = document.getElementById(id);
+            if (!block) {
+                const div = document.createElement('div');
+                div.className = 'answer';
+                block = document.createElement('div');
+                block.id = id;
+                block.className = 'block';
+                const icon = bot.cloneNode(true);
+                div.appendChild(icon);
+                div.appendChild(block);
+                result.appendChild(div);
+                result.appendChild(div);
+
+                // Move the processing message back to the bottom
+                if (processing) {
+                    processing.parentNode.removeChild(processing);
+                    result.appendChild(processing);
+                }
+            }
+
+            block.innerHTML = content;
+
+            if (processing)
+                processing.scrollIntoView(false);
+            else
+                block.scrollIntoView(false);
+
+            block.querySelectorAll(".copyCode").forEach(c => c.addEventListener('click', e => {
+                const code = e.target.parentNode.querySelector("pre").textContent;
+                navigator.clipboard.writeText(code);
+            }));
+        }
+
+        showPromptSuggestion = function (type, title, action, message) {
+            const div = document.createElement('div');
+            div.className = 'suggestion ' + type;
+            const block = document.createElement('div');
+            block.className = 'block';
+            block.innerHTML = title;
+            const icon = document.getElementById(type).cloneNode(true);
+            div.appendChild(icon);
+            div.appendChild(block);
+            const button = document.createElement('button');
+            button.textContent = action;
+            button.addEventListener('click', () => {
+                sendMessage(message);
+            });
+            block.appendChild(button);
+            result.appendChild(div);
+            div.scrollIntoView(false);
+        }
+
+        sendMessage = async function (message) {
+            result.querySelectorAll("button").forEach(b => b.disabled = true);
+            send.className = "disabled";
+
+            showProcessingMessage();
+
+            await window.chrome.webview.hostObjects.sql4cds.SendMessage(message);
+            finished();
+        }
+
+        showProcessingMessage = function () {
+            if (processing)
+                processing.parentNode.removeChild(processing);
+
+            processing = document.createElement('div');
+            processing.id = "processing";
+            processing.textContent = "Processing...";
+            result.appendChild(processing);
+            processing.scrollIntoView(false);
+        }
+
+        runStarted = function () {
+            if (!processing)
+                return;
+
+            const cancel = document.createElement('button');
+            cancel.textContent = "Cancel";
+            cancel.addEventListener('click', async () => {
+                await window.chrome.webview.hostObjects.sql4cds.Cancel();
+                finished();
+            });
+            processing.appendChild(cancel);
+            processing.scrollIntoView(false);
+        }
+
+        finished = function () {
+            send.className = "";
+
+            if (processing) {
+                processing.parentNode.removeChild(processing);
+                processing = null;
+            }
+        }
     </script>
 </body>
 </html>

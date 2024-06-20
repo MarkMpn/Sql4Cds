@@ -72,6 +72,8 @@ namespace MarkMpn.Sql4Cds.XTB
         public string OpenAIKey { get; set; }
 
         public string AssistantID { get; set; }
+
+        public bool AllowCopilotSelectQueries { get; set; }
     }
 
     public class TabContent
