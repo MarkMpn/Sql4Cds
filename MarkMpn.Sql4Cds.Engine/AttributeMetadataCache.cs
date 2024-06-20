@@ -256,6 +256,12 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             MetadataLoading?.Invoke(this, args);
         }
+
+        /// <inheritdoc/>
+        public IEnumerable<EntityMetadata> GetAllEntities()
+        {
+            return _metadata.Values;
+        }
     }
 
     /// <summary>

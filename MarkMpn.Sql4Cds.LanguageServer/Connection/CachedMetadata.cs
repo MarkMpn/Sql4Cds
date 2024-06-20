@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
         public string[] RecycleBinEntities => _defaultCache.RecycleBinEntities;
 
-        public EntityMetadata[] GetAutocompleteEntities()
+        public IEnumerable<EntityMetadata> GetAllEntities()
         {
             if (_cacheUnavailable && _autocompleteCache == null)
             {

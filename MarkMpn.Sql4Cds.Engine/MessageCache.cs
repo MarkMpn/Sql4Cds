@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -429,5 +430,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return false;
         }
+
+        /// <summary>
+        /// Returns the SQL data type for the parameter
+        /// </summary>
+        public Microsoft.SqlServer.TransactSql.ScriptDom.DataTypeReference GetSqlDataType(DataSource dataSource) => SqlTypeConverter.NetToSqlType(Type).ToSqlType(dataSource);
     }
 }

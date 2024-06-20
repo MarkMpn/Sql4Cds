@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.ServiceModel;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -105,6 +106,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     case 409: return 2627;
                 }
             }
+
+            var match = Regex.Match(fault.Message, "Sql Number: (\\d+)");
+            if (match.Success)
+                return Int32.Parse(match.Groups[1].Value);
 
             return 10337;
         }

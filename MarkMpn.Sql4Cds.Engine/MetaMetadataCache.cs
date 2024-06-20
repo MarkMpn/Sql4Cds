@@ -304,5 +304,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
         /// <inheritdoc/>
         public string[] RecycleBinEntities => _inner.RecycleBinEntities;
+
+        /// <inheritdoc/>
+        public IEnumerable<EntityMetadata> GetAllEntities()
+        {
+            return _inner.GetAllEntities().Concat(_customMetadata.Values);
+        }
     }
 }

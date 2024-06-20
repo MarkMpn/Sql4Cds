@@ -1,4 +1,5 @@
-﻿using Microsoft.Xrm.Sdk.Metadata;
+﻿using System.Collections.Generic;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -88,5 +89,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns a list of entity logical names that are enabled for recycle bin access
         /// </summary>
         string[] RecycleBinEntities { get; }
+
+        /// <summary>
+        /// Gets a list of all available entities for autocomplete
+        /// </summary>
+        /// <returns>A list of all available entities for autocomplete</returns>
+        IEnumerable<EntityMetadata> GetAllEntities();
     }
 }

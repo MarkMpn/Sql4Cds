@@ -94,6 +94,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
+            _executionCount++;
+
             if (ErrorNumber == null)
                 context.Log(context.Error);
 

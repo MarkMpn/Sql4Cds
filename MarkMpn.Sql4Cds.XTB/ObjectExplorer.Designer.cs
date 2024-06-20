@@ -44,9 +44,33 @@
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
             this.tsbConnect = new System.Windows.Forms.ToolStripButton();
             this.tsbDisconnect = new System.Windows.Forms.ToolStripButton();
+            this.tableContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.selectTop1000RowsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.scriptTableasToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.scriptAsTypeContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.selectToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.scriptAsTargetsContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.newQueryEditorWindowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
+            this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.clipboardToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.executeToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.insertToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.updateToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.deleteToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripMenuItem5 = new System.Windows.Forms.ToolStripSeparator();
+            this.toolStripMenuItem3 = new System.Windows.Forms.ToolStripMenuItem();
+            this.functionContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripMenuItem();
+            this.procedureContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.tsqlContextMenuStrip.SuspendLayout();
             this.serverContextMenuStrip.SuspendLayout();
             this.toolStrip1.SuspendLayout();
+            this.tableContextMenuStrip.SuspendLayout();
+            this.scriptAsTypeContextMenuStrip.SuspendLayout();
+            this.scriptAsTargetsContextMenuStrip.SuspendLayout();
+            this.functionContextMenuStrip.SuspendLayout();
+            this.procedureContextMenuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
             // treeView
@@ -55,10 +79,10 @@
             this.treeView.ImageIndex = 0;
             this.treeView.ImageList = this.imageList;
             this.treeView.Location = new System.Drawing.Point(0, 25);
-            this.treeView.Margin = new System.Windows.Forms.Padding(2);
+            this.treeView.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.treeView.Name = "treeView";
             this.treeView.SelectedImageIndex = 0;
-            this.treeView.Size = new System.Drawing.Size(284, 236);
+            this.treeView.Size = new System.Drawing.Size(379, 296);
             this.treeView.TabIndex = 1;
             this.treeView.BeforeExpand += new System.Windows.Forms.TreeViewCancelEventHandler(this.treeView_BeforeExpand);
             this.treeView.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.treeView_AfterSelect);
@@ -173,7 +197,7 @@
             this.tsbDisconnect});
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
-            this.toolStrip1.Size = new System.Drawing.Size(284, 25);
+            this.toolStrip1.Size = new System.Drawing.Size(379, 25);
             this.toolStrip1.TabIndex = 2;
             this.toolStrip1.Text = "toolStrip1";
             // 
@@ -198,20 +222,177 @@
             this.tsbDisconnect.Text = "Disconnect";
             this.tsbDisconnect.Click += new System.EventHandler(this.disconnectToolStripMenuItem_Click);
             // 
+            // tableContextMenuStrip
+            // 
+            this.tableContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.selectTop1000RowsToolStripMenuItem,
+            this.scriptTableasToolStripMenuItem});
+            this.tableContextMenuStrip.Name = "tableContextMenuStrip";
+            this.tableContextMenuStrip.Size = new System.Drawing.Size(186, 48);
+            this.tableContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.tableContextMenuStrip_Opening);
+            // 
+            // selectTop1000RowsToolStripMenuItem
+            // 
+            this.selectTop1000RowsToolStripMenuItem.Name = "selectTop1000RowsToolStripMenuItem";
+            this.selectTop1000RowsToolStripMenuItem.Size = new System.Drawing.Size(185, 22);
+            this.selectTop1000RowsToolStripMenuItem.Text = "Select Top 1000 Rows";
+            this.selectTop1000RowsToolStripMenuItem.Click += new System.EventHandler(this.selectTop1000RowsToolStripMenuItem_Click);
+            // 
+            // scriptTableasToolStripMenuItem
+            // 
+            this.scriptTableasToolStripMenuItem.DropDown = this.scriptAsTypeContextMenuStrip;
+            this.scriptTableasToolStripMenuItem.Name = "scriptTableasToolStripMenuItem";
+            this.scriptTableasToolStripMenuItem.Size = new System.Drawing.Size(185, 22);
+            this.scriptTableasToolStripMenuItem.Text = "Script Table as";
+            // 
+            // scriptAsTypeContextMenuStrip
+            // 
+            this.scriptAsTypeContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.selectToToolStripMenuItem,
+            this.insertToToolStripMenuItem,
+            this.updateToToolStripMenuItem,
+            this.deleteToToolStripMenuItem,
+            this.toolStripMenuItem5,
+            this.executeToToolStripMenuItem});
+            this.scriptAsTypeContextMenuStrip.Name = "tableContextMenuStrip";
+            this.scriptAsTypeContextMenuStrip.OwnerItem = this.toolStripMenuItem4;
+            this.scriptAsTypeContextMenuStrip.Size = new System.Drawing.Size(137, 120);
+            // 
+            // selectToToolStripMenuItem
+            // 
+            this.selectToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.selectToToolStripMenuItem.Name = "selectToToolStripMenuItem";
+            this.selectToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.selectToToolStripMenuItem.Text = "SELECT To";
+            this.selectToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            // 
+            // scriptAsTargetsContextMenuStrip
+            // 
+            this.scriptAsTargetsContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.newQueryEditorWindowToolStripMenuItem,
+            this.toolStripMenuItem2,
+            this.fileToolStripMenuItem,
+            this.clipboardToolStripMenuItem});
+            this.scriptAsTargetsContextMenuStrip.Name = "scriptTableAsTargetsContextMenuStrip";
+            this.scriptAsTargetsContextMenuStrip.OwnerItem = this.deleteToToolStripMenuItem;
+            this.scriptAsTargetsContextMenuStrip.Size = new System.Drawing.Size(215, 76);
+            // 
+            // newQueryEditorWindowToolStripMenuItem
+            // 
+            this.newQueryEditorWindowToolStripMenuItem.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.ScriptManager;
+            this.newQueryEditorWindowToolStripMenuItem.Name = "newQueryEditorWindowToolStripMenuItem";
+            this.newQueryEditorWindowToolStripMenuItem.Size = new System.Drawing.Size(214, 22);
+            this.newQueryEditorWindowToolStripMenuItem.Text = "New Query Editor Window";
+            this.newQueryEditorWindowToolStripMenuItem.Click += new System.EventHandler(this.newQueryEditorWindowToolStripMenuItem_Click);
+            // 
+            // toolStripMenuItem2
+            // 
+            this.toolStripMenuItem2.Name = "toolStripMenuItem2";
+            this.toolStripMenuItem2.Size = new System.Drawing.Size(211, 6);
+            // 
+            // fileToolStripMenuItem
+            // 
+            this.fileToolStripMenuItem.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.ExportScript;
+            this.fileToolStripMenuItem.Name = "fileToolStripMenuItem";
+            this.fileToolStripMenuItem.Size = new System.Drawing.Size(214, 22);
+            this.fileToolStripMenuItem.Text = "File...";
+            this.fileToolStripMenuItem.Click += new System.EventHandler(this.fileToolStripMenuItem_Click);
+            // 
+            // clipboardToolStripMenuItem
+            // 
+            this.clipboardToolStripMenuItem.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.Copy;
+            this.clipboardToolStripMenuItem.Name = "clipboardToolStripMenuItem";
+            this.clipboardToolStripMenuItem.Size = new System.Drawing.Size(214, 22);
+            this.clipboardToolStripMenuItem.Text = "Clipboard";
+            this.clipboardToolStripMenuItem.Click += new System.EventHandler(this.clipboardToolStripMenuItem_Click);
+            // 
+            // executeToToolStripMenuItem
+            // 
+            this.executeToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.executeToToolStripMenuItem.Name = "executeToToolStripMenuItem";
+            this.executeToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.executeToToolStripMenuItem.Text = "EXECUTE To";
+            this.executeToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            // 
+            // insertToToolStripMenuItem
+            // 
+            this.insertToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.insertToToolStripMenuItem.Name = "insertToToolStripMenuItem";
+            this.insertToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.insertToToolStripMenuItem.Text = "INSERT To";
+            this.insertToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            // 
+            // updateToToolStripMenuItem
+            // 
+            this.updateToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.updateToToolStripMenuItem.Name = "updateToToolStripMenuItem";
+            this.updateToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.updateToToolStripMenuItem.Text = "UPDATE To";
+            this.updateToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            // 
+            // deleteToToolStripMenuItem
+            // 
+            this.deleteToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.deleteToToolStripMenuItem.Name = "deleteToToolStripMenuItem";
+            this.deleteToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.deleteToToolStripMenuItem.Text = "DELETE To";
+            this.deleteToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            // 
+            // toolStripMenuItem5
+            // 
+            this.toolStripMenuItem5.Name = "toolStripMenuItem5";
+            this.toolStripMenuItem5.Size = new System.Drawing.Size(133, 6);
+            // 
+            // toolStripMenuItem3
+            // 
+            this.toolStripMenuItem3.DropDown = this.scriptAsTypeContextMenuStrip;
+            this.toolStripMenuItem3.Name = "toolStripMenuItem3";
+            this.toolStripMenuItem3.Size = new System.Drawing.Size(212, 22);
+            this.toolStripMenuItem3.Text = "Script Stored Procedure as";
+            // 
+            // functionContextMenuStrip
+            // 
+            this.functionContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.toolStripMenuItem4});
+            this.functionContextMenuStrip.Name = "tableContextMenuStrip";
+            this.functionContextMenuStrip.Size = new System.Drawing.Size(169, 26);
+            this.functionContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.functionContextMenuStrip_Opening);
+            // 
+            // toolStripMenuItem4
+            // 
+            this.toolStripMenuItem4.DropDown = this.scriptAsTypeContextMenuStrip;
+            this.toolStripMenuItem4.Name = "toolStripMenuItem4";
+            this.toolStripMenuItem4.Size = new System.Drawing.Size(168, 22);
+            this.toolStripMenuItem4.Text = "Script Function as";
+            // 
+            // procedureContextMenuStrip
+            // 
+            this.procedureContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.toolStripMenuItem3});
+            this.procedureContextMenuStrip.Name = "tableContextMenuStrip";
+            this.procedureContextMenuStrip.Size = new System.Drawing.Size(213, 48);
+            this.procedureContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.procedureContextMenuStrip_Opening);
+            // 
             // ObjectExplorer
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(284, 261);
+            this.ClientSize = new System.Drawing.Size(379, 321);
             this.Controls.Add(this.treeView);
             this.Controls.Add(this.toolStrip1);
             this.HideOnClose = true;
+            this.Margin = new System.Windows.Forms.Padding(4);
             this.Name = "ObjectExplorer";
             this.Text = "Object Explorer";
             this.tsqlContextMenuStrip.ResumeLayout(false);
             this.serverContextMenuStrip.ResumeLayout(false);
             this.toolStrip1.ResumeLayout(false);
             this.toolStrip1.PerformLayout();
+            this.tableContextMenuStrip.ResumeLayout(false);
+            this.scriptAsTypeContextMenuStrip.ResumeLayout(false);
+            this.scriptAsTargetsContextMenuStrip.ResumeLayout(false);
+            this.functionContextMenuStrip.ResumeLayout(false);
+            this.procedureContextMenuStrip.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -233,5 +414,24 @@
         private System.Windows.Forms.ToolStrip toolStrip1;
         private System.Windows.Forms.ToolStripButton tsbConnect;
         private System.Windows.Forms.ToolStripButton tsbDisconnect;
+        private System.Windows.Forms.ContextMenuStrip tableContextMenuStrip;
+        private System.Windows.Forms.ToolStripMenuItem selectTop1000RowsToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem scriptTableasToolStripMenuItem;
+        private System.Windows.Forms.ContextMenuStrip scriptAsTargetsContextMenuStrip;
+        private System.Windows.Forms.ToolStripMenuItem newQueryEditorWindowToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem2;
+        private System.Windows.Forms.ToolStripMenuItem fileToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem clipboardToolStripMenuItem;
+        private System.Windows.Forms.ContextMenuStrip scriptAsTypeContextMenuStrip;
+        private System.Windows.Forms.ToolStripMenuItem selectToToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem insertToToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem updateToToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem deleteToToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem5;
+        private System.Windows.Forms.ToolStripMenuItem executeToToolStripMenuItem;
+        private System.Windows.Forms.ContextMenuStrip functionContextMenuStrip;
+        private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem4;
+        private System.Windows.Forms.ContextMenuStrip procedureContextMenuStrip;
+        private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem3;
     }
 }

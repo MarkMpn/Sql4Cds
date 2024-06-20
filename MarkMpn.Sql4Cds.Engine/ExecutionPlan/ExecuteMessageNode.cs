@@ -174,7 +174,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (message.OutputParameters.All(f => f.IsScalarType()))
             {
                 foreach (var value in message.OutputParameters)
-                    AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType(dataSource)); // TODO: How are OSV and ER fields represented?
+                    AddSchemaColumn(value.Name, value.GetSqlDataType(dataSource));
             }
             else
             {
@@ -206,16 +206,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource, false));
 
                     // Add standard virtual attributes
-                    if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-
-                    if (attrMetadata is LookupAttributeMetadata lookup)
-                    {
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-
-                        if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                            AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-                    }
+                    foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
+                        AddSchemaColumn(attrMetadata.LogicalName + virtualAttr.Suffix, virtualAttr.DataType);
                 }
 
                 if (audit)
@@ -564,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var f = expectedInputParameters[i];
                 var sourceExpression = tvf.Parameters[i];
                 sourceExpression.GetType(context, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType(context.PrimaryDataSource);
+                var expectedType = f.GetSqlDataType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(tvf.Parameters[f.Position], sourceType, expectedType));
@@ -666,7 +658,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var sourceExpression = sproc.Parameters[i].ParameterValue;
                 sourceExpression.GetType(context, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType(context.PrimaryDataSource);
+                var expectedType = targetParam.GetSqlDataType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                 {
