@@ -39,6 +39,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         public override bool ColumnComparisonAvailable => _columnComparisonAvailable;
 
+        public override bool CrossTableColumnComparisonAvailable => _columnComparisonAvailable;
+
         public override bool OrderByEntityNameAvailable => _orderByEntityNameAvailable;
 
         public override List<JoinOperator> JoinOperatorsAvailable => _joinOperators;

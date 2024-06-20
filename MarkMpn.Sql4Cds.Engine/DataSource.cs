@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Microsoft.Crm.Sdk.Messages;
+using System.Linq;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -87,6 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             JoinOperatorsAvailable = joinOperators;
             ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
+            CrossTableColumnComparisonAvailable = version >= new Version("9.2");
             OrderByEntityNameAvailable = version >= new Version("9.1.0.25249");
         }
 
@@ -131,6 +134,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if the server supports column comparison conditions in FetchXML
         /// </summary>
         public virtual bool ColumnComparisonAvailable { get; }
+
+        /// <summary>
+        /// Indicates if the server supports column comparison conditions across tables in FetchXML
+        /// </summary>
+        public virtual bool CrossTableColumnComparisonAvailable { get; }
 
         /// <summary>
         /// Indicates if the server supports ordering by link-entities in FetchXML
@@ -206,7 +214,11 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 ColumnSet = new ColumnSet("localeid")
             };
-            var org = Connection.RetrieveMultiple(qry).Entities[0];
+            var org = Connection.RetrieveMultiple(qry).Entities.FirstOrDefault();
+
+            if (org == null)
+                return Collation.USEnglish;
+
             var lcid = org.GetAttributeValue<int>("localeid");
 
             // Collation options are set based on the default language. Most are CI/AI but a few are not
@@ -240,6 +252,11 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return new Collation(lcid, !ci, !ai);
+        }
+
+        public DataSource Clone()
+        {
+            return (DataSource)MemberwiseClone();
         }
     }
 }

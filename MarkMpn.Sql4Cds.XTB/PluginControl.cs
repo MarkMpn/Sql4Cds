@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.XTB
             Settings.Instance = settings;
 
             _dataSources = new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase);
-            _objectExplorer = new ObjectExplorer(_dataSources, WorkAsync, con => CreateQuery(con, ""), ConnectObjectExplorer);
+            _objectExplorer = new ObjectExplorer(_dataSources, WorkAsync, CreateQuery, ConnectObjectExplorer);
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
             _properties.SelectedObjectChanged += OnSelectedObjectChanged;

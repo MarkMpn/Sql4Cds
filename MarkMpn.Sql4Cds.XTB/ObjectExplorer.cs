@@ -14,14 +14,17 @@ using Microsoft.Xrm.Tooling.Connector;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Sdk;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
+using System.Globalization;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
     partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {
         private readonly IDictionary<string, DataSource> _dataSources;
-        private readonly Action<ConnectionDetail> _newQuery;
+        private readonly Func<ConnectionDetail, string, SqlQueryControl> _newQuery;
         private readonly Action _connect;
+        private Func<string> _scriptGenerator;
 
         class LoaderParam
         {
@@ -29,7 +32,7 @@ namespace MarkMpn.Sql4Cds.XTB
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<string, DataSource> dataSources, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery, Action connect)
+        public ObjectExplorer(IDictionary<string, DataSource> dataSources, Action<WorkAsyncInfo> workAsync, Func<ConnectionDetail,string,SqlQueryControl> newQuery, Action connect)
         {
             InitializeComponent();
 
@@ -125,6 +128,8 @@ namespace MarkMpn.Sql4Cds.XTB
                             break;
                     }
 
+                    node.ContextMenuStrip = tableContextMenuStrip;
+
                     return node;
                 })
                 .ToArray();
@@ -205,6 +210,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     n.Tag = msg;
                     n.ImageIndex = 25;
                     n.SelectedImageIndex = 25;
+                    n.ContextMenuStrip = functionContextMenuStrip;
                 }
 
                 if (msg.IsValidAsStoredProcedure())
@@ -213,6 +219,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     n.Tag = msg;
                     n.ImageIndex = 26;
                     n.SelectedImageIndex = 26;
+                    n.ContextMenuStrip = procedureContextMenuStrip;
                 }
             }
 
@@ -253,6 +260,8 @@ namespace MarkMpn.Sql4Cds.XTB
             var logicalName = parent.Parent.Text;
 
             var metadata = (EntityMetadata)parent.Parent.Tag;
+            var connection = GetService(parent);
+            var dataSource = _dataSources[connection.ConnectionName];
             
             if (metadata.Attributes == null)
                 metadata = _dataSources[GetService(parent).ConnectionName].Metadata[logicalName];
@@ -268,20 +277,12 @@ namespace MarkMpn.Sql4Cds.XTB
                     var nodes = new List<TreeNode>();
                     nodes.Add(node);
 
-                    if (a is EnumAttributeMetadata || a is BooleanAttributeMetadata || a is LookupAttributeMetadata)
+                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, false))
                     {
-                        var nameNode = new TreeNode(a.LogicalName + "name");
-                        nameNode.Tag = a;
-                        SetIcon(nameNode, "Text");
-                        nodes.Add(nameNode);
-                    }
-
-                    if (a is LookupAttributeMetadata lookup && lookup.Targets.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    {
-                        var typeNode = new TreeNode(a.LogicalName + "type");
-                        typeNode.Tag = a;
-                        SetIcon(typeNode, "Text");
-                        nodes.Add(typeNode);
+                        var virtualNode = new TreeNode(a.LogicalName + virtualAttr.Suffix);
+                        virtualNode.Tag = a;
+                        SetIcon(virtualNode, "Text");
+                        nodes.Add(virtualNode);
                     }
 
                     return nodes;
@@ -607,7 +608,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void newQueryToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var con = GetService(treeView.SelectedNode);
-            _newQuery(con);
+            _newQuery(con, string.Empty);
         }
 
         private void disconnectToolStripMenuItem_Click(object sender, EventArgs e)
@@ -678,6 +679,468 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void treeView_AfterSelect(object sender, TreeViewEventArgs e)
         {
             tsbDisconnect.Enabled = treeView.SelectedNode != null;
+        }
+
+        private void tableContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            executeToToolStripMenuItem.Enabled = false;
+
+            var entity = (EntityMetadata)treeView.SelectedNode.Tag;
+            var schema = (string)treeView.SelectedNode.Parent.Tag;
+            selectTop1000RowsToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(schema, entity, 1000));
+            selectToToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(schema, entity, null));
+            insertToToolStripMenuItem.Tag = (Func<string>)(() => GenerateInsertQuery(schema, entity));
+            updateToToolStripMenuItem.Tag = (Func<string>)(() => GenerateUpdateQuery(schema, entity));
+            deleteToToolStripMenuItem.Tag = (Func<string>)(() => GenerateDeleteQuery(schema, entity));
+
+            switch (schema)
+            {
+                case "dbo":
+                    selectToToolStripMenuItem.Enabled = true;
+                    insertToToolStripMenuItem.Enabled = true;
+                    updateToToolStripMenuItem.Enabled = true;
+                    deleteToToolStripMenuItem.Enabled = true;
+                    return;
+                case "metadata":
+                    selectToToolStripMenuItem.Enabled = true;
+                    insertToToolStripMenuItem.Enabled = false;
+                    updateToToolStripMenuItem.Enabled = false;
+                    deleteToToolStripMenuItem.Enabled = false;
+                    return;
+                case "archive":
+                    selectToToolStripMenuItem.Enabled = true;
+                    insertToToolStripMenuItem.Enabled = false;
+                    updateToToolStripMenuItem.Enabled = false;
+                    deleteToToolStripMenuItem.Enabled = false;
+                    return;
+                case "bin":
+                    selectToToolStripMenuItem.Enabled = true;
+                    insertToToolStripMenuItem.Enabled = false;
+                    updateToToolStripMenuItem.Enabled = false;
+                    deleteToToolStripMenuItem.Enabled = true;
+                    return;
+            }
+        }
+
+        private void functionContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var tvf = (Engine.Message)treeView.SelectedNode.Tag;
+            selectToToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(tvf));
+
+            selectToToolStripMenuItem.Enabled = true;
+            insertToToolStripMenuItem.Enabled = false;
+            updateToToolStripMenuItem.Enabled = false;
+            deleteToToolStripMenuItem.Enabled = false;
+            executeToToolStripMenuItem.Enabled = false;
+        }
+
+        private void procedureContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var sproc = (Engine.Message)treeView.SelectedNode.Tag;
+            executeToToolStripMenuItem.Tag = (Func<string>)(() => GenerateExecuteQuery(sproc));
+
+            selectToToolStripMenuItem.Enabled = false;
+            insertToToolStripMenuItem.Enabled = false;
+            updateToToolStripMenuItem.Enabled = false;
+            deleteToToolStripMenuItem.Enabled = false;
+            executeToToolStripMenuItem.Enabled = true;
+        }
+
+        private string GenerateSelectQuery(Engine.Message tvf)
+        {
+            var querySpec = new QuerySpecification();
+            querySpec.SelectElements.Add(new SelectScalarExpression { Expression = new ColumnReferenceExpression { ColumnType = ColumnType.Wildcard } });
+            var tvfReference = new SchemaObjectFunctionTableReference
+            {
+                SchemaObject = new SchemaObjectName
+                {
+                    Identifiers =
+                    {
+                        new Identifier { Value = tvf.Name }
+                    }
+                }
+            };
+            querySpec.FromClause = new FromClause
+            {
+                TableReferences = { tvfReference }
+            };
+
+            foreach (var param in tvf.InputParameters)
+            {
+                tvfReference.Parameters.Add(new VariableReference
+                {
+                    Name = $"<@{param.Name}, {param.GetSqlDataType(null).ToSql()}>"
+                });
+            }
+
+            var select = new SelectStatement
+            {
+                QueryExpression = querySpec
+            };
+
+            return querySpec.ToSql();
+        }
+
+        private string GenerateExecuteQuery(Engine.Message sproc)
+        {
+            var batch = new TSqlBatch();
+            var declare = new DeclareVariableStatement();
+            batch.Statements.Add(declare);
+
+            declare.Declarations.Add(new DeclareVariableElement
+            {
+                VariableName = new Identifier { Value = "@RC" },
+                DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int }
+            });
+
+            foreach (var param in sproc.InputParameters.Concat(sproc.OutputParameters))
+            {
+                declare.Declarations.Add(new DeclareVariableElement
+                {
+                    VariableName = new Identifier { Value = $"@{param.Name}" },
+                    DataType = param.GetSqlDataType(null)
+                });
+            }
+
+            var exec = new ExecuteStatement
+            {
+                ExecuteSpecification = new ExecuteSpecification
+                {
+                    Variable = new VariableReference { Name = "@RC" },
+                    ExecutableEntity = new ExecutableProcedureReference
+                    {
+                        ProcedureReference = new ProcedureReferenceName
+                        {
+                            ProcedureReference = new ProcedureReference
+                            {
+                                Name = new SchemaObjectName
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier { Value = "dbo" },
+                                        new Identifier { Value = sproc.Name }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            foreach (var param in sproc.InputParameters)
+            {
+                exec.ExecuteSpecification.ExecutableEntity.Parameters.Add(new ExecuteParameter
+                {
+                    Variable = new VariableReference { Name = $"@{param.Name}" },
+                    ParameterValue = new VariableReference { Name = $"@{param.Name}" }
+                });
+            }
+
+            foreach (var param in sproc.OutputParameters)
+            {
+                exec.ExecuteSpecification.ExecutableEntity.Parameters.Add(new ExecuteParameter
+                {
+                    Variable = new VariableReference { Name = $"@{param.Name}" },
+                    ParameterValue = new VariableReference { Name = $"@{param.Name}" },
+                    IsOutput = true
+                });
+            }
+
+            batch.Statements.Add(exec);
+
+            return batch.ToSql();
+        }
+
+        private string GenerateSelectQuery(string schema, EntityMetadata metadata, int? top)
+        {
+            var connection = GetService(treeView.SelectedNode);
+            var dataSource = _dataSources[connection.ConnectionName];
+            metadata = dataSource.Metadata[metadata.LogicalName];
+
+            var attrs = metadata.Attributes
+                .Where(a => a.IsValidForRead != false && a.AttributeOf == null);
+
+            IOrderedEnumerable<AttributeMetadata> sortedAttrs;
+
+            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Strict)
+                sortedAttrs = attrs.OrderBy(a => a.ColumnNumber);
+            else
+                sortedAttrs = attrs.OrderBy(a => a.LogicalName);
+
+            var columnNames = sortedAttrs
+                .SelectMany(a =>
+                {
+                    var names = new List<string>();
+                    names.Add(a.LogicalName);
+
+                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, false))
+                        names.Add(a.LogicalName + virtualAttr.Suffix);
+
+                    return names;
+                });
+
+            var querySpec = new QuerySpecification();
+
+            if (top != null)
+                querySpec.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = top.Value.ToString(CultureInfo.InvariantCulture) } };
+
+            foreach (var col in columnNames)
+                querySpec.SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = col }
+                            }
+                        }
+                    }
+                });
+
+            querySpec.FromClause = new FromClause
+            {
+                TableReferences =
+                {
+                    new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = schema },
+                                new Identifier { Value = metadata.LogicalName }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var select = new SelectStatement
+            {
+                QueryExpression = querySpec
+            };
+
+            return querySpec.ToSql();
+        }
+
+        private string GenerateInsertQuery(string schema, EntityMetadata metadata)
+        {
+            var connection = GetService(treeView.SelectedNode);
+            var dataSource = _dataSources[connection.ConnectionName];
+            metadata = dataSource.Metadata[metadata.LogicalName];
+
+            var attrs = metadata.Attributes
+                .Where(a => a.IsValidForCreate != false && a.AttributeOf == null);
+
+            IOrderedEnumerable<AttributeMetadata> sortedAttrs;
+
+            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Strict)
+                sortedAttrs = attrs.OrderBy(a => a.ColumnNumber);
+            else
+                sortedAttrs = attrs.OrderBy(a => a.LogicalName);
+
+            var columnNames = sortedAttrs
+                .SelectMany(a =>
+                {
+                    var names = new List<KeyValuePair<string,DataTypeReference>>();
+                    var type = a.GetAttributeSqlType(dataSource, true);
+
+                    if (type is UserDataTypeReference userType && userType.Name.BaseIdentifier.Value == "EntityReference")
+                        type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+
+                    names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
+
+                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
+                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType));
+
+                    return names;
+                })
+                .ToArray();
+
+            var insert = new InsertStatement
+            {
+                InsertSpecification = new InsertSpecification
+                {
+                    Target = new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = schema },
+                                new Identifier { Value = metadata.LogicalName }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var values = new ValuesInsertSource();
+            insert.InsertSpecification.InsertSource = values;
+            var rowValues = new RowValue();
+            values.RowValues.Add(rowValues);
+
+            foreach (var col in columnNames)
+            {
+                insert.InsertSpecification.Columns.Add(new ColumnReferenceExpression
+                {
+                    MultiPartIdentifier = new MultiPartIdentifier
+                    {
+                        Identifiers =
+                        {
+                            new Identifier { Value = col.Key }
+                        }
+                    }
+                });
+
+                rowValues.ColumnValues.Add(new ColumnReferenceExpression
+                {
+                    MultiPartIdentifier = new MultiPartIdentifier
+                    {
+                        Identifiers =
+                        {
+                            new Identifier { Value = $"<{col.Key}, {col.Value.ToSql()}>" }
+                        }
+                    }
+                });
+            }
+
+            var script = insert.ToSql();
+
+            // Remove the double space that the script generator adds after INSERT
+            if (script.StartsWith("INSERT  "))
+                script = script.Remove(7, 1);
+
+            return script;
+        }
+
+        private string GenerateUpdateQuery(string schema, EntityMetadata metadata)
+        {
+            var connection = GetService(treeView.SelectedNode);
+            var dataSource = _dataSources[connection.ConnectionName];
+            metadata = dataSource.Metadata[metadata.LogicalName];
+
+            var attrs = metadata.Attributes
+                .Where(a => a.IsValidForUpdate != false && a.AttributeOf == null);
+
+            IOrderedEnumerable<AttributeMetadata> sortedAttrs;
+
+            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Strict)
+                sortedAttrs = attrs.OrderBy(a => a.ColumnNumber);
+            else
+                sortedAttrs = attrs.OrderBy(a => a.LogicalName);
+
+            var columnNames = sortedAttrs
+                .SelectMany(a =>
+                {
+                    var names = new List<KeyValuePair<string, DataTypeReference>>();
+                    var type = a.GetAttributeSqlType(dataSource, true);
+
+                    if (type is UserDataTypeReference userType && userType.Name.BaseIdentifier.Value == "EntityReference")
+                        type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+
+                    names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
+
+                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
+                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType));
+
+                    return names;
+                })
+                .ToArray();
+
+            var update = new UpdateStatement
+            {
+                UpdateSpecification = new UpdateSpecification
+                {
+                    Target = new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = schema },
+                                new Identifier { Value = metadata.LogicalName }
+                            }
+                        }
+                    }
+                }
+            };
+
+            foreach (var col in columnNames)
+            {
+                update.UpdateSpecification.SetClauses.Add(new AssignmentSetClause
+                {
+                    Column = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = col.Key }
+                            }
+                        }
+                    },
+                    NewValue = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = $"<{col.Key}, {col.Value.ToSql()}>" }
+                            }
+                        }
+                    }
+                });
+            }
+
+            return update.ToSql() + "\r\nWHERE <Search Conditions>";
+        }
+
+        private string GenerateDeleteQuery(string schema, EntityMetadata metadata)
+        {
+            return $"DELETE FROM {schema}.{metadata.LogicalName}\r\nWHERE <Search Conditions>";
+        }
+
+        private void scriptTableAsTargetsContextMenuStripOpening(object sender, EventArgs e)
+        {
+            var menuItem = (ToolStripMenuItem)sender;
+            _scriptGenerator = (Func<string>)menuItem.Tag;
+        }
+
+        private void newQueryEditorWindowToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var script = _scriptGenerator();
+            _newQuery(GetService(treeView.SelectedNode), script);
+        }
+
+        private void fileToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            using (var dialog = new SaveFileDialog())
+            {
+                dialog.Filter = "SQL Script (*.sql)|*.sql";
+
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    var script = _scriptGenerator();
+                    System.IO.File.WriteAllText(dialog.FileName, script);
+                }
+            }
+        }
+
+        private void clipboardToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var script = _scriptGenerator();
+            Clipboard.SetText(script);
+        }
+
+        private void selectTop1000RowsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var scriptGenerator = (Func<string>)selectTop1000RowsToolStripMenuItem.Tag;
+            var script = scriptGenerator();
+            var window = _newQuery(GetService(treeView.SelectedNode), script);
+            window.Execute(true, Settings.Instance.IncludeFetchXml);
         }
     }
 }

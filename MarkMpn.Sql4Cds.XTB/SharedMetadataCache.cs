@@ -90,7 +90,7 @@ namespace MarkMpn.Sql4Cds.XTB
         /// <inheritdoc />
         public string[] RecycleBinEntities => _innerCache.RecycleBinEntities;
 
-        private  bool CacheReady
+        private bool CacheReady
         {
             get
             {
@@ -126,6 +126,16 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             add { _innerCache.MetadataLoading += value; }
             remove { _innerCache.MetadataLoading -= value; }
+        }
+
+        public IEnumerable<EntityMetadata> GetAllEntities()
+        {
+            if (!CacheReady)
+                return _innerCache.GetAllEntities();
+
+            LoadCache();
+
+            return _entitiesByName.Values;
         }
     }
 }

@@ -73,6 +73,16 @@ namespace MarkMpn.Sql4Cds.XTB.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap Copy {
+            get {
+                object obj = ResourceManager.GetObject("Copy", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap Disconnect_Filled_16x {
             get {
                 object obj = ResourceManager.GetObject("Disconnect_Filled_16x", resourceCulture);
@@ -93,6 +103,16 @@ namespace MarkMpn.Sql4Cds.XTB.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap ExportScript {
+            get {
+                object obj = ResourceManager.GetObject("ExportScript", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap FXB {
             get {
                 object obj = ResourceManager.GetObject("FXB", resourceCulture);
@@ -106,6 +126,16 @@ namespace MarkMpn.Sql4Cds.XTB.Properties {
         internal static System.Drawing.Bitmap progress {
             get {
                 object obj = ResourceManager.GetObject("progress", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap ScriptManager {
+            get {
+                object obj = ResourceManager.GetObject("ScriptManager", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
