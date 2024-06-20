@@ -2,6 +2,7 @@
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using System;
 using System.Collections.Generic;
@@ -28,14 +29,14 @@ namespace MarkMpn.Sql4Cds.Tests
             typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(a.Attributes.Single(attr => attr.LogicalName == "primarycontactidname"), "primarycontactid");
             typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForUpdate)).SetValue(c.Attributes.Single(attr => attr.LogicalName == "fullname"), false);
 
-            var dataSources = new Dictionary<string, AutocompleteDataSource>
+            var dataSources = new Dictionary<string, DataSource>
             {
-                ["local"] = new AutocompleteDataSource
+                ["local"] = new DataSource
                 {
                     Name = "local",
-                    Entities = new[] { a, c, n },
                     Metadata = metadata,
-                    Messages = new StubMessageCache()
+                    MessageCache = new StubMessageCache(),
+                    Connection = _service
                 }
             };
             _autocomplete = new Autocomplete(dataSources, "local", ColumnOrdering.Strict);

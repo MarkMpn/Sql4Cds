@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Microsoft.Crm.Sdk.Messages;
+using System.Linq;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -212,7 +214,11 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 ColumnSet = new ColumnSet("localeid")
             };
-            var org = Connection.RetrieveMultiple(qry).Entities[0];
+            var org = Connection.RetrieveMultiple(qry).Entities.FirstOrDefault();
+
+            if (org == null)
+                return Collation.USEnglish;
+
             var lcid = org.GetAttributeValue<int>("localeid");
 
             // Collation options are set based on the default language. Most are CI/AI but a few are not
