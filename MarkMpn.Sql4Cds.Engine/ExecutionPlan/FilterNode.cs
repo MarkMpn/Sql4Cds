@@ -769,14 +769,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void ConvertOuterJoinsWithNonNullFiltersToInnerJoins(NodeCompilationContext context, IDataExecutionPlanNodeInternal source, List<string> notNullColumns)
         {
-            if (source is BaseJoinNode join)
+            if (source is BaseJoinNode join && !join.SemiJoin)
             {
                 IDataExecutionPlanNodeInternal outerSource = null;
 
                 if (join.JoinType == QualifiedJoinType.LeftOuter)
-                    outerSource = join.RightSource;
+                    outerSource = join.OutputRightSchema ? join.RightSource : null;
                 else if (join.JoinType == QualifiedJoinType.RightOuter)
-                    outerSource = join.LeftSource;
+                    outerSource = join.OutputLeftSchema ? join.LeftSource : null;
 
                 if (outerSource != null)
                 {
