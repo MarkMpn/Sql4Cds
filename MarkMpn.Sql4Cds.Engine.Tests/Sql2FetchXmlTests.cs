@@ -235,7 +235,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NestedFilters()
         {
-            var query = "SELECT accountid, name FROM account WHERE name = 'test' OR (accountid is not null and name like 'foo%')";
+            var query = "SELECT accountid, name FROM account WHERE name = 'test' OR (employees is not null and name like 'foo%')";
 
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
             var queries = planBuilder.Build(query, null, out _);
@@ -248,7 +248,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter type='or'>
                             <condition attribute='name' operator='eq' value='test' />
                             <filter type='and'>
-                                <condition attribute='accountid' operator='not-null' />
+                                <condition attribute='employees' operator='not-null' />
                                 <condition attribute='name' operator='like' value='foo%' />
                             </filter>
                         </filter>
