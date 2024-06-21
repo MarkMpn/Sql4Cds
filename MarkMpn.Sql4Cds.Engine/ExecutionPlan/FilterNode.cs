@@ -1470,6 +1470,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private bool FoldFiltersToDataSources(NodeCompilationContext context, IList<OptimizerHint> hints, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions)
         {
+            if (Filter == null)
+                return false;
+
             var foldedFilters = false;
 
             // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
