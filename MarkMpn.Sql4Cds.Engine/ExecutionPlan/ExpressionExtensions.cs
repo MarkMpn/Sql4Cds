@@ -2429,6 +2429,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
+        /// <summary>
+        /// Checks if an expression has a constant value
+        /// </summary>
+        /// <param name="expr">The expression to check</param>
+        /// <param name="context">The context the expression is being evaluated in</param>
+        /// <param name="literal">The equivalent literal value</param>
+        /// <returns><c>true</c> if the expression has a constant value, or <c>false</c> if it can change depending on the current data record</returns>
+        public static bool IsConstantValueExpression(this BooleanExpression expr, ExpressionCompilationContext context, out bool value)
+        {
+            value = false;
+
+            var columnVisitor = new ColumnCollectingVisitor();
+            expr.Accept(columnVisitor);
+
+            if (columnVisitor.Columns.Count > 0)
+                return false;
+
+            var variableVisitor = new VariableCollectingVisitor();
+            expr.Accept(variableVisitor);
+
+            if (variableVisitor.Variables.Count > 0 || variableVisitor.GlobalVariables.Count > 0)
+                return false;
+
+            var parameterlessVisitor = new ParameterlessCollectingVisitor();
+            expr.Accept(parameterlessVisitor);
+
+            if (parameterlessVisitor.ParameterlessCalls.Any(p => p.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp))
+                return false;
+
+            var evaluationContext = new ExpressionExecutionContext(context);
+            value = expr.Compile(context)(evaluationContext);
+
+            return true;
+        }
+
         private static void AssertCollationSensitive(DataTypeReference finalType)
         {
             if (finalType is SqlDataTypeReferenceWithCollation collation &&

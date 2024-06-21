@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -159,6 +160,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var foldedFilters = false;
 
             foldedFilters |= FoldConsecutiveFilters();
+            foldedFilters |= RemoveTautologyAndContradiction(context, hints);
             foldedFilters |= FoldNestedLoopFiltersToJoins(context, hints);
             foldedFilters |= FoldInExistsToFetchXml(context, hints, out var addedLinks, out var subqueryConditions);
             foldedFilters |= FoldTableSpoolToIndexSpool(context, hints);
@@ -190,6 +192,153 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             StartupExpression = CheckStartupExpression();
 
             return this;
+        }
+
+        private bool RemoveTautologyAndContradiction(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            if (Filter == null)
+                return false;
+
+            var modified = false;
+            var schema = Source.GetSchema(context);
+            Filter = RemoveTautologyAndContradiction(Filter, context, schema, ref modified, out var result);
+
+            if (result == true)
+            {
+                Debug.Assert(Filter == null);
+            }
+            else if (result == false)
+            {
+                Filter = null;
+
+                var constantScan = new ConstantScanNode();
+                foreach (var col in schema.Schema)
+                    constantScan.Schema[col.Key] = col.Value;
+
+                Source = constantScan;
+            }
+
+            return modified;
+        }
+
+        private BooleanExpression RemoveTautologyAndContradiction(BooleanExpression filter, NodeCompilationContext context, INodeSchema schema, ref bool modified, out bool? result)
+        {
+            result = null;
+
+            if (filter is BooleanParenthesisExpression paren)
+            {
+                paren.Expression = RemoveTautologyAndContradiction(paren.Expression, context, schema, ref modified, out result);
+                if (paren.Expression == null)
+                    return null;
+            }
+
+            if (filter is BooleanBinaryExpression bin)
+            {
+                bin.FirstExpression = RemoveTautologyAndContradiction(bin.FirstExpression, context, schema, ref modified, out var firstResult);
+                bin.SecondExpression = RemoveTautologyAndContradiction(bin.SecondExpression, context, schema, ref modified, out var secondResult);
+
+                if (bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+                {
+                    if (firstResult == false || secondResult == false)
+                    {
+                        result = false;
+                        return null;
+                    }
+
+                    if (firstResult == true)
+                        return bin.SecondExpression;
+
+                    if (secondResult == true)
+                        return bin.FirstExpression;
+                }
+                else if (bin.BinaryExpressionType == BooleanBinaryExpressionType.Or)
+                {
+                    if (firstResult == true || secondResult == true)
+                    {
+                        result = true;
+                        return null;
+                    }
+
+                    if (firstResult == false)
+                        return bin.SecondExpression;
+
+                    if (secondResult == false)
+                        return bin.FirstExpression;
+                }
+            }
+
+            if (filter is BooleanIsNullExpression isNull)
+            {
+                if (isNull.Expression is ColumnReferenceExpression colRef &&
+                    schema.ContainsColumn(colRef.GetColumnName(), out var colName))
+                {
+                    var schemaCol = schema.Schema[colName];
+
+                    // IS NOT NULL on a non-nullable column is always true,
+                    // IS NULL on a non-nullable column is always false
+                    if (!schemaCol.IsNullable)
+                    {
+                        result = isNull.IsNot;
+                        modified = true;
+                        return null;
+                    }
+                }
+            }
+
+            if (filter is BooleanComparisonExpression cmp)
+            {
+                if (cmp.FirstExpression is ColumnReferenceExpression colRef1 &&
+                    cmp.SecondExpression is ColumnReferenceExpression colRef2 &&
+                    schema.ContainsColumn(colRef1.GetColumnName(), out var colName1) &&
+                    schema.ContainsColumn(colRef2.GetColumnName(), out var colName2) &&
+                    colName1 == colName2)
+                {
+                    if ((cmp.ComparisonType == BooleanComparisonType.Equals || cmp.ComparisonType == BooleanComparisonType.LessThanOrEqualTo || cmp.ComparisonType == BooleanComparisonType.GreaterThanOrEqualTo) && !schema.Schema[colName1].IsNullable)
+                    {
+                        // a = a (or a <= a, a >= a) is always true so long as the column is not nullable
+                        result = true;
+                        modified = true;
+                        return null;
+                    }
+                    else if (cmp.ComparisonType == BooleanComparisonType.IsNotDistinctFrom)
+                    {
+                        // a IS NOT DISTINCT FROM a is always true even if the column is nullable
+                        result = true;
+                        modified = true;
+                        return null;
+                    }
+                    else if ((cmp.ComparisonType == BooleanComparisonType.NotEqualToExclamation || cmp.ComparisonType == BooleanComparisonType.NotEqualToBrackets) && !schema.Schema[colName1].IsNullable)
+                    {
+                        // a <> a is always false so long as the column is not nullable
+                        result = false;
+                        modified = true;
+                        return null;
+                    }
+                    else if (cmp.ComparisonType == BooleanComparisonType.IsDistinctFrom)
+                    {
+                        // a IS DISTINCT FROM a is always false even if the column is nullable
+                        result = false;
+                        modified = true;
+                        return null;
+                    }
+                    else if (cmp.ComparisonType == BooleanComparisonType.LessThan || cmp.ComparisonType == BooleanComparisonType.GreaterThan)
+                    {
+                        // a < a (or a > a) is always false
+                        result = false;
+                        modified = true;
+                        return null;
+                    }
+                }
+            }
+
+            if (filter.IsConstantValueExpression(new ExpressionCompilationContext(context, schema, null), out var value))
+            {
+                result = value;
+                modified = true;
+                return null;
+            }
+
+            return filter;
         }
 
         private bool FoldFiltersToNestedLoopCondition(NodeCompilationContext context, IList<OptimizerHint> hints)
