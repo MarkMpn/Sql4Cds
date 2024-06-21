@@ -242,7 +242,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
-            var contactComputeScalar = AssertNode<ComputeScalarNode>(join.RightSource);
+            var contactFilter = AssertNode<FilterNode>(join.RightSource);
+            Assert.AreEqual("Expr1 IS NOT NULL", contactFilter.Filter.ToSql());
+            var contactComputeScalar = AssertNode<ComputeScalarNode>(contactFilter.Source);
             var contactFetch = AssertNode<FetchXmlScan>(contactComputeScalar.Source);
             AssertFetchXml(contactFetch, @"
                 <fetch>
@@ -3099,7 +3101,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var join = AssertNode<HashJoinNode>(select.Source);
-            var leftCompute = AssertNode<ComputeScalarNode>(join.LeftSource);
+            var leftFilter = AssertNode<FilterNode>(join.LeftSource);
+            Assert.AreEqual("Expr1 IS NOT NULL", leftFilter.Filter.ToSql());
+            var leftCompute = AssertNode<ComputeScalarNode>(leftFilter.Source);
             var leftFetch = AssertNode<FetchXmlScan>(leftCompute.Source);
             AssertFetchXml(leftFetch, @"
                 <fetch>
@@ -3110,7 +3114,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
-            var rightCompute = AssertNode<ComputeScalarNode>(join.RightSource);
+            var rightFilter = AssertNode<FilterNode>(join.RightSource);
+            Assert.AreEqual("Expr2 IS NOT NULL", rightFilter.Filter.ToSql());
+            var rightCompute = AssertNode<ComputeScalarNode>(rightFilter.Source);
             var rightFetch = AssertNode<FetchXmlScan>(rightCompute.Source);
             AssertFetchXml(rightFetch, @"
                 <fetch>
@@ -5832,9 +5838,27 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual("p.name", join.LeftAttribute.ToSql());
             Assert.AreEqual("Expr1", join.RightAttribute.ToSql());
             var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
-            var computeScalar = AssertNode<ComputeScalarNode>(join.RightSource);
+
+            AssertFetchXml(fetch1, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var filter = AssertNode<FilterNode>(join.RightSource);
+            Assert.AreEqual("Expr1 IS NOT NULL", filter.Filter.ToSql());
+            var computeScalar = AssertNode<ComputeScalarNode>(filter.Source);
             Assert.AreEqual("ExplicitCollation(f.name COLLATE French_CI_AS)", computeScalar.Columns["Expr1"].ToSql());
             var fetch2 = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(fetch2, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
         }
 
         [TestMethod]
