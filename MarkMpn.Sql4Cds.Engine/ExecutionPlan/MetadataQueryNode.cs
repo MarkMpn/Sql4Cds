@@ -853,15 +853,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             // Execute expressions to get filter conditions, but preserve the original expressions for later executions
-            var query = new EntityQueryExpression
-            {
-                AttributeQuery = Query.AttributeQuery,
-                Criteria = Query.Criteria,
-                KeyQuery = Query.KeyQuery,
-                LabelQuery = Query.LabelQuery,
-                Properties = Query.Properties,
-                RelationshipQuery = Query.RelationshipQuery
-            };
+            var query = Query.Clone();
 
             ApplyFilterValues(query, new ExpressionExecutionContext(context));
 
@@ -991,24 +983,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void ApplyFilterValues(EntityQueryExpression query, ExpressionExecutionContext context)
         {
-            query.Criteria = ApplyFilterValues(query.Criteria, context);
-
-            if (query.AttributeQuery != null)
-                query.AttributeQuery.Criteria = ApplyFilterValues(query.AttributeQuery.Criteria, context);
-
-            if (query.RelationshipQuery != null)
-                query.RelationshipQuery.Criteria = ApplyFilterValues(query.RelationshipQuery.Criteria, context);
+            ApplyFilterValues(query.Criteria, context);
+            ApplyFilterValues(query.AttributeQuery?.Criteria, context);
+            ApplyFilterValues(query.RelationshipQuery?.Criteria, context);
         }
 
-        private MetadataFilterExpression ApplyFilterValues(MetadataFilterExpression criteria, ExpressionExecutionContext context)
+        private void ApplyFilterValues(MetadataFilterExpression criteria, ExpressionExecutionContext context)
         {
             if (criteria == null)
-                return null;
-
-            var clone = new MetadataFilterExpression();
+                return;
 
             foreach (var filter in criteria.Filters)
-                clone.Filters.Add(ApplyFilterValues(filter, context));
+                ApplyFilterValues(filter, context);
 
             foreach (var condition in criteria.Conditions.ToArray())
             {
@@ -1059,7 +1045,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        clone.Conditions.Add(new MetadataConditionExpression(condition.PropertyName, condition.ConditionOperator, value));
+                        condition.Value = value;
                     }
                 }
                 else if (condition.Value is CompiledExpressionList expressions)
@@ -1079,14 +1065,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     for (var i = 0; i < values.Count; i++)
                         array.SetValue(values[i], i);
 
-                    clone.Conditions.Add(new MetadataConditionExpression(condition.PropertyName, condition.ConditionOperator, array));
+                    condition.Value = array;
                 }
 
                 if (replacementFilter != null)
-                    clone.Filters.Add(replacementFilter);
+                {
+                    criteria.Conditions.Remove(condition);
+                    criteria.Filters.Add(replacementFilter);
+                }
             }
-
-            return clone;
         }
 
         public override object Clone()
