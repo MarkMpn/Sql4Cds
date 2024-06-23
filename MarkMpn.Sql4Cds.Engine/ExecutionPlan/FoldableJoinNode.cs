@@ -117,10 +117,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Left outer join - right key must be non-null
             // Right outer join - left key must be non-null
             if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)
-                LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints);
+                LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints, false);
 
             if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
-                RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints);
+                RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints, false);
 
             if (FoldSingleRowJoinToNestedLoop(context, hints, leftSchema, rightSchema, out folded))
                 return folded;
@@ -142,7 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return folded;
         }
 
-        private IDataExecutionPlanNodeInternal AddNotNullFilter(IDataExecutionPlanNodeInternal source, ColumnReferenceExpression attribute, NodeCompilationContext context, IList<OptimizerHint> hints)
+        protected IDataExecutionPlanNodeInternal AddNotNullFilter(IDataExecutionPlanNodeInternal source, ColumnReferenceExpression attribute, NodeCompilationContext context, IList<OptimizerHint> hints, bool required)
         {
             var schema = source.GetSchema(context);
             if (!schema.ContainsColumn(attribute.GetColumnName(), out var colName))
@@ -163,7 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var folded = filter.FoldQuery(context, hints);
 
-            if (folded != filter)
+            if (required || folded != filter)
             {
                 folded.Parent = this;
                 return folded;

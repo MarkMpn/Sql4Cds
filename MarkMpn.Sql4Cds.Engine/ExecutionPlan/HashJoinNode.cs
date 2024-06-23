@@ -150,6 +150,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     JoinType = QualifiedJoinType.LeftOuter;
             }
 
+            // Make sure the join keys are not null - the SqlType classes override == to prevent NULL = NULL
+            // but .Equals used by the hash table allows them to match
+            LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints, true);
+            RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints, true);
+
             return this;
         }
 

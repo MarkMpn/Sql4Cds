@@ -340,6 +340,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     (fetchXml.Entity.name == "audit" || metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider))
                     canUseFetchXmlAggregate = false;
 
+                // Aggregates on audit entity seem to transform inner joins to left outer joins, so can't
+                // use FetchXML aggregates here
+                if (fetchXml.Entity.name == "audit" && fetchXml.Entity.GetLinkEntities(true).Any())
+                    canUseFetchXmlAggregate = false;
+
                 var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
                 if (canUseFetchXmlAggregate)

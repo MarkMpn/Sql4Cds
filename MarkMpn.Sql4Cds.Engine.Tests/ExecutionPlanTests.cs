@@ -242,7 +242,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
-            var contactComputeScalar = AssertNode<ComputeScalarNode>(join.RightSource);
+            var contactFilter = AssertNode<FilterNode>(join.RightSource);
+            Assert.AreEqual("Expr1 IS NOT NULL", contactFilter.Filter.ToSql());
+            var contactComputeScalar = AssertNode<ComputeScalarNode>(contactFilter.Source);
             var contactFetch = AssertNode<FetchXmlScan>(contactComputeScalar.Source);
             AssertFetchXml(contactFetch, @"
                 <fetch>
@@ -3099,7 +3101,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var join = AssertNode<HashJoinNode>(select.Source);
-            var leftCompute = AssertNode<ComputeScalarNode>(join.LeftSource);
+            var leftFilter = AssertNode<FilterNode>(join.LeftSource);
+            Assert.AreEqual("Expr1 IS NOT NULL", leftFilter.Filter.ToSql());
+            var leftCompute = AssertNode<ComputeScalarNode>(leftFilter.Source);
             var leftFetch = AssertNode<FetchXmlScan>(leftCompute.Source);
             AssertFetchXml(leftFetch, @"
                 <fetch>
@@ -3110,7 +3114,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
-            var rightCompute = AssertNode<ComputeScalarNode>(join.RightSource);
+            var rightFilter = AssertNode<FilterNode>(join.RightSource);
+            Assert.AreEqual("Expr2 IS NOT NULL", rightFilter.Filter.ToSql());
+            var rightCompute = AssertNode<ComputeScalarNode>(rightFilter.Source);
             var rightFetch = AssertNode<FetchXmlScan>(rightCompute.Source);
             AssertFetchXml(rightFetch, @"
                 <fetch>
@@ -5832,9 +5838,27 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual("p.name", join.LeftAttribute.ToSql());
             Assert.AreEqual("Expr1", join.RightAttribute.ToSql());
             var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
-            var computeScalar = AssertNode<ComputeScalarNode>(join.RightSource);
+
+            AssertFetchXml(fetch1, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var filter = AssertNode<FilterNode>(join.RightSource);
+            Assert.AreEqual("Expr1 IS NOT NULL", filter.Filter.ToSql());
+            var computeScalar = AssertNode<ComputeScalarNode>(filter.Source);
             Assert.AreEqual("ExplicitCollation(f.name COLLATE French_CI_AS)", computeScalar.Columns["Expr1"].ToSql());
             var fetch2 = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(fetch2, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
         }
 
         [TestMethod]
@@ -6039,6 +6063,62 @@ UPDATE account SET employees = @employees WHERE name = @name";
         }
 
         [TestMethod]
+        public void FilterAuditOnUserId()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM audit WHERE userid = 'B52C0694-E16F-40CD-9F27-800023C47A98'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='userid' operator='eq' value='B52C0694-E16F-40CD-9F27-800023C47A98' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterAuditOnUserIdAggregate()
+        {
+            // Can do aggregates on audit table when any filtering is done only on the table itself,
+            // not on any joins
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT COUNT(*) FROM audit WHERE userid = 'B52C0694-E16F-40CD-9F27-800023C47A98'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var tryCatch = AssertNode<TryCatchNode>(select.Source);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(aggregateFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' aggregate='true'>
+                    <entity name='audit'>
+                        <attribute name='auditid' aggregate='count' alias='count' />
+                        <filter>
+                            <condition attribute='userid' operator='eq' value='B52C0694-E16F-40CD-9F27-800023C47A98' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var streamAggregate = AssertNode<StreamAggregateNode>(tryCatch.CatchSource);
+            var fetch = AssertNode<FetchXmlScan>(streamAggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <attribute name='auditid' />
+                        <filter>
+                            <condition attribute='userid' operator='eq' value='B52C0694-E16F-40CD-9F27-800023C47A98' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void FilterAuditOnInnerJoinColumn()
         {
             var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
@@ -6054,6 +6134,33 @@ UPDATE account SET employees = @employees WHERE name = @name";
                         <all-attributes />
                         <link-entity name='systemuser' from='systemuserid' to='userid' link-type='inner' alias='systemuser'>
                             <all-attributes />
+                            <filter>
+                                <condition attribute='domainname' operator='ne' value='SYSTEM' />
+                                <condition attribute='domainname' operator='not-null' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterAuditOnInnerJoinColumnAggregate()
+        {
+            // Can't do aggregates on audit table when filtering is done on a join
+            // https://github.com/MarkMpn/Sql4Cds/issues/488
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT COUNT(*) FROM audit INNER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname <> 'SYSTEM'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <attribute name='auditid' />
+                        <link-entity name='systemuser' from='systemuserid' to='userid' link-type='inner' alias='systemuser'>
                             <filter>
                                 <condition attribute='domainname' operator='ne' value='SYSTEM' />
                                 <condition attribute='domainname' operator='not-null' />
