@@ -535,6 +535,27 @@ namespace MarkMpn.Sql4Cds.XTB
                 tsbExecute.PerformClick();
             else if (keyData == Keys.F4)
                 dockPanel.ActiveAutoHideContent = _properties;
+            else if (keyData == (Keys.Control | Keys.W))
+            {
+                if (ConfirmBulkClose(new[] { dockPanel.ActiveDocument }, false))
+                    dockPanel.ActiveDocumentPane.CloseActiveContent();
+            }
+            else if (keyData == (Keys.Control | Keys.PageUp))
+            {
+                var index = dockPanel.ActiveDocumentPane.DisplayingContents.IndexOf(dockPanel.ActiveDocument);
+                index++;
+                if (index >= dockPanel.ActiveDocumentPane.DisplayingContents.Count)
+                    index = 0;
+                ((DockContent)dockPanel.ActiveDocumentPane.DisplayingContents[index]).Activate();
+            }
+            else if (keyData == (Keys.Control | Keys.PageDown))
+            {
+                var index = dockPanel.ActiveDocumentPane.DisplayingContents.IndexOf(dockPanel.ActiveDocument);
+                index--;
+                if (index == -1)
+                    index = dockPanel.ActiveDocumentPane.DisplayingContents.Count - 1;
+                ((DockContent)dockPanel.ActiveDocumentPane.DisplayingContents[index]).Activate();
+            }
             else
                 return base.ProcessCmdKey(ref msg, keyData);
 
