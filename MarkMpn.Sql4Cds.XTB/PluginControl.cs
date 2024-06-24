@@ -632,7 +632,13 @@ namespace MarkMpn.Sql4Cds.XTB
             using (var form = new SettingsForm(Settings.Instance, this))
             {
                 if (form.ShowDialog(this) == DialogResult.OK)
+                {
                     SaveSettings();
+
+                    // Notify each document of the new settings
+                    foreach (var doc in dockPanel.Contents.OfType<IDocumentWindow>())
+                        doc.SettingsChanged();
+                }
             }
         }
 

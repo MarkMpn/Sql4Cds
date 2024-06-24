@@ -78,6 +78,7 @@
             this.label16 = new System.Windows.Forms.Label();
             this.pictureBox3 = new System.Windows.Forms.PictureBox();
             this.tabPage3 = new System.Windows.Forms.TabPage();
+            this.resetToolWindowsButton = new System.Windows.Forms.Button();
             this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
             this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
             this.tabPage4 = new System.Windows.Forms.TabPage();
@@ -87,7 +88,11 @@
             this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
-            this.resetToolWindowsButton = new System.Windows.Forms.Button();
+            this.label18 = new System.Windows.Forms.Label();
+            this.fontComboBox = new System.Windows.Forms.ComboBox();
+            this.label19 = new System.Windows.Forms.Label();
+            this.fontSizeNumericUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label20 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -109,6 +114,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
             this.tabPage3.SuspendLayout();
             this.tabPage4.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.fontSizeNumericUpDown)).BeginInit();
             this.SuspendLayout();
             // 
             // topPanel
@@ -675,6 +681,11 @@
             // 
             // tabPage3
             // 
+            this.tabPage3.Controls.Add(this.label20);
+            this.tabPage3.Controls.Add(this.fontSizeNumericUpDown);
+            this.tabPage3.Controls.Add(this.label19);
+            this.tabPage3.Controls.Add(this.fontComboBox);
+            this.tabPage3.Controls.Add(this.label18);
             this.tabPage3.Controls.Add(this.resetToolWindowsButton);
             this.tabPage3.Controls.Add(this.localDateFormatCheckbox);
             this.tabPage3.Controls.Add(this.rememberSessionCheckbox);
@@ -687,6 +698,16 @@
             this.tabPage3.TabIndex = 2;
             this.tabPage3.Text = "Editor";
             this.tabPage3.UseVisualStyleBackColor = true;
+            // 
+            // resetToolWindowsButton
+            // 
+            this.resetToolWindowsButton.Location = new System.Drawing.Point(6, 98);
+            this.resetToolWindowsButton.Name = "resetToolWindowsButton";
+            this.resetToolWindowsButton.Size = new System.Drawing.Size(119, 23);
+            this.resetToolWindowsButton.TabIndex = 4;
+            this.resetToolWindowsButton.Text = "Reset Tool Windows";
+            this.resetToolWindowsButton.UseVisualStyleBackColor = true;
+            this.resetToolWindowsButton.Click += new System.EventHandler(this.resetToolWindowsButton_Click);
             // 
             // localDateFormatCheckbox
             // 
@@ -788,15 +809,61 @@
             this.label17.TabIndex = 0;
             this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
             // 
-            // resetToolWindowsButton
+            // label18
             // 
-            this.resetToolWindowsButton.Location = new System.Drawing.Point(6, 98);
-            this.resetToolWindowsButton.Name = "resetToolWindowsButton";
-            this.resetToolWindowsButton.Size = new System.Drawing.Size(119, 23);
-            this.resetToolWindowsButton.TabIndex = 4;
-            this.resetToolWindowsButton.Text = "Reset Tool Windows";
-            this.resetToolWindowsButton.UseVisualStyleBackColor = true;
-            this.resetToolWindowsButton.Click += new System.EventHandler(this.resetToolWindowsButton_Click);
+            this.label18.AutoSize = true;
+            this.label18.Location = new System.Drawing.Point(6, 133);
+            this.label18.Name = "label18";
+            this.label18.Size = new System.Drawing.Size(58, 13);
+            this.label18.TabIndex = 5;
+            this.label18.Text = "Editor Font";
+            // 
+            // fontComboBox
+            // 
+            this.fontComboBox.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.SuggestAppend;
+            this.fontComboBox.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
+            this.fontComboBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
+            this.fontComboBox.FormattingEnabled = true;
+            this.fontComboBox.Location = new System.Drawing.Point(9, 149);
+            this.fontComboBox.Name = "fontComboBox";
+            this.fontComboBox.Size = new System.Drawing.Size(200, 21);
+            this.fontComboBox.TabIndex = 6;
+            this.fontComboBox.DrawItem += new System.Windows.Forms.DrawItemEventHandler(this.fontComboBox_DrawItem);
+            // 
+            // label19
+            // 
+            this.label19.AutoSize = true;
+            this.label19.Location = new System.Drawing.Point(212, 134);
+            this.label19.Name = "label19";
+            this.label19.Size = new System.Drawing.Size(51, 13);
+            this.label19.TabIndex = 7;
+            this.label19.Text = "Font Size";
+            // 
+            // fontSizeNumericUpDown
+            // 
+            this.fontSizeNumericUpDown.Location = new System.Drawing.Point(215, 150);
+            this.fontSizeNumericUpDown.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.fontSizeNumericUpDown.Name = "fontSizeNumericUpDown";
+            this.fontSizeNumericUpDown.Size = new System.Drawing.Size(38, 20);
+            this.fontSizeNumericUpDown.TabIndex = 8;
+            this.fontSizeNumericUpDown.Value = new decimal(new int[] {
+            10,
+            0,
+            0,
+            0});
+            // 
+            // label20
+            // 
+            this.label20.AutoSize = true;
+            this.label20.Location = new System.Drawing.Point(259, 152);
+            this.label20.Name = "label20";
+            this.label20.Size = new System.Drawing.Size(16, 13);
+            this.label20.TabIndex = 9;
+            this.label20.Text = "pt";
             // 
             // SettingsForm
             // 
@@ -843,6 +910,7 @@
             this.tabPage3.PerformLayout();
             this.tabPage4.ResumeLayout(false);
             this.tabPage4.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.fontSizeNumericUpDown)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -908,5 +976,10 @@
         private System.Windows.Forms.LinkLabel fetchXml2SqlConversionAdvancedLinkLabel;
         private System.Windows.Forms.CheckBox schemaColumnOrderingCheckbox;
         private System.Windows.Forms.Button resetToolWindowsButton;
+        private System.Windows.Forms.NumericUpDown fontSizeNumericUpDown;
+        private System.Windows.Forms.Label label19;
+        private System.Windows.Forms.ComboBox fontComboBox;
+        private System.Windows.Forms.Label label18;
+        private System.Windows.Forms.Label label20;
     }
 }

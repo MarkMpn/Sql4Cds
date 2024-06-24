@@ -13,6 +13,8 @@ namespace MarkMpn.Sql4Cds.XTB
         TabContent GetSessionDetails();
 
         void RestoreSessionDetails(TabContent tab);
+
+        void SettingsChanged();
     }
 
     interface ISaveableDocumentWindow : IDocumentWindow

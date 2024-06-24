@@ -145,6 +145,21 @@ namespace MarkMpn.Sql4Cds.XTB
         
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
 
+        public override void SettingsChanged()
+        {
+            base.SettingsChanged();
+
+            // Update all styles on the editor to use the new font
+            foreach (var style in _editor.Styles)
+            {
+                style.Font = Settings.Instance.EditorFontName;
+                style.Size = Settings.Instance.EditorFontSize;
+            }
+
+            // Update the font on the autocomplete menu as well
+            _autocomplete.Font = new Font(Settings.Instance.EditorFontName, Settings.Instance.EditorFontSize);
+        }
+
         protected override void OnClosing(CancelEventArgs e)
         {
             if (Busy)
@@ -260,8 +275,8 @@ namespace MarkMpn.Sql4Cds.XTB
 
             // Reset the styles
             scintilla.StyleResetDefault();
-            scintilla.Styles[Style.Default].Font = "Courier New";
-            scintilla.Styles[Style.Default].Size = 10;
+            scintilla.Styles[Style.Default].Font = Settings.Instance.EditorFontName;
+            scintilla.Styles[Style.Default].Size = Settings.Instance.EditorFontSize;
             scintilla.StyleClearAll();
 
             return scintilla;

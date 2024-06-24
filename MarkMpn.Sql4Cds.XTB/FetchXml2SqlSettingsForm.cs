@@ -44,8 +44,8 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             // Reset the styles
             scintilla.StyleResetDefault();
-            scintilla.Styles[Style.Default].Font = "Consolas";
-            scintilla.Styles[Style.Default].Size = 10;
+            scintilla.Styles[Style.Default].Font = Settings.Instance.EditorFontName;
+            scintilla.Styles[Style.Default].Size = Settings.Instance.EditorFontSize;
             scintilla.StyleClearAll();
 
             // Set the XML Lexer
@@ -89,8 +89,8 @@ namespace MarkMpn.Sql4Cds.XTB
             // Set the Styles
             scintilla.StyleResetDefault();
             // I like fixed font for XML
-            scintilla.Styles[Style.Default].Font = "Courier New";
-            scintilla.Styles[Style.Default].Size = 10;
+            scintilla.Styles[Style.Default].Font = Settings.Instance.EditorFontName;
+            scintilla.Styles[Style.Default].Size = Settings.Instance.EditorFontSize;
             scintilla.StyleClearAll();
             scintilla.Styles[Style.Xml.Attribute].ForeColor = Color.Red;
             scintilla.Styles[Style.Xml.Entity].ForeColor = Color.Red;
@@ -106,8 +106,8 @@ namespace MarkMpn.Sql4Cds.XTB
         private void SetSqlStyle(Scintilla scintilla)
         {
             scintilla.StyleResetDefault();
-            scintilla.Styles[Style.Default].Font = "Courier New";
-            scintilla.Styles[Style.Default].Size = 10;
+            scintilla.Styles[Style.Default].Font = Settings.Instance.EditorFontName;
+            scintilla.Styles[Style.Default].Size = Settings.Instance.EditorFontSize;
             scintilla.StyleClearAll();
 
             scintilla.Lexer = Lexer.Sql;
