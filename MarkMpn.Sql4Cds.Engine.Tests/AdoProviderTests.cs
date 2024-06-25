@@ -2105,5 +2105,22 @@ END CATCH";
                 }
             }
         }
+
+        [TestMethod]
+        public void MissingCountParameter()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT count() FROM account");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(174, ex.Number);
+                }
+            }
+        }
     }
 }

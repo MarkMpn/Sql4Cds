@@ -3347,15 +3347,22 @@ namespace MarkMpn.Sql4Cds.Engine
                     Distinct = aggregate.Expression.UniqueRowFilter == UniqueRowFilter.Distinct
                 };
 
-                converted.SqlExpression = aggregate.Expression.Parameters[0].Clone();
+                if (aggregate.Expression.Parameters.Count > 0)
+                    converted.SqlExpression = aggregate.Expression.Parameters[0].Clone();
 
                 switch (aggregate.Expression.FunctionName.Value.ToUpper())
                 {
                     case "AVG":
+                        if (aggregate.Expression.Parameters.Count != 1)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(aggregate.Expression.FunctionName, 1));
+
                         converted.AggregateType = AggregateType.Average;
                         break;
 
                     case "COUNT":
+                        if (aggregate.Expression.Parameters.Count != 1)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(aggregate.Expression.FunctionName, 1));
+
                         if ((converted.SqlExpression is ColumnReferenceExpression countCol && countCol.ColumnType == ColumnType.Wildcard) || (converted.SqlExpression is Literal && !(converted.SqlExpression is NullLiteral)))
                             converted.AggregateType = AggregateType.CountStar;
                         else
@@ -3363,14 +3370,23 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case "MAX":
+                        if (aggregate.Expression.Parameters.Count != 1)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(aggregate.Expression.FunctionName, 1));
+
                         converted.AggregateType = AggregateType.Max;
                         break;
 
                     case "MIN":
+                        if (aggregate.Expression.Parameters.Count != 1)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(aggregate.Expression.FunctionName, 1));
+
                         converted.AggregateType = AggregateType.Min;
                         break;
 
                     case "SUM":
+                        if (aggregate.Expression.Parameters.Count != 1)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(aggregate.Expression.FunctionName, 1));
+
                         if (converted.SqlExpression is IntegerLiteral sumLiteral && sumLiteral.Value == "1")
                             converted.AggregateType = AggregateType.CountStar;
                         else
