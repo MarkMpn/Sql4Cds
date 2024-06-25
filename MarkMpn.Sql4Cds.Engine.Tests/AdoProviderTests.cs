@@ -2088,5 +2088,22 @@ END CATCH";
                 Assert.AreEqual("1,2,3", result);
             }
         }
+
+        [TestMethod]
+        public void InSelectStarError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT * FROM contact WHERE contactid IN (SELECT * FROM account)");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(116, ex.Number);
+                }
+            }
+        }
     }
 }
