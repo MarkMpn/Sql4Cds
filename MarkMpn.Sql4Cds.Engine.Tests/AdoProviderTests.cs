@@ -2075,5 +2075,18 @@ END CATCH";
                 Assert.AreEqual("Not Exists", message);
             }
         }
+
+        [TestMethod]
+        public void StringAggCast()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                var result = con.ExecuteScalar<string>(@"
+                    SELECT STRING_AGG(CAST(ID AS NVARCHAR(MAX)), ',')
+                    FROM (VALUES (1), (2), (3)) AS T(ID)");
+
+                Assert.AreEqual("1,2,3", result);
+            }
+        }
     }
 }

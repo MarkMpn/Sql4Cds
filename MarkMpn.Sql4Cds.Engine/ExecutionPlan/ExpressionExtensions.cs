@@ -2032,10 +2032,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = convert.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, sqlType, style, styleType, styleCacheKey, convert, "CONVERT", out cacheKey);
+            return Convert(context, value, valueType, valueCacheKey, ref sqlType, style, styleType, styleCacheKey, convert, "CONVERT", out cacheKey);
         }
 
-        private static Expression Convert(ExpressionCompilationContext context, Expression value, DataTypeReference valueType, string valueCacheKey, DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
+        private static Expression Convert(ExpressionCompilationContext context, Expression value, DataTypeReference valueType, string valueCacheKey, ref DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
         {
             if (sqlType is SqlDataTypeReference sqlTargetType &&
                 sqlTargetType.SqlDataTypeOption.IsStringType())
@@ -2072,7 +2072,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var value = cast.InvokeSubExpression(x => x.Parameter, x => x.Parameter, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
             sqlType = cast.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, sqlType, null, null, null, cast, "CAST", out cacheKey);
+            return Convert(context, value, valueType, valueCacheKey, ref sqlType, null, null, null, cast, "CAST", out cacheKey);
         }
 
         private static readonly Regex _containsParser = new Regex("^\\S+( OR \\S+)*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
