@@ -253,6 +253,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(ColumnReferenceExpression col, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
+            // Wildcard columns shouldn't appear in an expression
+            if (col.ColumnType == ColumnType.Wildcard)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(col));
+
             var name = col.GetColumnName();
 
             if (context.Schema == null || !context.Schema.ContainsColumn(name, out var normalizedName))

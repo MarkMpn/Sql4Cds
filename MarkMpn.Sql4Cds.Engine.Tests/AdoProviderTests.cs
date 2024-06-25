@@ -2139,5 +2139,22 @@ END CATCH";
                 }
             }
         }
+
+        [TestMethod]
+        public void WildcardColumnAsFunctionParameterIsSyntaxError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT SIZE(*) FROM account");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(102, ex.Number);
+                }
+            }
+        }
     }
 }
