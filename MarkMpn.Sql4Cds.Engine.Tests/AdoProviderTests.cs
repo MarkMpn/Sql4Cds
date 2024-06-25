@@ -2122,5 +2122,22 @@ END CATCH";
                 }
             }
         }
+
+        [TestMethod]
+        public void InvalidTypesForOperator()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT * FROM account where name & ('1') > 1");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(402, ex.Number);
+                }
+            }
+        }
     }
 }

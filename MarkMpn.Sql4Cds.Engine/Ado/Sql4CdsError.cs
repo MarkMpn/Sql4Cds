@@ -740,6 +740,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(15533, fragment, name);
         }
 
+        internal static Sql4CdsError IncompatibleDataTypesForOperator(TSqlFragment fragment, DataTypeReference type1, DataTypeReference type2, string op)
+        {
+            return Create(402, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type1)), Collation.USEnglish.ToSqlString(GetTypeName(type2)), Collation.USEnglish.ToSqlString(op));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)
