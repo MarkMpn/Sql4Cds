@@ -474,6 +474,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var attrType = attr.GetAttributeSqlType(dataSource, false);
                 if (attrType.IsSameAs(DataTypeHelpers.EntityReference))
                     attrType = DataTypeHelpers.UniqueIdentifier;
+
+                // For some operators the value type may be different from the attribute type
+                switch (condition.@operator)
+                {
+                    case @operator.infiscalperiod:
+                    case @operator.infiscalperiodandyear:
+                    case @operator.infiscalyear:
+                    case @operator.inorafterfiscalperiodandyear:
+                    case @operator.inorbeforefiscalperiodandyear:
+                    case @operator.lastxdays:
+                    case @operator.lastxfiscalperiods:
+                    case @operator.lastxfiscalyears:
+                    case @operator.lastxhours:
+                    case @operator.lastxmonths:
+                    case @operator.lastxweeks:
+                    case @operator.lastxyears:
+                    case @operator.nextxdays:
+                    case @operator.nextxfiscalperiods:
+                    case @operator.nextxfiscalyears:
+                    case @operator.nextxhours:
+                    case @operator.nextxmonths:
+                    case @operator.nextxweeks:
+                    case @operator.nextxyears:
+                    case @operator.olderthanxdays:
+                    case @operator.olderthanxhours:
+                    case @operator.olderthanxminutes:
+                    case @operator.olderthanxmonths:
+                    case @operator.olderthanxweeks:
+                    case @operator.olderthanxyears:
+                        attrType = DataTypeHelpers.Int;
+                        break;
+                }
+
                 var conversion = SqlTypeConverter.GetConversion(DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), attrType);
 
                 if (condition.value != null)
