@@ -3935,6 +3935,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression, hints, outerSchema, outerReferences, innerContext);
 
                 // Scalar subquery must return exactly one column and one row
+                subqueryPlan.ExpandWildcardColumns();
+
                 if (subqueryPlan.ColumnSet.Count != 1)
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.MultiColumnScalarSubquery(subquery));
 
