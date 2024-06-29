@@ -1,4 +1,6 @@
-﻿namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
+﻿using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+
+namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
 {
     public class ResultSetSubset
     {

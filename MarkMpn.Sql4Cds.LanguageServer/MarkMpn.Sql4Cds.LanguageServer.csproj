@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetCore\MarkMpn.Sql4Cds.Engine.NetCore.csproj" />
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Export\MarkMpn.Sql4Cds.Export.csproj" />
   </ItemGroup>
 
 </Project>

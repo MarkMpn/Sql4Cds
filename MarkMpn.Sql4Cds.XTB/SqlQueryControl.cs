@@ -18,9 +18,12 @@ using AutocompleteMenuNS;
 using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using MarkMpn.Sql4Cds.Export;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
@@ -61,6 +64,47 @@ namespace MarkMpn.Sql4Cds.XTB
             public int Length { get; }
         }
 
+        abstract class ExportParams
+        {
+            public DataTable DataTable { get; set; }
+
+            public string Filename { get; set; }
+
+            protected abstract IFileStreamFactory GetFileStreamFactory();
+
+            public void Export(Action<int> progress)
+            {
+                var cols = new List<DbColumnWrapper>();
+
+                for (var i = 0; i < DataTable.Columns.Count; i++)
+                {
+                    var col = DataTable.Columns[i];
+                    var schema = (DataRow)col.ExtendedProperties["Schema"];
+                    var type = (string)schema["DataTypeName"];
+                    var scale = (short)schema["NumericScale"];
+                    cols.Add(new DbColumnWrapper(col.Caption, type, scale));
+                }
+
+                using (var stream = GetFileStreamFactory().GetWriter(Filename, cols))
+                {
+                    var cells = new DbCellValue[cols.Count];
+
+                    for (var row = 0; row < DataTable.Rows.Count; row++)
+                    {
+                        for (var col = 0; col < cols.Count; col++)
+                            cells[col] = ValueFormatter.Format(DataTable.Rows[row][col], cols[col].DataTypeName, cols[col].NumericScale, Settings.Instance.LocalFormatDates);
+
+                        stream.WriteRow(cells, cols);
+
+                        if ((row + 1) % 100 == 0)
+                            progress(row + 1);
+                    }
+
+                    progress(DataTable.Rows.Count);
+                }
+            }
+        }
+
         private ConnectionDetail _con;
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
@@ -85,6 +129,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private FindReplace _findReplace;
         private bool _ctrlK;
         private Font _linkFont;
+        private BackgroundWorker _exportBackgroundWorker;
 
         static SqlQueryControl()
         {
@@ -97,6 +142,13 @@ namespace MarkMpn.Sql4Cds.XTB
         public SqlQueryControl(ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
+
+            _exportBackgroundWorker = new BackgroundWorker();
+            _exportBackgroundWorker.DoWork += exportBackgroundWorker_DoWork;
+            _exportBackgroundWorker.ProgressChanged += backgroundWorker_ProgressChanged;
+            _exportBackgroundWorker.RunWorkerCompleted += exportBackgroundWorker_RunWorkerCompleted;
+            _exportBackgroundWorker.WorkerReportsProgress = true;
+
             DisplayName = $"SQLQuery{++_queryCounter}.sql";
             ShowFetchXML = showFetchXml;
             DataSources = dataSources;
@@ -142,7 +194,7 @@ namespace MarkMpn.Sql4Cds.XTB
         public Action<string> ShowFetchXML { get; }
 
         public ConnectionDetail Connection => _con;
-        
+
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
 
         public override void SettingsChanged()
@@ -576,7 +628,7 @@ namespace MarkMpn.Sql4Cds.XTB
             if (Connection == null)
                 return;
 
-            if (backgroundWorker.IsBusy)
+            if (Busy)
                 return;
 
             var offset = String.IsNullOrEmpty(_editor.SelectedText) ? 0 : _editor.SelectionStart;
@@ -592,7 +644,7 @@ namespace MarkMpn.Sql4Cds.XTB
             backgroundWorker.RunWorkerAsync(_params);
         }
 
-        public bool Busy => backgroundWorker.IsBusy;
+        public bool Busy => backgroundWorker.IsBusy || _exportBackgroundWorker.IsBusy;
 
         public event EventHandler BusyChanged;
 
@@ -1257,85 +1309,32 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private void FormatCell(object sender, DataGridViewCellFormattingEventArgs e)
         {
-            var grid = (DataGridView)sender;
-            var results = (DataTable)grid.DataSource;
+            var results = sender as DataTable;
 
-            if (e.Value is DBNull || (e.Value is INullable nullable && nullable.IsNull))
+            if (sender is DataGridView grid)
+                results = (DataTable)grid.DataSource;
+
+            var col = results.Columns[e.ColumnIndex];
+            var schema = (DataRow)col.ExtendedProperties["Schema"];
+            var type = (string)schema["DataTypeName"];
+            var scale = (short)schema["NumericScale"];
+            var cell = ValueFormatter.Format(e.Value, type, scale, Settings.Instance.LocalFormatDates);
+
+            e.Value = cell.DisplayValue;
+            e.FormattingApplied = true;
+
+            if (cell.IsNull)
             {
-                e.Value = "NULL";
-
                 if (e.CellStyle != null)
                     e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
-                
-                e.FormattingApplied = true;
             }
-            else if (e.Value is bool b)
-            {
-                e.Value = b ? "1" : "0";
-                e.FormattingApplied = true;
-            }
-            else if (e.Value is DateTime dt)
-            {
-                var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                var type = (string)schema["DataTypeName"];
-
-                if (type == "date")
-                {
-                    if (Settings.Instance.LocalFormatDates)
-                        e.Value = dt.ToShortDateString();
-                    else
-                        e.Value = dt.ToString("yyyy-MM-dd");
-
-                    e.FormattingApplied = true;
-                }
-                else if (type == "smalldatetime")
-                {
-                    if (Settings.Instance.LocalFormatDates)
-                        e.Value = dt.ToShortDateString() + " " + dt.ToString("HH:mm");
-                    else
-                        e.Value = dt.ToString("yyyy-MM-dd HH:mm");
-
-                    e.FormattingApplied = true;
-                }
-                else if (!Settings.Instance.LocalFormatDates)
-                {
-                    var scale = (short)schema["NumericScale"];
-                    e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', scale))));
-                    e.FormattingApplied = true;
-                }
-            }
-            else if (e.Value is TimeSpan ts && !Settings.Instance.LocalFormatDates)
-            {
-                var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                var scale = (short)schema["NumericScale"];
-                e.Value = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
-                e.FormattingApplied = true;
-            }
-            else if (e.Value is decimal dec)
-            {
-                var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                var scale = (short)schema["NumericScale"];
-                e.Value = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
-                e.FormattingApplied = true;
-            }
-            else if (e.Value is SqlEntityReference)
+            else if (e.Value is SqlEntityReference || e.Value is SqlXml)
             {
                 if (e.CellStyle != null)
                 {
                     e.CellStyle.ForeColor = SystemColors.HotTrack;
                     e.CellStyle.Font = _linkFont;
                 }
-            }
-            else if (e.Value is SqlXml xml)
-            {
-                if (e.CellStyle != null)
-                {
-                    e.CellStyle.ForeColor = SystemColors.HotTrack;
-                    e.CellStyle.Font = _linkFont;
-                }
-
-                e.Value = xml.Value;
-                e.FormattingApplied = true;
             }
         }
 
@@ -1377,7 +1376,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {
             toolStripStatusLabel.Image = null;
-            toolStripStatusLabel.Text = (string) e.UserState;
+            toolStripStatusLabel.Text = (string)e.UserState;
         }
 
         private void timer_Tick(object sender, EventArgs e)
@@ -1428,7 +1427,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
 
             if (control is Scintilla scintilla)
-                return (int) ((scintilla.Lines.Count + 1) * scintilla.Styles[Style.Default].Size * 1.6) + 20;
+                return (int)((scintilla.Lines.Count + 1) * scintilla.Styles[Style.Default].Size * 1.6) + 20;
 
             if (control is Panel panel)
                 return panel.Controls.OfType<Control>().Sum(child => GetMinHeight(child, max));
@@ -1450,7 +1449,7 @@ namespace MarkMpn.Sql4Cds.XTB
             else
             {
                 var service = (CrmServiceClient)DataSources[Connection.ConnectionName].Connection;
-                
+
                 if (service.CallerId == Guid.Empty)
                 {
                     usernameDropDownButton.Text = _con.UserName;
@@ -1512,6 +1511,9 @@ namespace MarkMpn.Sql4Cds.XTB
             }
 
             copyToolStripMenuItem.Enabled = grid.Rows.Count > 0;
+
+            saveAsCSVToolStripMenuItem.Enabled = !Busy;
+            saveAsExcelToolStripMenuItem.Enabled = !Busy;
         }
 
         private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
@@ -1842,6 +1844,136 @@ namespace MarkMpn.Sql4Cds.XTB
                 container = control as IContainerControl;
             }
             return control;
+        }
+
+        private void saveAsCSVToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+            var table = (DataTable)grid.DataSource;
+
+            using (var saveDialog = new SaveFileDialog())
+            {
+                saveDialog.Filter = "CSV Files (*.csv)|*.csv";
+
+                if (saveDialog.ShowDialog() == DialogResult.OK)
+                {
+                    _exportBackgroundWorker.RunWorkerAsync(new ExportToCsv(table, saveDialog.FileName));
+                }
+            }
+        }
+
+        class ExportToCsv : ExportParams
+        {
+            public ExportToCsv(DataTable table, string filename)
+            {
+                DataTable = table;
+                Filename = filename;
+            }
+
+            protected override IFileStreamFactory GetFileStreamFactory()
+            {
+                return new SaveAsCsvFileStreamFactory
+                {
+                    SaveRequestParams = new SaveResultsAsCsvRequestParams
+                    {
+                        FilePath = Filename,
+                        IncludeHeaders = true
+                    }
+                };
+            }
+        }
+
+        private void saveAsExcelToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+            var table = (DataTable)grid.DataSource;
+
+            using (var saveDialog = new SaveFileDialog())
+            {
+                saveDialog.Filter = "Excel Files (*.xlsx)|*.xlsx";
+
+                if (saveDialog.ShowDialog() == DialogResult.OK)
+                {
+                    _exportBackgroundWorker.RunWorkerAsync(new ExportToExcel(table, saveDialog.FileName));
+                }
+            }
+        }
+
+        class ExportToExcel : ExportParams
+        {
+            public ExportToExcel(DataTable table, string filename)
+            {
+                DataTable = table;
+                Filename = filename;
+            }
+
+            protected override IFileStreamFactory GetFileStreamFactory()
+            {
+                return new SaveAsExcelFileStreamFactory
+                {
+                    SaveRequestParams = new SaveResultsAsExcelRequestParams
+                    {
+                        FilePath = Filename,
+                        IncludeHeaders = true,
+                        BoldHeaderRow = true
+                    }
+                };
+            }
+        }
+
+        private void exportBackgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            _progressHost.Visible = false;
+            _stopwatch.Stop();
+            timer.Enabled = false;
+
+            if (e.Error != null)
+            {
+                toolStripStatusLabel.Image = Properties.Resources.StatusWarning_16x;
+                toolStripStatusLabel.Text = "Export failed";
+                MessageBox.Show(e.Error.Message, "Export Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            else
+            {
+                toolStripStatusLabel.Image = Properties.Resources.StatusOK_16x;
+                toolStripStatusLabel.Text = "Export completed";
+            }
+
+            BusyChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void exportBackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            BusyChanged?.Invoke(this, EventArgs.Empty);
+
+            var exportParams = (ExportParams)e.Argument;
+
+            Execute(() =>
+            {
+                _progressHost.Visible = true;
+                timerLabel.Text = "00:00:00";
+                _stopwatch.Restart();
+                timer.Enabled = true;
+                _rowCount = 0;
+                rowsLabel.Text = "0 rows";
+            });
+
+            _exportBackgroundWorker.ReportProgress(0, "Exporting data...");
+
+            exportParams.Export(rows =>
+            {
+                Execute(() =>
+                {
+                    _rowCount = rows;
+
+                    if (_rowCount == 1)
+                        rowsLabel.Text = "1 row";
+                    else
+                        rowsLabel.Text = $"{_rowCount:N0} rows";
+                });
+            });
+
+            e.Result = exportParams;
         }
     }
 }
