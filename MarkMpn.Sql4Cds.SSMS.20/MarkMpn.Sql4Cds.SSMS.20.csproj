@@ -155,9 +155,9 @@
       <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
       <Name>MarkMpn.Sql4Cds.Controls</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
-      <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
-      <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
+      <Project>{c77b731d-e55c-4197-b96c-2b23eb9f56ef}</Project>
+      <Name>MarkMpn.Sql4Cds.Engine</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

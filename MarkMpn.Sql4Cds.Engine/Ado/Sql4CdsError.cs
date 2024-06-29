@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             _errorNumberToDetails = new Dictionary<int, Sql4CdsError>();
 
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.Engine.resources.Errors.csv"))
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.Engine.Resources.Errors.csv"))
             using (var reader = new StreamReader(stream))
             {
                 string line;

@@ -14,12 +14,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Tests", "Ma
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.FetchXml.Tests", "MarkMpn.Sql4Cds.Engine.FetchXml.Tests\MarkMpn.Sql4Cds.Engine.FetchXml.Tests.csproj", "{69F7D111-3542-4E31-A0F8-E544F9FFA587}"
 EndProject
-Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "MarkMpn.Sql4Cds.Engine", "MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.shproj", "{BCF89341-E1A6-4106-9C12-1E15C9E7C58B}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.NetFx", "MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj", "{23288BB2-0D6F-4329-9A5C-4C659567A652}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.Engine.NetCore", "MarkMpn.Sql4Cds.Engine.NetCore\MarkMpn.Sql4Cds.Engine.NetCore.csproj", "{A570CBCA-D09C-40D5-A318-A95C8FBBD593}"
-EndProject
 Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "MarkMpn.Sql4Cds.Engine.FetchXml", "MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.FetchXml.shproj", "{460A4174-B9EA-413A-AF83-C27C0686E98F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Controls", "MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj", "{04C2D073-DE54-4628-B876-5965D0B75B6E}"
@@ -58,6 +52,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide", "MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide\MarkMpn.Sql4Cds.DebugVisualizer.DebugeeSide.csproj", "{65FD7411-5B94-443B-A4C3-A66082E0B0AE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Export", "MarkMpn.Sql4Cds.Export\MarkMpn.Sql4Cds.Export.csproj", "{920BAC0A-847B-467B-ADAA-674DF59209F2}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.Engine", "MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj", "{C77B731D-E55C-4197-B96C-2B23EB9F56EF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -117,30 +113,6 @@ Global
 		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Release|arm64.Build.0 = Release|Any CPU
 		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Release|x86.ActiveCfg = Release|Any CPU
 		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Release|x86.Build.0 = Release|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Debug|arm64.ActiveCfg = Debug|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Debug|arm64.Build.0 = Debug|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Debug|x86.Build.0 = Debug|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Release|Any CPU.Build.0 = Release|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Release|arm64.ActiveCfg = Release|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Release|arm64.Build.0 = Release|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Release|x86.ActiveCfg = Release|Any CPU
-		{23288BB2-0D6F-4329-9A5C-4C659567A652}.Release|x86.Build.0 = Release|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Debug|arm64.ActiveCfg = Debug|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Debug|arm64.Build.0 = Debug|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Debug|x86.Build.0 = Debug|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|arm64.ActiveCfg = Release|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|arm64.Build.0 = Release|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|x86.ActiveCfg = Release|Any CPU
-		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|x86.Build.0 = Release|Any CPU
 		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Debug|arm64.ActiveCfg = Debug|Any CPU
@@ -279,6 +251,18 @@ Global
 		{920BAC0A-847B-467B-ADAA-674DF59209F2}.Release|arm64.Build.0 = Release|Any CPU
 		{920BAC0A-847B-467B-ADAA-674DF59209F2}.Release|x86.ActiveCfg = Release|Any CPU
 		{920BAC0A-847B-467B-ADAA-674DF59209F2}.Release|x86.Build.0 = Release|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Debug|arm64.Build.0 = Debug|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Debug|x86.Build.0 = Debug|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Release|arm64.ActiveCfg = Release|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Release|arm64.Build.0 = Release|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Release|x86.ActiveCfg = Release|Any CPU
+		{C77B731D-E55C-4197-B96C-2B23EB9F56EF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -291,14 +275,11 @@ Global
 		SolutionGuid = {5E960561-7FE2-4022-964B-57E990767108}
 	EndGlobalSection
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
-		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems*{23288bb2-0d6f-4329-9a5c-4c659567a652}*SharedItemsImports = 4
 		MarkMpn.Sql4Cds.SSMS\MarkMpn.Sql4Cds.SSMS.projitems*{2cfff3c0-5a6f-493b-86d7-4cc42b322393}*SharedItemsImports = 4
 		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.FetchXml.projitems*{460a4174-b9ea-413a-af83-c27c0686e98f}*SharedItemsImports = 13
 		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.FetchXml.projitems*{69f7d111-3542-4e31-a0f8-e544f9ffa587}*SharedItemsImports = 4
 		MarkMpn.Sql4Cds.SSMS\MarkMpn.Sql4Cds.SSMS.projitems*{73283a07-671d-4ba2-b922-98987f85330b}*SharedItemsImports = 13
 		MarkMpn.Sql4Cds.SSMS\MarkMpn.Sql4Cds.SSMS.projitems*{8c71690c-4ef8-4ebf-88c0-33952fed3acf}*SharedItemsImports = 4
-		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems*{a570cbca-d09c-40d5-a318-a95c8fbbd593}*SharedItemsImports = 5
 		MarkMpn.Sql4Cds.SSMS\MarkMpn.Sql4Cds.SSMS.projitems*{baf95ec5-addf-422a-a40c-cb8f5da1c445}*SharedItemsImports = 4
-		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems*{bcf89341-e1a6-4106-9c12-1e15c9e7c58b}*SharedItemsImports = 13
 	EndGlobalSection
 EndGlobal

@@ -12,8 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetCore\MarkMpn.Sql4Cds.Engine.NetCore.csproj" Condition="'$(TargetFramework)' == 'net6.0'" />
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj" Condition="'$(TargetFramework)' == 'net462'" />
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
   </ItemGroup>
 
 </Project>
