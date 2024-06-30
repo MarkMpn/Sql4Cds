@@ -1328,7 +1328,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (e.CellStyle != null)
                     e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
             }
-            else if (e.Value is SqlEntityReference || e.Value is SqlXml)
+            else if (cell.RawObject is SqlEntityReference || cell.RawObject is SqlXml)
             {
                 if (e.CellStyle != null)
                 {
@@ -1894,17 +1894,20 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 if (saveDialog.ShowDialog() == DialogResult.OK)
                 {
-                    _exportBackgroundWorker.RunWorkerAsync(new ExportToExcel(table, saveDialog.FileName));
+                    _exportBackgroundWorker.RunWorkerAsync(new ExportToExcel(table, saveDialog.FileName, er => GetRecordUrl(er, out _)));
                 }
             }
         }
 
         class ExportToExcel : ExportParams
         {
-            public ExportToExcel(DataTable table, string filename)
+            private readonly Func<SqlEntityReference, string> _urlGenerator;
+
+            public ExportToExcel(DataTable table, string filename, Func<SqlEntityReference, string> urlGenerator)
             {
                 DataTable = table;
                 Filename = filename;
+                _urlGenerator = urlGenerator;
             }
 
             protected override IFileStreamFactory GetFileStreamFactory()
@@ -1916,7 +1919,8 @@ namespace MarkMpn.Sql4Cds.XTB
                         FilePath = Filename,
                         IncludeHeaders = true,
                         BoldHeaderRow = true
-                    }
+                    },
+                    UrlGenerator = _urlGenerator
                 };
             }
         }

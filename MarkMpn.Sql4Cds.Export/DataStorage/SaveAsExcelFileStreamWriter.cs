@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
 using SkiaSharp;
 
@@ -32,6 +33,7 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
         private readonly int columnEndIndex;
         private readonly int columnStartIndex;
         private readonly SaveAsExcelFileStreamWriterHelper helper;
+        private readonly Func<SqlEntityReference, string> urlGenerator;
 
         private bool headerWritten;
         private SaveAsExcelFileStreamWriterHelper.ExcelSheet sheet;
@@ -50,11 +52,12 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
         /// The entire list of columns for the result set. They will be filtered down as per the
         /// request params.
         /// </param>
-        public SaveAsExcelFileStreamWriter(Stream stream, SaveResultsAsExcelRequestParams requestParams, IReadOnlyList<DbColumnWrapper> columns)
+        public SaveAsExcelFileStreamWriter(Stream stream, SaveResultsAsExcelRequestParams requestParams, IReadOnlyList<DbColumnWrapper> columns, Func<SqlEntityReference, string> urlGenerator)
             : base(stream, requestParams, columns)
         {
             saveParams = requestParams;
             helper = new SaveAsExcelFileStreamWriterHelper(stream);
+            this.urlGenerator = urlGenerator;
 
             // Do some setup if the caller requested automatically sized columns
             if (requestParams.AutoSizeColumns)
@@ -198,7 +201,7 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
             sheet.AddRow();
             for (int i = ColumnStartIndex; i <= ColumnEndIndex; i++)
             {
-                sheet.AddCell(row[i]);
+                sheet.AddCell(row[i], urlGenerator: urlGenerator);
             }
         }
 

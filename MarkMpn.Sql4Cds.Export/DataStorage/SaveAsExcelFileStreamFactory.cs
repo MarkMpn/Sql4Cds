@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
 using Microsoft.SqlTools.ServiceLayer.Utility;
 
@@ -23,6 +24,11 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
         /// Parameters for the save as Excel request
         /// </summary>
         public SaveResultsAsExcelRequestParams SaveRequestParams { get; set; }
+
+        /// <summary>
+        /// A function to create a URL from a SqlEntityReference
+        /// </summary>
+        public Func<SqlEntityReference, string> UrlGenerator { get; set; }
 
         #endregion
 
@@ -62,7 +68,8 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
             return new SaveAsExcelFileStreamWriter(
                 new FileStream(fileName, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite),
                 SaveRequestParams,
-                columns
+                columns,
+                UrlGenerator
             );
         }
 

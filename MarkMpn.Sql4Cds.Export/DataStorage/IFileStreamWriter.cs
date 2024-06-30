@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
 
 

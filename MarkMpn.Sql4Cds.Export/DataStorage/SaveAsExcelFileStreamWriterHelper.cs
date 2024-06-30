@@ -10,6 +10,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Xml;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
 
 namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
@@ -164,12 +165,45 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
             }
 
             /// <summary>
+            /// Write an entity reference cell
+            /// </summary>
+            /// <param name="value">Entity reference value to write</param>
+            public void AddCell(SqlEntityReference value, Func<SqlEntityReference, string> urlGenerator)
+            {
+                // string needs <c t="inlineStr"><is><t>string</t></is></c>
+                // This class uses inlineStr instead of more common shared string table
+                // to improve write performance and reduce implementation complexity
+                referenceManager.AssureColumnReference();
+                if (value.IsNull)
+                {
+                    AddCellEmpty();
+                    return;
+                }
+
+                writer.WriteStartElement("c");
+
+                referenceManager.WriteAndIncreaseColumnReference();
+
+                writer.WriteAttributeString("t", "inlineStr");
+                writer.WriteAttributeString("s", "6");
+
+                writer.WriteStartElement("f");
+                writer.WriteValue($"HYPERLINK(\"{urlGenerator(value)}\",\"{value.Id}\")");
+                writer.WriteEndElement();   // <f>
+                writer.WriteStartElement("v");
+                writer.WriteValue(value.Id.ToString());
+                writer.WriteEndElement();   // <v>
+
+                writer.WriteEndElement();   // <c>
+            }
+
+            /// <summary>
             /// Write a object cell
             /// </summary>
             /// The program will try to output number/datetime, otherwise, call the ToString 
             /// <param name="dbCellValue">DbCellValue to write based on data type</param>
             /// <param name="bold">Whether the cell should be bold, defaults to false</param>
-            public void AddCell(DbCellValue dbCellValue, bool bold = false)
+            public void AddCell(DbCellValue dbCellValue, bool bold = false, Func<SqlEntityReference, string> urlGenerator = null)
             {
                 object o = dbCellValue.RawObject;
                 if (dbCellValue.IsNull || o == null)
@@ -206,6 +240,10 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
                         else if (o is SqlDecimal || o is SqlMoney)
                         {
                             AddCellBoxedNumber(dbCellValue.DisplayValue);
+                        }
+                        else if (o is SqlEntityReference er && urlGenerator != null)
+                        {
+                            AddCell(er, urlGenerator);
                         }
                         else
                         {
@@ -847,7 +885,7 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
 
 
                 xw.WriteStartElement("fonts");
-                xw.WriteAttributeString("count", "2");
+                xw.WriteAttributeString("count", "3");
 
                 xw.WriteStartElement("font");
                 xw.WriteStartElement("sz");
@@ -887,6 +925,26 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
                 xw.WriteEndElement();   // <scheme>
                 xw.WriteEndElement();   // <font>
 
+                xw.WriteStartElement("font");
+                xw.WriteStartElement("u");
+                xw.WriteEndElement();   // <u>
+                xw.WriteStartElement("sz");
+                xw.WriteAttributeString("val", "11");
+                xw.WriteEndElement();   // <sz>
+                xw.WriteStartElement("color");
+                xw.WriteAttributeString("theme", "10");
+                xw.WriteEndElement();   // <color>
+                xw.WriteStartElement("name");
+                xw.WriteAttributeString("val", "Calibri");
+                xw.WriteEndElement();   // <name>
+                xw.WriteStartElement("family");
+                xw.WriteAttributeString("val", "2");
+                xw.WriteEndElement();   // <family>
+                xw.WriteStartElement("scheme");
+                xw.WriteAttributeString("val", "minor");
+                xw.WriteEndElement();   // <scheme>
+                xw.WriteEndElement();   // <font>
+
                 xw.WriteEndElement(); // fonts
 
                 xw.WriteStartElement("fills");
@@ -910,17 +968,23 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
                 xw.WriteEndElement();   // <borders>
 
                 xw.WriteStartElement("cellStyleXfs");
-                xw.WriteAttributeString("count", "1");
+                xw.WriteAttributeString("count", "2");
                 xw.WriteStartElement("xf");
                 xw.WriteAttributeString("numFmtId", "0");
                 xw.WriteAttributeString("fontId", "0");
                 xw.WriteAttributeString("fillId", "0");
                 xw.WriteAttributeString("borderId", "0");
                 xw.WriteEndElement();   // <xf>
+                xw.WriteStartElement("xf");
+                xw.WriteAttributeString("numFmtId", "0");
+                xw.WriteAttributeString("fontId", "2");
+                xw.WriteAttributeString("fillId", "0");
+                xw.WriteAttributeString("borderId", "0");
+                xw.WriteEndElement();   // <xf>
                 xw.WriteEndElement();   // <cellStyleXfs>
 
                 xw.WriteStartElement("cellXfs");
-                xw.WriteAttributeString("count", "6");
+                xw.WriteAttributeString("count", "7");
                 xw.WriteStartElement("xf");
                 xw.WriteAttributeString("xfId", "0");
                 xw.WriteEndElement();   // <xf>
@@ -948,10 +1012,19 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
                 xw.WriteAttributeString("xfId", "0");
                 xw.WriteAttributeString("fontId", "1");
                 xw.WriteEndElement();   // <xf>
+                xw.WriteStartElement("xf");
+                xw.WriteAttributeString("xfId", "1");
+                xw.WriteAttributeString("fontId", "2");
+                xw.WriteEndElement();   // <xf>
                 xw.WriteEndElement();   // <cellXfs>
 
                 xw.WriteStartElement("cellStyles");
-                xw.WriteAttributeString("count", "1");
+                xw.WriteAttributeString("count", "2");
+                xw.WriteStartElement("cellStyle");
+                xw.WriteAttributeString("name", "Hyperlink");
+                xw.WriteAttributeString("builtinId", "8");
+                xw.WriteAttributeString("xfId", "1");
+                xw.WriteEndElement();   // <cellStyle>
                 xw.WriteStartElement("cellStyle");
                 xw.WriteAttributeString("name", "Normal");
                 xw.WriteAttributeString("builtinId", "0");
