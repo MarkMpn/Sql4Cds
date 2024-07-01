@@ -8,9 +8,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Xml;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     /// <summary>
     /// Writer for writing rows of results to a XML file.

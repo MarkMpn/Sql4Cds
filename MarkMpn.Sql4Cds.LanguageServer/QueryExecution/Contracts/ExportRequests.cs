@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts

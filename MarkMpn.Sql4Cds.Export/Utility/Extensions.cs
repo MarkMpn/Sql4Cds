@@ -6,7 +6,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Microsoft.SqlTools.Utility
+namespace MarkMpn.Sql4Cds.Export.Utility
 {
     public static class ObjectExtensions
     {

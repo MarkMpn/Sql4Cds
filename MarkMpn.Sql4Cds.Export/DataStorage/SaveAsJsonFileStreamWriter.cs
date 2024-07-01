@@ -6,10 +6,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
 using Newtonsoft.Json;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     /// <summary>
     /// Writer for writing rows of results to a JSON file.

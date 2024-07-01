@@ -5,10 +5,10 @@
 
 using System.Collections.Generic;
 using System.IO;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
 using Microsoft.SqlTools.ServiceLayer.Utility;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     /// <summary>
     /// Factory that creates file reader/writers that process rows in an internal, non-human readable file format

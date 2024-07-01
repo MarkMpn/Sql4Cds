@@ -7,10 +7,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
-using Microsoft.SqlTools.Utility;
+using MarkMpn.Sql4Cds.Export.Contracts;
+using MarkMpn.Sql4Cds.Export.Utility;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     /// <summary>
     /// Abstract class for implementing writers that save results to file. Stores some basic info

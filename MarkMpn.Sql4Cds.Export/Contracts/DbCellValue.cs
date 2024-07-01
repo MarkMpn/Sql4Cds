@@ -3,9 +3,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 //
 
-using Microsoft.SqlTools.Utility;
+using MarkMpn.Sql4Cds.Export.Utility;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts
+namespace MarkMpn.Sql4Cds.Export.Contracts
 {
     /// <summary>
     /// Class used for internally passing results from a cell around.

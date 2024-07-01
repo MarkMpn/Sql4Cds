@@ -11,9 +11,9 @@ using System.IO;
 using System.IO.Compression;
 using System.Xml;
 using MarkMpn.Sql4Cds.Engine;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     // A xlsx file is a zip with specific folder structure.
     // http://www.ecma-international.org/publications/standards/Ecma-376.htm

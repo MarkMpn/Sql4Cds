@@ -6,10 +6,10 @@
 using System;
 using System.Collections.Generic;
 using MarkMpn.Sql4Cds.Engine;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
 
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     /// <summary>
     /// Interface for a object that writes to a filesystem wrapper

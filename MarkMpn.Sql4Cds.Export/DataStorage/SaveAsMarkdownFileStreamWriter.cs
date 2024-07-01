@@ -11,9 +11,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 using MarkMpn.Sql4Cds.Engine;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     /// <summary>
     /// Writer for exporting results to a Markdown table.

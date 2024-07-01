@@ -10,9 +10,9 @@ using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Diagnostics;
-using Microsoft.SqlTools.Utility;
+using MarkMpn.Sql4Cds.Export.Utility;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts
+namespace MarkMpn.Sql4Cds.Export.Contracts
 {
     /// <summary>
     /// Wrapper around a DbColumn, which provides extra functionality, but can be used as a

@@ -9,10 +9,10 @@ using System.Data;
 using System.Data.SqlTypes;
 using System.IO;
 using System.Text;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
-using Microsoft.SqlTools.Utility;
+using MarkMpn.Sql4Cds.Export.Contracts;
+using MarkMpn.Sql4Cds.Export.Utility;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
+namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
     /// <summary>
     /// Reader for service buffer formatted file streams

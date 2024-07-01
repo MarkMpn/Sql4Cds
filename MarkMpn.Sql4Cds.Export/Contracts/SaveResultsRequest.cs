@@ -4,7 +4,7 @@
 //
 
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts
+namespace MarkMpn.Sql4Cds.Export.Contracts
 {
     /// <summary>
     /// Parameters for the save results request

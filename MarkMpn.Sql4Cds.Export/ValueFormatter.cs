@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Text;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution;
-using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using MarkMpn.Sql4Cds.Export;
+using MarkMpn.Sql4Cds.Export.Contracts;
 
 namespace MarkMpn.Sql4Cds.Export
 {

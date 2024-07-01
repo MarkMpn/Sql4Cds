@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.Text;
 
-namespace Microsoft.SqlTools.ServiceLayer.QueryExecution
+namespace MarkMpn.Sql4Cds.Export
 {
     internal class SR
     {
