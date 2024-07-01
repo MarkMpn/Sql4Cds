@@ -21,6 +21,7 @@ using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts;
 using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
+using Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -58,6 +59,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             lsp.AddHandler(QueryExecutionPlanRequest.Type, HandleQueryExecutionPlan);
             lsp.AddHandler(QueryDisposeRequest.Type, HandleQueryDispose);
             lsp.AddHandler(ConfirmationResponse.Type, HandleConfirmation);
+            lsp.AddHandler(ExportRequests.CsvType, HandleExportCsv);
+            lsp.AddHandler(ExportRequests.ExcelType, HandleExportExcel);
+            lsp.AddHandler(ExportRequests.JsonType, HandleExportJson);
+            lsp.AddHandler(ExportRequests.MarkdownType, HandleExportMarkdown);
+            lsp.AddHandler(ExportRequests.XmlType, HandleExportXml);
         }
 
         private void HandleConfirmation(ConfirmationResponseParams arg)
@@ -1048,6 +1054,72 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         {
             _resultSets.Remove(request.OwnerUri, out _);
             return new QueryDisposeResult();
+        }
+
+        public SaveResultRequestResult HandleExportCsv(SaveResultsAsCsvRequestParams request)
+        {
+            var factory = new SaveAsCsvFileStreamFactory { SaveRequestParams = request };
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportExcel(SaveResultsAsExcelRequestParams request)
+        {
+            var factory = new SaveAsExcelFileStreamFactory
+            {
+                SaveRequestParams = request,
+                UrlGenerator = _connectionManager.GetConnection(request.OwnerUri).DataSource.GetEntityReferenceUrl
+            };
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportJson(SaveResultsAsJsonRequestParams request)
+        {
+            var factory = new SaveAsJsonFileStreamFactory
+            {
+                SaveRequestParams = request
+            };
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportMarkdown(SaveResultsAsMarkdownRequestParams request)
+        {
+            var factory = new SaveAsMarkdownFileStreamFactory(request, _connectionManager.GetConnection(request.OwnerUri).DataSource.GetEntityReferenceUrl);
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportXml(SaveResultsAsXmlRequestParams request)
+        {
+            var factory = new SaveAsXmlFileStreamFactory
+            {
+                SaveRequestParams = request
+            };
+            return SaveResultsHelper(request, factory);
+        }
+
+        private SaveResultRequestResult SaveResultsHelper(SaveResultsRequestParams request, IFileStreamFactory factory)
+        {
+            try
+            {
+                var resultSet = _resultSets[request.OwnerUri][request.ResultSetIndex];
+
+                using (var writer = factory.GetWriter(request.FilePath, resultSet.ColumnInfo))
+                {
+                    foreach (var row in resultSet.Values)
+                    {
+                        writer.WriteRow(row.Select((value, colIndex) =>
+                        {
+                            var col = resultSet.ColumnInfo[colIndex];
+                            return ValueFormatter.Format(value, col.DataTypeName, col.NumericScale.GetValueOrDefault(), Sql4CdsSettings.Instance.LocalFormatDates);
+                        }).ToArray(), resultSet.ColumnInfo);
+                    }
+                }
+
+                return new SaveResultRequestResult();
+            }
+            catch (Exception ex)
+            {
+                return new SaveResultRequestResult { Messages = ex.Message };
+            }
         }
     }
 }

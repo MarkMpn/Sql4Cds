@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
 
 namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
@@ -26,11 +27,13 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
 
         private readonly Encoding _encoding;
         private readonly string _lineSeparator;
+        private readonly Func<SqlEntityReference, string> _urlGenerator;
 
         public SaveAsMarkdownFileStreamWriter(
             Stream stream,
             SaveResultsAsMarkdownRequestParams requestParams,
-            IReadOnlyList<DbColumnWrapper> columns)
+            IReadOnlyList<DbColumnWrapper> columns,
+            Func<SqlEntityReference, string> urlGenerator)
             : base(stream, requestParams, columns)
         {
             // Parse the request params
@@ -38,6 +41,7 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
                 ? Environment.NewLine
                 : requestParams.LineSeparator;
             this._encoding = ParseEncoding(requestParams.Encoding, Encoding.UTF8);
+            this._urlGenerator = urlGenerator;
 
             // Output the header if requested
             if (requestParams.IncludeHeaders)
@@ -66,7 +70,7 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
         {
             IEnumerable<string> selectedCells = row.Skip(this.ColumnStartIndex)
                 .Take(this.ColumnCount)
-                .Select(c => EncodeMarkdownField(c.DisplayValue));
+                .Select(c => EncodeMarkdownField(c));
             string rowLine = string.Join(Delimiter, selectedCells);
 
             this.WriteLine($"{Delimiter}{rowLine}{Delimiter}");
@@ -92,6 +96,16 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
             field = GetNewLineRegex().Replace(field, @"<br />");
 
             return field;
+        }
+
+        private string EncodeMarkdownField(DbCellValue value)
+        {
+            var encoded = EncodeMarkdownField(value.IsNull ? null : value.DisplayValue);
+
+            if (!value.IsNull && value.RawObject is SqlEntityReference er)
+                encoded = $"[{encoded}]({_urlGenerator(er)})";
+
+            return encoded;
         }
 
         private void WriteLine(string line)

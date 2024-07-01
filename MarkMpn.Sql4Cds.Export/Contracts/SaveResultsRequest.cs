@@ -179,16 +179,5 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts
         /// </summary>
         public string Encoding { get; set; }
     }
-    
-    /// <summary>
-    /// Parameters for the save results result
-    /// </summary>
-    public class SaveResultRequestResult
-    {
-        /// <summary>
-        /// Error messages for saving to file. 
-        /// </summary>
-        public string Messages { get; set; }
-    }
 
 }

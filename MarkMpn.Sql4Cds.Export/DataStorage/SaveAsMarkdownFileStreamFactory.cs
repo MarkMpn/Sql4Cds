@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlTools.ServiceLayer.QueryExecution.Contracts;
 using Microsoft.SqlTools.ServiceLayer.Utility;
 
@@ -14,14 +15,17 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
     public class SaveAsMarkdownFileStreamFactory : IFileStreamFactory
     {
         private readonly SaveResultsAsMarkdownRequestParams _saveRequestParams;
+        private readonly Func<SqlEntityReference, string> _urlGenerator;
 
         /// <summary>
         /// Constructs and initializes a new instance of <see cref="SaveAsMarkdownFileStreamFactory"/>.
         /// </summary>
         /// <param name="requestParams">Parameters for the save as request</param>
-        public SaveAsMarkdownFileStreamFactory(SaveResultsAsMarkdownRequestParams requestParams)
+        public SaveAsMarkdownFileStreamFactory(SaveResultsAsMarkdownRequestParams requestParams,
+            Func<SqlEntityReference, string> urlGenerator)
         {
             this._saveRequestParams = requestParams;
+            this._urlGenerator = urlGenerator;
         }
 
         /// <inheritdoc />
@@ -51,7 +55,8 @@ namespace Microsoft.SqlTools.ServiceLayer.QueryExecution.DataStorage
             return new SaveAsMarkdownFileStreamWriter(
                 new FileStream(fileName, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite),
                 this._saveRequestParams,
-                columns);
+                columns,
+                this._urlGenerator);
         }
 
         /// <inheritdoc />
