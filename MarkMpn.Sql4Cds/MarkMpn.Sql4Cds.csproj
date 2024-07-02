@@ -46,9 +46,6 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="Microsoft.VisualStudio.CoreUtility">
-      <Private>False</Private>
-    </Reference>
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Activities" />
@@ -80,9 +77,9 @@
       <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
       <Name>MarkMpn.Sql4Cds.Controls</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
-      <Project>{c77b731d-e55c-4197-b96c-2b23eb9f56ef}</Project>
-      <Name>MarkMpn.Sql4Cds.Engine</Name>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Export\MarkMpn.Sql4Cds.Export.csproj">
+      <Project>{920bac0a-847b-467b-adaa-674df59209f2}</Project>
+      <Name>MarkMpn.Sql4Cds.Export</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
