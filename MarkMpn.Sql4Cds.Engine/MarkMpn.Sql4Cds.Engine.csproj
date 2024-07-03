@@ -39,4 +39,13 @@
     <Reference Include="Microsoft.VisualBasic" Condition=" '$(TargetFramework)' == 'net462' " />
   </ItemGroup>
 
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' And '$(TargetFramework)' == 'net462' ">
+    <MakeDir Directories="$(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+    <Exec Command="copy $(TargetDir)MarkMpn.Sql4Cds.Engine.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+    <Exec Command="copy $(TargetDir)Microsoft.SqlServer.TransactSql.ScriptDom.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+    <Exec Command="copy $(TargetDir)Microsoft.ApplicationInsights.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+    <Exec Command="copy $(TargetDir)XPath2.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+    <Exec Command="copy $(TargetDir)XPath2.Extensions.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+  </Target>
+
 </Project>

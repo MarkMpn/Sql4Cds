@@ -98,7 +98,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins
+    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.dll $(AppData)\MscrmTools\XrmToolBox\Plugins
 </PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it.

@@ -19,4 +19,9 @@
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
   </ItemGroup>
 
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <MakeDir Directories="$(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+    <Exec Command="copy $(TargetDir)MarkMpn.Sql4Cds.Export.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
+  </Target>
+
 </Project>

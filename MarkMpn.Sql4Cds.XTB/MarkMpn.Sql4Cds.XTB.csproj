@@ -311,13 +311,9 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
-  </PropertyGroup>
-  <PropertyGroup>
-    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.Engine.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)MarkMpn.Sql4Cds.Export.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)SkiaSharp.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)System.Text.Encoding.CodePages.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
+    <PostBuildEvent>mkdir $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)SkiaSharp.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.Text.Encoding.CodePages.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
   </PropertyGroup>
 </Project>
