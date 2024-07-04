@@ -240,10 +240,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
     class DataSourceWithInfo : DataSource
     {
+        private readonly string _url;
+
         public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org)
         {
             UniqueName = Name;
             ServerName = new Uri(url).Host;
+            _url = url;
 
             using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource> { [Name] = this }))
             using (var cmd = con.CreateCommand())
@@ -279,6 +282,22 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public string Version { get; set; }
 
         public string Username { get; set; }
+
+        internal string GetEntityReferenceUrl(SqlEntityReference reference)
+        {
+            if (reference.IsNull)
+            {
+                return string.Empty;
+            }
+            var url = _url;
+            url = string.Concat(url,
+                url.EndsWith("/") ? "" : "/",
+                "main.aspx?etn=",
+                reference.LogicalName,
+                "&pagetype=entityrecord&id=",
+                reference.Id.ToString());
+            return url;
+        }
     }
 
     class Session

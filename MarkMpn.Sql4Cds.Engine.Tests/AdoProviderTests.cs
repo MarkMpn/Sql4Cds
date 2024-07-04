@@ -2075,5 +2075,86 @@ END CATCH";
                 Assert.AreEqual("Not Exists", message);
             }
         }
+
+        [TestMethod]
+        public void StringAggCast()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                var result = con.ExecuteScalar<string>(@"
+                    SELECT STRING_AGG(CAST(ID AS NVARCHAR(MAX)), ',')
+                    FROM (VALUES (1), (2), (3)) AS T(ID)");
+
+                Assert.AreEqual("1,2,3", result);
+            }
+        }
+
+        [TestMethod]
+        public void InSelectStarError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT * FROM contact WHERE contactid IN (SELECT * FROM account)");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(116, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MissingCountParameter()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT count() FROM account");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(174, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void InvalidTypesForOperator()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT * FROM account where name & ('1') > 1");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(402, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void WildcardColumnAsFunctionParameterIsSyntaxError()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                try
+                {
+                    con.Execute("SELECT SIZE(*) FROM account");
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(102, ex.Number);
+                }
+            }
+        }
     }
 }

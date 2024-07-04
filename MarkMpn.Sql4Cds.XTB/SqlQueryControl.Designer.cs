@@ -31,7 +31,6 @@
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SqlQueryControl));
             this.splitContainer = new System.Windows.Forms.SplitContainer();
-            this.environmentHighlightLabel = new System.Windows.Forms.Label();
             this.tabControl = new System.Windows.Forms.TabControl();
             this.resultsTabPage = new System.Windows.Forms.TabPage();
             this.resultsFlowLayoutPanel = new System.Windows.Forms.FlowLayoutPanel();
@@ -57,6 +56,10 @@
             this.rowsLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.backgroundWorker = new System.ComponentModel.BackgroundWorker();
             this.timer = new System.Windows.Forms.Timer(this.components);
+            this.environmentHighlightLabel = new System.Windows.Forms.Label();
+            this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator(); 
+            this.saveAsCSVToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.saveAsExcelToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.copilotSplitContainer = new System.Windows.Forms.SplitContainer();
             this.copilotPictureBox = new System.Windows.Forms.PictureBox();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
@@ -96,20 +99,6 @@
             this.splitContainer.SplitterDistance = 190;
             this.splitContainer.SplitterWidth = 2;
             this.splitContainer.TabIndex = 0;
-            // 
-            // environmentHighlightLabel
-            // 
-            this.environmentHighlightLabel.BackColor = System.Drawing.Color.Red;
-            this.environmentHighlightLabel.Dock = System.Windows.Forms.DockStyle.Top;
-            this.environmentHighlightLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.environmentHighlightLabel.ForeColor = System.Drawing.Color.White;
-            this.environmentHighlightLabel.Location = new System.Drawing.Point(0, 0);
-            this.environmentHighlightLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            this.environmentHighlightLabel.Name = "environmentHighlightLabel";
-            this.environmentHighlightLabel.Size = new System.Drawing.Size(560, 23);
-            this.environmentHighlightLabel.TabIndex = 0;
-            this.environmentHighlightLabel.Text = "Environment Name";
-            this.environmentHighlightLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // tabControl
             // 
@@ -202,7 +191,10 @@
             this.toolStripMenuItem1,
             this.openRecordToolStripMenuItem,
             this.copyRecordUrlToolStripMenuItem,
-            this.createSELECTStatementToolStripMenuItem});
+            this.createSELECTStatementToolStripMenuItem,
+            this.toolStripMenuItem2,
+            this.saveAsCSVToolStripMenuItem,
+            this.saveAsExcelToolStripMenuItem});
             this.gridContextMenuStrip.Name = "gridContextMenuStrip";
             this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 120);
             this.gridContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.gridContextMenuStrip_Opening);
@@ -384,6 +376,25 @@
             this.copilotPictureBox.TabStop = false;
             this.copilotPictureBox.Click += new System.EventHandler(this.copilotPictureBox_Click);
             // 
+            // toolStripMenuItem2
+            // 
+            this.toolStripMenuItem2.Name = "toolStripMenuItem2";
+            this.toolStripMenuItem2.Size = new System.Drawing.Size(203, 6);
+            // 
+            // saveAsCSVToolStripMenuItem
+            // 
+            this.saveAsCSVToolStripMenuItem.Name = "saveAsCSVToolStripMenuItem";
+            this.saveAsCSVToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
+            this.saveAsCSVToolStripMenuItem.Text = "Save As CSV...";
+            this.saveAsCSVToolStripMenuItem.Click += new System.EventHandler(this.saveAsCSVToolStripMenuItem_Click);
+            // 
+            // saveAsExcelToolStripMenuItem
+            // 
+            this.saveAsExcelToolStripMenuItem.Name = "saveAsExcelToolStripMenuItem";
+            this.saveAsExcelToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
+            this.saveAsExcelToolStripMenuItem.Text = "Save As Excel...";
+            this.saveAsExcelToolStripMenuItem.Click += new System.EventHandler(this.saveAsExcelToolStripMenuItem_Click);
+            // 
             // SqlQueryControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
@@ -442,6 +453,9 @@
         private System.Windows.Forms.ToolStripMenuItem createSELECTStatementToolStripMenuItem;
         private System.Windows.Forms.Label environmentHighlightLabel;
         private System.Windows.Forms.ToolStripMenuItem copyRecordUrlToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem2;
+        private System.Windows.Forms.ToolStripMenuItem saveAsCSVToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem saveAsExcelToolStripMenuItem;
         private System.Windows.Forms.SplitContainer copilotSplitContainer;
         private System.Windows.Forms.PictureBox copilotPictureBox;
     }

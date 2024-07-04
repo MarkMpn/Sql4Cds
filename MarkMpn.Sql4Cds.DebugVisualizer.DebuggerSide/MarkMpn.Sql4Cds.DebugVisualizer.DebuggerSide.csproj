@@ -43,6 +43,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj" />
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj" />
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
   </ItemGroup>
 </Project>

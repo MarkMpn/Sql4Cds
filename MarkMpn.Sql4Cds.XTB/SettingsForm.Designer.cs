@@ -88,15 +88,20 @@
             this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
+            this.label18 = new System.Windows.Forms.Label();
+            this.fontComboBox = new System.Windows.Forms.ComboBox();
+            this.label19 = new System.Windows.Forms.Label();
+            this.fontSizeNumericUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label20 = new System.Windows.Forms.Label();
             this.tabPage5 = new System.Windows.Forms.TabPage();
             this.assistantIdTextBox = new System.Windows.Forms.TextBox();
-            this.label20 = new System.Windows.Forms.Label();
+            this.label23 = new System.Windows.Forms.Label();
             this.openAiKeyTextBox = new System.Windows.Forms.TextBox();
-            this.label19 = new System.Windows.Forms.Label();
+            this.label22 = new System.Windows.Forms.Label();
             this.openAiEndpointTextBox = new System.Windows.Forms.TextBox();
-            this.label18 = new System.Windows.Forms.Label();
-            this.allowCopilotSelectQueriesCheckBox = new System.Windows.Forms.CheckBox();
             this.label21 = new System.Windows.Forms.Label();
+            this.allowCopilotSelectQueriesCheckBox = new System.Windows.Forms.CheckBox();
+            this.label24 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -118,6 +123,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
             this.tabPage3.SuspendLayout();
             this.tabPage4.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.fontSizeNumericUpDown)).BeginInit();
             this.tabPage5.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -686,6 +692,11 @@
             // 
             // tabPage3
             // 
+            this.tabPage3.Controls.Add(this.label20);
+            this.tabPage3.Controls.Add(this.fontSizeNumericUpDown);
+            this.tabPage3.Controls.Add(this.label19);
+            this.tabPage3.Controls.Add(this.fontComboBox);
+            this.tabPage3.Controls.Add(this.label18);
             this.tabPage3.Controls.Add(this.resetToolWindowsButton);
             this.tabPage3.Controls.Add(this.localDateFormatCheckbox);
             this.tabPage3.Controls.Add(this.rememberSessionCheckbox);
@@ -809,16 +820,72 @@
             this.label17.TabIndex = 0;
             this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
             // 
+            // label18
+            // 
+            this.label18.AutoSize = true;
+            this.label18.Location = new System.Drawing.Point(6, 133);
+            this.label18.Name = "label18";
+            this.label18.Size = new System.Drawing.Size(58, 13);
+            this.label18.TabIndex = 5;
+            this.label18.Text = "Editor Font";
+            // 
+            // fontComboBox
+            // 
+            this.fontComboBox.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.SuggestAppend;
+            this.fontComboBox.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
+            this.fontComboBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
+            this.fontComboBox.FormattingEnabled = true;
+            this.fontComboBox.Location = new System.Drawing.Point(9, 149);
+            this.fontComboBox.Name = "fontComboBox";
+            this.fontComboBox.Size = new System.Drawing.Size(200, 21);
+            this.fontComboBox.TabIndex = 6;
+            this.fontComboBox.DrawItem += new System.Windows.Forms.DrawItemEventHandler(this.fontComboBox_DrawItem);
+            // 
+            // label19
+            // 
+            this.label19.AutoSize = true;
+            this.label19.Location = new System.Drawing.Point(212, 134);
+            this.label19.Name = "label19";
+            this.label19.Size = new System.Drawing.Size(51, 13);
+            this.label19.TabIndex = 7;
+            this.label19.Text = "Font Size";
+            // 
+            // fontSizeNumericUpDown
+            // 
+            this.fontSizeNumericUpDown.Location = new System.Drawing.Point(215, 150);
+            this.fontSizeNumericUpDown.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.fontSizeNumericUpDown.Name = "fontSizeNumericUpDown";
+            this.fontSizeNumericUpDown.Size = new System.Drawing.Size(38, 20);
+            this.fontSizeNumericUpDown.TabIndex = 8;
+            this.fontSizeNumericUpDown.Value = new decimal(new int[] {
+            10,
+            0,
+            0,
+            0});
+            // 
+            // label20
+            //
+            this.label20.AutoSize = true;
+            this.label20.Location = new System.Drawing.Point(259, 152);
+            this.label20.Name = "label20";
+            this.label20.Size = new System.Drawing.Size(16, 13);
+            this.label20.TabIndex = 9;
+            this.label20.Text = "pt";
+            //
             // tabPage5
             // 
-            this.tabPage5.Controls.Add(this.label21);
+            this.tabPage5.Controls.Add(this.label24);
             this.tabPage5.Controls.Add(this.allowCopilotSelectQueriesCheckBox);
             this.tabPage5.Controls.Add(this.assistantIdTextBox);
-            this.tabPage5.Controls.Add(this.label20);
+            this.tabPage5.Controls.Add(this.label23);
             this.tabPage5.Controls.Add(this.openAiKeyTextBox);
-            this.tabPage5.Controls.Add(this.label19);
+            this.tabPage5.Controls.Add(this.label22);
             this.tabPage5.Controls.Add(this.openAiEndpointTextBox);
-            this.tabPage5.Controls.Add(this.label18);
+            this.tabPage5.Controls.Add(this.label21);
             this.tabPage5.Location = new System.Drawing.Point(4, 22);
             this.tabPage5.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.tabPage5.Name = "tabPage5";
@@ -836,15 +903,15 @@
             this.assistantIdTextBox.Size = new System.Drawing.Size(401, 20);
             this.assistantIdTextBox.TabIndex = 5;
             // 
-            // label20
+            // label23
             // 
-            this.label20.AutoSize = true;
-            this.label20.Location = new System.Drawing.Point(4, 98);
-            this.label20.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
-            this.label20.Name = "label20";
-            this.label20.Size = new System.Drawing.Size(63, 13);
-            this.label20.TabIndex = 4;
-            this.label20.Text = "Assistant ID";
+            this.label23.AutoSize = true;
+            this.label23.Location = new System.Drawing.Point(4, 98);
+            this.label23.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label23.Name = "label23";
+            this.label23.Size = new System.Drawing.Size(63, 13);
+            this.label23.TabIndex = 4;
+            this.label23.Text = "Assistant ID";
             // 
             // openAiKeyTextBox
             // 
@@ -854,15 +921,15 @@
             this.openAiKeyTextBox.Size = new System.Drawing.Size(401, 20);
             this.openAiKeyTextBox.TabIndex = 3;
             // 
-            // label19
+            // label22
             // 
-            this.label19.AutoSize = true;
-            this.label19.Location = new System.Drawing.Point(4, 55);
-            this.label19.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
-            this.label19.Name = "label19";
-            this.label19.Size = new System.Drawing.Size(67, 13);
-            this.label19.TabIndex = 2;
-            this.label19.Text = "Open AI Key";
+            this.label22.AutoSize = true;
+            this.label22.Location = new System.Drawing.Point(4, 55);
+            this.label22.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label22.Name = "label22";
+            this.label22.Size = new System.Drawing.Size(67, 13);
+            this.label22.TabIndex = 2;
+            this.label22.Text = "Open AI Key";
             // 
             // openAiEndpointTextBox
             // 
@@ -872,15 +939,15 @@
             this.openAiEndpointTextBox.Size = new System.Drawing.Size(401, 20);
             this.openAiEndpointTextBox.TabIndex = 1;
             // 
-            // label18
+            // label21
             // 
-            this.label18.AutoSize = true;
-            this.label18.Location = new System.Drawing.Point(4, 11);
-            this.label18.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
-            this.label18.Name = "label18";
-            this.label18.Size = new System.Drawing.Size(91, 13);
-            this.label18.TabIndex = 0;
-            this.label18.Text = "Open AI Endpoint";
+            this.label21.AutoSize = true;
+            this.label21.Location = new System.Drawing.Point(4, 11);
+            this.label21.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label21.Name = "label21";
+            this.label21.Size = new System.Drawing.Size(91, 13);
+            this.label21.TabIndex = 0;
+            this.label21.Text = "Open AI Endpoint";
             // 
             // allowCopilotSelectQueriesCheckBox
             // 
@@ -892,13 +959,13 @@
             this.allowCopilotSelectQueriesCheckBox.Text = "Allow Copilot to execute SELECT queries independently";
             this.allowCopilotSelectQueriesCheckBox.UseVisualStyleBackColor = true;
             // 
-            // label21
+            // label24
             // 
-            this.label21.Location = new System.Drawing.Point(26, 168);
-            this.label21.Name = "label21";
-            this.label21.Size = new System.Drawing.Size(378, 32);
-            this.label21.TabIndex = 7;
-            this.label21.Text = "This option allows Copilot to execute a SELECT query to retrieve information with" +
+            this.label24.Location = new System.Drawing.Point(26, 168);
+            this.label24.Name = "label24";
+            this.label24.Size = new System.Drawing.Size(378, 32);
+            this.label24.TabIndex = 7;
+            this.label24.Text = "This option allows Copilot to execute a SELECT query to retrieve information with" +
     "out first showing the query.";
             // 
             // SettingsForm
@@ -946,6 +1013,7 @@
             this.tabPage3.PerformLayout();
             this.tabPage4.ResumeLayout(false);
             this.tabPage4.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.fontSizeNumericUpDown)).EndInit();
             this.tabPage5.ResumeLayout(false);
             this.tabPage5.PerformLayout();
             this.ResumeLayout(false);
@@ -1013,14 +1081,19 @@
         private System.Windows.Forms.LinkLabel fetchXml2SqlConversionAdvancedLinkLabel;
         private System.Windows.Forms.CheckBox schemaColumnOrderingCheckbox;
         private System.Windows.Forms.Button resetToolWindowsButton;
+        private System.Windows.Forms.NumericUpDown fontSizeNumericUpDown;
+        private System.Windows.Forms.Label label19;
+        private System.Windows.Forms.ComboBox fontComboBox;
+        private System.Windows.Forms.Label label18;
+        private System.Windows.Forms.Label label20;
         private System.Windows.Forms.TabPage tabPage5;
         private System.Windows.Forms.TextBox assistantIdTextBox;
-        private System.Windows.Forms.Label label20;
+        private System.Windows.Forms.Label label23;
         private System.Windows.Forms.TextBox openAiKeyTextBox;
-        private System.Windows.Forms.Label label19;
+        private System.Windows.Forms.Label label22;
         private System.Windows.Forms.TextBox openAiEndpointTextBox;
-        private System.Windows.Forms.Label label18;
         private System.Windows.Forms.Label label21;
+        private System.Windows.Forms.Label label24;
         private System.Windows.Forms.CheckBox allowCopilotSelectQueriesCheckBox;
     }
 }

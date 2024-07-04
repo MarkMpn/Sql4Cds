@@ -852,53 +852,56 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            // TODO: Execute expressions to get filter conditions, but preserve the original expressions for later executions
-            ApplyFilterValues(new ExpressionExecutionContext(context));
+            // Execute expressions to get filter conditions, but preserve the original expressions for later executions
+            var query = Query.Clone();
+
+            ApplyFilterValues(query, new ExpressionExecutionContext(context));
 
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {
-                if (Query.Properties == null)
-                    Query.Properties = new MetadataPropertiesExpression();
+                if (query.Properties == null)
+                    query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the attributes
-                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.Attributes)))
-                    Query.Properties.PropertyNames.Add(nameof(EntityMetadata.Attributes));
+                if (!query.Properties.AllProperties && !query.Properties.PropertyNames.Contains(nameof(EntityMetadata.Attributes)))
+                    query.Properties.PropertyNames.Add(nameof(EntityMetadata.Attributes));
             }
 
             if (MetadataSource.HasFlag(MetadataSource.OneToManyRelationship))
             {
-                if (Query.Properties == null)
-                    Query.Properties = new MetadataPropertiesExpression();
+                if (query.Properties == null)
+                    query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the relationships
-                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.OneToManyRelationships)))
-                    Query.Properties.PropertyNames.Add(nameof(EntityMetadata.OneToManyRelationships));
+                if (!query.Properties.AllProperties && !query.Properties.PropertyNames.Contains(nameof(EntityMetadata.OneToManyRelationships)))
+                    query.Properties.PropertyNames.Add(nameof(EntityMetadata.OneToManyRelationships));
             }
 
             if (MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship))
             {
-                if (Query.Properties == null)
-                    Query.Properties = new MetadataPropertiesExpression();
+                if (query.Properties == null)
+                    query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the relationships
-                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToOneRelationships)))
-                    Query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToOneRelationships));
+                if (!query.Properties.AllProperties && !query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToOneRelationships)))
+                    query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToOneRelationships));
             }
 
             if (MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
             {
-                if (Query.Properties == null)
-                    Query.Properties = new MetadataPropertiesExpression();
+                if (query.Properties == null)
+                    query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the relationships
-                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToManyRelationships)))
-                    Query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToManyRelationships));
+                if (!query.Properties.AllProperties && !query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToManyRelationships)))
+                    query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToManyRelationships));
             }
 
             if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
-            var resp = (RetrieveMetadataChangesResponse) dataSource.Connection.Execute(new RetrieveMetadataChangesRequest { Query = Query });
+            var resp = (RetrieveMetadataChangesResponse)dataSource.Connection.Execute(new RetrieveMetadataChangesRequest { Query = query });
+
             var entityProps = typeof(EntityMetadata).GetProperties().ToDictionary(p => p.Name);
             var oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);
             var manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);
@@ -915,7 +918,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 results = results.SelectMany(r => r.Entity.ManyToOneRelationships.Select(mo => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mo }));
 
             if (MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
-                results = results.SelectMany(r => r.Entity.ManyToManyRelationships.Where(mm => ManyToManyRelationshipJoin == null || ((string) typeof(ManyToManyRelationshipMetadata).GetProperty(ManyToManyRelationshipJoin).GetValue(mm)) == r.Entity.LogicalName).Select(mm => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mm }));
+                results = results.SelectMany(r => r.Entity.ManyToManyRelationships.Where(mm => ManyToManyRelationshipJoin == null || ((string)typeof(ManyToManyRelationshipMetadata).GetProperty(ManyToManyRelationshipJoin).GetValue(mm)) == r.Entity.LogicalName).Select(mm => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mm }));
 
             foreach (var result in results)
             {
@@ -978,11 +981,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void ApplyFilterValues(ExpressionExecutionContext context)
+        private void ApplyFilterValues(EntityQueryExpression query, ExpressionExecutionContext context)
         {
-            ApplyFilterValues(Query.Criteria, context);
-            ApplyFilterValues(Query.AttributeQuery?.Criteria, context);
-            ApplyFilterValues(Query.RelationshipQuery?.Criteria, context);
+            ApplyFilterValues(query.Criteria, context);
+            ApplyFilterValues(query.AttributeQuery?.Criteria, context);
+            ApplyFilterValues(query.RelationshipQuery?.Criteria, context);
         }
 
         private void ApplyFilterValues(MetadataFilterExpression criteria, ExpressionExecutionContext context)

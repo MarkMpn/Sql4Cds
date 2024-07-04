@@ -22,6 +22,10 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             InitializeComponent();
 
+            fontComboBox.DataSource = FontFamily.Families;
+            fontComboBox.ValueMember = nameof(FontFamily.Name);
+            fontComboBox.DisplayMember = nameof(FontFamily.Name);
+
             quotedIdentifiersCheckbox.Checked = settings.QuotedIdentifiers;
             selectLimitUpDown.Value = settings.SelectLimit;
             retriveLimitUpDown.Value = settings.MaxRetrievesPerQuery;
@@ -44,6 +48,8 @@ namespace MarkMpn.Sql4Cds.XTB
             simpleSqlRadioButton.Checked = !settings.UseNativeSqlConversion;
             nativeSqlRadioButton.Checked = settings.UseNativeSqlConversion;
             schemaColumnOrderingCheckbox.Checked = settings.ColumnOrdering == ColumnOrdering.Strict;
+            fontComboBox.SelectedValue = Settings.Instance.EditorFontName;
+            fontSizeNumericUpDown.Value = Settings.Instance.EditorFontSize;
             openAiEndpointTextBox.Text = settings.OpenAIEndpoint;
             openAiKeyTextBox.Text = settings.OpenAIKey;
             assistantIdTextBox.Text = settings.AssistantID;
@@ -65,8 +71,8 @@ namespace MarkMpn.Sql4Cds.XTB
         private void SetSqlStyle(Scintilla scintilla)
         {
             scintilla.StyleResetDefault();
-            scintilla.Styles[Style.Default].Font = "Courier New";
-            scintilla.Styles[Style.Default].Size = 10;
+            scintilla.Styles[Style.Default].Font = Settings.Instance.EditorFontName;
+            scintilla.Styles[Style.Default].Size = Settings.Instance.EditorFontSize;
             scintilla.StyleClearAll();
 
             scintilla.Lexer = Lexer.Sql;
@@ -127,6 +133,8 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.UseNativeSqlConversion = nativeSqlRadioButton.Checked;
                 _settings.FetchXml2SqlOptions = _fetchXml2SqlOptions;
                 _settings.ColumnOrdering = schemaColumnOrderingCheckbox.Checked ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
+                _settings.EditorFontName = (string)fontComboBox.SelectedValue ?? "Courier New";
+                _settings.EditorFontSize = (int) fontSizeNumericUpDown.Value;
                 _settings.OpenAIEndpoint = openAiEndpointTextBox.Text;
                 _settings.OpenAIKey = openAiKeyTextBox.Text;
                 _settings.AssistantID = assistantIdTextBox.Text;
@@ -179,6 +187,32 @@ namespace MarkMpn.Sql4Cds.XTB
         private void resetToolWindowsButton_Click(object sender, EventArgs e)
         {
             _pluginControl.ResetDockLayout();
+        }
+
+        private void fontComboBox_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            var ff = (FontFamily)fontComboBox.Items[e.Index];
+
+            using (var font = new Font(ff, fontComboBox.Font.Size))
+            {
+                e.DrawBackground();
+
+                var monospaceIndictorSize = 10;
+                var monospaceIndictorOffset = (e.Bounds.Height - monospaceIndictorSize) / 2;
+
+                if (e.Graphics.MeasureString("i", font).Width == e.Graphics.MeasureString("W", font).Width)
+                {
+                    // Monospaced font
+                    e.Graphics.FillEllipse(Brushes.Green, e.Bounds.X + monospaceIndictorOffset, e.Bounds.Y + monospaceIndictorOffset, monospaceIndictorSize, monospaceIndictorSize);
+                }
+                else
+                {
+                    // Variable width font
+                }
+
+                e.Graphics.DrawString(ff.Name, font, Brushes.Black, e.Bounds.Location.X + monospaceIndictorOffset + monospaceIndictorSize + monospaceIndictorOffset, e.Bounds.Location.Y);
+                e.DrawFocusRectangle();
+            }
         }
     }
 }

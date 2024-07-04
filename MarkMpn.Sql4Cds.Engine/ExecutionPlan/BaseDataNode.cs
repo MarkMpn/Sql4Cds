@@ -523,7 +523,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName, op))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
@@ -671,13 +671,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+                var op = inPred.NotDefined ? @operator.notin : @operator.@in;
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName, op))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, inPred.NotDefined ? @operator.notin : @operator.@in, inPred.Values.Cast<Literal>().ToArray(), dataSource, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, op, inPred.Values.Cast<Literal>().ToArray(), dataSource, targetEntityAlias, items, out condition, out filter);
             }
 
             if (criteria is BooleanIsNullExpression isNull)
@@ -698,13 +699,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+                var op = isNull.IsNot ? @operator.notnull : @operator.@null;
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName, op))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, isNull.IsNot ? @operator.notnull : @operator.@null, null, dataSource, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, op, null, dataSource, targetEntityAlias, items, out condition, out filter);
             }
 
             if (criteria is LikePredicate like)
@@ -731,13 +733,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+                var op = like.NotDefined ? @operator.notlike : @operator.like;
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName, op))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, dataSource, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, op, new[] { value }, dataSource, targetEntityAlias, items, out condition, out filter);
             }
 
             if (criteria is FullTextPredicate ||
@@ -778,8 +781,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+                var op = not == null ? @operator.containvalues : @operator.notcontainvalues;
 
-                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName))
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName, op))
                     return false;
 
                 var meta = dataSource.Metadata[entityName];
@@ -788,34 +792,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!(attr is MultiSelectPicklistAttributeMetadata))
                     return false;
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, not == null ? @operator.containvalues : @operator.notcontainvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), dataSource, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, op, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), dataSource, targetEntityAlias, items, out condition, out filter);
             }
 
             return false;
         }
 
         /// <summary>
-        /// Checks if this filter can't be folded into the FetchXML query because it's on an outer-joined table
-        /// from the audit entity.
+        /// Checks if this filter can't be folded into the FetchXML query because of limitations on the audit entity provider
         /// </summary>
         /// <param name="targetEntityName">The base entity type of the FetchXML query</param>
         /// <param name="entityName">The entity type being filtered</param>
         /// <param name="items">The list of items in the FetchXML entity element</param>
         /// <param name="attrName">The name of the attribute the filter will be applied on</param>
+        /// <param name="op">The operator which will be used for the filter</param>
         /// <returns><c>true</c> if the filter cannot be applied, or <c>false</c> otherwise</returns>
         /// <remarks>
         /// The audit provider does not support filtering using the &lt;condition entityname="systemuser" .../&gt; syntax.
         /// See https://github.com/MarkMpn/Sql4Cds/issues/294
+        /// 
+        /// It also does not support filtering on various specific attributes, see https://github.com/MarkMpn/Sql4Cds/issues/488
         /// </remarks>
-        private bool IsInvalidAuditFilter(string targetEntityName, string entityName, object[] items, string attrName)
+        private bool IsInvalidAuditFilter(string targetEntityName, string entityName, object[] items, string attrName, @operator op)
         {
             if (targetEntityName != "audit")
                 return false;
 
             if (entityName == "audit")
             {
-                // Can't filter on the changedata attribute
+                // Can't filter on these special attributes
                 if (attrName == "changedata")
+                    return true;
+
+                if (attrName == "attributemask" && op != @operator.like && op != @operator.notlike)
+                    return true;
+
+                if (attrName == "objectidname")
+                    return true;
+
+                if ((attrName == "userid" || attrName == "callinguserid") && (op == @operator.equserid || op == @operator.neuserid))
                     return true;
 
                 return false;

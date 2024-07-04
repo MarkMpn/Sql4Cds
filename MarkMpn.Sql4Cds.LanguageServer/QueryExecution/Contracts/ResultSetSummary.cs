@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using MarkMpn.Sql4Cds.Export.Contracts;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
 {

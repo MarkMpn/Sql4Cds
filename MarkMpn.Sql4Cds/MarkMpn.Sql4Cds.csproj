@@ -46,9 +46,6 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="Microsoft.VisualStudio.CoreUtility">
-      <Private>False</Private>
-    </Reference>
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Activities" />
@@ -80,9 +77,9 @@
       <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
       <Name>MarkMpn.Sql4Cds.Controls</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
-      <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
-      <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Export\MarkMpn.Sql4Cds.Export.csproj">
+      <Project>{920bac0a-847b-467b-adaa-674df59209f2}</Project>
+      <Name>MarkMpn.Sql4Cds.Export</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
@@ -101,7 +98,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins
+    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.dll $(AppData)\MscrmTools\XrmToolBox\Plugins
 </PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
