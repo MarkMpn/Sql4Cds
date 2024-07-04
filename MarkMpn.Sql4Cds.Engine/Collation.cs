@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             _collationNameToLcid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.Engine.resources.CollationNameToLCID.txt"))
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.Engine.Resources.CollationNameToLCID.txt"))
             using (var reader = new StreamReader(stream))
             {
                 string line;

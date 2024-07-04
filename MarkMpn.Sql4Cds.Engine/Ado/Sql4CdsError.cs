@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             _errorNumberToDetails = new Dictionary<int, Sql4CdsError>();
 
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.Engine.resources.Errors.csv"))
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.Engine.Resources.Errors.csv"))
             using (var reader = new StreamReader(stream))
             {
                 string line;
@@ -738,6 +738,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError InvalidTypeForStatement(TSqlFragment fragment, string name)
         {
             return Create(15533, fragment, name);
+        }
+
+        internal static Sql4CdsError IncompatibleDataTypesForOperator(TSqlFragment fragment, DataTypeReference type1, DataTypeReference type2, string op)
+        {
+            return Create(402, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type1)), Collation.USEnglish.ToSqlString(GetTypeName(type2)), Collation.USEnglish.ToSqlString(op));
         }
 
         private static string GetTypeName(DataTypeReference type)

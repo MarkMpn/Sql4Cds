@@ -1,11 +1,18 @@
-﻿using System;
+﻿//
+// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+//
+
+
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Diagnostics;
+using MarkMpn.Sql4Cds.Export.Utility;
 
-namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
+namespace MarkMpn.Sql4Cds.Export.Contracts
 {
     /// <summary>
     /// Wrapper around a DbColumn, which provides extra functionality, but can be used as a
@@ -114,19 +121,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
             }
         }
 
-        public DbColumnWrapper(ColumnInfo columnInfo)
+        public DbColumnWrapper(string name, string dataTypeName, int? numericScale)
         {
-            DataTypeName = columnInfo.DataTypeName.ToLowerInvariant();
+            DataTypeName = dataTypeName.ToLowerInvariant();
             DetermineSqlDbType();
-            DataType = TypeConvertor.ToNetType(SqlDbType);
-            if (DataType == typeof(string))
+            DataType = TypeConvertor.ToNetType(this.SqlDbType);
+            if (DataType == typeof(String))
             {
-                ColumnSize = int.MaxValue;
+                this.ColumnSize = int.MaxValue;
             }
-            AddNameAndDataFields(columnInfo.Name);
-            NumericScale = columnInfo.NumericScale;
+            AddNameAndDataFields(name);
+            NumericScale = numericScale;
         }
-
 
         /// <summary>
         /// Default constructor, used for deserializing JSON RPC only
@@ -206,9 +212,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
         /// Logic taken from SSDT determination of updatable columns
         /// Special treatment for HierarchyId since we are using an Expression for HierarchyId column and expression column is readonly.
         /// </remarks>
-        public bool IsUpdatable => IsAutoIncrement != true &&
-                                   IsReadOnly != true &&
-                                   !IsSqlXmlType || IsHierarchyId;
+        public bool IsUpdatable => (!IsAutoIncrement.HasTrue() &&
+                                   !IsReadOnly.HasTrue() &&
+                                   !IsSqlXmlType) || IsHierarchyId;
 
         #endregion
 
@@ -248,7 +254,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
         {
             // We want the display name for the column to always exist
             ColumnName = string.IsNullOrEmpty(columnName)
-                ? null//SR.QueryServiceColumnNull
+                ? SR.QueryServiceColumnNull
                 : columnName;
 
             switch (DataTypeName)
@@ -315,6 +321,73 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
                     }
                     break;
             }
+        }
+    }
+
+
+
+    /// <summary>
+    /// Convert a base data type to another base data type
+    /// </summary>
+    public sealed class TypeConvertor
+    {
+        private static Dictionary<SqlDbType,Type> _typeMap = new Dictionary<SqlDbType,Type>();
+
+        static TypeConvertor()
+        {
+            _typeMap[SqlDbType.BigInt] = typeof(Int64);
+            _typeMap[SqlDbType.Binary] = typeof(Byte);
+            _typeMap[SqlDbType.Bit] = typeof(Boolean);
+            _typeMap[SqlDbType.Char] = typeof(String);
+            _typeMap[SqlDbType.DateTime] = typeof(DateTime);
+            _typeMap[SqlDbType.Decimal] = typeof(Decimal);
+            _typeMap[SqlDbType.Float] = typeof(Double);
+            _typeMap[SqlDbType.Image] = typeof(Byte[]);
+            _typeMap[SqlDbType.Int] = typeof(Int32);
+            _typeMap[SqlDbType.Money] = typeof(Decimal);
+            _typeMap[SqlDbType.NChar] = typeof(String);
+            _typeMap[SqlDbType.NChar] = typeof(String);
+            _typeMap[SqlDbType.NChar] = typeof(String);
+            _typeMap[SqlDbType.NText] = typeof(String);
+            _typeMap[SqlDbType.NVarChar] = typeof(String);
+            _typeMap[SqlDbType.Real] = typeof(Single);
+            _typeMap[SqlDbType.UniqueIdentifier] = typeof(Guid);
+            _typeMap[SqlDbType.SmallDateTime] = typeof(DateTime);
+            _typeMap[SqlDbType.SmallInt] = typeof(Int16);
+            _typeMap[SqlDbType.SmallMoney] = typeof(Decimal);
+            _typeMap[SqlDbType.Text] = typeof(String);
+            _typeMap[SqlDbType.Timestamp] = typeof(Byte[]);
+            _typeMap[SqlDbType.TinyInt] = typeof(Byte);
+            _typeMap[SqlDbType.VarBinary] = typeof(Byte[]);
+            _typeMap[SqlDbType.VarChar] = typeof(String);
+            _typeMap[SqlDbType.Variant] = typeof(Object);
+            // Note: treating as string
+            _typeMap[SqlDbType.Xml] = typeof(String);
+            _typeMap[SqlDbType.TinyInt] = typeof(Byte);
+            _typeMap[SqlDbType.TinyInt] = typeof(Byte);
+            _typeMap[SqlDbType.TinyInt] = typeof(Byte);
+            _typeMap[SqlDbType.TinyInt] = typeof(Byte);
+        }
+
+        private TypeConvertor()
+        {
+
+        }
+
+
+        /// <summary>
+        /// Convert TSQL type to .Net data type
+        /// </summary>
+        /// <param name="sqlDbType"></param>
+        /// <returns></returns>
+        public static Type ToNetType(SqlDbType sqlDbType)
+        {
+            Type netType;
+            if (!_typeMap.TryGetValue(sqlDbType, out netType))
+            {
+                netType = typeof(String);
+            }
+            return netType;
         }
     }
 }

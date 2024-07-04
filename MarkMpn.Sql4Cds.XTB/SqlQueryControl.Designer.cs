@@ -57,6 +57,9 @@
             this.backgroundWorker = new System.ComponentModel.BackgroundWorker();
             this.timer = new System.Windows.Forms.Timer(this.components);
             this.environmentHighlightLabel = new System.Windows.Forms.Label();
+            this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator(); 
+            this.saveAsCSVToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.saveAsExcelToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
             this.splitContainer.Panel1.SuspendLayout();
             this.splitContainer.Panel2.SuspendLayout();
@@ -178,7 +181,10 @@
             this.toolStripMenuItem1,
             this.openRecordToolStripMenuItem,
             this.copyRecordUrlToolStripMenuItem,
-            this.createSELECTStatementToolStripMenuItem});
+            this.createSELECTStatementToolStripMenuItem,
+            this.toolStripMenuItem2,
+            this.saveAsCSVToolStripMenuItem,
+            this.saveAsExcelToolStripMenuItem});
             this.gridContextMenuStrip.Name = "gridContextMenuStrip";
             this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 142);
             this.gridContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.gridContextMenuStrip_Opening);
@@ -336,6 +342,25 @@
             this.environmentHighlightLabel.Text = "Environment Name";
             this.environmentHighlightLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
+            // toolStripMenuItem2
+            // 
+            this.toolStripMenuItem2.Name = "toolStripMenuItem2";
+            this.toolStripMenuItem2.Size = new System.Drawing.Size(203, 6);
+            // 
+            // saveAsCSVToolStripMenuItem
+            // 
+            this.saveAsCSVToolStripMenuItem.Name = "saveAsCSVToolStripMenuItem";
+            this.saveAsCSVToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
+            this.saveAsCSVToolStripMenuItem.Text = "Save As CSV...";
+            this.saveAsCSVToolStripMenuItem.Click += new System.EventHandler(this.saveAsCSVToolStripMenuItem_Click);
+            // 
+            // saveAsExcelToolStripMenuItem
+            // 
+            this.saveAsExcelToolStripMenuItem.Name = "saveAsExcelToolStripMenuItem";
+            this.saveAsExcelToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
+            this.saveAsExcelToolStripMenuItem.Text = "Save As Excel...";
+            this.saveAsExcelToolStripMenuItem.Click += new System.EventHandler(this.saveAsExcelToolStripMenuItem_Click);
+            // 
             // SqlQueryControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -389,5 +414,8 @@
         private System.Windows.Forms.ToolStripMenuItem createSELECTStatementToolStripMenuItem;
         private System.Windows.Forms.Label environmentHighlightLabel;
         private System.Windows.Forms.ToolStripMenuItem copyRecordUrlToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem2;
+        private System.Windows.Forms.ToolStripMenuItem saveAsCSVToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem saveAsExcelToolStripMenuItem;
     }
 }

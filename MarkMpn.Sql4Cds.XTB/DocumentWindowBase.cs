@@ -183,5 +183,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 }
             }
         }
+
+        public virtual void SettingsChanged()
+        {
+        }
     }
 }

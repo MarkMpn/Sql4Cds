@@ -7940,5 +7940,103 @@ select statecodename [state], parentcustomerid x, parentcustomeridname from cont
   </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void CustomPagingWithInSubquery()
+        {
+            var query = @"
+SELECT DISTINCT 
+    c.contactid,
+    CASE
+        WHEN c.lastname = c.firstname THEN 1
+        ELSE 0 
+    END AS flag
+FROM account as a
+inner join contact AS c on c.contactid = a.primarycontactid
+LEFT JOIN account AS ca ON c.contactid = ca.primarycontactid
+WHERE c.parentcustomerid IN (SELECT contactid FROM contact WHERE createdon = today())";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var distinct = AssertNode<DistinctNode>(select.Source);
+            var compute = AssertNode<ComputeScalarNode>(distinct.Source);
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            Assert.IsTrue(fetch.UsingCustomPaging);
+            AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='account'>
+    <attribute name='accountid' />
+    <link-entity name='contact' to='primarycontactid' from='contactid' alias='c' link-type='inner'>
+      <attribute name='contactid' />
+      <attribute name='lastname' />
+      <attribute name='firstname' />
+      <link-entity name='account' to='contactid' from='primarycontactid' alias='ca' link-type='outer'>
+        <attribute name='accountid' />
+        <order attribute='accountid' />
+      </link-entity>
+      <link-entity name='contact' to='parentcustomerid' from='contactid' alias='Expr1' link-type='inner'>
+        <filter>
+          <condition attribute='createdon' operator='today' />
+        </filter>
+      </link-entity>
+      <order attribute='contactid' />
+    </link-entity>
+    <order attribute='accountid' />
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void InSubqueryOnPrimaryKeyFoldedToFilter()
+        {
+            var query = @"
+SELECT DISTINCT 
+    c.contactid,
+    CASE
+        WHEN c.lastname = c.firstname THEN 1
+        ELSE 0 
+    END AS flag
+FROM account as a
+inner join contact AS c on c.contactid = a.primarycontactid
+LEFT JOIN account AS ca ON c.contactid = ca.primarycontactid
+WHERE c.contactid IN (SELECT contactid FROM contact WHERE createdon = today())";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var distinct = AssertNode<DistinctNode>(select.Source);
+            var compute = AssertNode<ComputeScalarNode>(distinct.Source);
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            Assert.IsTrue(fetch.UsingCustomPaging);
+            AssertFetchXml(fetch, @"
+<fetch>
+  <entity name='account'>
+    <attribute name='accountid' />
+    <link-entity name='contact' to='primarycontactid' from='contactid' alias='c' link-type='inner'>
+      <attribute name='contactid' />
+      <attribute name='lastname' />
+      <attribute name='firstname' />
+      <link-entity name='account' to='contactid' from='primarycontactid' alias='ca' link-type='outer'>
+        <attribute name='accountid' />
+        <order attribute='accountid' />
+      </link-entity>
+      <filter>
+        <condition attribute='createdon' operator='today' />
+      </filter>
+      <order attribute='contactid' />
+    </link-entity>
+    <order attribute='accountid' />
+  </entity>
+</fetch>");
+        }
     }
 }

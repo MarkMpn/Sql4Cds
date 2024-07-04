@@ -31,8 +31,8 @@ namespace MarkMpn.Sql4Cds.XTB
             // Configuring the default style with properties
             // we have common to every lexer style saves time.
             scintilla.StyleResetDefault();
-            scintilla.Styles[Style.Default].Font = "Consolas";
-            scintilla.Styles[Style.Default].Size = 10;
+            scintilla.Styles[Style.Default].Font = Settings.Instance.EditorFontName;
+            scintilla.Styles[Style.Default].Size = Settings.Instance.EditorFontSize;
             scintilla.StyleClearAll();
 
             // Configure the CPP (C#) lexer styles
@@ -72,6 +72,18 @@ namespace MarkMpn.Sql4Cds.XTB
         public void SetFocus()
         {
             scintilla.Focus();
+        }
+
+        public override void SettingsChanged()
+        {
+            base.SettingsChanged();
+
+            // Update all styles on the editor to use the new font
+            foreach (var style in scintilla.Styles)
+            {
+                style.Font = Settings.Instance.EditorFontName;
+                style.Size = Settings.Instance.EditorFontSize;
+            }
         }
     }
 }

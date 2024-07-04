@@ -253,6 +253,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(ColumnReferenceExpression col, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
+            // Wildcard columns shouldn't appear in an expression
+            if (col.ColumnType == ColumnType.Wildcard)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(col));
+
             var name = col.GetColumnName();
 
             if (context.Schema == null || !context.Schema.ContainsColumn(name, out var normalizedName))
@@ -764,97 +768,106 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = null;
             Expression expr;
+            var operatorString = "";
 
-            switch (bin.BinaryExpressionType)
+            try
             {
-                case BinaryExpressionType.Add:
-                    cacheKey = lhsCacheKey + " + " + rhsCacheKey;
+                switch (bin.BinaryExpressionType)
+                {
+                    case BinaryExpressionType.Add:
+                        operatorString = "+";
 
-                    // Special case for SqlDateTime
-                    if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
-                        expr = Expr.Call(() => AddSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
-                    else
-                        expr = Expression.Add(lhs, rhs);
+                        // Special case for SqlDateTime
+                        if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
+                            expr = Expr.Call(() => AddSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+                        else
+                            expr = Expression.Add(lhs, rhs);
 
-                    // Special case for SqlString length & collation calculation
-                    if (lhsSqlType is SqlDataTypeReferenceWithCollation lhsSql &&
-                        rhsSqlType is SqlDataTypeReferenceWithCollation rhsSql &&
-                        lhsSql.Parameters.Count == 1 &&
-                        rhsSql.Parameters.Count == 1)
-                    {
-                        int lhsLength;
-                        int rhsLength;
-
-                        if (lhsSql.Parameters[0].LiteralType != LiteralType.Integer ||
-                            !Int32.TryParse(lhsSql.Parameters[0].Value, out lhsLength))
-                            lhsLength = 8000;
-
-                        if (rhsSql.Parameters[0].LiteralType != LiteralType.Integer ||
-                            !Int32.TryParse(rhsSql.Parameters[0].Value, out rhsLength))
-                            rhsLength = 8000;
-
-                        var length = lhsLength + rhsLength;
-
-                        if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, bin, "add", out var collation, out var collationLabel, out var collationError))
-                            throw new NotSupportedQueryFragmentException(collationError);
-
-                        sqlType = new SqlDataTypeReferenceWithCollation
+                        // Special case for SqlString length & collation calculation
+                        if (lhsSqlType is SqlDataTypeReferenceWithCollation lhsSql &&
+                            rhsSqlType is SqlDataTypeReferenceWithCollation rhsSql &&
+                            lhsSql.Parameters.Count == 1 &&
+                            rhsSql.Parameters.Count == 1)
                         {
-                            SqlDataTypeOption = ((SqlDataTypeReference)type).SqlDataTypeOption,
-                            Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() },
-                            Collation = collation,
-                            CollationLabel = collationLabel,
-                            CollationConflictError = collationError
-                        };
-                    }
-                    break;
+                            int lhsLength;
+                            int rhsLength;
 
-                case BinaryExpressionType.Subtract:
-                    cacheKey = lhsCacheKey + " - " + rhsCacheKey;
+                            if (lhsSql.Parameters[0].LiteralType != LiteralType.Integer ||
+                                !Int32.TryParse(lhsSql.Parameters[0].Value, out lhsLength))
+                                lhsLength = 8000;
 
-                    // Special case for SqlDateTime
-                    if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
-                        expr = Expr.Call(() => SubtractSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
-                    else
-                        expr = Expression.Subtract(lhs, rhs);
-                    break;
+                            if (rhsSql.Parameters[0].LiteralType != LiteralType.Integer ||
+                                !Int32.TryParse(rhsSql.Parameters[0].Value, out rhsLength))
+                                rhsLength = 8000;
 
-                case BinaryExpressionType.Multiply:
-                    cacheKey = lhsCacheKey + " * " + rhsCacheKey;
-                    expr = Expression.Multiply(lhs, rhs);
-                    break;
+                            var length = lhsLength + rhsLength;
 
-                case BinaryExpressionType.Divide:
-                    cacheKey = lhsCacheKey + " / " + rhsCacheKey;
-                    expr = Expression.Divide(lhs, rhs);
+                            if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, bin, "add", out var collation, out var collationLabel, out var collationError))
+                                throw new NotSupportedQueryFragmentException(collationError);
 
-                    expr = Expression.TryCatch(expr, Expression.Catch(typeof(DivideByZeroException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), Expr.Call(() => Sql4CdsError.DivideByZero())), expr.Type)));
-                    //expr = Expression.Invoke(Expression.Lambda(expr));
-                    break;
+                            sqlType = new SqlDataTypeReferenceWithCollation
+                            {
+                                SqlDataTypeOption = ((SqlDataTypeReference)type).SqlDataTypeOption,
+                                Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() },
+                                Collation = collation,
+                                CollationLabel = collationLabel,
+                                CollationConflictError = collationError
+                            };
+                        }
+                        break;
 
-                case BinaryExpressionType.Modulo:
-                    cacheKey = lhsCacheKey + " % " + rhsCacheKey;
-                    expr = Expression.Modulo(lhs, rhs);
-                    break;
+                    case BinaryExpressionType.Subtract:
+                        operatorString = "-";
 
-                case BinaryExpressionType.BitwiseAnd:
-                    cacheKey = lhsCacheKey + " & " + rhsCacheKey;
-                    expr = Expression.And(lhs, rhs);
-                    break;
+                        // Special case for SqlDateTime
+                        if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
+                            expr = Expr.Call(() => SubtractSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+                        else
+                            expr = Expression.Subtract(lhs, rhs);
+                        break;
 
-                case BinaryExpressionType.BitwiseOr:
-                    cacheKey = lhsCacheKey + " | " + rhsCacheKey;
-                    expr = Expression.Or(lhs, rhs);
-                    break;
+                    case BinaryExpressionType.Multiply:
+                        operatorString = "*";
+                        expr = Expression.Multiply(lhs, rhs);
+                        break;
 
-                case BinaryExpressionType.BitwiseXor:
-                    cacheKey = lhsCacheKey + " ^ " + rhsCacheKey;
-                    expr = Expression.ExclusiveOr(lhs, rhs);
-                    break;
+                    case BinaryExpressionType.Divide:
+                        operatorString = "/";
+                        expr = Expression.Divide(lhs, rhs);
 
-                default:
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(bin)) { Suggestion = "Unknown operator" };
+                        expr = Expression.TryCatch(expr, Expression.Catch(typeof(DivideByZeroException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), Expr.Call(() => Sql4CdsError.DivideByZero())), expr.Type)));
+                        break;
+
+                    case BinaryExpressionType.Modulo:
+                        operatorString = "%";
+                        expr = Expression.Modulo(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.BitwiseAnd:
+                        operatorString = "&";
+                        expr = Expression.And(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.BitwiseOr:
+                        operatorString = "|";
+                        expr = Expression.Or(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.BitwiseXor:
+                        operatorString = "^";
+                        expr = Expression.ExclusiveOr(lhs, rhs);
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(bin)) { Suggestion = "Unknown operator" };
+                }
             }
+            catch (InvalidOperationException)
+            {
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.IncompatibleDataTypesForOperator(bin, lhsSqlType, rhsSqlType, operatorString));
+            }
+
+            cacheKey = $"{lhsCacheKey} {operatorString} {rhsCacheKey}";
 
             if (sqlType == null && expr.Type == typeof(SqlDecimal))
                 sqlType = type;
@@ -2032,10 +2045,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = convert.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, sqlType, style, styleType, styleCacheKey, convert, "CONVERT", out cacheKey);
+            return Convert(context, value, valueType, valueCacheKey, ref sqlType, style, styleType, styleCacheKey, convert, "CONVERT", out cacheKey);
         }
 
-        private static Expression Convert(ExpressionCompilationContext context, Expression value, DataTypeReference valueType, string valueCacheKey, DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
+        private static Expression Convert(ExpressionCompilationContext context, Expression value, DataTypeReference valueType, string valueCacheKey, ref DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
         {
             if (sqlType is SqlDataTypeReference sqlTargetType &&
                 sqlTargetType.SqlDataTypeOption.IsStringType())
@@ -2072,7 +2085,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var value = cast.InvokeSubExpression(x => x.Parameter, x => x.Parameter, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
             sqlType = cast.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, sqlType, null, null, null, cast, "CAST", out cacheKey);
+            return Convert(context, value, valueType, valueCacheKey, ref sqlType, null, null, null, cast, "CAST", out cacheKey);
         }
 
         private static readonly Regex _containsParser = new Regex("^\\S+( OR \\S+)*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);

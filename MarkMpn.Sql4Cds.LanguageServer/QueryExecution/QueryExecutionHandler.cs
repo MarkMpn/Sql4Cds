@@ -14,11 +14,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using MarkMpn.Sql4Cds.Export;
 using MarkMpn.Sql4Cds.LanguageServer.Configuration;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts;
+using MarkMpn.Sql4Cds.Export.Contracts;
+using MarkMpn.Sql4Cds.Export.DataStorage;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -56,6 +59,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             lsp.AddHandler(QueryExecutionPlanRequest.Type, HandleQueryExecutionPlan);
             lsp.AddHandler(QueryDisposeRequest.Type, HandleQueryDispose);
             lsp.AddHandler(ConfirmationResponse.Type, HandleConfirmation);
+            lsp.AddHandler(ExportRequests.CsvType, HandleExportCsv);
+            lsp.AddHandler(ExportRequests.ExcelType, HandleExportExcel);
+            lsp.AddHandler(ExportRequests.JsonType, HandleExportJson);
+            lsp.AddHandler(ExportRequests.MarkdownType, HandleExportMarkdown);
+            lsp.AddHandler(ExportRequests.XmlType, HandleExportXml);
         }
 
         private void HandleConfirmation(ConfirmationResponseParams arg)
@@ -299,7 +307,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     Id = resultSets.Count,
                                     BatchId = batchSummary.Id,
                                     Complete = true,
-                                    ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
+                                    ColumnInfo = new[] { new DbColumnWrapper("Microsoft SQL Server 2005 XML Showplan", "xml", null) },
                                     RowCount = 0,
                                     SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
                                 };
@@ -341,10 +349,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 var schemaTable = reader.GetSchemaTable();
 
                                 for (var i = 0; i < reader.FieldCount; i++)
-                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(
-                                        String.IsNullOrEmpty(reader.GetName(i)) ? $"(No column name)" : reader.GetName(i),
-                                        reader.GetDataTypeName(i),
-                                        (short)schemaTable.Rows[i]["NumericScale"]));
+                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(reader.GetName(i), reader.GetDataTypeName(i), null);
 
                                 resultSetInProgress = resultSet;
                                 resultSets.Add(resultSet);
@@ -390,7 +395,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                             Id = resultSets.Count,
                             BatchId = batchSummary.Id,
                             Complete = true,
-                            ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
+                            ColumnInfo = new[] { new DbColumnWrapper("Microsoft SQL Server 2005 XML Showplan", "xml", null) },
                             RowCount = 0,
                             SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
                         };
@@ -1007,54 +1012,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                             .Select((value, colIndex) =>
                             {
                                 var col = resultSet.ColumnInfo[colIndex];
-                                var text = value?.ToString();
-
-                                if (value is bool b)
-                                {
-                                    text = b ? "1" : "0";
-                                }
-                                else if (value is DateTime dt)
-                                {
-                                    var type = col.DataTypeName;
-
-                                    if (type == "date")
-                                    {
-                                        if (Sql4CdsSettings.Instance.LocalFormatDates)
-                                            text = dt.ToShortDateString();
-                                        else
-                                            text = dt.ToString("yyyy-MM-dd");
-                                    }
-                                    else if (type == "smalldatetime")
-                                    {
-                                        if (Sql4CdsSettings.Instance.LocalFormatDates)
-                                            text = dt.ToShortDateString() + " " + dt.ToString("HH:mm");
-                                        else
-                                            text = dt.ToString("yyyy-MM-dd HH:mm");
-                                    }
-                                    else if (!Sql4CdsSettings.Instance.LocalFormatDates)
-                                    {
-                                        var scale = col.NumericScale.Value;
-                                        text = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', scale))));
-                                    }
-                                }
-                                else if (value is TimeSpan ts && !Sql4CdsSettings.Instance.LocalFormatDates)
-                                {
-                                    var scale = col.NumericScale.Value;
-                                    text = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
-                                }
-                                else if (value is decimal dec)
-                                {
-                                    var scale = col.NumericScale.Value;
-                                    text = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
-                                }
-
-                                return new DbCellValue
-                                {
-                                    DisplayValue = text,
-                                    InvariantCultureDisplayValue = text,
-                                    IsNull = value == null || value.Equals(DBNull.Value),
-                                    RawObject = value,
-                                };
+                                return ValueFormatter.Format(value, col.DataTypeName, col.NumericScale.GetValueOrDefault(), Sql4CdsSettings.Instance.LocalFormatDates);
                             })
                             .ToArray())
                         .ToArray()
@@ -1096,6 +1054,72 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         {
             _resultSets.Remove(request.OwnerUri, out _);
             return new QueryDisposeResult();
+        }
+
+        public SaveResultRequestResult HandleExportCsv(SaveResultsAsCsvRequestParams request)
+        {
+            var factory = new SaveAsCsvFileStreamFactory { SaveRequestParams = request };
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportExcel(SaveResultsAsExcelRequestParams request)
+        {
+            var factory = new SaveAsExcelFileStreamFactory
+            {
+                SaveRequestParams = request,
+                UrlGenerator = _connectionManager.GetConnection(request.OwnerUri).DataSource.GetEntityReferenceUrl
+            };
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportJson(SaveResultsAsJsonRequestParams request)
+        {
+            var factory = new SaveAsJsonFileStreamFactory
+            {
+                SaveRequestParams = request
+            };
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportMarkdown(SaveResultsAsMarkdownRequestParams request)
+        {
+            var factory = new SaveAsMarkdownFileStreamFactory(request, _connectionManager.GetConnection(request.OwnerUri).DataSource.GetEntityReferenceUrl);
+            return SaveResultsHelper(request, factory);
+        }
+
+        public SaveResultRequestResult HandleExportXml(SaveResultsAsXmlRequestParams request)
+        {
+            var factory = new SaveAsXmlFileStreamFactory
+            {
+                SaveRequestParams = request
+            };
+            return SaveResultsHelper(request, factory);
+        }
+
+        private SaveResultRequestResult SaveResultsHelper(SaveResultsRequestParams request, IFileStreamFactory factory)
+        {
+            try
+            {
+                var resultSet = _resultSets[request.OwnerUri][request.ResultSetIndex];
+
+                using (var writer = factory.GetWriter(request.FilePath, resultSet.ColumnInfo))
+                {
+                    foreach (var row in resultSet.Values)
+                    {
+                        writer.WriteRow(row.Select((value, colIndex) =>
+                        {
+                            var col = resultSet.ColumnInfo[colIndex];
+                            return ValueFormatter.Format(value, col.DataTypeName, col.NumericScale.GetValueOrDefault(), Sql4CdsSettings.Instance.LocalFormatDates);
+                        }).ToArray(), resultSet.ColumnInfo);
+                    }
+                }
+
+                return new SaveResultRequestResult();
+            }
+            catch (Exception ex)
+            {
+                return new SaveResultRequestResult { Messages = ex.Message };
+            }
         }
     }
 }

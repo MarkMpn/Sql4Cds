@@ -213,7 +213,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var linkEntity in Entity.GetLinkEntities())
             {
                 // Link entities used for filtering do not require custom paging
-                if (linkEntity.linktype == "exists" || linkEntity.linktype == "in")
+                if (linkEntity.linktype == "exists" || linkEntity.linktype == "in" || linkEntity.SemiJoin)
                     continue;
 
                 // Sorts on link entities always require custom paging
@@ -474,6 +474,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var attrType = attr.GetAttributeSqlType(dataSource, false);
                 if (attrType.IsSameAs(DataTypeHelpers.EntityReference))
                     attrType = DataTypeHelpers.UniqueIdentifier;
+
+                // For some operators the value type may be different from the attribute type
+                switch (condition.@operator)
+                {
+                    case @operator.infiscalperiod:
+                    case @operator.infiscalperiodandyear:
+                    case @operator.infiscalyear:
+                    case @operator.inorafterfiscalperiodandyear:
+                    case @operator.inorbeforefiscalperiodandyear:
+                    case @operator.lastxdays:
+                    case @operator.lastxfiscalperiods:
+                    case @operator.lastxfiscalyears:
+                    case @operator.lastxhours:
+                    case @operator.lastxmonths:
+                    case @operator.lastxweeks:
+                    case @operator.lastxyears:
+                    case @operator.nextxdays:
+                    case @operator.nextxfiscalperiods:
+                    case @operator.nextxfiscalyears:
+                    case @operator.nextxhours:
+                    case @operator.nextxmonths:
+                    case @operator.nextxweeks:
+                    case @operator.nextxyears:
+                    case @operator.olderthanxdays:
+                    case @operator.olderthanxhours:
+                    case @operator.olderthanxminutes:
+                    case @operator.olderthanxmonths:
+                    case @operator.olderthanxweeks:
+                    case @operator.olderthanxyears:
+                        attrType = DataTypeHelpers.Int;
+                        break;
+                }
+
                 var conversion = SqlTypeConverter.GetConversion(DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), attrType);
 
                 if (condition.value != null)
@@ -1324,7 +1357,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            NormalizeFilters();
+            NormalizeFilters(context);
 
             if (hints != null)
             {
@@ -1357,7 +1390,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (FoldFilterToIndexSpool(context, out var indexSpool))
             {
-                NormalizeFilters();
+                NormalizeFilters(context);
                 Parent = indexSpool;
                 return indexSpool.FoldQuery(context, hints);
             }
@@ -1547,13 +1580,56 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return bypassPluginExecution || context.Options.BypassCustomPlugins;
         }
 
-        private void NormalizeFilters()
+        private void NormalizeFilters(NodeCompilationContext context)
         {
+            RemoveIdentitySemiJoinLinkEntities(context);
             MoveFiltersToLinkEntities();
             RemoveEmptyFilters();
             MergeRootFilters();
             MergeSingleConditionFilters();
             MergeNestedFilters();
+        }
+
+        private void RemoveIdentitySemiJoinLinkEntities(NodeCompilationContext context)
+        {
+            // If we've got a semi join link entity that matches to the parent entity by primary key,
+            // remove the link entity and move the conditions to the parent entity
+            var dataSource = context.DataSources[DataSource];
+            Entity.Items = RemoveIdentitySemiJoinLinkEntities(Entity.name, dataSource.Metadata, Entity.Items);
+        }
+
+        private object[] RemoveIdentitySemiJoinLinkEntities(string logicalName, IAttributeMetadataCache metadata, object[] items)
+        {
+            if (items == null)
+                return items;
+
+            var newItems = new List<object>();
+
+            foreach (var item in items)
+            {
+                if (!(item is FetchLinkEntityType linkEntity))
+                {
+                    newItems.Add(item);
+                    continue;
+                }
+
+                linkEntity.Items = RemoveIdentitySemiJoinLinkEntities(linkEntity.name, metadata, linkEntity.Items);
+
+                if (linkEntity.linktype != "inner" ||
+                    linkEntity.name != logicalName ||
+                    !linkEntity.SemiJoin ||
+                    linkEntity.from != metadata[logicalName].PrimaryIdAttribute ||
+                    linkEntity.to != metadata[logicalName].PrimaryIdAttribute)
+                {
+                    newItems.Add(item);
+                    continue;
+                }
+
+                if (linkEntity.Items != null)
+                    newItems.AddRange(linkEntity.Items);
+            }
+
+            return newItems.ToArray();
         }
 
         private void MoveFiltersToLinkEntities()
@@ -1853,7 +1929,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Distinct queries should already be sorted by each attribute being returned
                     AddAllDistinctAttributes(Entity, dataSource);
 
-                    foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
+                    foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !le.SemiJoin && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
                         AddAllDistinctAttributes(linkEntity, dataSource);
                 }
                 else
@@ -1863,7 +1939,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Ensure the primary key of each entity is included
                     AddPrimaryIdAttribute(Entity, dataSource);
 
-                    foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
+                    foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.linktype != "exists" && le.linktype != "in" && !le.SemiJoin && !HasSingleRecordFilter(le, dataSource.Metadata[le.name].PrimaryIdAttribute)))
                         AddPrimaryIdAttribute(linkEntity, dataSource);
                 }
             }

@@ -66,6 +66,10 @@ namespace MarkMpn.Sql4Cds.XTB
         public ColumnOrdering ColumnOrdering { get; set; } = ColumnOrdering.Alphabetical;
 
         public string DockLayout { get; set; }
+
+        public string EditorFontName { get; set; } = "Courier New";
+
+        public int EditorFontSize { get; set; } = 10;
     }
 
     public class TabContent
