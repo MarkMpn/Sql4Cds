@@ -30,7 +30,7 @@ steps:
   displayName: Update version in the vsix manifest
   inputs:
     filePath: 'MarkMpn.Sql4Cds.SSMS\update-version.ps1'
-    arguments: '$(assemblySemVer)'
+    arguments: '$(GitVersion.AssemblySemVer)'
     pwsh: true
 
 - task: DotNetCoreCLI@2
