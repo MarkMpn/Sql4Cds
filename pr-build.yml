@@ -14,15 +14,17 @@ steps:
 - checkout: self
   persistCredentials: true
 
-- task: gitversion/setup@1
-  displayName: 'Install GitVersion'
+- task: NuGetCommand@2
+  displayName: Install GitVersion
   inputs:
-    versionSpec: '5.x'
+    command: custom
+    arguments: install GitVersion.CommandLine -Version 5.12.0 -OutputDirectory $(Build.BinariesDirectory)/tools -ExcludeVersion
 
-- task: gitversion/execute@1
-  displayName: 'Determine Version'
-  inputs:
-    updateAssemblyInfo: true
+- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo
+  displayName: Determine Version (NetFX)
+
+- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateprojectfiles
+  displayName: Determine Version (NetCore)
 
 - task: PowerShell@2
   displayName: Update version in the vsix manifest
