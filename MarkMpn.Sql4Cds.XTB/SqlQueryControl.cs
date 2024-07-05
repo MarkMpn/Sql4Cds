@@ -193,6 +193,9 @@ namespace MarkMpn.Sql4Cds.XTB
             splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
             Icon = _sqlIcon;
 
+            // Show/hide the copilot panel
+            copilotSplitContainer.Panel2Collapsed = !String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint) && !String.IsNullOrEmpty(Settings.Instance.OpenAIKey) && !String.IsNullOrEmpty(Settings.Instance.AssistantID);
+
             Connect();
 
             ChangeConnection(con);
@@ -231,6 +234,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
             // Update the font on the autocomplete menu as well
             _autocomplete.Font = new Font(Settings.Instance.EditorFontName, Settings.Instance.EditorFontSize);
+
+            // Show/hide the copilot panel
+            copilotSplitContainer.Panel2Collapsed = !String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint) && !String.IsNullOrEmpty(Settings.Instance.OpenAIKey) && !String.IsNullOrEmpty(Settings.Instance.AssistantID);
         }
 
         protected override void OnClosing(CancelEventArgs e)
