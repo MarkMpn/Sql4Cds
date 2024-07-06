@@ -214,5 +214,16 @@ namespace MarkMpn.Sql4Cds.XTB
                 e.DrawFocusRectangle();
             }
         }
+
+        private void createAssistantbutton_Click(object sender, EventArgs e)
+        {
+            using (var form = new CreateCopilotAssistantForm(openAiEndpointTextBox.Text, openAiKeyTextBox.Text))
+            {
+                if (form.ShowDialog(this) == DialogResult.OK)
+                {
+                    assistantIdTextBox.Text = form.AssistantId;
+                }
+            }
+        }
     }
 }

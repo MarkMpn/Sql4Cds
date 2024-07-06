@@ -13,7 +13,7 @@
     <RuntimeIdentifiers>win</RuntimeIdentifiers>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
-    <LangVersion>8.0</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
   </PropertyGroup>
@@ -67,6 +67,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CreateCopilotAssistantForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="CreateCopilotAssistantForm.Designer.cs">
+      <DependentUpon>CreateCopilotAssistantForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Formatter.cs" />
     <Compile Include="MarkdownExtensions.cs" />
     <Compile Include="MessageBoxExt.cs" />
@@ -208,6 +214,9 @@
     <EmbeddedResource Include="ConfirmCloseForm.resx">
       <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="CreateCopilotAssistantForm.resx">
+      <DependentUpon>CreateCopilotAssistantForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="FetchXml2SqlSettingsForm.resx">
       <DependentUpon>FetchXml2SqlSettingsForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -327,6 +336,7 @@
     <None Include="Resources\Copy.png" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Resources\CopilotInstructions.txt" />
     <None Include="Resources\Copilot for SQL 4 CDS.png" />
     <Content Include="Resources\Copilot.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -337,23 +347,20 @@
     <PostBuildEvent>mkdir $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)SkiaSharp.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)System.Text.Encoding.CodePages.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
-  </PropertyGroup>
-  <PropertyGroup>
-    <PostBuildEvent>copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)Azure.Core.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)Azure.Identity.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)Azure.AI.OpenAI.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)OpenAI.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)Microsoft.Bcl.AsyncInterfaces.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)System.ClientModel.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)System.Memory.Data.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)System.Buffers.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)System.Diagnostics.DiagnosticSource.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)Markdig.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)ColorCode.Core.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)ColorCode.Html.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)Resources\Copilot.html %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)QuikGraph.dll %25appdata%25\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
+copy $(TargetDir)System.Text.Encoding.CodePages.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Azure.Core.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Azure.Identity.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Azure.AI.OpenAI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)OpenAI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Microsoft.Bcl.AsyncInterfaces.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.ClientModel.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.Memory.Data.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.Buffers.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.Diagnostics.DiagnosticSource.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Markdig.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)ColorCode.Core.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)ColorCode.Html.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Resources\Copilot.html $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)QuikGraph.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
   </PropertyGroup>
 </Project>
