@@ -2086,6 +2086,7 @@ namespace MarkMpn.Sql4Cds.XTB
             if (_copilotWebView != null)
             {
                 _copilotWebView.Visible = true;
+                _copilotWebView.Focus();
                 return;
             }
 
@@ -2095,6 +2096,7 @@ namespace MarkMpn.Sql4Cds.XTB
             await _copilotWebView.EnsureCoreWebView2Async();
             _copilotWebView.Source = new Uri(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Copilot.html"));
             _copilotWebView.CoreWebView2.AddHostObjectToScript("sql4cds", new CopilotScriptObject(this, _copilotWebView));
+            _copilotWebView.Focus();
         }
 
         private void copilotPictureBox_Click(object sender, EventArgs e)
@@ -2265,6 +2267,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                         _runningQuery = true;
                                         var results = await Task.Run(() => _control.Execute(query));
                                         _runningQuery = false;
+                                        _copilotWebView.Focus();
 
                                         if (results.Count == 1)
                                             toolOutputs.Add(new ToolOutput(func.ToolCallId, results[0]));
