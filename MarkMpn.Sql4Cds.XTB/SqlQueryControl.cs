@@ -2166,7 +2166,7 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 if (_assistantClient == null)
                 {
-                    var client = new Azure.AI.OpenAI.AzureOpenAIClient(new Uri(Settings.Instance.OpenAIEndpoint), new Azure.AzureKeyCredential(Settings.Instance.OpenAIKey));
+                    var client = Settings.Instance.OpenAIEndpoint == "https://api.openai.com/" ? new OpenAI.OpenAIClient(new ApiKeyCredential(Settings.Instance.OpenAIKey)) : new Azure.AI.OpenAI.AzureOpenAIClient(new Uri(Settings.Instance.OpenAIEndpoint), new Azure.AzureKeyCredential(Settings.Instance.OpenAIKey));
                     _assistantClient = client.GetAssistantClient();
                 }
 
