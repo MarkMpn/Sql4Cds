@@ -45,6 +45,7 @@ using QuikGraph;
 using QuikGraph.Algorithms;
 using ScintillaNET;
 using xrmtb.XrmToolBox.Controls.Controls;
+using XrmToolBox.Extensibility;
 
 #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 
@@ -195,7 +196,7 @@ namespace MarkMpn.Sql4Cds.XTB
             Icon = _sqlIcon;
 
             // Show/hide the copilot panel
-            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint) || String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
+            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
 
             Connect();
 
@@ -237,7 +238,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _autocomplete.Font = new Font(Settings.Instance.EditorFontName, Settings.Instance.EditorFontSize);
 
             // Show/hide the copilot panel
-            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint) || String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
+            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
         }
 
         protected override void OnClosing(CancelEventArgs e)
@@ -2096,7 +2097,8 @@ namespace MarkMpn.Sql4Cds.XTB
             copilotSplitContainer.Panel2.Controls.Add(_copilotWebView);
             await _copilotWebView.EnsureCoreWebView2Async();
             _copilotWebView.Source = new Uri(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Copilot.html"));
-            _copilotWebView.CoreWebView2.AddHostObjectToScript("sql4cds", new CopilotScriptObject(this, _copilotWebView));
+            var script = new CopilotScriptObject(this, _copilotWebView);
+            _copilotWebView.CoreWebView2.AddHostObjectToScript("sql4cds", script);
             _copilotWebView.Focus();
         }
 
@@ -2167,8 +2169,23 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 if (_assistantClient == null)
                 {
-                    var client = Settings.Instance.OpenAIEndpoint == "https://api.openai.com/" ? new OpenAI.OpenAIClient(new ApiKeyCredential(Settings.Instance.OpenAIKey)) : new Azure.AI.OpenAI.AzureOpenAIClient(new Uri(Settings.Instance.OpenAIEndpoint), new Azure.AzureKeyCredential(Settings.Instance.OpenAIKey));
+                    var client = String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint) ? new OpenAI.OpenAIClient(new ApiKeyCredential(Settings.Instance.OpenAIKey)) : new Azure.AI.OpenAI.AzureOpenAIClient(new Uri(Settings.Instance.OpenAIEndpoint), new Azure.AzureKeyCredential(Settings.Instance.OpenAIKey));
                     _assistantClient = client.GetAssistantClient();
+                    
+                    if (!Version.TryParse(Settings.Instance.AssistantVersion, out var assistantVersion) || assistantVersion < Assembly.GetExecutingAssembly().GetName().Version)
+                    {
+                        // Update the assistant definition before we try to use it
+                        var definition = CreateCopilotAssistantForm.Definition;
+
+                        await _assistantClient.ModifyAssistantAsync(Settings.Instance.AssistantID, new AssistantModificationOptions
+                        {
+                            Instructions = definition.Instructions,
+                            DefaultTools = definition.Tools,
+                        });
+
+                        Settings.Instance.AssistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+                        SettingsManager.Instance.Save(typeof(PluginControl), Settings.Instance);
+                    }
                 }
 
                 if (_assistant == null)

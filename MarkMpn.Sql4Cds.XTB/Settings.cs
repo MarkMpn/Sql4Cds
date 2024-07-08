@@ -78,6 +78,8 @@ namespace MarkMpn.Sql4Cds.XTB
         public string AssistantID { get; set; }
 
         public bool AllowCopilotSelectQueries { get; set; }
+
+        public string AssistantVersion { get; set; }
     }
 
     public class TabContent

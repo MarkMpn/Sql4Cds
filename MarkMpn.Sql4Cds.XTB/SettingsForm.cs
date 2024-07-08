@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -17,6 +18,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private readonly Settings _settings;
         private readonly FetchXml2SqlOptions _fetchXml2SqlOptions;
         private readonly PluginControl _pluginControl;
+        private string _assistantVersion;
 
         public SettingsForm(Settings settings, PluginControl plugin)
         {
@@ -139,6 +141,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.OpenAIKey = openAiKeyTextBox.Text;
                 _settings.AssistantID = assistantIdTextBox.Text;
                 _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
+
+                if (_assistantVersion != null)
+                    _settings.AssistantVersion = _assistantVersion;
             }
         }
 
@@ -222,6 +227,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
                     assistantIdTextBox.Text = form.AssistantId;
+                    _assistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
                 }
             }
         }

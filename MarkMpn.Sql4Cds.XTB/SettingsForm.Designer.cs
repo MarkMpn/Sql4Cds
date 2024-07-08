@@ -981,7 +981,7 @@
             this.label21.Name = "label21";
             this.label21.Size = new System.Drawing.Size(91, 13);
             this.label21.TabIndex = 0;
-            this.label21.Text = "Open AI Endpoint";
+            this.label21.Text = "Azure Open AI Endpoint";
             // 
             // label25
             // 
@@ -989,7 +989,7 @@
             this.label25.Name = "label25";
             this.label25.Size = new System.Drawing.Size(399, 41);
             this.label25.TabIndex = 9;
-            this.label25.Text = "If using OpenAI, enter https://api.openai.com/v1\r\nFor Azure OpenAI, enter the end" +
+            this.label25.Text = "Leave blank when using OpenAI.\r\nFor Azure OpenAI, enter the end" +
     "point of your resource, e.g. https://my-copilot.openai.azure.com/";
             // 
             // SettingsForm
