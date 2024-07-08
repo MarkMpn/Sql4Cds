@@ -233,12 +233,16 @@
             const icon = document.getElementById(type).cloneNode(true);
             div.appendChild(icon);
             div.appendChild(block);
-            const button = document.createElement('button');
-            button.textContent = action;
-            button.addEventListener('click', () => {
-                sendMessage(message);
-            });
-            block.appendChild(button);
+
+            if (action) {
+                const button = document.createElement('button');
+                button.textContent = action;
+                button.addEventListener('click', () => {
+                    sendMessage(message);
+                });
+                block.appendChild(button);
+            }
+
             result.appendChild(div);
             div.scrollIntoView(false);
         }

@@ -32,6 +32,7 @@ using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.Export.DataStorage;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
+using Microsoft.Identity.Client;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Xrm.Sdk;
@@ -2417,6 +2418,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             catch (Exception ex)
             {
+                await ShowPromptSuggestionAsync("warning", HttpUtility.HtmlEncode(ex.Message), null, null);
                 return new[] { ex.Message };
             }
             finally
