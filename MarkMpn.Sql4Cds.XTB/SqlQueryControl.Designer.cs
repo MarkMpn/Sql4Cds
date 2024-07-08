@@ -60,6 +60,8 @@
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator(); 
             this.saveAsCSVToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.saveAsExcelToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.copilotSplitContainer = new System.Windows.Forms.SplitContainer();
+            this.copilotPictureBox = new System.Windows.Forms.PictureBox();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
             this.splitContainer.Panel1.SuspendLayout();
             this.splitContainer.Panel2.SuspendLayout();
@@ -69,6 +71,11 @@
             this.fetchXmlTabPage.SuspendLayout();
             this.gridContextMenuStrip.SuspendLayout();
             this.statusStrip.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.copilotSplitContainer)).BeginInit();
+            this.copilotSplitContainer.Panel1.SuspendLayout();
+            this.copilotSplitContainer.Panel2.SuspendLayout();
+            this.copilotSplitContainer.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.copilotPictureBox)).BeginInit();
             this.SuspendLayout();
             // 
             // splitContainer
@@ -88,7 +95,7 @@
             this.splitContainer.Panel2.AutoScroll = true;
             this.splitContainer.Panel2.Controls.Add(this.tabControl);
             this.splitContainer.Panel2Collapsed = true;
-            this.splitContainer.Size = new System.Drawing.Size(595, 452);
+            this.splitContainer.Size = new System.Drawing.Size(560, 452);
             this.splitContainer.SplitterDistance = 190;
             this.splitContainer.SplitterWidth = 2;
             this.splitContainer.TabIndex = 0;
@@ -111,6 +118,7 @@
             this.resultsTabPage.Controls.Add(this.resultsFlowLayoutPanel);
             this.resultsTabPage.ImageIndex = 0;
             this.resultsTabPage.Location = new System.Drawing.Point(4, 23);
+            this.resultsTabPage.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.resultsTabPage.Name = "resultsTabPage";
             this.resultsTabPage.Size = new System.Drawing.Size(142, 19);
             this.resultsTabPage.TabIndex = 0;
@@ -135,6 +143,7 @@
             this.fetchXmlTabPage.Controls.Add(this.fetchXMLFlowLayoutPanel);
             this.fetchXmlTabPage.ImageIndex = 1;
             this.fetchXmlTabPage.Location = new System.Drawing.Point(4, 23);
+            this.fetchXmlTabPage.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.fetchXmlTabPage.Name = "fetchXmlTabPage";
             this.fetchXmlTabPage.Size = new System.Drawing.Size(142, 19);
             this.fetchXmlTabPage.TabIndex = 2;
@@ -158,8 +167,9 @@
             // 
             this.messagesTabPage.ImageIndex = 2;
             this.messagesTabPage.Location = new System.Drawing.Point(4, 23);
+            this.messagesTabPage.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.messagesTabPage.Name = "messagesTabPage";
-            this.messagesTabPage.Padding = new System.Windows.Forms.Padding(3);
+            this.messagesTabPage.Padding = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.messagesTabPage.Size = new System.Drawing.Size(142, 19);
             this.messagesTabPage.TabIndex = 1;
             this.messagesTabPage.Text = "Messages";
@@ -186,7 +196,7 @@
             this.saveAsCSVToolStripMenuItem,
             this.saveAsExcelToolStripMenuItem});
             this.gridContextMenuStrip.Name = "gridContextMenuStrip";
-            this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 142);
+            this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 120);
             this.gridContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.gridContextMenuStrip_Opening);
             // 
             // copyToolStripMenuItem
@@ -329,18 +339,42 @@
             this.timer.Interval = 1000;
             this.timer.Tick += new System.EventHandler(this.timer_Tick);
             // 
-            // environmentHighlightLabel
+            // copilotSplitContainer
             // 
-            this.environmentHighlightLabel.BackColor = System.Drawing.Color.Red;
-            this.environmentHighlightLabel.Dock = System.Windows.Forms.DockStyle.Top;
-            this.environmentHighlightLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.environmentHighlightLabel.ForeColor = System.Drawing.Color.White;
-            this.environmentHighlightLabel.Location = new System.Drawing.Point(0, 0);
-            this.environmentHighlightLabel.Name = "environmentHighlightLabel";
-            this.environmentHighlightLabel.Size = new System.Drawing.Size(595, 23);
-            this.environmentHighlightLabel.TabIndex = 0;
-            this.environmentHighlightLabel.Text = "Environment Name";
-            this.environmentHighlightLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.copilotSplitContainer.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.copilotSplitContainer.FixedPanel = System.Windows.Forms.FixedPanel.Panel2;
+            this.copilotSplitContainer.IsSplitterFixed = true;
+            this.copilotSplitContainer.Location = new System.Drawing.Point(0, 0);
+            this.copilotSplitContainer.Margin = new System.Windows.Forms.Padding(2);
+            this.copilotSplitContainer.Name = "copilotSplitContainer";
+            // 
+            // copilotSplitContainer.Panel1
+            // 
+            this.copilotSplitContainer.Panel1.Controls.Add(this.splitContainer);
+            // 
+            // copilotSplitContainer.Panel2
+            // 
+            this.copilotSplitContainer.Panel2.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.copilotSplitContainer.Panel2.Controls.Add(this.copilotPictureBox);
+            this.copilotSplitContainer.Panel2.Click += new System.EventHandler(this.copilotPictureBox_Click);
+            this.copilotSplitContainer.Panel2MinSize = 32;
+            this.copilotSplitContainer.Size = new System.Drawing.Size(595, 452);
+            this.copilotSplitContainer.SplitterDistance = 560;
+            this.copilotSplitContainer.SplitterWidth = 3;
+            this.copilotSplitContainer.TabIndex = 1;
+            this.copilotSplitContainer.SplitterMoved += new System.Windows.Forms.SplitterEventHandler(this.copilotSplitContainer_SplitterMoved);
+            // 
+            // copilotPictureBox
+            // 
+            this.copilotPictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.copilotPictureBox.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.Copilot_for_SQL_4_CDS;
+            this.copilotPictureBox.Location = new System.Drawing.Point(0, 0);
+            this.copilotPictureBox.Name = "copilotPictureBox";
+            this.copilotPictureBox.Size = new System.Drawing.Size(32, 32);
+            this.copilotPictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            this.copilotPictureBox.TabIndex = 2;
+            this.copilotPictureBox.TabStop = false;
+            this.copilotPictureBox.Click += new System.EventHandler(this.copilotPictureBox_Click);
             // 
             // toolStripMenuItem2
             // 
@@ -363,12 +397,12 @@
             // 
             // SqlQueryControl
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(595, 474);
-            this.Controls.Add(this.splitContainer);
+            this.ClientSize = new System.Drawing.Size(793, 583);
+            this.Controls.Add(this.copilotSplitContainer);
             this.Controls.Add(this.statusStrip);
-            this.Margin = new System.Windows.Forms.Padding(2);
+            this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Name = "SqlQueryControl";
             this.splitContainer.Panel1.ResumeLayout(false);
             this.splitContainer.Panel2.ResumeLayout(false);
@@ -380,6 +414,11 @@
             this.gridContextMenuStrip.ResumeLayout(false);
             this.statusStrip.ResumeLayout(false);
             this.statusStrip.PerformLayout();
+            this.copilotSplitContainer.Panel1.ResumeLayout(false);
+            this.copilotSplitContainer.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.copilotSplitContainer)).EndInit();
+            this.copilotSplitContainer.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.copilotPictureBox)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -417,5 +456,7 @@
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem2;
         private System.Windows.Forms.ToolStripMenuItem saveAsCSVToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem saveAsExcelToolStripMenuItem;
+        private System.Windows.Forms.SplitContainer copilotSplitContainer;
+        private System.Windows.Forms.PictureBox copilotPictureBox;
     }
 }
