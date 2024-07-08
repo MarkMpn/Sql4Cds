@@ -202,57 +202,69 @@ namespace MarkMpn.Sql4Cds.XTB
             SetIcon(sprocNode, "Folder");
             treeView.SelectedNode = conNode;
 
-            foreach (var msg in _dataSources[con.ConnectionName].MessageCache.GetAllMessages().OrderBy(tvf => tvf.Name))
-            {
-                if (msg.IsValidAsTableValuedFunction())
-                {
-                    var n = tvfNode.Nodes.Add(msg.Name);
-                    n.Tag = msg;
-                    n.ImageIndex = 25;
-                    n.SelectedImageIndex = 25;
-                    n.ContextMenuStrip = functionContextMenuStrip;
-                }
-
-                if (msg.IsValidAsStoredProcedure())
-                {
-                    var n = sprocNode.Nodes.Add(msg.Name);
-                    n.Tag = msg;
-                    n.ImageIndex = 26;
-                    n.SelectedImageIndex = 26;
-                    n.ContextMenuStrip = procedureContextMenuStrip;
-                }
-            }
-
+            AddVirtualChildNodes(tvfNode, parent => LoadMessages(parent, msg => msg.IsValidAsTableValuedFunction(), 25, functionContextMenuStrip));
+            AddVirtualChildNodes(sprocNode, parent => LoadMessages(parent, msg => msg.IsValidAsStoredProcedure(), 26, procedureContextMenuStrip));
+            
             if (new Uri(con.OrganizationServiceUrl).Host.EndsWith(".dynamics.com") &&
                 new Version(con.OrganizationVersion) >= new Version("9.1.0.17437"))
             {
                 var tsqlNode = conNode.Nodes.Add("TDS Endpoint");
+                SetIcon(tsqlNode, "Loading");
 
-                if (TDSEndpoint.IsEnabled(svc))
+                _ = Handle;
+                _ = Task.Run(() =>
                 {
-                    if (!String.IsNullOrEmpty(svc.CurrentAccessToken))
+                    var enabled = TDSEndpoint.IsEnabled(svc);
+
+                    Invoke((Action)(() =>
                     {
-                        tsqlNode.ImageIndex = 21;
-                        tsqlNode.SelectedImageIndex = 21;
-                    }
-                    else
-                    {
-                        tsqlNode.Text += " (Unavailable - OAuth authentication required)";
-                        tsqlNode.ImageIndex = 22;
-                        tsqlNode.SelectedImageIndex = 22;
-                    }
-                }
-                else
-                {
-                    tsqlNode.Text += " (Disabled)";
-                    tsqlNode.ImageIndex = 20;
-                    tsqlNode.SelectedImageIndex = 20;
-                }
+                        if (enabled)
+                        {
+                            if (!String.IsNullOrEmpty(svc.CurrentAccessToken))
+                            {
+                                tsqlNode.ImageIndex = 21;
+                                tsqlNode.SelectedImageIndex = 21;
+                            }
+                            else
+                            {
+                                tsqlNode.Text += " (Unavailable - OAuth authentication required)";
+                                tsqlNode.ImageIndex = 22;
+                                tsqlNode.SelectedImageIndex = 22;
+                            }
+                        }
+                        else
+                        {
+                            tsqlNode.Text += " (Disabled)";
+                            tsqlNode.ImageIndex = 20;
+                            tsqlNode.SelectedImageIndex = 20;
+                        }
+                    }));
+                });
 
                 tsqlNode.ContextMenuStrip = tsqlContextMenuStrip;
             }
 
             conNode.Expand();
+        }
+
+        private TreeNode[] LoadMessages(TreeNode parent, Func<MarkMpn.Sql4Cds.Engine.Message,bool> predicate, int imageIndex, ContextMenuStrip menu)
+        {
+            var connection = GetService(parent);
+            var dataSource = _dataSources[connection.ConnectionName];
+
+            return dataSource.MessageCache.GetAllMessages()
+                .Where(msg => predicate(msg))
+                .OrderBy(msg => msg.Name)
+                .Select(msg =>
+                {
+                    var node = new TreeNode(msg.Name);
+                    node.Tag = msg;
+                    node.ImageIndex = 25;
+                    node.SelectedImageIndex = 25;
+                    node.ContextMenuStrip = functionContextMenuStrip;
+                    return node;
+                })
+                .ToArray();
         }
 
         private TreeNode[] LoadAttributes(TreeNode parent)

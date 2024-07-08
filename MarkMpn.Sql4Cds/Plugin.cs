@@ -32,6 +32,14 @@ namespace MarkMpn.Sql4Cds
             var folder = Path.GetFileNameWithoutExtension(currAssembly.Location);
             dir = Path.Combine(dir, folder);
             _primaryAssembly = Assembly.LoadFrom(Path.Combine(dir, "MarkMpn.Sql4Cds.XTB.dll"));
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
+            {
+                var name = new AssemblyName(args.Name).Name + ".dll";
+                var path = Path.Combine(dir, name);
+                if (File.Exists(path))
+                    return Assembly.LoadFrom(path);
+                return null;
+            };
         }
 
         public override IXrmToolBoxPluginControl GetControl()

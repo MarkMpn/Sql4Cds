@@ -1,5 +1,7 @@
 ﻿using System;
+using System.ClientModel;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -9,12 +11,19 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.ServiceModel;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Web;
 using System.Windows.Forms;
 using AutocompleteMenuNS;
+using Azure.Core;
+using Markdig;
+using Markdig.Syntax;
 using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
@@ -23,12 +32,22 @@ using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.Export.DataStorage;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
+using Microsoft.Identity.Client;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
+using Newtonsoft.Json;
+using OpenAI.Assistants;
+using QuikGraph;
+using QuikGraph.Algorithms;
 using ScintillaNET;
 using xrmtb.XrmToolBox.Controls.Controls;
+using XrmToolBox.Extensibility;
+
+#pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -40,6 +59,8 @@ namespace MarkMpn.Sql4Cds.XTB
             public bool Execute { get; set; }
             public bool IncludeFetchXml { get; set; }
             public int Offset { get; set; }
+            public ManualResetEventSlim Event { get; set; }
+            public List<string> Result { get; set; }
         }
 
         class QueryException : ApplicationException
@@ -130,6 +151,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private bool _ctrlK;
         private Font _linkFont;
         private BackgroundWorker _exportBackgroundWorker;
+        private WebView2 _copilotWebView;
 
         static SqlQueryControl()
         {
@@ -159,6 +181,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _properties = properties;
             _stopwatch = new Stopwatch();
             BusyChanged += (s, e) => SyncTitle();
+            copilotSplitContainer.SplitterDistance = copilotSplitContainer.Width - 32;
 
             // Populate the status bar and add separators between each field
             for (var i = statusStrip.Items.Count - 1; i > 1; i--)
@@ -171,6 +194,9 @@ namespace MarkMpn.Sql4Cds.XTB
             splitContainer.Panel1.Controls.Add(_editor);
             splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
             Icon = _sqlIcon;
+
+            // Show/hide the copilot panel
+            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
 
             Connect();
 
@@ -210,6 +236,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
             // Update the font on the autocomplete menu as well
             _autocomplete.Font = new Font(Settings.Instance.EditorFontName, Settings.Instance.EditorFontSize);
+
+            // Show/hide the copilot panel
+            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
         }
 
         protected override void OnClosing(CancelEventArgs e)
@@ -644,6 +673,34 @@ namespace MarkMpn.Sql4Cds.XTB
             backgroundWorker.RunWorkerAsync(_params);
         }
 
+        internal List<string> Execute(string sql)
+        {
+            if (Connection == null)
+                throw new InvalidOperationException("Not connected");
+
+            if (backgroundWorker.IsBusy)
+                throw new InvalidOperationException("Another query is already executing");
+
+            var ev = new ManualResetEventSlim(false);
+            _params = new ExecuteParams { Sql = sql, Execute = true, IncludeFetchXml = false, Offset = 0, Event = ev, Result = new List<string>() };
+            Execute(() => backgroundWorker.RunWorkerAsync(_params));
+            ev.Wait();
+            return _params.Result;
+        }
+
+        internal void ValidateQuery(string query)
+        {
+            using (var cmd = _connection.CreateCommand())
+            using (var options = new QueryExecutionOptions(this, backgroundWorker, _connection, cmd))
+            {
+                _connection.ChangeDatabase(Connection.ConnectionName);
+                options.ApplySettings(false);
+
+                cmd.CommandText = query;
+                cmd.GeneratePlan(false);
+            }
+        }
+
         public bool Busy => backgroundWorker.IsBusy || _exportBackgroundWorker.IsBusy;
 
         public event EventHandler BusyChanged;
@@ -898,7 +955,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
-            _editor.Focus();
+            if (_params.Event != null)
+                _params.Event.Set();
+            else
+                _editor.Focus();
         }
 
         private IRootExecutionPlanNode GetRootNode(IExecutionPlanNode node)
@@ -972,6 +1032,9 @@ namespace MarkMpn.Sql4Cds.XTB
         private void AddMessage(int index, int length, string message, MessageType messageType)
         {
             message = message.Trim();
+
+            if (_params.Result != null)
+                _params.Result.Add(JsonConvert.SerializeObject(new { messageType, message }));
 
             var scintilla = (Scintilla)messagesTabPage.Controls[0];
             var line = scintilla.Lines.Count - 1;
@@ -1136,6 +1199,24 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             if (results != null)
             {
+                if (_params.Result != null)
+                {
+                    var rows = new List<Dictionary<string, object>>(results.Rows.Count);
+
+                    foreach (DataRow row in results.Rows)
+                    {
+                        var dict = new Dictionary<string, object>();
+
+                        for (var i = 0; i < results.Columns.Count; i++)
+                            dict[results.Columns[i].ColumnName] = row[i];
+
+                        rows.Add(dict);
+                    }
+
+                    var json = JsonConvert.SerializeObject(rows);
+                    _params.Result.Add(json);
+                }
+                
                 var grid = new DataGridView();
 
                 grid.AllowUserToAddRows = false;
@@ -1274,10 +1355,21 @@ namespace MarkMpn.Sql4Cds.XTB
             }
             else if (msg != null)
             {
+                if (_params.Result != null)
+                    _params.Result.Add(JsonConvert.SerializeObject(msg));
+                
                 AddMessage(query?.Index ?? -1, query?.Length ?? 0, msg, MessageType.Info);
             }
             else if (args.IncludeFetchXml)
             {
+                if (_params.Result != null)
+                {
+                    var fetchXmlNodes = GetAllNodes(query).OfType<IFetchXmlExecutionPlanNode>();
+
+                    foreach (var node in fetchXmlNodes)
+                        _params.Result.Add(JsonConvert.SerializeObject(node.FetchXmlString));
+                }
+                
                 var plan = new Panel();
                 var fetchLabel = new System.Windows.Forms.Label
                 {
@@ -1304,6 +1396,17 @@ namespace MarkMpn.Sql4Cds.XTB
                 plan.Controls.Add(fetchLabel);
 
                 AddExecutionPlan(plan);
+            }
+        }
+
+        private IEnumerable<IExecutionPlanNode> GetAllNodes(IExecutionPlanNode node)
+        {
+            foreach (var source in node.GetSources())
+            {
+                yield return source;
+
+                foreach (var subSource in GetAllNodes(source))
+                    yield return subSource;
             }
         }
 
@@ -1979,5 +2082,402 @@ namespace MarkMpn.Sql4Cds.XTB
 
             e.Result = exportParams;
         }
+
+        private async Task InitCopilot()
+        {
+            if (_copilotWebView != null)
+            {
+                _copilotWebView.Visible = true;
+                _copilotWebView.Focus();
+                return;
+            }
+
+            _copilotWebView = new WebView2();
+            _copilotWebView.Dock = DockStyle.Fill;
+            copilotSplitContainer.Panel2.Controls.Add(_copilotWebView);
+            await _copilotWebView.EnsureCoreWebView2Async();
+            _copilotWebView.Source = new Uri(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Copilot.html"));
+            var script = new CopilotScriptObject(this, _copilotWebView);
+            _copilotWebView.CoreWebView2.AddHostObjectToScript("sql4cds", script);
+            _copilotWebView.Focus();
+        }
+
+        private void copilotPictureBox_Click(object sender, EventArgs e)
+        {
+            copilotSplitContainer.IsSplitterFixed = false;
+            copilotSplitContainer.SplitterDistance = copilotSplitContainer.Width - 300;
+            copilotPictureBox.Visible = false;
+
+            _ = InitCopilot().ConfigureAwait(false);
+        }
+
+        private void copilotSplitContainer_SplitterMoved(object sender, SplitterEventArgs e)
+        {
+            if (copilotSplitContainer.SplitterDistance > copilotSplitContainer.Width - 50)
+            {
+                copilotSplitContainer.IsSplitterFixed = true;
+                copilotPictureBox.Visible = true;
+
+                if (_copilotWebView != null)
+                    _copilotWebView.Visible = false;
+            }
+        }
+    }
+
+    [ClassInterface(ClassInterfaceType.AutoDual)]
+    [ComVisible(true)]
+    public class CopilotScriptObject
+    {
+        private readonly SqlQueryControl _control;
+        private readonly WebView2 _copilotWebView;
+        private readonly MarkdownPipeline _markdownPipeline;
+        private AssistantClient _assistantClient;
+        private Assistant _assistant;
+        private AssistantThread _assistantThread;
+        private ThreadRun _run;
+        private string _lastMessage;
+        private bool _canceled;
+        private bool _runningQuery;
+
+        internal CopilotScriptObject(SqlQueryControl control, WebView2 copilotWebView)
+        {
+            _markdownPipeline = new MarkdownPipelineBuilder()
+                .UseAdvancedExtensions()
+                .UseSqlCodeBlockHandling()
+                .Build();
+            _control = control;
+            _copilotWebView = copilotWebView;
+        }
+
+        public void Cancel()
+        {
+            if (_run != null)
+            {
+                _canceled = true;
+                _assistantClient.CancelRun(_run);
+                if (_runningQuery && _control.Cancellable)
+                    _control.Cancel();
+                _run = null;
+            }
+        }
+
+        public async Task<string[]> SendMessage(string request)
+        {
+            _canceled = false;
+
+            try
+            {
+                if (_assistantClient == null)
+                {
+                    var client = String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint) ? new OpenAI.OpenAIClient(new ApiKeyCredential(Settings.Instance.OpenAIKey)) : new Azure.AI.OpenAI.AzureOpenAIClient(new Uri(Settings.Instance.OpenAIEndpoint), new Azure.AzureKeyCredential(Settings.Instance.OpenAIKey));
+                    _assistantClient = client.GetAssistantClient();
+                    
+                    if (!Version.TryParse(Settings.Instance.AssistantVersion, out var assistantVersion) || assistantVersion < Assembly.GetExecutingAssembly().GetName().Version)
+                    {
+                        // Update the assistant definition before we try to use it
+                        var definition = CreateCopilotAssistantForm.Definition;
+
+                        await _assistantClient.ModifyAssistantAsync(Settings.Instance.AssistantID, new AssistantModificationOptions
+                        {
+                            Instructions = definition.Instructions,
+                            DefaultTools = definition.Tools,
+                        });
+
+                        Settings.Instance.AssistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+                        SettingsManager.Instance.Save(typeof(PluginControl), Settings.Instance);
+                    }
+                }
+
+                if (_assistant == null)
+                    _assistant = await _assistantClient.GetAssistantAsync(Settings.Instance.AssistantID);
+
+                if (_assistantThread == null)
+                    _assistantThread = await _assistantClient.CreateThreadAsync();
+
+                ThreadMessage message = await _assistantClient.CreateMessageAsync(
+                    _assistantThread,
+                    new [] { MessageContent.FromText(request) });
+
+                var updates = _assistantClient.CreateRunStreamingAsync(_assistantThread, _assistant);
+                var dataSource = _control.DataSources[_control.Connection.ConnectionName];
+                var messageText = new ConcurrentDictionary<string, string>();
+                
+                do
+                {
+                    var toolOutputs = new List<ToolOutput>();
+
+                    await foreach (var update in updates)
+                    {
+                        if (_canceled)
+                            break;
+
+                        if (update is RunUpdate runUpdate)
+                        {
+                            if (_run == null)
+                                await RunStarted();
+
+                            _run = runUpdate;
+                        }
+                        else if (update is RequiredActionUpdate func)
+                        {
+                            var args = JsonConvert.DeserializeObject<Dictionary<string, string>>(func.FunctionArguments);
+
+                            switch (func.FunctionName)
+                            {
+                                case "list_tables":
+                                    var entities = dataSource.Metadata.GetAllEntities();
+                                    var response = entities.ToDictionary(e => e.LogicalName, e => new { displayName = e.DisplayName?.UserLocalizedLabel?.Label, description = e.Description?.UserLocalizedLabel?.Label });
+                                    toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(response, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })));
+                                    break;
+
+                                case "get_columns_in_table":
+                                    var entity = args["table_name"];
+                                    dataSource.Metadata.TryGetValue(entity, out var metadata);
+
+                                    if (metadata == null)
+                                    {
+                                        toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = $"The table '{entity}' does not exist in this environment" })));
+                                    }
+                                    else
+                                    {
+                                        var columns = metadata.Attributes.ToDictionary(a => a.LogicalName, a => new { displayName = a.DisplayName?.UserLocalizedLabel?.Label, description = a.Description?.UserLocalizedLabel?.Label, type = a.AttributeTypeName?.Value, options = (a as EnumAttributeMetadata)?.OptionSet?.Options?.ToDictionary(o => o.Value, o => o.Label?.UserLocalizedLabel?.Label), lookupTo = (a as LookupAttributeMetadata)?.Targets?.Select(target => target + "." + dataSource.Metadata[target].PrimaryIdAttribute)?.ToArray() });
+                                        toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(columns, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })));
+                                    }
+                                    break;
+
+                                case "get_current_query":
+                                    toolOutputs.Add(new ToolOutput(func.ToolCallId, _control.Sql));
+                                    break;
+
+                                case "execute_query":
+                                    var query = args["query"];
+
+                                    // Check if the user has seen this query in the previous message
+                                    var whitespace = new Regex(@"\s+");
+                                    var executeAllowed = _lastMessage != null && whitespace.Replace(_lastMessage, " ").Contains(whitespace.Replace(query, " "));
+
+                                    if (!executeAllowed && Settings.Instance.AllowCopilotSelectQueries)
+                                    {
+                                        // Check if unprompted execution is allowed - must be a single SELECT query only
+                                        var parser = new TSql160Parser(Settings.Instance.QuotedIdentifiers);
+                                        var result = parser.Parse(new StringReader(query), out var errors);
+
+                                        if (result is TSqlScript script &&
+                                            script.Batches.Count == 1 &&
+                                            script.Batches[0].Statements.Count == 1 &&
+                                            script.Batches[0].Statements[0] is SelectStatement)
+                                        {
+                                            executeAllowed = true;
+
+                                            // Show a message to the user so they know what query is being executed
+                                            var markdown = "Executing the query:\n\n```sql\n" + query + "\n```";
+                                            var html = Markdown.ToHtml(markdown, _markdownPipeline);
+                                            await ShowMessageAsync(func.ToolCallId, html);
+                                        }
+                                    }
+
+                                    if (!executeAllowed)
+                                    {
+                                        toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = "User has not been shown this query yet. Confirm with the user if they want to run it first." })));
+                                    }
+                                    else
+                                    {
+                                        _runningQuery = true;
+                                        var results = await Task.Run(() => _control.Execute(query));
+                                        _runningQuery = false;
+                                        _copilotWebView.Focus();
+
+                                        if (results.Count == 1)
+                                            toolOutputs.Add(new ToolOutput(func.ToolCallId, results[0]));
+                                        else
+                                            toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(results)));
+                                    }
+                                    break;
+
+                                case "find_relationship":
+                                    var table1 = args["table1"];
+                                    var table2 = args["table2"];
+
+                                    if (!dataSource.Metadata.TryGetValue(table1, out var t1) ||
+                                        !dataSource.Metadata.TryGetValue(table2, out var t2))
+                                    {
+                                        toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = "One or both of the tables do not exist in this environment. Use the list_tables function to get the valid table names." })));
+                                    }
+                                    else
+                                    {
+                                        // Build the graph of relationships between each entity
+                                        var graph = new UndirectedGraph<string, TaggedEdge<string, string>>();
+
+                                        foreach (var e in dataSource.Metadata.GetAllEntities())
+                                            graph.AddVertex(e.LogicalName);
+
+                                        // Some entities have links to almost everything else - ignore them unless they're one of the entities we're interested in
+                                        var ignoreEntities = new[] { "organization", "systemuser", "team", "queue", "businessunit", "asyncoperation", "userentityinstancedata" };
+
+                                        foreach (var e in dataSource.Metadata.GetAllEntities())
+                                        {
+                                            if (ignoreEntities.Contains(e.LogicalName) && t1.LogicalName != e.LogicalName && t2.LogicalName != e.LogicalName)
+                                                continue;
+
+                                            foreach (var a in e.Attributes.OfType<LookupAttributeMetadata>())
+                                            {
+                                                foreach (var target in a.Targets)
+                                                {
+                                                    if (ignoreEntities.Contains(target) && t1.LogicalName != target && t2.LogicalName != target)
+                                                        continue;
+
+                                                    graph.AddEdge(new TaggedEdge<string, string>(e.LogicalName, target, a.LogicalName));
+                                                }
+                                            }
+                                        }
+
+                                        var paths = graph.ShortestPathsDijkstra(e => 1, table1);
+
+                                        if (paths(table2, out var path))
+                                        {
+                                            toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(path.Select(e => new { fromTable = e.Source, fromColumn = e.Tag, toTable = e.Target, toColumn = dataSource.Metadata[e.Target].PrimaryIdAttribute }).ToArray())));
+                                        }
+                                        else
+                                        {
+                                            toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = "There is no set of relationships that link these two tables" })));
+                                        }
+                                    }
+                                    break;
+
+                                default:
+                                    break;
+                            }
+                        }
+                        else if (update is MessageContentUpdate messageContentUpdate)
+                        {
+                            var text = messageText.AddOrUpdate(messageContentUpdate.MessageId, messageContentUpdate.Text, (_, existing) => existing + messageContentUpdate.Text);
+                            _lastMessage = text;
+
+                            var html = Markdown.ToHtml(text, _markdownPipeline);
+                            await ShowMessageAsync(messageContentUpdate.MessageId, html);
+                        }
+                        else if (update is MessageStatusUpdate messageStatusUpdate)
+                        {
+                            if (messageStatusUpdate.UpdateKind == StreamingUpdateReason.MessageCompleted)
+                            {
+                                var text = messageText[messageStatusUpdate.Value.Id];
+
+                                // If there are any SQL queries in this message, validate them now
+                                var queries = Markdown.Parse(text)
+                                    .OfType<FencedCodeBlock>()
+                                    .Where(c => c.Info == "sql");
+
+                                var errors = new List<string>();
+                                var errorHints = new List<string>();
+
+                                foreach (var query in queries)
+                                {
+                                    try
+                                    {
+                                        _control.ValidateQuery(query.Lines.ToString());
+                                    }
+                                    catch (Sql4CdsException ex)
+                                    {
+                                        errors.AddRange(ex.Errors.Select(e => e.Message));
+
+                                        var error = (Exception)ex;
+                                        while (error.InnerException != null)
+                                        {
+                                            if (error is NotSupportedQueryFragmentException nsqfe &&
+                                                nsqfe.Suggestion != null)
+                                            {
+                                                errors.Add(nsqfe.Suggestion);
+                                            }
+
+                                            error = error.InnerException;
+                                        }
+
+                                        var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
+                                        var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
+                                        var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query.Lines.ToString());
+
+                                        if (showListTablesHint)
+                                            errorHints.Add("To get a list of valid table names, use the `list_tables` function");
+                                        if (showGetColumnsInTableHint)
+                                            errorHints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
+                                        if (showFindRelationshipHint)
+                                            errorHints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
+                                    }
+                                }
+
+                                if (errors.Any())
+                                {
+                                    var html = Markdown.ToHtml($"The suggested query contains errors:\r\n```\r\n{errors[0]}\r\n```", _markdownPipeline);
+                                    var prompt = $"This query contains the following errors:\r\n{String.Join("\r\n", errors.Select(e => $"* {e}"))}";
+
+                                    if (errorHints.Any())
+                                        prompt += "\r\n\r\nTry the following changes:\r\n" + String.Join("\r\n", errorHints.Select(h => $"* {h}"));
+
+                                    await ShowPromptSuggestionAsync("warning", html, "Retry", prompt);
+                                }
+                                else if (queries.Count() == 1)
+                                {
+                                    await ShowPromptSuggestionAsync("info", "", "Run this query", "Run this query");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            //throw new NotSupportedException();
+                        }
+
+                        if (toolOutputs.Any() && !_canceled)
+                            updates = _assistantClient.SubmitToolOutputsToRunStreamingAsync(_run, toolOutputs);
+                    }
+                } while (_run?.Status.IsTerminal == false);
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                await ShowPromptSuggestionAsync("warning", HttpUtility.HtmlEncode(ex.Message), null, null);
+                return new[] { ex.Message };
+            }
+            finally
+            {
+                _run = null;
+            }
+        }
+
+        private bool ContainsJoin(string sql)
+        {
+            var parsed = new TSql160Parser(Settings.Instance.QuotedIdentifiers).Parse(new StringReader(sql), out _);
+            var visitor = new FindJoinVisitor();
+            parsed.Accept(visitor);
+            return visitor.ContainsJoin;
+        }
+
+        class FindJoinVisitor : TSqlFragmentVisitor
+        {
+            public bool ContainsJoin { get; private set; }
+
+            public override void Visit(QualifiedJoin node)
+            {
+                base.Visit(node);
+                ContainsJoin = true;
+            }
+        }
+
+        private async Task ShowMessageAsync(string id, string html)
+        {
+            await _copilotWebView.ExecuteScriptAsync("updateMessage(" + JsonConvert.SerializeObject(id) + "," + JsonConvert.SerializeObject(html) + ")");
+        }
+
+        private async Task ShowPromptSuggestionAsync(string type, string title, string action, string message)
+        {
+            await _copilotWebView.ExecuteScriptAsync("showPromptSuggestion(" + JsonConvert.SerializeObject(type) + "," + JsonConvert.SerializeObject(title) + "," + JsonConvert.SerializeObject(action) + "," + JsonConvert.SerializeObject(message) + ")");
+        }
+
+        private async Task RunStarted()
+        {
+            await _copilotWebView.ExecuteScriptAsync("runStarted()");
+        }
     }
 }
+
+#pragma warning restore OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.

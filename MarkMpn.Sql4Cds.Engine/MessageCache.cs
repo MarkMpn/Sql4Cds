@@ -44,8 +44,9 @@ namespace MarkMpn.Sql4Cds.Engine
     public class MessageCache : IMessageCache
     {
         private readonly IOrganizationService _org;
-        private readonly Dictionary<string, Message> _cache;
-        private readonly Dictionary<string, bool> _entityMessages;
+        private readonly IAttributeMetadataCache _metadata;
+        private Dictionary<string, Message> _cache;
+        private Dictionary<string, bool> _entityMessages;
 
         /// <summary>
         /// Loads a list of messages from a specific instance
@@ -55,6 +56,14 @@ namespace MarkMpn.Sql4Cds.Engine
         public MessageCache(IOrganizationService org, IAttributeMetadataCache metadata)
         {
             _org = org;
+            _metadata = metadata;
+        }
+
+        private void Load()
+        {
+            if (_cache != null)
+                return;
+
             _entityMessages = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
             // Load the requests and input parameters
@@ -68,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var messageRequestFields = new Dictionary<string, List<MessageParameter>>();
 
-            foreach (var entity in RetrieveAll(org, requestQry, metadata))
+            foreach (var entity in RetrieveAll(requestQry))
             {
                 var messageName = entity.GetAttributeValue<string>("name");
 
@@ -108,7 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var messageResponseFields = new Dictionary<string, List<MessageParameter>>();
 
-            foreach (var entity in RetrieveAll(org, responseQry, metadata))
+            foreach (var entity in RetrieveAll(responseQry))
             {
                 var messageName = (string)entity.GetAttributeValue<AliasedValue>("sdkmessagerequest.name").Value;
 
@@ -147,11 +156,11 @@ namespace MarkMpn.Sql4Cds.Engine
             }, StringComparer.OrdinalIgnoreCase);
         }
 
-        private IEnumerable<Entity> RetrieveAll(IOrganizationService org, QueryExpression qry, IAttributeMetadataCache metadata)
+        private IEnumerable<Entity> RetrieveAll(QueryExpression qry)
         {
-            RemoveMissingAttributes(qry, metadata);
+            RemoveMissingAttributes(qry);
 
-            var results = org.RetrieveMultiple(qry);
+            var results = _org.RetrieveMultiple(qry);
 
             foreach (var entity in results.Entities)
                 yield return entity;
@@ -168,21 +177,21 @@ namespace MarkMpn.Sql4Cds.Engine
                     PagingCookie = results.PagingCookie
                 };
 
-                results = org.RetrieveMultiple(qry);
+                results = _org.RetrieveMultiple(qry);
 
                 foreach (var entity in results.Entities)
                     yield return entity;
             }
         }
 
-        private void RemoveMissingAttributes(QueryExpression qry, IAttributeMetadataCache metadata)
+        private void RemoveMissingAttributes(QueryExpression qry)
         {
             var logicalName = qry.EntityName;
             var columnSet = qry.ColumnSet;
-            RemoveMissingAttributes(metadata[logicalName], columnSet);
+            RemoveMissingAttributes(_metadata[logicalName], columnSet);
 
             foreach (var linkEntity in qry.LinkEntities)
-                RemoveMissingAttributes(linkEntity, metadata);
+                RemoveMissingAttributes(linkEntity, _metadata);
         }
 
         private void RemoveMissingAttributes(LinkEntity linkEntity, IAttributeMetadataCache metadata)
@@ -235,16 +244,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool TryGetValue(string name, out Message message)
         {
+            Load();
             return _cache.TryGetValue(name, out message);
         }
 
         public IEnumerable<Message> GetAllMessages()
         {
+            Load();
             return _cache.Values;
         }
 
         public bool IsMessageAvailable(string entityLogicalName, string messageName)
         {
+            Load();
             var key = entityLogicalName + ":" + messageName;
 
             if (_entityMessages.TryGetValue(key, out var value))

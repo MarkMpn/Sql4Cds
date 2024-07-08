@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -17,6 +18,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private readonly Settings _settings;
         private readonly FetchXml2SqlOptions _fetchXml2SqlOptions;
         private readonly PluginControl _pluginControl;
+        private string _assistantVersion;
 
         public SettingsForm(Settings settings, PluginControl plugin)
         {
@@ -50,6 +52,10 @@ namespace MarkMpn.Sql4Cds.XTB
             schemaColumnOrderingCheckbox.Checked = settings.ColumnOrdering == ColumnOrdering.Strict;
             fontComboBox.SelectedValue = Settings.Instance.EditorFontName;
             fontSizeNumericUpDown.Value = Settings.Instance.EditorFontSize;
+            openAiEndpointTextBox.Text = settings.OpenAIEndpoint;
+            openAiKeyTextBox.Text = settings.OpenAIKey;
+            assistantIdTextBox.Text = settings.AssistantID;
+            allowCopilotSelectQueriesCheckBox.Checked = settings.AllowCopilotSelectQueries;
 
             SetSqlStyle(simpleSqlScintilla);
             SetSqlStyle(nativeSqlScintilla);
@@ -131,6 +137,13 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.ColumnOrdering = schemaColumnOrderingCheckbox.Checked ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
                 _settings.EditorFontName = (string)fontComboBox.SelectedValue ?? "Courier New";
                 _settings.EditorFontSize = (int) fontSizeNumericUpDown.Value;
+                _settings.OpenAIEndpoint = openAiEndpointTextBox.Text;
+                _settings.OpenAIKey = openAiKeyTextBox.Text;
+                _settings.AssistantID = assistantIdTextBox.Text;
+                _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
+
+                if (_assistantVersion != null)
+                    _settings.AssistantVersion = _assistantVersion;
             }
         }
 
@@ -204,6 +217,18 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 e.Graphics.DrawString(ff.Name, font, Brushes.Black, e.Bounds.Location.X + monospaceIndictorOffset + monospaceIndictorSize + monospaceIndictorOffset, e.Bounds.Location.Y);
                 e.DrawFocusRectangle();
+            }
+        }
+
+        private void createAssistantbutton_Click(object sender, EventArgs e)
+        {
+            using (var form = new CreateCopilotAssistantForm(openAiEndpointTextBox.Text, openAiKeyTextBox.Text))
+            {
+                if (form.ShowDialog(this) == DialogResult.OK)
+                {
+                    assistantIdTextBox.Text = form.AssistantId;
+                    _assistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+                }
             }
         }
     }

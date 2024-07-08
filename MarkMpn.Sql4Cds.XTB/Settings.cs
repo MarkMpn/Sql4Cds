@@ -70,6 +70,16 @@ namespace MarkMpn.Sql4Cds.XTB
         public string EditorFontName { get; set; } = "Courier New";
 
         public int EditorFontSize { get; set; } = 10;
+
+        public string OpenAIEndpoint { get; set; }
+
+        public string OpenAIKey { get; set; }
+
+        public string AssistantID { get; set; }
+
+        public bool AllowCopilotSelectQueries { get; set; }
+
+        public string AssistantVersion { get; set; }
     }
 
     public class TabContent
