@@ -196,6 +196,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public string Warning => _missingPagingCookie && RowsOut == 50_000 ? "Using legacy paging - results may be incomplete" : null;
 
+        internal bool IsUnreliableVirtualEntityProvider => _isVirtualEntity;
+
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
             // Never need to do paging if we're enforcing a TOP constraint
