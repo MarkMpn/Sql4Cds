@@ -111,16 +111,6 @@
     <None Include="Key.snk" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
-      <Project>{c77b731d-e55c-4197-b96c-2b23eb9f56ef}</Project>
-      <Name>MarkMpn.Sql4Cds.Engine</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj">
-      <Project>{a7af5d13-a44e-426d-b3fc-ae390832c7df}</Project>
-      <Name>MarkMpn.Sql4Cds</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="Dapper.StrongName">
       <Version>2.1.28</Version>
     </PackageReference>
@@ -139,6 +129,12 @@
     <PackageReference Include="System.Text.Json">
       <Version>6.0.7</Version>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
+      <Project>{c77b731d-e55c-4197-b96c-2b23eb9f56ef}</Project>
+      <Name>MarkMpn.Sql4Cds.Engine</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

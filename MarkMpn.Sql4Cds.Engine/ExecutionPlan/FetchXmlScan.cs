@@ -91,6 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private List<KeyValuePair<string, string>> _pagingFields;
         private List<INullable> _lastPageValues;
         private bool _missingPagingCookie;
+        private bool _isVirtualEntity;
 
         public FetchXmlScan()
         {
@@ -195,6 +196,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public string Warning => _missingPagingCookie && RowsOut == 50_000 ? "Using legacy paging - results may be incomplete" : null;
 
+        internal bool IsUnreliableVirtualEntityProvider => _isVirtualEntity;
+
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
             // Never need to do paging if we're enforcing a TOP constraint
@@ -291,6 +294,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = dataSource.Metadata[name];
+            _isVirtualEntity = meta.DataProviderId != null && meta.DataProviderId != DataProviders.ElasticDataProvider;
 
             if (!(Parent is PartitionedAggregateNode))
                 context.Options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
@@ -748,10 +752,69 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 object sqlValue;
 
-                if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
-                    sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value.Type);
-                else
+                if (!entity.Attributes.TryGetValue(col.Key, out var value) && _isVirtualEntity)
+                {
+                    // Virtual entity providers aren't reliable and can produce attributes with names in different cases
+                    // than expected, e.g. msdyn_solutioncomponentsummary returns its id as msdyn_solutioncomponentsummaryId
+                    var altKey = entity.Attributes.Keys.FirstOrDefault(k => k.Equals(col.Key, StringComparison.OrdinalIgnoreCase));
+
+                    if (altKey != null)
+                    {
+                        value = entity[col.Key] = entity[altKey];
+                        entity.Attributes.Remove(altKey);
+                    }
+                }
+
+                if (value == null)
+                {
                     sqlValue = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
+                }
+                else
+                {
+                    if (_isVirtualEntity)
+                    {
+                        // Virtual entity providers aren't reliable and can produce attribute values of different types
+                        // than expected, e.g. msdyn_componentlayer returns string values as guids. Convert the CLR
+                        // values to the correct type before converting to SQL types.
+                        var expectedClrType = SqlTypeConverter.SqlToNetType(col.Value.Type.ToNetType(out _));
+                        if (value.GetType() != expectedClrType)
+                        {
+                            if (value is Guid guidValue)
+                            {
+                                if (expectedClrType == typeof(string))
+                                {
+                                    value = guidValue.ToString();
+                                }
+                                else if (expectedClrType == typeof(EntityReference))
+                                {
+                                    // We don't know the logical name of the entity reference, check if we can find it from the metadata
+                                    var parts = col.Key.SplitMultiPartIdentifier();
+                                    var entityLogicalName = Entity.name;
+                                    if (!parts[0].Equals(Alias, StringComparison.OrdinalIgnoreCase))
+                                        entityLogicalName = Entity.FindLinkEntity(parts[0]).name;
+                                    var attrMeta = dataSource.Metadata[entityLogicalName].Attributes.Single(a => a.LogicalName == parts[1]);
+                                    if (attrMeta.IsPrimaryId == false && attrMeta is LookupAttributeMetadata lookupAttrMeta)
+                                    {
+                                        if (lookupAttrMeta.Targets?.Length == 1)
+                                            value = new EntityReference(lookupAttrMeta.Targets[0], guidValue);
+                                        else
+                                            value = new EntityReference(null, guidValue);
+                                    }
+                                }
+                                else
+                                {
+                                    throw new QueryExecutionException($"Expected {expectedClrType.Name} value, got {value.GetType()}");
+                                }
+                            }
+                            else
+                            {
+                                value = Convert.ChangeType(value, expectedClrType);
+                            }
+                        }
+                    }
+
+                    sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value.Type);
+                }
 
                 if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName) && sqlValue is SqlGuid guid)
                     sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
@@ -955,6 +1018,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Add each attribute from the main entity and recurse into link entities
             var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var meta = dataSource.Metadata[entity.name];
+            _isVirtualEntity = meta.DataProviderId != null && meta.DataProviderId != DataProviders.ElasticDataProvider;
 
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
@@ -1332,6 +1396,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var visible = true;
             if (parts.Length == 2 && HiddenAliases.Contains(parts[0]))
                 visible = false;
+
+            // Virtual entity providers are not reliable - they can produce string values that are longer than the metadata indicates
+            // e.g. msdn_componentlayer.msdyn_children
+            if (_isVirtualEntity && type is SqlDataTypeReferenceWithCollation sqlType && sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                type = DataTypeHelpers.NVarChar(Int32.MaxValue, sqlType.Collation, sqlType.CollationLabel);
 
             schema[fullName] = new ColumnDefinition(type, !notNull, false, visible);
 

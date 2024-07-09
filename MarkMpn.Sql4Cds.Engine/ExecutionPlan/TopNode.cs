@@ -169,6 +169,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         fetchXml.FetchXml.top = literal.Value;
                         fetchXml.AllPages = false;
 
+                        // Virtual entity providers aren't reliable - fold the TOP into the FetchXML but keep
+                        // this node in case the provider doesn't support TOP
+                        if (fetchXml.IsUnreliableVirtualEntityProvider)
+                            return this;
+
                         if (Source == fetchXml)
                             return fetchXml;
 

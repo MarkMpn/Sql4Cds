@@ -119,7 +119,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                if (!virtualAttr)
+                // Virtual entity providers are unreliable - still fold the DISTINCT to the fetch but keep
+                // this node to ensure the DISTINCT is applied if the provider doesn't support it.
+                if (!virtualAttr && !fetch.IsUnreliableVirtualEntityProvider)
                     return fetch;
 
                 schema = Source.GetSchema(context);

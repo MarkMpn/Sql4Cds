@@ -519,6 +519,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         fetchXml.FetchXml.UseRawOrderBy = true;
                 }
 
+                // Virtual entity providers are unreliable - fold the sorts to the FetchXML but keep this
+                // node to resort if required.
+                if (fetchXml.IsUnreliableVirtualEntityProvider)
+                {
+                    PresortedCount = 0;
+                    return this;
+                }
+
                 return Source;
             }
 

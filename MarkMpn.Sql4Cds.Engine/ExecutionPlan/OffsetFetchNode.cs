@@ -73,6 +73,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is FetchXmlScan fetchXml)
             {
+                // Virtual entity providers aren't reliable - use naive implementation
+                if (fetchXml.IsUnreliableVirtualEntityProvider)
+                    return this;
+
                 var expressionExecutionContext = new ExpressionExecutionContext(expressionCompilationContext);
                 var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(expressionCompilationContext)(expressionExecutionContext));
                 var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(expressionCompilationContext)(expressionExecutionContext));
