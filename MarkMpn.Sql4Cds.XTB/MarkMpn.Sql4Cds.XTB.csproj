@@ -298,7 +298,7 @@
       <Version>2.0.0-beta.2</Version>
     </PackageReference>
     <PackageReference Include="Azure.Identity">
-      <Version>1.10.3</Version>
+      <Version>1.11.4</Version>
     </PackageReference>
     <PackageReference Include="ColorCode.HTML">
       <Version>2.0.15</Version>
