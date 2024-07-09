@@ -219,7 +219,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal static Sql4CdsError ConversionFailed(DataTypeReference sourceType, Literal sourceValue, DataTypeReference targetType)
         {
-            return Create(245, sourceValue, GetTypeName(sourceType), (SqlInt32)sourceValue.Value.Length, Collation.USEnglish.ToSqlString(sourceValue.Value), GetTypeName(targetType));
+            return Create(245, sourceValue, Collation.USEnglish.ToSqlString(GetTypeName(sourceType)), (SqlInt32)sourceValue.Value.Length, Collation.USEnglish.ToSqlString(sourceValue.Value), Collation.USEnglish.ToSqlString(GetTypeName(targetType)));
         }
 
         internal static Sql4CdsError CollationConflict(TSqlFragment fragment, Collation source, Collation target, string operationName)
