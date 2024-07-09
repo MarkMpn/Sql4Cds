@@ -11,21 +11,23 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Enabled access to recycle bin records via the `bin` schema
-Enabled `INSERT`, `UPDATE` and `DELETE` statements on `principalobjectaccess` table
-Enabled use of subqueries within `ON` clause of `JOIN` statements
-Added support for `___pid` virtual column for lookups to elastic tables
-Improved folding of queries using index spools
-Improved primary key calculation when using joins on non-key columns
-Apply column order setting to parameters for stored procedures and table-valued functions
-Fixed error with DeleteMultiple requests
-Fixed paging error with `DISTINCT` queries causing results to be limited to 50,000 records
-Fixed paging errors when sorting by optionset values causing some results to be skipped
-Fixed errors when using joins inside `[NOT] EXISTS` subqueries
-Fixed incorrect results when applying aliases to `___name` and `___type` virtual columns
-Fixed max length calculation for string columns
-Added debug visualizer to inspect query plans within Visual Studio
-Fixed "invalid program" errors when combining type conversions with `AND` or `OR` in .NET Core applications
+    <releaseNotes>Simplify filters that can easily be identified as tautologies or contradictions
+Fixed incorrectly matching `null` values in hash joins
+Fixed identification of nullable columns in outer joins
+Handle `createdon` column being null in some system tables
+Fixed use of metadata queries within loops
+Fixed filtering and aggregation special cases with `audit` entity
+Fixed incorrect type conversion errors when using specialized FetchXML condition operators
+Fixed use of `CAST` and `CONVERT` with string types
+Fixed paging when using semi-joins
+Various fixes when querying virtual entities with unreliable providers:
+* values returned as different types
+* attributes using names with different case
+* not honouring `top`, `offset`, `count`, `order`
+Improved error reporting:
+* when using `*` instead of column name
+* when passing incorrect number of parameters to aggregate functions
+* when comparing lookup/optionset columns to invalid string values
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
@@ -36,6 +38,7 @@ Fixed "invalid program" errors when combining type conversions with `AND` or `OR
         <dependency id="Microsoft.CrmSdk.XrmTooling.CoreAssembly" version="9.1.1.32" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="161.8834.0" />
         <dependency id="Microsoft.ApplicationInsights" version="2.21.0" />
+        <dependency id="System.Data.SqlClient" version="4.8.6" />
         <dependency id="XPath2.Extensions" version="1.1.3" />
       </group>
       <group targetFramework=".NETCoreApp6.0">
@@ -43,6 +46,7 @@ Fixed "invalid program" errors when combining type conversions with `AND` or `OR
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="161.8834.0" />
         <dependency id="System.Data.SqlClient" version="4.8.6" />
         <dependency id="Microsoft.ApplicationInsights" version="2.21.0" />
+        <dependency id="System.Data.SqlClient" version="4.8.6" />
         <dependency id="XPath2.Extensions" version="1.1.3" />
       </group>
     </dependencies>
