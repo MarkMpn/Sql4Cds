@@ -1,5 +1,26 @@
 # Change Log
 
+## [v9.2.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.2.0) - 2024-07-10
+
+Added export to CSV/Excel/JSON/Markdown/XML
+Simplify filters that can easily be identified as tautologies or contradictions
+Fixed incorrectly matching `null` values in hash joins
+Fixed identification of nullable columns in outer joins
+Handle `createdon` column being null in some system tables
+Fixed use of metadata queries within loops
+Fixed filtering and aggregation special cases with `audit` entity
+Fixed incorrect type conversion errors when using specialized FetchXML condition operators
+Fixed use of `CAST` and `CONVERT` with string types
+Fixed paging when using semi-joins
+Various fixes when querying virtual entities with unreliable providers:
+* values returned as different types
+* attributes using names with different case
+* not honouring `top`, `offset`, `count`, `order`
+Improved error reporting:
+* when using `*` instead of column name
+* when passing incorrect number of parameters to aggregate functions
+* when comparing lookup/optionset columns to invalid string values
+
 ## [v9.1.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.1.0) - 2024-06-10
 
 Enabled access to recycle bin records via the `bin` schema
