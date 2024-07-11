@@ -41,7 +41,7 @@ Fixed paging when using semi-joins
 Various fixes when querying virtual entities with unreliable providers:
 * values returned as different types
 * attributes using names with different case
-* not honouring `top`, `offset`, `count`, `order`
+* not honouring `top`, `offset`, `count`, `order`, `filter`
 Improved error reporting:
 * when using `*` instead of column name
 * when passing incorrect number of parameters to aggregate functions
