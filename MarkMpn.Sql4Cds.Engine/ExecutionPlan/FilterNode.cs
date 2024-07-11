@@ -1492,6 +1492,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
+                    var originalFilter = fetchXml.IsUnreliableVirtualEntityProvider ? Filter.Clone() : null;
+
                     Filter = ExtractFetchXMLFilters(
                         foldableContext,
                         dataSource,
@@ -1521,6 +1523,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             fetchXml.Entity.Items = fetchXml.Entity.Items.Except(notNull).ToArray();
                         }
                     }
+
+                    // Virtual entity providers are unreliable - fold the filters to the FetchXML but keep this
+                    // node to filter again if necessary
+                    if (originalFilter != null)
+                        Filter = originalFilter;
                 }
 
                 if (source is MetadataQueryNode meta)

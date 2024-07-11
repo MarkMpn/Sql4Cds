@@ -777,6 +777,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // than expected, e.g. msdyn_componentlayer returns string values as guids. Convert the CLR
                         // values to the correct type before converting to SQL types.
                         var expectedClrType = SqlTypeConverter.SqlToNetType(col.Value.Type.ToNetType(out _));
+
+                        // Unwrap common types
+                        if (value is OptionSetValue osv)
+                            value = osv.Value;
+                        else if (value is Money m)
+                            value = m.Value;
+
                         if (value.GetType() != expectedClrType)
                         {
                             if (value is Guid guidValue)
@@ -806,7 +813,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     throw new QueryExecutionException($"Expected {expectedClrType.Name} value, got {value.GetType()}");
                                 }
                             }
-                            else
+                            else if (value is IConvertible)
                             {
                                 value = Convert.ChangeType(value, expectedClrType);
                             }

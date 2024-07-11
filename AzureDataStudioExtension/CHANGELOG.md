@@ -1,6 +1,6 @@
 # Change Log
 
-## [v9.2.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.2.0) - 2024-07-10
+## [v9.2.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.2.0) - 2024-07-11
 
 Added export to CSV/Excel/JSON/Markdown/XML
 Simplify filters that can easily be identified as tautologies or contradictions
@@ -15,7 +15,7 @@ Fixed paging when using semi-joins
 Various fixes when querying virtual entities with unreliable providers:
 * values returned as different types
 * attributes using names with different case
-* not honouring `top`, `offset`, `count`, `order`
+* not honouring `top`, `offset`, `count`, `order`, `filter`
 Improved error reporting:
 * when using `*` instead of column name
 * when passing incorrect number of parameters to aggregate functions
