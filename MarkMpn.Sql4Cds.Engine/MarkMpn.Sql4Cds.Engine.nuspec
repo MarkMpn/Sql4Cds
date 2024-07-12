@@ -44,7 +44,6 @@ Improved error reporting:
       <group targetFramework=".NETCoreApp6.0">
         <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="1.1.9" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="161.8834.0" />
-        <dependency id="System.Data.SqlClient" version="4.8.6" />
         <dependency id="Microsoft.ApplicationInsights" version="2.21.0" />
         <dependency id="System.Data.SqlClient" version="4.8.6" />
         <dependency id="XPath2.Extensions" version="1.1.3" />
@@ -53,8 +52,8 @@ Improved error reporting:
 	<readme>docs\README.md</readme>
   </metadata>
   <files>
-    <file src="..\MarkMpn.Sql4Cds.Engine.NetFx\bin\Release\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
-    <file src="..\MarkMpn.Sql4Cds.Engine.NetCore\bin\Release\net6.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net6.0\MarkMpn.Sql4Cds.Engine.dll" />
-	<file src="..\README.md" target="docs\" />
+    <file src=".\bin\Release\net462\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src=".\bin\Release\net6.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net6.0\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src="..\README.md" target="docs\" />
   </files>
 </package>
