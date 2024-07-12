@@ -53,8 +53,8 @@ Improved error reporting:
 	<readme>docs\README.md</readme>
   </metadata>
   <files>
-    <file src="..\MarkMpn.Sql4Cds.Engine.NetFx\bin\Release\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
-    <file src="..\MarkMpn.Sql4Cds.Engine.NetCore\bin\Release\net6.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net6.0\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src=".\bin\Release\net462\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src=".\bin\Release\net6.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net6.0\MarkMpn.Sql4Cds.Engine.dll" />
 	<file src="..\README.md" target="docs\" />
   </files>
 </package>
