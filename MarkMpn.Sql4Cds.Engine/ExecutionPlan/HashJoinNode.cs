@@ -152,8 +152,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Make sure the join keys are not null - the SqlType classes override == to prevent NULL = NULL
             // but .Equals used by the hash table allows them to match
-            LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints, true);
-            RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints, true);
+            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)
+                LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints, true);
+
+            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
+                RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints, true);
 
             return this;
         }
