@@ -823,8 +823,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value.Type);
                 }
 
-                if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName) && sqlValue is SqlGuid guid)
-                    sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
+                if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName))
+                {
+                    if (sqlValue is SqlGuid guid)
+                        sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
+
+                    if (_isVirtualEntity && sqlValue is SqlEntityReference er && er.IsNull && !col.Value.IsNullable)
+                    {
+                        // Virtual entity providers aren't reliable and can produce null guids for non-nullable primary keys
+                        // https://github.com/MarkMpn/Sql4Cds/issues/511
+                        // Make up a new guid to avoid the null value
+                        sqlValue = new SqlEntityReference(DataSource, logicalName, Guid.NewGuid());
+                    }
+                }
 
                 entity[col.Key] = sqlValue;
             }
