@@ -779,7 +779,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' usertimezone='true' />
                         <attribute name='accountid' aggregate='count' alias='count' />
                         <order alias='createdon_month' />
                     </entity>
@@ -791,7 +791,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(partitionFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' usertimezone='true' />
                         <attribute name='accountid' aggregate='count' alias='count' />
                         <order alias='createdon_month' />
                     </entity>
@@ -844,9 +844,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='createdon' groupby='true' alias='createdon_year' dategrouping='year' />
-                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
-                        <attribute name='createdon' groupby='true' alias='createdon_day' dategrouping='day' />
+                        <attribute name='createdon' groupby='true' alias='createdon_year' dategrouping='year' usertimezone='true' />
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' usertimezone='true' />
+                        <attribute name='createdon' groupby='true' alias='createdon_day' dategrouping='day' usertimezone='true' />
                         <attribute name='accountid' aggregate='count' alias='count' />
                         <order alias='createdon_year' />
                         <order alias='createdon_month' />
@@ -862,9 +862,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(partitionFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='createdon' groupby='true' alias='createdon_year' dategrouping='year' />
-                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
-                        <attribute name='createdon' groupby='true' alias='createdon_day' dategrouping='day' />
+                        <attribute name='createdon' groupby='true' alias='createdon_year' dategrouping='year' usertimezone='true' />
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' usertimezone='true' />
+                        <attribute name='createdon' groupby='true' alias='createdon_day' dategrouping='day' usertimezone='true' />
                         <attribute name='accountid' aggregate='count' alias='count' />
                         <order alias='createdon_year' />
                         <order alias='createdon_month' />

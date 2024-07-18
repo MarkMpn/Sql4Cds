@@ -266,13 +266,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             canUseFetchXmlAggregate = false;
                             break;
                         }
-
-                        // FetchXML dategrouping always uses local timezone. If we're using UTC we can't use it
-                        if (!context.Options.UseLocalTimeZone)
-                        {
-                            canUseFetchXmlAggregate = false;
-                            break;
-                        }
                     }
                 }
 
@@ -411,6 +404,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             attribute.dategrouping = dateGrouping.Value;
                             attribute.dategroupingSpecified = true;
+                            attribute.usertimezone = context.Options.UseLocalTimeZone ? FetchBoolType.@true : FetchBoolType.@false;
+                            attribute.usertimezoneSpecified = true;
                         }
                         else if (grouping.GetType(expressionCompilationContext, out _) == typeof(SqlDateTime))
                         {
