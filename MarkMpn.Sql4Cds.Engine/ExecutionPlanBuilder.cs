@@ -4439,6 +4439,16 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
+                    if (entityName.Equals("alternate_key", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            DataSource = dataSource.Name,
+                            MetadataSource = MetadataSource.Key,
+                            KeyAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
                     if (entityName.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
                     {
                         return new GlobalOptionSetQueryNode

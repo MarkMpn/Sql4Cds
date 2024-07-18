@@ -667,6 +667,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     folded = entityMeta;
                     return true;
                 }
+
+                if (otherMeta.MetadataSource == MetadataSource.Key)
+                {
+                    if (!otherKey.Equals($"{otherMeta.KeyAlias}.{nameof(EntityKeyMetadata.EntityLogicalName)}", StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    // Move the key details into the entity source
+                    entityMeta.MetadataSource |= otherMeta.MetadataSource;
+                    entityMeta.KeyAlias = otherMeta.KeyAlias;
+                    entityMeta.Query.KeyQuery = otherMeta.Query.KeyQuery;
+
+                    folded = entityMeta;
+                    return true;
+                }
             }
 
             return false;

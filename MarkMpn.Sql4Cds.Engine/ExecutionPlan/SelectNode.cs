@@ -303,6 +303,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     metadata.Query.RelationshipQuery.Properties.AllProperties = true;
                 }
+
+                if (metadata.MetadataSource.HasFlag(MetadataSource.Key) && (hasStar || aliasStars.Contains(metadata.KeyAlias)))
+                {
+                    if (metadata.Query.KeyQuery == null)
+                        metadata.Query.KeyQuery = new EntityKeyQueryExpression();
+
+                    if (metadata.Query.KeyQuery.Properties == null)
+                        metadata.Query.KeyQuery.Properties = new MetadataPropertiesExpression();
+
+                    metadata.Query.KeyQuery.Properties.AllProperties = true;
+                }
             }
         }
 
