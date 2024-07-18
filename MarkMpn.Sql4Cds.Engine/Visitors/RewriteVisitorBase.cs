@@ -228,6 +228,22 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             }
         }
 
+        public override void ExplicitVisit(GlobalFunctionTableReference node)
+        {
+            base.ExplicitVisit(node);
+
+            for (var i = 0; i < node.Parameters.Count; i++)
+            {
+                var replaced = ReplaceExpression(node.Parameters[i], out _);
+
+                if (node.Parameters[i] != replaced)
+                {
+                    node.Parameters[i] = replaced;
+                    node.ScriptTokenStream = null;
+                }
+            }
+        }
+
         public override void ExplicitVisit(OpenJsonTableReference node)
         {
             base.ExplicitVisit(node);

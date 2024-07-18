@@ -193,6 +193,12 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(208, obj, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
+        internal static Sql4CdsError InvalidObjectName(Identifier obj)
+        {
+            var name = obj.ToSql();
+            return Create(208, obj, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
         internal static Sql4CdsError NonFunctionCalledWithParameters(SchemaObjectName obj)
         {
             var name = obj.ToSql();
@@ -277,6 +283,12 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(313, sproc, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
+        internal static Sql4CdsError InsufficientArguments(Identifier function)
+        {
+            var name = function.ToSql();
+            return Create(313, function, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
         internal static Sql4CdsError TooManyArguments(SchemaObjectName sprocOrFunc, bool isSproc)
         {
             var name = sprocOrFunc.ToSql();
@@ -284,6 +296,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (isSproc)
                 err.Procedure = sprocOrFunc.BaseIdentifier.Value;
+
+            return err;
+        }
+
+        internal static Sql4CdsError TooManyArguments(Identifier function)
+        {
+            var name = function.ToSql();
+            var err = Create(8144, function, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
 
             return err;
         }
@@ -320,6 +340,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError InvalidArgumentType(TSqlFragment fragment, DataTypeReference type, int paramNum, string function)
         {
             return Create(8116, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type)), (SqlInt32)paramNum, Collation.USEnglish.ToSqlString(function));
+        }
+
+        internal static Sql4CdsError InvalidArgumentValue(TSqlFragment fragment, int value, int paramNum, string function)
+        {
+            return Create(4199, fragment, (SqlInt32)value, (SqlInt32)paramNum, Collation.USEnglish.ToSqlString(function));
         }
 
         internal static Sql4CdsError StringTruncation(TSqlFragment fragment, string table, string column, string value)
@@ -743,6 +768,16 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError IncompatibleDataTypesForOperator(TSqlFragment fragment, DataTypeReference type1, DataTypeReference type2, string op)
         {
             return Create(402, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type1)), Collation.USEnglish.ToSqlString(GetTypeName(type2)), Collation.USEnglish.ToSqlString(op));
+        }
+
+        internal static Sql4CdsError StringSplitOrdinalRequiresLiteral(TSqlFragment fragment)
+        {
+            return Create(8748, fragment);
+        }
+
+        internal static Sql4CdsError InvalidProcedureParameterType(TSqlFragment fragment, string parameter, string type)
+        {
+            return Create(214, fragment, parameter, type);
         }
 
         private static string GetTypeName(DataTypeReference type)

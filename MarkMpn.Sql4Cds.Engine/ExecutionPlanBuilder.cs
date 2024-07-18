@@ -4873,18 +4873,23 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            if (reference is SchemaObjectFunctionTableReference tvf)
+            var tvf = reference as SchemaObjectFunctionTableReference;
+            var gf = reference as GlobalFunctionTableReference;
+
+            if (tvf != null || gf != null)
             {
+                var parameters = tvf?.Parameters ?? gf.Parameters;
+
                 // Capture any references to data from an outer query
-                CaptureOuterReferences(outerSchema, null, tvf, context, outerReferences);
+                CaptureOuterReferences(outerSchema, null, reference, context, outerReferences);
 
                 // Convert any scalar subqueries in the parameters to its own execution plan, and capture the references from those plans
                 // as parameters to be passed to the function
                 IDataExecutionPlanNodeInternal source = new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } };
                 var computeScalar = new ComputeScalarNode { Source = source };
 
-                foreach (var param in tvf.Parameters.ToList())
-                    ConvertScalarSubqueries(param, hints, ref source, computeScalar, context, tvf);
+                foreach (var param in parameters.ToList())
+                    ConvertScalarSubqueries(param, hints, ref source, computeScalar, context, reference);
 
                 if (source is ConstantScanNode)
                     source = null;
@@ -4893,34 +4898,45 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var scalarSubquerySchema = source?.GetSchema(context);
                 var scalarSubqueryReferences = new Dictionary<string, string>();
-                CaptureOuterReferences(scalarSubquerySchema, null, tvf, context, scalarSubqueryReferences);
+                CaptureOuterReferences(scalarSubquerySchema, null, reference, context, scalarSubqueryReferences);
 
-                var dataSource = SelectDataSource(tvf.SchemaObject);
                 IDataExecutionPlanNodeInternal execute;
 
-                if (String.IsNullOrEmpty(tvf.SchemaObject.SchemaIdentifier?.Value) ||
-                    tvf.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                if (tvf != null)
                 {
-                    execute = ExecuteMessageNode.FromMessage(tvf, dataSource, GetExpressionContext(null, context));
-                }
-                else if (tvf.SchemaObject.SchemaIdentifier.Value.Equals("sys", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!Enum.TryParse<SystemFunction>(tvf.SchemaObject.BaseIdentifier.Value, true, out var systemFunction))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
+                    var dataSource = SelectDataSource(tvf.SchemaObject);
 
-                    if (typeof(SystemFunction).GetField(systemFunction.ToString()).GetCustomAttribute<SystemObjectTypeAttribute>().Type != SystemObjectType.Function)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NonFunctionCalledWithParameters(tvf.SchemaObject));
-
-                    execute = new SystemFunctionNode
+                    if (String.IsNullOrEmpty(tvf.SchemaObject.SchemaIdentifier?.Value) ||
+                        tvf.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
                     {
-                        DataSource = dataSource.Name,
-                        Alias = tvf.Alias?.Value,
-                        SystemFunction = systemFunction
-                    };
+                        execute = ExecuteMessageNode.FromMessage(tvf, dataSource, GetExpressionContext(null, context));
+                    }
+                    else if (tvf.SchemaObject.SchemaIdentifier.Value.Equals("sys", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!Enum.TryParse<SystemFunction>(tvf.SchemaObject.BaseIdentifier.Value, true, out var systemFunction))
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
+
+                        if (typeof(SystemFunction).GetField(systemFunction.ToString()).GetCustomAttribute<SystemObjectTypeAttribute>().Type != SystemObjectType.Function)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.NonFunctionCalledWithParameters(tvf.SchemaObject));
+
+                        execute = new SystemFunctionNode
+                        {
+                            DataSource = dataSource.Name,
+                            Alias = tvf.Alias?.Value,
+                            SystemFunction = systemFunction
+                        };
+                    }
+                    else
+                    {
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
+                    }
                 }
                 else
                 {
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(tvf.SchemaObject));
+                    if (gf.Name.Value.Equals("string_split", StringComparison.OrdinalIgnoreCase))
+                        execute = new StringSplitNode(gf, context);
+                    else
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(gf.Name));
                 }
 
                 if (source == null)

@@ -8038,5 +8038,35 @@ WHERE c.contactid IN (SELECT contactid FROM contact WHERE createdon = today())";
   </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void MetadataOuterJoin()
+        {
+            var query = @"
+SELECT a.entitylogicalname,
+       a.attributetypename,
+       a.logicalname,
+       a.targets,
+       p.logicalname
+FROM   metadata.attribute AS a
+       LEFT OUTER JOIN
+       metadata.entity AS p
+       ON a.targets = p.logicalname
+WHERE  a.entitylogicalname IN ('team')";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.RightOuter, join.JoinType);
+            var metadata_p = AssertNode<MetadataQueryNode>(join.LeftSource);
+            Assert.AreEqual("p", metadata_p.EntityAlias);
+            var metadata_a = AssertNode<MetadataQueryNode>(join.RightSource);
+            Assert.AreEqual("a", metadata_a.AttributeAlias);
+        }
     }
 }
