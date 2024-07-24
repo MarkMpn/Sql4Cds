@@ -83,6 +83,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!String.IsNullOrEmpty(schema.PrimaryKey) && Columns.Contains(schema.PrimaryKey, StringComparer.OrdinalIgnoreCase))
                 return Source;
 
+            // If we know the source doesn't have more than one record, there is no possibility of duplicate
+            // rows so we can discard the distinct node
+            if (Source.EstimateRowsOut(context) is RowCountEstimateDefiniteRange range && range.Maximum <= 1)
+                return Source;
+
             if (Source is FetchXmlScan fetch)
             {
                 fetch.FetchXml.distinct = true;

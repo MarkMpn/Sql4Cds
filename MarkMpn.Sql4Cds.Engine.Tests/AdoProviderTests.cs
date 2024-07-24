@@ -2156,5 +2156,131 @@ END CATCH";
                 }
             }
         }
+
+        [TestMethod]
+        public void Intersect()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c')) AS T(A, B)
+INTERSECT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("b", reader.GetString(0));
+                    Assert.AreEqual("c", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Except()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c')) AS T(A, B)
+EXCEPT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("a", reader.GetString(0));
+                    Assert.AreEqual("b", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void IntersectRemovesDuplicates()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c'), ('a', 'b'), ('b', 'c')) AS T(A, B)
+INTERSECT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd'), ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("b", reader.GetString(0));
+                    Assert.AreEqual("c", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExceptRemovesDuplicates()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c'), ('a', 'b'), ('b', 'c')) AS T(A, B)
+EXCEPT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd'), ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("a", reader.GetString(0));
+                    Assert.AreEqual("b", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void IntersectHandlesNulls()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', null), ('a', 'b'), ('b', null)) AS T(A, B)
+INTERSECT
+SELECT * FROM (VALUES ('b', null), ('c', 'd'), ('b', null), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("b", reader.GetString(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExceptHandlesNulls()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', null), ('a', 'b'), ('b', null)) AS T(A, B)
+EXCEPT
+SELECT * FROM (VALUES ('b', null), ('c', 'd'), ('b', null), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("a", reader.GetString(0));
+                    Assert.AreEqual("b", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

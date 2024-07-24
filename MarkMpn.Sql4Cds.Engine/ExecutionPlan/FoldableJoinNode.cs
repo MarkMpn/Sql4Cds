@@ -28,18 +28,54 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The attribute in the <see cref="OuterSource"/> to join on
         /// </summary>
+        [Browsable(false)]
+        public ColumnReferenceExpression LeftAttribute
+        {
+            get => LeftAttributes.Count == 1 ? LeftAttributes[0] : null;
+            set
+            {
+                LeftAttributes.Clear();
+                LeftAttributes.Add(value);
+            }
+        }
+
+        /// <summary>
+        /// The attributes in the <see cref="OuterSource"/> to join on
+        /// </summary>
         [Category("Join")]
-        [Description("The attribute in the outer data source to join on")]
-        [DisplayName("Left Attribute")]
-        public ColumnReferenceExpression LeftAttribute { get; set; }
+        [Description("The attributes in the outer data source to join on")]
+        [DisplayName("Left Attributes")]
+        public List<ColumnReferenceExpression> LeftAttributes { get; } = new List<ColumnReferenceExpression>();
 
         /// <summary>
         /// The attribute in the <see cref="InnerSource"/> to join on
         /// </summary>
+        [Browsable(false)]
+        public ColumnReferenceExpression RightAttribute
+        {
+            get => RightAttributes.Count == 1 ? RightAttributes[0] : null;
+            set
+            {
+                RightAttributes.Clear();
+                RightAttributes.Add(value);
+            }
+        }
+
+        /// <summary>
+        /// The attributes in the <see cref="InnerSource"/> to join on
+        /// </summary>
         [Category("Join")]
-        [Description("The attribute in the inner data source to join on")]
-        [DisplayName("Right Attribute")]
-        public ColumnReferenceExpression RightAttribute { get; set; }
+        [Description("The attributes in the inner data source to join on")]
+        [DisplayName("Right Attributes")]
+        public List<ColumnReferenceExpression> RightAttributes { get; } = new List<ColumnReferenceExpression>();
+
+        /// <summary>
+        /// The type of comparison that is used for the two inputs
+        /// </summary>
+        [Category("Join")]
+        [Description("The type of comparison that is used for the two inputs")]
+        [DisplayName("Comparison Type")]
+        public BooleanComparisonType ComparisonType { get; set; } = BooleanComparisonType.Equals;
 
         /// <summary>
         /// Any additional criteria to apply to the join
@@ -78,49 +114,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (SemiJoin)
                 return this;
 
-            var leftFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter ? LeftSource as FilterNode : null;
-            var rightFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter ? RightSource as FilterNode : null;
-            var leftFetch = (leftFilter?.Source ?? LeftSource) as FetchXmlScan;
-            var rightFetch = (rightFilter?.Source ?? RightSource) as FetchXmlScan;
-            var leftJoin = (leftFilter?.Source ?? LeftSource) as BaseJoinNode;
-            var rightJoin = (rightFilter?.Source ?? RightSource) as BaseJoinNode;
-            var leftMeta = (leftFilter?.Source ?? LeftSource) as MetadataQueryNode;
-            var rightMeta = (rightFilter?.Source ?? RightSource) as MetadataQueryNode;
+            IDataExecutionPlanNodeInternal folded = null;
 
-            if (leftFetch != null && rightFetch != null && FoldFetchXmlJoin(context, hints, leftFetch, leftSchema, rightFetch, rightSchema, out var folded))
-                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
-
-            if (leftJoin != null && rightFetch != null && FoldFetchXmlJoin(context, hints, leftJoin, rightFetch, rightSchema, out folded))
-                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
-
-            if (rightJoin != null && leftFetch != null && FoldFetchXmlJoin(context, hints, rightJoin, leftFetch, leftSchema, out folded))
-                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
-
-            if (leftMeta != null && rightMeta != null && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(context, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
+            if (LeftAttributes.Count == 1 && ComparisonType == BooleanComparisonType.Equals)
             {
-                folded = PrependFilters(folded, context, hints, leftFilter, rightFilter);
+                var leftFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter ? LeftSource as FilterNode : null;
+                var rightFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter ? RightSource as FilterNode : null;
+                var leftFetch = (leftFilter?.Source ?? LeftSource) as FetchXmlScan;
+                var rightFetch = (rightFilter?.Source ?? RightSource) as FetchXmlScan;
+                var leftJoin = (leftFilter?.Source ?? LeftSource) as BaseJoinNode;
+                var rightJoin = (rightFilter?.Source ?? RightSource) as BaseJoinNode;
+                var leftMeta = (leftFilter?.Source ?? LeftSource) as MetadataQueryNode;
+                var rightMeta = (rightFilter?.Source ?? RightSource) as MetadataQueryNode;
 
-                if (AdditionalJoinCriteria != null)
+                if (leftFetch != null && rightFetch != null && FoldFetchXmlJoin(context, hints, leftFetch, leftSchema, rightFetch, rightSchema, out folded))
+                    return PrependFilters(folded, context, hints, leftFilter, rightFilter);
+
+                if (leftJoin != null && rightFetch != null && FoldFetchXmlJoin(context, hints, leftJoin, rightFetch, rightSchema, out folded))
+                    return PrependFilters(folded, context, hints, leftFilter, rightFilter);
+
+                if (rightJoin != null && leftFetch != null && FoldFetchXmlJoin(context, hints, rightJoin, leftFetch, leftSchema, out folded))
+                    return PrependFilters(folded, context, hints, leftFilter, rightFilter);
+
+                if (leftMeta != null && rightMeta != null && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(context, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
                 {
-                    folded = new FilterNode
-                    {
-                        Source = folded,
-                        Filter = AdditionalJoinCriteria
-                    }.FoldQuery(context, hints);
-                }
+                    folded = PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
-                return folded;
+                    if (AdditionalJoinCriteria != null)
+                    {
+                        folded = new FilterNode
+                        {
+                            Source = folded,
+                            Filter = AdditionalJoinCriteria
+                        }.FoldQuery(context, hints);
+                    }
+
+                    return folded;
+                }
             }
 
-            // Add not-null filter on join keys
-            // Inner join - both must be non-null
-            // Left outer join - right key must be non-null
-            // Right outer join - left key must be non-null
-            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)
-                LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints, false);
+            if (ComparisonType == BooleanComparisonType.Equals)
+            {
+                // Add not-null filter on join keys
+                // Inner join - both must be non-null
+                // Left outer join - right key must be non-null
+                // Right outer join - left key must be non-null
+                if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)
+                    LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints, false);
 
-            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
-                RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints, false);
+                if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
+                    RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints, false);
+            }
 
             if (FoldSingleRowJoinToNestedLoop(context, hints, leftSchema, rightSchema, out folded))
                 return folded;

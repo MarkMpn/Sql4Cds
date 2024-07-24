@@ -2591,53 +2591,88 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SelectNode ConvertBinaryQuery(BinaryQueryExpression binary, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeCompilationContext context)
         {
-            if (binary.BinaryQueryExpressionType != BinaryQueryExpressionType.Union)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(binary, binary.BinaryQueryExpressionType.ToString()));
-
             var left = ConvertSelectStatement(binary.FirstQueryExpression, hints, outerSchema, outerReferences, context);
             var right = ConvertSelectStatement(binary.SecondQueryExpression, hints, outerSchema, outerReferences, context);
 
-            var concat = left.Source as ConcatenateNode;
-
-            if (concat == null)
-            {
-                concat = new ConcatenateNode();
-
-                concat.Sources.Add(left.Source);
-
-                left.ExpandWildcardColumns(context);
-
-                foreach (var col in left.ColumnSet)
-                {
-                    concat.ColumnSet.Add(new ConcatenateColumn
-                    {
-                        OutputColumn = context.GetExpressionName(),
-                        SourceColumns = { col.SourceColumn },
-                        SourceExpressions = { col.SourceExpression }
-                    });
-                }
-            }
-
-            concat.Sources.Add(right.Source);
-
+            left.ExpandWildcardColumns(context);
             right.ExpandWildcardColumns(context);
 
-            if (concat.ColumnSet.Count != right.ColumnSet.Count)
+            if (left.ColumnSet.Count != right.ColumnSet.Count)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.SetOperationWithDifferentColumnCounts(binary));
 
-            for (var i = 0; i < concat.ColumnSet.Count; i++)
+            IDataExecutionPlanNodeInternal node;
+
+            if (binary.BinaryQueryExpressionType == BinaryQueryExpressionType.Union)
             {
-                concat.ColumnSet[i].SourceColumns.Add(right.ColumnSet[i].SourceColumn);
-                concat.ColumnSet[i].SourceExpressions.Add(right.ColumnSet[i].SourceExpression);
+                var concat = left.Source as ConcatenateNode;
+
+                if (concat == null)
+                {
+                    concat = new ConcatenateNode();
+
+                    concat.Sources.Add(left.Source);
+
+                    foreach (var col in left.ColumnSet)
+                    {
+                        concat.ColumnSet.Add(new ConcatenateColumn
+                        {
+                            OutputColumn = context.GetExpressionName(),
+                            SourceColumns = { col.SourceColumn },
+                            SourceExpressions = { col.SourceExpression }
+                        });
+                    }
+                }
+
+                concat.Sources.Add(right.Source);
+
+                for (var i = 0; i < concat.ColumnSet.Count; i++)
+                {
+                    concat.ColumnSet[i].SourceColumns.Add(right.ColumnSet[i].SourceColumn);
+                    concat.ColumnSet[i].SourceExpressions.Add(right.ColumnSet[i].SourceExpression);
+                }
+
+                node = concat;
+
+                if (!binary.All)
+                {
+                    var distinct = new DistinctNode { Source = node };
+                    distinct.Columns.AddRange(concat.ColumnSet.Select(col => col.OutputColumn));
+                    node = distinct;
+                }
             }
-
-            var node = (IDataExecutionPlanNodeInternal)concat;
-
-            if (!binary.All)
+            else
             {
-                var distinct = new DistinctNode { Source = node };
-                distinct.Columns.AddRange(concat.ColumnSet.Select(col => col.OutputColumn));
-                node = distinct;
+                // EXCEPT & INTERSECT require distinct inputs
+                var leftSource = left.Source;
+                var rightSource = right.Source;
+
+                leftSource = new DistinctNode { Source = leftSource };
+                ((DistinctNode)leftSource).Columns.AddRange(left.ColumnSet.Select(col => col.SourceColumn));
+
+                rightSource = new DistinctNode { Source = rightSource };
+                ((DistinctNode)rightSource).Columns.AddRange(right.ColumnSet.Select(col => col.SourceColumn));
+
+                // Create the join node
+                node = new HashJoinNode
+                {
+                    LeftSource = leftSource,
+                    RightSource = rightSource,
+                    JoinType = QualifiedJoinType.LeftOuter,
+                    SemiJoin = true,
+                    AntiJoin = binary.BinaryQueryExpressionType == BinaryQueryExpressionType.Except,
+                    OutputRightSchema = false,
+                    ComparisonType = BooleanComparisonType.IsNotDistinctFrom
+                };
+
+                // Join on all the columns
+                for (var i = 0; i < left.ColumnSet.Count; i++)
+                {
+                    var leftCol = left.ColumnSet[i];
+                    var rightCol = right.ColumnSet[i];
+
+                    ((HashJoinNode)node).LeftAttributes.Add(leftCol.SourceColumn.ToColumnReference());
+                    ((HashJoinNode)node).RightAttributes.Add(rightCol.SourceColumn.ToColumnReference());
+                }
             }
 
             // Aliases to be used for sorting are:
@@ -2651,6 +2686,7 @@ namespace MarkMpn.Sql4Cds.Engine
             //
             // can sort by col1, x and y
             var leftSchema = left.Source.GetSchema(context);
+            var combinedSchema = node.GetSchema(context);
             var aliases = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             for (var i = 0; i < left.ColumnSet.Count; i++)
@@ -2663,7 +2699,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         aliases.Add(left.ColumnSet[i].OutputColumn, aliasedCols);
                     }
 
-                    aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                    //aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                    aliasedCols.Add(combinedSchema.Schema.Skip(i).First().Key);
                 }
 
                 var leftSourceCol = leftSchema.Schema[left.ColumnSet[i].SourceColumn];
@@ -2681,16 +2718,17 @@ namespace MarkMpn.Sql4Cds.Engine
                             aliases.Add(sourceColName, aliasedCols);
                         }
 
-                        aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                        //aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                        aliasedCols.Add(combinedSchema.Schema.Skip(i).First().Key);
                     }
                 }
             }
 
-            node = ConvertOrderByClause(node, hints, binary.OrderByClause, concat.ColumnSet.Select(col => col.OutputColumn.ToColumnReference()).ToArray(), aliases, binary, context, outerSchema, outerReferences, null);
+            node = ConvertOrderByClause(node, hints, binary.OrderByClause, combinedSchema.Schema.Select(col => col.Key.ToColumnReference()).ToArray(), aliases, binary, context, outerSchema, outerReferences, null);
             node = ConvertOffsetClause(node, binary.OffsetClause, context);
 
-            var select = new SelectNode { Source = node, LogicalSourceSchema = concat.GetSchema(context) };
-            select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, SourceExpression = col.SourceExpressions[0], OutputColumn = left.ColumnSet[i].OutputColumn }));
+            var select = new SelectNode { Source = node, LogicalSourceSchema = combinedSchema };
+            select.ColumnSet.AddRange(combinedSchema.Schema.Select((col, i) => new SelectColumn { SourceColumn = col.Key, SourceExpression = col.Key.ToColumnReference(), OutputColumn = left.ColumnSet[i].OutputColumn }));
 
             if (binary.ForClause is XmlForClause forXml)
                 ConvertForXmlClause(select, forXml, context);
