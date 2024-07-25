@@ -5826,6 +5826,57 @@ UPDATE account SET employees = @employees WHERE name = @name";
         }
 
         [TestMethod]
+        public void CollationConflictJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM prod.dbo.account p INNER JOIN french.dbo.account f ON p.name = f.name";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(468, ex.Errors.Single().Number);
+            }
+        }
+
+        [TestMethod]
+        public void TypeConflictJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM account p INNER JOIN account f ON p.accountid = f.turnover";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(206, ex.Errors.Single().Number);
+            }
+        }
+
+        [TestMethod]
+        public void TypeConflictCrossInstanceJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM prod.dbo.account p INNER JOIN french.dbo.account f ON p.accountid = f.turnover";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(206, ex.Errors.Single().Number);
+            }
+        }
+
+        [TestMethod]
         public void ExplicitCollation()
         {
             var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });

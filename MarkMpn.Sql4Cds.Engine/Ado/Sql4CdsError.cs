@@ -790,6 +790,20 @@ namespace MarkMpn.Sql4Cds.Engine
             
             return ((UserDataTypeReference)type).Name.ToSql();
         }
+
+        /// <summary>
+        /// Creates a copy of this error for a specific fragment
+        /// </summary>
+        /// <param name="expression">The fragment the error should be applied to</param>
+        /// <returns></returns>
+        /// <exception cref="NotImplementedException"></exception>
+        internal Sql4CdsError ForFragment(BooleanComparisonExpression expression)
+        {
+            if (expression == null)
+                return this;
+
+            return new Sql4CdsError(Class, -1, Number, Procedure, Server, State, Message, expression);
+        }
     }
 
     /// <summary>

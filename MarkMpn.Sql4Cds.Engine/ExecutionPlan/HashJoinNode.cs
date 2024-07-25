@@ -58,6 +58,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private Func<ExpressionExecutionContext, object>[] _leftKeyAccessors;
+        private Func<ExpressionExecutionContext, object>[] _rightKeyAccessors;
         private IDictionary<CompoundKey, List<OuterRecord>> _hashTable;
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
@@ -68,46 +70,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Build the hash table
             var leftSchema = LeftSource.GetSchema(context);
-            var leftCompilationContext = new ExpressionCompilationContext(context, leftSchema, null);
             var rightSchema = RightSource.GetSchema(context);
-            var rightCompilationContext = new ExpressionCompilationContext(context, rightSchema, null);
-
-            Func<ExpressionExecutionContext, object>[] leftKeyAccessors = new Func<ExpressionExecutionContext, object>[LeftAttributes.Count];
-            Func<ExpressionExecutionContext, object>[] rightKeyAccessors = new Func<ExpressionExecutionContext, object>[LeftAttributes.Count];
-
-            for (var i = 0; i < LeftAttributes.Count; i++)
-            {
-                LeftAttributes[i].GetType(leftCompilationContext, out var leftColType);
-                RightAttributes[i].GetType(rightCompilationContext, out var rightColType);
-
-                if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, context.PrimaryDataSource, null, null, out var keyType))
-                    throw new QueryExecutionException($"Cannot match key types {leftColType.ToSql()} and {rightColType.ToSql()}");
-
-                Identifier keyTypeCollation = null;
-
-                if (keyType is SqlDataTypeReferenceWithCollation keyTypeWithCollation)
-                    keyTypeCollation = new Identifier { Value = keyTypeWithCollation.Collation.Name };
-
-                var leftKeyAccessor = (ScalarExpression)LeftAttributes[i];
-                if (!leftColType.IsSameAs(keyType))
-                    leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType, Collation = keyTypeCollation };
-                var leftKeyConverter = leftKeyAccessor.Compile(leftCompilationContext);
-
-                var rightKeyAccessor = (ScalarExpression)RightAttributes[i];
-                if (!rightColType.IsSameAs(keyType))
-                    rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType, Collation = keyTypeCollation };
-                var rightKeyConverter = rightKeyAccessor.Compile(rightCompilationContext);
-
-                leftKeyAccessors[i] = leftKeyConverter;
-                rightKeyAccessors[i] = rightKeyConverter;
-            }
-
             var expressionContext = new ExpressionExecutionContext(context);
 
             foreach (var entity in LeftSource.Execute(context))
             {
                 expressionContext.Entity = entity;
-                var key = new CompoundKey(leftKeyAccessors.Select(accessor => accessor(expressionContext)));
+                var key = new CompoundKey(_leftKeyAccessors.Select(accessor => accessor(expressionContext)));
 
                 if (!_hashTable.TryGetValue(key, out var list))
                 {
@@ -122,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var entity in RightSource.Execute(context))
             {
                 expressionContext.Entity = entity;
-                var key = new CompoundKey(rightKeyAccessors.Select(accessor => accessor(expressionContext)));
+                var key = new CompoundKey(_rightKeyAccessors.Select(accessor => accessor(expressionContext)));
 
                 var matched = false;
 
@@ -169,13 +138,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            _leftKeyAccessors = new Func<ExpressionExecutionContext, object>[LeftAttributes.Count];
+            _rightKeyAccessors = new Func<ExpressionExecutionContext, object>[LeftAttributes.Count];
+
             var folded = base.FoldQuery(context, hints);
 
             if (folded != this)
                 return folded;
 
+            var leftSchema = LeftSource.GetSchema(context);
+            var leftCompilationContext = new ExpressionCompilationContext(context, leftSchema, null);
+            var rightSchema = RightSource.GetSchema(context);
+            var rightCompilationContext = new ExpressionCompilationContext(context, rightSchema, null);
+
             if (SemiJoin)
-                return folded;
+                return this;
 
             // If we can't fold this query, try to make sure the smaller table is used as the left input to reduce the
             // number of records held in memory in the hash table
@@ -212,6 +189,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
+        protected override void ValidateComparison(BooleanComparisonExpression expression, DataTypeReference keyType, DataTypeReference leftColType, ExpressionCompilationContext leftCompilationContext, DataTypeReference rightColType, ExpressionCompilationContext rightCompilationContext, int i)
+        {
+            Identifier keyTypeCollation = null;
+
+            if (keyType is SqlDataTypeReferenceWithCollation keyTypeWithCollation)
+            {
+                if (keyTypeWithCollation.CollationLabel == CollationLabel.NoCollation)
+                    throw new NotSupportedQueryFragmentException(keyTypeWithCollation.CollationConflictError.ForFragment(expression));
+
+                keyTypeCollation = new Identifier { Value = keyTypeWithCollation.Collation.Name };
+            }
+
+            var leftKeyAccessor = (ScalarExpression)LeftAttributes[i];
+            if (!leftColType.IsSameAs(keyType))
+                leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType, Collation = keyTypeCollation };
+            var leftKeyConverter = leftKeyAccessor.Compile(leftCompilationContext);
+
+            var rightKeyAccessor = (ScalarExpression)RightAttributes[i];
+            if (!rightColType.IsSameAs(keyType))
+                rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType, Collation = keyTypeCollation };
+            var rightKeyConverter = rightKeyAccessor.Compile(rightCompilationContext);
+
+            _leftKeyAccessors[i] = leftKeyConverter;
+            _rightKeyAccessors[i] = rightKeyConverter;
+        }
+
         public override object Clone()
         {
             var clone = new HashJoinNode
@@ -225,6 +228,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 OutputRightSchema = OutputRightSchema,
                 ComparisonType = ComparisonType,
                 AntiJoin = AntiJoin,
+                _leftKeyAccessors = _leftKeyAccessors,
+                _rightKeyAccessors = _rightKeyAccessors
             };
 
             foreach (var attr in LeftAttributes)
@@ -232,6 +237,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var attr in RightAttributes)
                 clone.RightAttributes.Add(attr);
+
+            foreach (var expr in Expressions)
+                clone.Expressions.Add(expr);
 
             foreach (var kvp in DefinedValues)
                 clone.DefinedValues.Add(kvp);

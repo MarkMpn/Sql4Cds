@@ -4648,6 +4648,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         LeftAttribute = joinConditionVisitor.LhsKey.Clone(),
                         RightSource = rhs,
                         RightAttribute = joinConditionVisitor.RhsKey.Clone(),
+                        Expressions = { joinConditionVisitor.JoinCondition },
                         JoinType = join.QualifiedJoinType,
                         AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };
@@ -4660,6 +4661,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         LeftAttribute = joinConditionVisitor.RhsKey.Clone(),
                         RightSource = lhs,
                         RightAttribute = joinConditionVisitor.LhsKey.Clone(),
+                        Expressions = { joinConditionVisitor.JoinCondition },
                         AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };
 
@@ -4690,6 +4692,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         LeftAttribute = joinConditionVisitor.LhsKey.Clone(),
                         RightSource = rhs,
                         RightAttribute = joinConditionVisitor.RhsKey.Clone(),
+                        Expressions = { joinConditionVisitor.JoinCondition },
                         JoinType = join.QualifiedJoinType,
                         AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };

@@ -69,6 +69,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Right Attributes")]
         public List<ColumnReferenceExpression> RightAttributes { get; } = new List<ColumnReferenceExpression>();
 
+        internal List<BooleanComparisonExpression> Expressions { get; } = new List<BooleanComparisonExpression>();
+
         /// <summary>
         /// The type of comparison that is used for the two inputs
         /// </summary>
@@ -87,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            // For inner joins, additional join criteria are eqivalent to doing the join without them and then applying the filter
+            // For inner joins, additional join criteria are equivalent to doing the join without them and then applying the filter
             // We've already got logic in the Filter node for efficiently folding those queries, so split them out and let it do
             // what it can
             if (JoinType == QualifiedJoinType.Inner && AdditionalJoinCriteria != null)
@@ -107,7 +109,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource.Parent = this;
 
             var leftSchema = LeftSource.GetSchema(context);
+            var leftCompilationContext = new ExpressionCompilationContext(context, leftSchema, null);
             var rightSchema = RightSource.GetSchema(context);
+            var rightCompilationContext = new ExpressionCompilationContext(context, rightSchema, null);
+
+            // Check the types of the comparisons
+            for (var i = 0; i < LeftAttributes.Count; i++)
+                ValidateComparison(context, leftCompilationContext, rightCompilationContext, i);
 
             FoldDefinedValues(rightSchema);
 
@@ -170,6 +178,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return folded;
 
             return this;
+        }
+
+        private void ValidateComparison(NodeCompilationContext context, ExpressionCompilationContext leftCompilationContext, ExpressionCompilationContext rightCompilationContext, int i)
+        {
+            LeftAttributes[i].GetType(leftCompilationContext, out var leftColType);
+            RightAttributes[i].GetType(rightCompilationContext, out var rightColType);
+
+            var expression = i < Expressions.Count ? Expressions[i] : null;
+            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, context.PrimaryDataSource, null, "equals", out var keyType))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(expression, leftColType, rightColType));
+
+            if (keyType is SqlDataTypeReferenceWithCollation keyTypeWithCollation && keyTypeWithCollation.CollationLabel == CollationLabel.NoCollation)
+                throw new NotSupportedQueryFragmentException(keyTypeWithCollation.CollationConflictError.ForFragment(expression));
+
+            ValidateComparison(expression, keyType, leftColType, leftCompilationContext, rightColType, rightCompilationContext, i);
+        }
+
+        protected virtual void ValidateComparison(BooleanComparisonExpression expression, DataTypeReference keyType, DataTypeReference leftColType, ExpressionCompilationContext leftCompilationContext, DataTypeReference rightColType, ExpressionCompilationContext rightCompilationContext, int i)
+        {
         }
 
         private IDataExecutionPlanNodeInternal PrependFilters(IDataExecutionPlanNodeInternal folded, NodeCompilationContext context, IList<OptimizerHint> hints, params FilterNode[] filters)

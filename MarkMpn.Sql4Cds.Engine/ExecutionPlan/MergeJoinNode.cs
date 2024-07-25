@@ -265,12 +265,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 LeftSource = LeftSource,
                 RightSource = RightSource,
-                LeftAttribute = LeftAttribute,
-                RightAttribute = RightAttribute,
                 JoinType = JoinType,
                 AdditionalJoinCriteria = AdditionalJoinCriteria,
                 SemiJoin = SemiJoin
             };
+
+            foreach (var attr in LeftAttributes)
+                hashJoin.LeftAttributes.Add(attr);
+
+            foreach (var attr in RightAttributes)
+                hashJoin.RightAttributes.Add(attr);
+
+            foreach (var expr in Expressions)
+                hashJoin.Expressions.Add(expr);
 
             foreach (var kvp in DefinedValues)
                 hashJoin.DefinedValues.Add(kvp);
@@ -428,6 +435,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var attr in RightAttributes)
                 clone.RightAttributes.Add(attr);
+
+            foreach (var expr in Expressions)
+                clone.Expressions.Add(expr);
 
             foreach (var kvp in DefinedValues)
                 clone.DefinedValues.Add(kvp);
