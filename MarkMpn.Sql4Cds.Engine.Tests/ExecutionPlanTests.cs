@@ -6040,6 +6040,33 @@ UPDATE account SET employees = @employees WHERE name = @name";
                 </fetch>");
         }
 
+        [DataTestMethod]
+        [DataRow("objectid")]
+        [DataRow("objectidname")]
+        [DataRow("objectidtype")]
+        public void SelectAuditObjectIdDistinct(string column)
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/296
+            // https://github.com/MarkMpn/Sql4Cds/issues/519
+            // We need to add the objecttypecode attribute to the FetchXML for the first issue, but combining this
+            // with DISTINCT doesn't work because of the second issue.
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = $"SELECT DISTINCT {column} AS o FROM audit";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var distinct = AssertNode<DistinctNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(distinct.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <attribute name='objectid' />
+                        <attribute name='objecttypecode' />
+                    </entity>
+                </fetch>");
+        }
+
         [TestMethod]
         public void FilterAuditOnLeftJoinColumn()
         {

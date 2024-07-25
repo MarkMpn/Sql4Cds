@@ -200,7 +200,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Make sure the join keys are not null - the SqlType classes override == to prevent NULL = NULL
             // but .Equals used by the hash table allows them to match
-            // TODO: We do this in the base class as well, can we delete this version?
             if (ComparisonType == BooleanComparisonType.Equals)
             {
                 if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)

@@ -90,6 +90,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is FetchXmlScan fetch)
             {
+                // Can't apply DISTINCT to audit.objectid
+                // https://github.com/MarkMpn/Sql4Cds/issues/519
+                if (fetch.Entity.name == "audit" && Columns.Any(col => col.StartsWith(fetch.Alias.EscapeIdentifier() + ".objectid")))
+                    return this;
+
                 fetch.FetchXml.distinct = true;
                 fetch.FetchXml.distinctSpecified = true;
                 var metadata = context.DataSources[fetch.DataSource].Metadata;
