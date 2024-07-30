@@ -9,7 +9,6 @@ using Markdig;
 using Markdig.Parsers;
 using Markdig.Syntax;
 using Markdig.Helpers;
-using static MarkMpn.Sql4Cds.XTB.MarkdownPipelineBuilderExtensions;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
 

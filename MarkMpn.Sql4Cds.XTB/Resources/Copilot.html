@@ -254,7 +254,6 @@
             showProcessingMessage();
 
             await window.chrome.webview.hostObjects.sql4cds.SendMessage(message);
-            finished();
         }
 
         showProcessingMessage = function () {
@@ -280,6 +279,60 @@
             });
             processing.appendChild(cancel);
             processing.scrollIntoView(false);
+        }
+
+        showExecutePrompt = function (html, id) {
+            if (processing) {
+                processing.parentNode.removeChild(processing);
+                processing = null;
+            }
+
+            var previousResult = result.lastChild;
+            if (previousResult.classList.contains('suggestion') && previousResult.classList.contains('info')) {
+                previousResult.parentNode.removeChild(previousResult);
+            }
+
+            result.querySelectorAll("button").forEach(b => b.disabled = true);
+            send.className = "disabled";
+
+            const div = document.createElement('div');
+            div.className = 'suggestion info';
+            const block = document.createElement('div');
+            block.className = 'block';
+            block.innerHTML = html;
+            const icon = document.getElementById('info').cloneNode(true);
+            div.appendChild(icon);
+            div.appendChild(block);
+
+            const yesButton = document.createElement('button');
+            yesButton.textContent = 'Yes';
+            yesButton.addEventListener('click', () => {
+                executeQuery(id, true);
+            });
+            block.appendChild(yesButton);
+
+            const noButton = document.createElement('button');
+            noButton.textContent = 'No';
+            noButton.addEventListener('click', () => {
+                executeQuery(id, false);
+            });
+            block.appendChild(noButton);
+
+            result.appendChild(div);
+            div.scrollIntoView(false);
+        }
+
+        executeQuery = async function (id, execute) {
+            result.querySelectorAll("button").forEach(b => b.disabled = true);
+            send.className = "disabled";
+
+            showProcessingMessage();
+
+            await window.chrome.webview.hostObjects.sql4cds.ExecuteQuery(id, execute);
+        }
+
+        runningQuery = function () {
+            result.querySelectorAll("button").forEach(b => b.disabled = true);
         }
 
         finished = function () {
