@@ -483,11 +483,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (parameterless != null)
                 {
-                    if (parameterless.IsConstantValueExpression(expressionContext, out literal))
-                    {
-                        values = new[] { literal };
-                    }
-                    else if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.eq)
+                    if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.eq)
                     {
                         op = @operator.equserid;
                     }
@@ -495,6 +491,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         op = @operator.neuserid;
                     }
+                    // TODO: Can support other parameterless calls by translating them to parameterised filters and filling the values
+                    // in automatically at runtime
                     else
                     {
                         return false;
@@ -881,6 +879,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Can't fold LIKE queries for non-string fields - the server will try to convert the value to the type of
             // the attribute (e.g. integer) and throw an exception. 
             if (attribute != null && attributeSuffix == null && (op == @operator.like || op == @operator.notlike) && !(attribute.AttributeType == AttributeTypeCode.String || attribute.AttributeType == AttributeTypeCode.Memo))
+                return false;
+
+            // Can only fold eq-userid conditions on lookup fields
+            if ((op == @operator.equserid || op == @operator.neuserid) && !(attribute is LookupAttributeMetadata))
                 return false;
 
             // Can't fold queries on PartyList attributes

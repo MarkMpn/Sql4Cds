@@ -4037,6 +4037,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void DoNotFoldEqualsCurrentUserOnStringField()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT systemuserid FROM systemuser WHERE domainname = CURRENT_USER";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='systemuser'>
+                        <attribute name='systemuserid' />
+                        <attribute name='domainname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void EntityReferenceInQuery()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);

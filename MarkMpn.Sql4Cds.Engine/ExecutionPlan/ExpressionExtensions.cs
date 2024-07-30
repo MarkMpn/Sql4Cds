@@ -2414,7 +2414,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var parameterlessVisitor = new ParameterlessCollectingVisitor();
             expr.Accept(parameterlessVisitor);
 
-            if (parameterlessVisitor.ParameterlessCalls.Any(p => p.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp))
+            if (parameterlessVisitor.ParameterlessCalls.Count > 0)
                 return false;
 
             var evaluationContext = new ExpressionExecutionContext(context);
