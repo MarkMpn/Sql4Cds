@@ -18,6 +18,8 @@ using System.Xml.XPath;
 using Wmhelp.XPath2;
 using Wmhelp.XPath2.Value;
 using System.Text.Json;
+using Microsoft.SqlServer.Server;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -37,6 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="logicalName">The logical name of the entity type being referred to</param>
         /// <param name="id">The unique identifier of the record</param>
         /// <returns>A <see cref="SqlEntityReference"/> value combining the <paramref name="logicalName"/> and <paramref name="id"/></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlEntityReference CreateLookup(SqlString logicalName, SqlGuid id)
         {
             if (logicalName.IsNull || id.IsNull)
@@ -53,6 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>Returns a single text value of type nvarchar(4000)</returns>
         [MaxLength(4000)]
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Json_Value(SqlString json, SqlString jpath)
         {
             if (json.IsNull || jpath.IsNull)
@@ -112,6 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="jpath">A JSON path that specifies the property to extract</param>
         /// <returns>Returns a JSON fragment of type nvarchar(max)</returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Json_Query(SqlString json, SqlString jpath)
         {
             if (json.IsNull || jpath.IsNull)
@@ -158,6 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="json">An expression containing the JSON document to parse</param>
         /// <param name="jpath">A JSON path that specifies the property to extract</param>
         /// <returns>A value indicating if the path exists in the JSON document</returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlBoolean Json_Path_Exists(SqlString json, SqlString jpath)
         {
             if (json.IsNull || jpath.IsNull)
@@ -187,6 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="date">The date value to add to</param>
         /// <returns>The modified date</returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver15"/>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlDateTime DateAdd(SqlString datepart, SqlDouble number, SqlDateTime date)
         {
             if (number.IsNull || date.IsNull)
@@ -210,6 +217,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="enddate">The second date to compare to</param>
         /// <returns>The number of whole <paramref name="datepart"/> units between <paramref name="startdate"/> and <paramref name="enddate"/></returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver15"/>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 DateDiff(SqlString datepart, SqlDateTime startdate, SqlDateTime enddate)
         {
             if (startdate.IsNull || enddate.IsNull)
@@ -225,6 +233,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="datepart">The specific part of the <paramref name="date"/> argument for which DATEPART will return an integer</param>
         /// <param name="date">The date to extract the <paramref name="datepart"/> from</param>
         /// <returns>The <paramref name="datepart"/> of the <paramref name="date"/></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 DatePart(SqlString datepart, SqlDateTime date)
         {
             if (date.IsNull)
@@ -301,6 +310,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in user-local timezone
         /// </summary>
         /// <returns>The current date/time in user-local timezone</returns>
+        [SqlFunction(IsDeterministic = false)]
         public static SqlDateTime GetDate()
         {
             return DateTime.Now;
@@ -310,6 +320,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in user-local timezone
         /// </summary>
         /// <returns>The current date/time in user-local timezone</returns>
+        [SqlFunction(IsDeterministic = false)]
         public static SqlDateTime SysDateTime()
         {
             return DateTime.Now;
@@ -319,6 +330,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in user-local timezone
         /// </summary>
         /// <returns>The current date/time in user-local timezone</returns>
+        [SqlFunction(IsDeterministic = false)]
         public static SqlDateTime SysDateTimeOffset()
         {
             return DateTime.Now;
@@ -328,6 +340,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in UTC timezone
         /// </summary>
         /// <returns>The current date/time in UTC timezone</returns>
+        [SqlFunction(IsDeterministic = false)]
         public static SqlDateTime GetUtcDate()
         {
             return DateTime.UtcNow;
@@ -337,6 +350,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in UTC timezone
         /// </summary>
         /// <returns>The current date/time in UTC timezone</returns>
+        [SqlFunction(IsDeterministic = false)]
         public static SqlDateTime SysUtcDateTime()
         {
             return DateTime.UtcNow;
@@ -347,6 +361,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="date">The date to get the day number from</param>
         /// <returns>The day of the month</returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 Day(SqlDateTime date)
         {
             if (date.IsNull)
@@ -360,6 +375,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="date">The date to get the month number from</param>
         /// <returns>The month number</returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 Month(SqlDateTime date)
         {
             if (date.IsNull)
@@ -373,6 +389,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="date">The date to get the year number from</param>
         /// <returns>The year number</returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 Year(SqlDateTime date)
         {
             if (date.IsNull)
@@ -388,6 +405,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="length">The number of characters to return</param>
         /// <returns>The first <paramref name="length"/> characters of the string <paramref name="s"/></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Left(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
@@ -406,6 +424,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="length">The number of characters to return</param>
         /// <returns>The last <paramref name="length"/> characters of the string <paramref name="s"/></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Right(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
@@ -425,6 +444,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="replace">The replacement string</param>
         /// <returns>Replaces any instances of <paramref name="find"/> with <paramref name="replace"/> in the <paramref name="input"/></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Replace(SqlString input, SqlString find, SqlString replace)
         {
             if (input.IsNull || find.IsNull || replace.IsNull)
@@ -439,6 +459,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string expression to be evaluated</param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 Len(SqlString s)
         {
             if (s.IsNull)
@@ -452,6 +473,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">Any expression</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 DataLength<T>(T value, [SourceType] DataTypeReference type)
             where T:INullable
         {
@@ -487,6 +509,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="length">A positive integer that specifies how many characters of the expression will be returned</param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Substring(SqlString expression, SqlInt32 start, [MaxLength] SqlInt32 length)
         {
             if (expression.IsNull || start.IsNull || length.IsNull)
@@ -514,6 +537,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Trim([MaxLength] SqlString expression)
         {
             if (expression.IsNull)
@@ -527,6 +551,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString LTrim([MaxLength] SqlString expression)
         {
             if (expression.IsNull)
@@ -540,6 +565,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString RTrim([MaxLength] SqlString expression)
         {
             if (expression.IsNull)
@@ -555,6 +581,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="search">A character expression to search.</param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 CharIndex(SqlString find, SqlString search)
         {
             return CharIndex(find, search, 0);
@@ -568,6 +595,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="startLocation">An integer or bigint expression at which the search starts. If start_location is not specified, has a negative value, or has a zero (0) value, the search starts at the beginning of expressionToSearch.</param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 CharIndex(SqlString find, SqlString search, SqlInt32 startLocation)
         {
             if (find.IsNull || search.IsNull || startLocation.IsNull)
@@ -589,6 +617,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="expression">An expression that is searched for the specified <paramref name="pattern"/></param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 PatIndex(SqlString pattern, SqlString expression)
         {
             if (pattern.IsNull || expression.IsNull)
@@ -613,6 +642,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Char(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 255)
@@ -626,6 +656,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString NChar(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 0x10FFFF)
@@ -639,6 +670,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">A string to convert</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 Ascii(SqlString value)
         {
             if (value.IsNull || value.Value.Length == 0)
@@ -653,6 +685,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">A string to convert</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 Unicode(SqlString value)
         {
             if (value.IsNull || value.Value.Length == 0)
@@ -666,6 +699,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="context">The context in which the expression is being executed</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = false)]
         public static SqlEntityReference User_Name(ExpressionExecutionContext context)
         {
             return new SqlEntityReference(context.Options.PrimaryDataSource, "systemuser", context.Options.UserId);
@@ -678,6 +712,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="check">The expression to be checked for NULL</param>
         /// <param name="replacement">The value to be returned if <paramref name="check"/> is NULL</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static T IsNull<T>(T check, T replacement)
             where T:INullable
         {
@@ -695,6 +730,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="format">Format pattern</param>
         /// <param name="culture">Optional argument specifying a culture</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = false)]
         public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture, [SourceType] DataTypeReference type, ExpressionExecutionContext context)
             where T : INullable
         {
@@ -740,6 +776,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="value">An expression of character data</param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Upper([MaxLength] SqlString value)
         {
             if (value.IsNull)
@@ -754,6 +791,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="value">An expression of character data</param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Lower([MaxLength] SqlString value)
         {
             if (value.IsNull)
@@ -768,6 +806,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="collation">The name of the collation</param>
         /// <param name="property">The collation property</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt32 CollationProperty(SqlString collation, SqlString property)
         {
             if (collation.IsNull || property.IsNull)
@@ -825,6 +864,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="context">The context the expression is evaluated in</param>
         /// <param name="schema">The schema of data available to the query</param>
         /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlXml Query(SqlXml value, XPath2Expression query, ExpressionExecutionContext context, INodeSchema schema)
         {
             if (value.IsNull)
@@ -870,6 +910,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="schema">The schema of data available to the query</param>
         /// <returns></returns>
         /// <exception cref="NotSupportedException"></exception>
+        [SqlFunction(IsDeterministic = true)]
         public static object Value(SqlXml value, XPath2Expression query, [TargetType] DataTypeReference targetType, ExpressionExecutionContext context, INodeSchema schema)
         {
             if (value.IsNull)
@@ -913,6 +954,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="replaceWith">The second string to insert into the first string</param>
         /// <returns></returns>
         [CollationSensitive]
+        [SqlFunction(IsDeterministic = true)]
         public static SqlString Stuff(SqlString value, SqlInt32 start, SqlInt32 length, SqlString replaceWith)
         {
             if (value.IsNull || start.IsNull || length.IsNull || start.Value <= 0 || start.Value > value.Value.Length || length.Value < 0)
@@ -929,6 +971,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SqlString(sb.ToString(), value.LCID, value.SqlCompareOptions);
         }
 
+        [SqlFunction(IsDeterministic = false)]
         public static SqlVariant ServerProperty(SqlString propertyName, ExpressionExecutionContext context)
         {
             if (propertyName.IsNull)
@@ -1004,6 +1047,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return SqlVariant.Null;
         }
 
+        [SqlFunction(IsDeterministic = false)]
         public static SqlVariant Sql_Variant_Property(SqlVariant expression, SqlString property)
         {
             if (property.IsNull)
@@ -1059,6 +1103,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="json">The string to test</param>
         /// <returns><c>null</c> if <paramref name="json"/> is null, <c>true</c> if the input is a valid JSON object or array or <c>false</c> otherwise</returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlBoolean IsJson(SqlString json)
         {
             if (json.IsNull)
@@ -1089,6 +1134,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="json">The string to test</param>
         /// <param name="type">Specifies the JSON type to check in the input</param>
         /// <returns>Returns <c>true</c> if the string contains valid JSON; otherwise, returns <c>false</c>. Returns <c>null</c> if expression is null</returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlBoolean IsJson(SqlString json, SqlString type)
         {
             if (json.IsNull)
@@ -1125,6 +1171,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
+        [SqlFunction(IsDeterministic = false)]
         public static SqlInt32 Error_Severity(ExpressionExecutionContext context)
         {
             if (context.Error == null)
@@ -1133,6 +1180,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return context.Error.Class;
         }
 
+        [SqlFunction(IsDeterministic = false)]
         public static SqlInt32 Error_State(ExpressionExecutionContext context)
         {
             if (context.Error == null)
@@ -1141,6 +1189,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return context.Error.State;
         }
 
+        [SqlFunction(IsDeterministic = false)]
         public static SqlInt32 Error_Number(ExpressionExecutionContext context)
         {
             if (context.Error == null)
@@ -1150,6 +1199,7 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         [MaxLength(4000)]
+        [SqlFunction(IsDeterministic = false)]
         public static SqlString Error_Message(ExpressionExecutionContext context)
         {
             if (context.Error == null)
@@ -1158,6 +1208,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return context.PrimaryDataSource.DefaultCollation.ToSqlString(context.Error.Message);
         }
 
+        [SqlFunction(IsDeterministic = false)]
         public static SqlInt32 Error_Line(ExpressionExecutionContext context)
         {
             if (context.Error == null)
@@ -1167,6 +1218,7 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         [MaxLength(128)]
+        [SqlFunction(IsDeterministic = false)]
         public static SqlString Error_Procedure(ExpressionExecutionContext context)
         {
             if (context.Error == null || context.Error.Procedure == null)
@@ -1176,6 +1228,7 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         [MaxLength(2048)]
+        [SqlFunction(IsDeterministic = false)]
         public static SqlString FormatMessage(SqlString message, ExpressionExecutionContext context, params INullable[] parameters)
         {
             if (message.IsNull)

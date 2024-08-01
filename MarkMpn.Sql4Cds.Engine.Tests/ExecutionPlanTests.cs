@@ -4048,13 +4048,104 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var filter = AssertNode<FilterNode>(select.Source);
-            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["Expr1"]);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            Assert.AreEqual("CURRENT_USER", compute.Columns["Expr1"].ToSql());
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            Assert.AreEqual(1, constant.Values.Count);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
             AssertFetchXml(fetch, @"
-                <fetch>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='systemuser'>
                         <attribute name='systemuserid' />
-                        <attribute name='domainname' />
+                        <filter>
+                            <condition attribute='domainname' operator='eq' value='@Expr2' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UseNestedLoopToInjectDynamicFilterValue_GlobalVariable()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT * FROM account WHERE turnover = CAST(CURRENT_TIMESTAMP AS int)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["Expr1"]);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            Assert.AreEqual("CAST(CURRENT_TIMESTAMP AS int)", compute.Columns["Expr1"].ToSql());
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            Assert.AreEqual(1, constant.Values.Count);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='turnover' operator='eq' value='@Expr2' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UseNestedLoopToInjectDynamicFilterValue_NonDeterministicFunction()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT * FROM account WHERE turnover = CAST(GETDATE() AS int)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["Expr1"]);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            Assert.AreEqual("CAST(GETDATE() AS int)", compute.Columns["Expr1"].ToSql());
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            Assert.AreEqual(1, constant.Values.Count);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='turnover' operator='eq' value='@Expr2' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotUseNestedLoopToInjectDynamicFilterValue_DeterministicFunction()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT * FROM account WHERE turnover = CAST(LEFT('1test', 1) AS int) + 1";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='turnover' operator='eq' value='2' />
+                        </filter>
                     </entity>
                 </fetch>");
         }

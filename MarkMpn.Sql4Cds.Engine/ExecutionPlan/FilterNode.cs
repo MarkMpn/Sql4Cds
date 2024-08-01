@@ -165,7 +165,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foldedFilters |= FoldInExistsToFetchXml(context, hints, out var addedLinks, out var subqueryConditions);
             foldedFilters |= FoldTableSpoolToIndexSpool(context, hints);
             foldedFilters |= ExpandFiltersOnColumnComparisons(context);
-            foldedFilters |= FoldFiltersToDataSources(context, hints, subqueryConditions);
+            foldedFilters |= FoldFiltersToDataSources(context, hints, subqueryConditions, out var dynamicValuesLoop);
             foldedFilters |= FoldFiltersToInnerJoinSources(context, hints);
             foldedFilters |= FoldFiltersToSpoolSource(context, hints);
             foldedFilters |= FoldFiltersToNestedLoopCondition(context, hints);
@@ -174,6 +174,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 addedLink.Key.SemiJoin = true;
                 addedLink.Value.ResetSchemaCache();
+            }
+
+            if (dynamicValuesLoop != null)
+            {
+                var innerLoop = dynamicValuesLoop;
+                while (innerLoop.RightSource != null)
+                    innerLoop = (NestedLoopNode)innerLoop.RightSource;
+
+                innerLoop.RightSource = Source;
+                Source = dynamicValuesLoop;
             }
 
             // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
@@ -185,8 +195,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Filter == null)
                 return Source;
 
-            if (FoldScalarSubqueries(context, out var nestedLoop))
-                return nestedLoop.FoldQuery(context, hints);
+            if (FoldScalarSubqueries(context, out var subqueryLoop))
+                return subqueryLoop.FoldQuery(context, hints);
 
             // Check if we can apply the filter during startup instead of per-record
             StartupExpression = CheckStartupExpression();
@@ -1468,8 +1478,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        private bool FoldFiltersToDataSources(NodeCompilationContext context, IList<OptimizerHint> hints, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions)
+        private bool FoldFiltersToDataSources(NodeCompilationContext context, IList<OptimizerHint> hints, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions, out NestedLoopNode nestedLoop)
         {
+            nestedLoop = null;
+
             if (Filter == null)
                 return false;
 
@@ -1503,7 +1515,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         ignoreAliasesByNode[fetchXml],
                         fetchXml,
                         subqueryExpressions,
-                        out var fetchFilter);
+                        out var fetchFilter,
+                        out var fetchLoop);
+
+                    nestedLoop = CombineLoops(nestedLoop, fetchLoop);
 
                     if (fetchFilter != null)
                     {
@@ -1857,14 +1872,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, DataSource dataSource, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, FetchXmlScan fetchXmlScan, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, DataSource dataSource, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, FetchXmlScan fetchXmlScan, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions, out filter filter, out NestedLoopNode nestedLoop)
         {
             var targetEntityName = fetchXmlScan.Entity.name;
             var targetEntityAlias = fetchXmlScan.Alias;
             var items = fetchXmlScan.Entity.Items;
 
             var subqueryConditions = new HashSet<BooleanExpression>();
-            var result = ExtractFetchXMLFilters(context, dataSource, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, subqueryConditions, out filter);
+            var result = ExtractFetchXMLFilters(context, dataSource, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, subqueryConditions, out filter, out nestedLoop);
 
             if (result == criteria)
                 return result;
@@ -1910,10 +1925,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return result;
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, DataSource dataSource, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, string targetEntityName, string targetEntityAlias, object[] items, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions, HashSet<BooleanExpression> replacedSubqueryExpressions, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, DataSource dataSource, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, HashSet<string> barredPrefixes, string targetEntityName, string targetEntityAlias, object[] items, Dictionary<BooleanExpression, ConvertedSubquery> subqueryExpressions, HashSet<BooleanExpression> replacedSubqueryExpressions, out filter filter, out NestedLoopNode nestedLoop)
         {
-            if (TranslateFetchXMLCriteria(context, dataSource, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out filter))
+            if (TranslateFetchXMLCriteria(context, dataSource, criteria, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out filter, out nestedLoop))
                 return null;
+
+            nestedLoop = null;
 
             if (!(criteria is BooleanBinaryExpression bin))
                 return criteria;
@@ -1921,15 +1938,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(context, dataSource, bin.FirstExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out var lhsFilter);
-            bin.SecondExpression = ExtractFetchXMLFilters(context, dataSource, bin.SecondExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out var rhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(context, dataSource, bin.FirstExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out var lhsFilter, out var lhsLoop);
+            bin.SecondExpression = ExtractFetchXMLFilters(context, dataSource, bin.SecondExpression, schema, allowedPrefix, barredPrefixes, targetEntityName, targetEntityAlias, items, subqueryExpressions, replacedSubqueryExpressions, out var rhsFilter, out var rhsLoop);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
+            nestedLoop = CombineLoops(lhsLoop, rhsLoop);
 
             if (bin.FirstExpression != null && bin.SecondExpression != null)
                 return bin;
 
             return bin.FirstExpression ?? bin.SecondExpression;
+        }
+
+        private NestedLoopNode CombineLoops(NestedLoopNode loop1, NestedLoopNode loop2)
+        {
+            if (loop1 == null || loop2 == null)
+                return loop1 ?? loop2;
+
+            loop1.RightSource = loop2;
+
+            return loop1;
         }
 
         protected BooleanExpression ExtractMetadataFilters(NodeCompilationContext context, BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter, out MetadataFilterExpression keyFilter)

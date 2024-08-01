@@ -8,6 +8,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -467,7 +468,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Special case for field = func() where func is defined in FetchXmlConditionMethods
             if (cmp.FirstExpression is ColumnReferenceExpression &&
                 cmp.ComparisonType == BooleanComparisonType.Equals &&
-                cmp.SecondExpression is FunctionCall func
+                cmp.SecondExpression is FunctionCall func &&
+                Enum.TryParse<@operator>(func.FunctionName.Value.ToLowerInvariant(), out _)
                 )
             {
                 var parameters = func.Parameters.Select((p, index) =>
@@ -2417,6 +2419,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parameterlessVisitor.ParameterlessCalls.Count > 0)
                 return false;
 
+            // Check if all functions in the expression are deterministic
+            var functionVisitor = new FunctionCollectingVisitor();
+            expr.Accept(functionVisitor);
+
+            if (functionVisitor.Functions.Any(f => !f.IsDeterministic(context)))
+                return false;
+
             var evaluationContext = new ExpressionExecutionContext(context);
             var value = expr.Compile(context)(evaluationContext);
 
@@ -2473,6 +2482,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var evaluationContext = new ExpressionExecutionContext(context);
             value = expr.Compile(context)(evaluationContext);
+
+            return true;
+        }
+
+        public static bool IsDeterministic(this FunctionCall functionCall, ExpressionCompilationContext context)
+        {
+            // The function itself must be defined as deterministic
+            var method = GetMethod(functionCall, context, null, null, false, out _, out _, out _);
+
+            if (method == null)
+                return false;
+
+            var attr = method.GetCustomAttribute<Microsoft.SqlServer.Server.SqlFunctionAttribute>();
+
+            if (attr == null)
+                return false;
+
+            if (!attr.IsDeterministic)
+                return false;
+
+            // All the parameters must also be deterministic
+            foreach (var param in functionCall.Parameters)
+            {
+                if (!param.IsConstantValueExpression(context, out _))
+                    return false;
+            }
 
             return true;
         }
