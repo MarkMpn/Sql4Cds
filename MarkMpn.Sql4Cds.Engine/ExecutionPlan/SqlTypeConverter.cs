@@ -487,7 +487,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Expression.PropertyOrField(
                             Expression.Subtract(
                                 Expression.Convert(expr, typeof(DateTime)),
-                                Expression.Constant(SqlDateTime.MinValue)
+                                Expression.Constant(SqlDateTime.MinValue.Value)
                             ),
                             nameof(TimeSpan.TotalDays)
                         ),
