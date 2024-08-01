@@ -1777,7 +1777,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var entityNames = filter.Items
                 .OfType<condition>()
                 .Select(c => c.entityname)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Union(filter.Items.OfType<filter>().Select(GetConsistentEntityName))
                 .ToList();
 
             if (entityNames.Count != 1)
