@@ -67,6 +67,13 @@
                 #result .suggestion .block {
                     margin-left: 10px;
                 }
+                    #result .suggestion .block pre {
+                        overflow-x: auto;
+                        position: relative;
+                    }
+                    #result .suggestion .block div:has(>pre) {
+                        position: relative;
+                    }
                 #result .suggestion.info .block {
                     background-color: #f1faf1;
                 }

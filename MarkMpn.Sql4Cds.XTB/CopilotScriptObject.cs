@@ -239,6 +239,9 @@ namespace MarkMpn.Sql4Cds.XTB
                                             error = error.InnerException;
                                         }
 
+                                        var html = Markdown.ToHtml($"Errors found while validating a proposed query:\r\n\r\n```sql\r\n{query}\r\n```\r\n\r\n```\r\n{errors[0]}\r\n```\r\n\r\nRetrying...", _markdownPipeline);
+                                        await ShowPromptSuggestionAsync("warning", html, null, null);
+
                                         var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
                                         var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
                                         var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query);
