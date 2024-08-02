@@ -463,7 +463,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // in the new link entity or we must be using an inner join so we can use a post-filter node
             var additionalCriteria = AdditionalJoinCriteria;
 
-            if (TranslateFetchXMLCriteria(context, dataSource, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, null, null, out var filter, out var dynamicValuesLoop))
+            if (TranslateFetchXMLCriteria(context, dataSource, additionalCriteria, rightSchema, rightFetch.Alias, null, rightEntity.name, rightFetch.Alias, rightEntity.Items, null, null, out var filter))
             {
                 rightEntity.AddItem(filter);
                 additionalCriteria = null;
@@ -513,13 +513,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (additionalCriteria != null)
                 folded = new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(context, hints);
-
-            // Insert the loop to calculate the dynamic filter values into the plan
-            if (dynamicValuesLoop != null)
-            {
-                dynamicValuesLoop.RightSource = folded;
-                folded = dynamicValuesLoop;
-            }
 
             // We might have previously folded a sort to the FetchXML that is no longer valid as we require custom paging
             if (leftFetch.RequiresCustomPaging(context.DataSources))

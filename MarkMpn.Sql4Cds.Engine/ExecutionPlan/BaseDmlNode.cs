@@ -151,6 +151,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The node that should be used in place of this node</returns>
         public virtual IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            context.ResetGlobalCalculations();
+
             if (Source is IDataExecutionPlanNodeInternal dataNode)
                 Source = dataNode.FoldQuery(context, hints);
             else if (Source is IDataReaderExecutionPlanNode dataSetNode)
@@ -167,6 +169,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             BatchSize = GetBatchSize(context, hints);
             BypassCustomPluginExecution = GetBypassPluginExecution(context, hints);
             ContinueOnError = GetContinueOnError(context, hints);
+
+            if (Source is IDataExecutionPlanNodeInternal source)
+                Source = context.InsertGlobalCalculations(this, source);
 
             return new[] { this };
         }
