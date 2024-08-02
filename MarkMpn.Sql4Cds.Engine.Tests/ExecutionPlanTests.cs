@@ -8260,5 +8260,33 @@ WHERE  a.entitylogicalname IN ('team')";
             var metadata_a = AssertNode<MetadataQueryNode>(join.RightSource);
             Assert.AreEqual("a", metadata_a.AttributeAlias);
         }
+
+        [TestMethod]
+        public void AggregateWithDynamicFilterValues()
+        {
+            var query = @"
+SELECT COUNT(*) AS AccountCount
+FROM account
+WHERE createdon >= CAST(GETDATE() AS DATE)
+AND createdon < DATEADD(day, 1, CAST(GETDATE() AS DATE))";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            var tryCatch1 = AssertNode<TryCatchNode>(loop.RightSource);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var fetch1 = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
+            var partition = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            var fetch2 = AssertNode<FetchXmlScan>(partition.Source);
+            var streamAggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
+            var fetch3 = AssertNode<FetchXmlScan>(streamAggregate.Source);
+        }
     }
 }

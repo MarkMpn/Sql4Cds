@@ -356,10 +356,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (entityName == fetchXml.Alias)
                     {
-                        if (fetchSort.attribute != null)
+                        var attributeName = fetchSort.attribute;
+                        if (fetchSort.alias != null)
+                        {
+                            var fetchAttribute = fetchXml.Entity.Items.OfType<FetchAttributeType>().Where(a => a.alias == fetchSort.alias).FirstOrDefault();
+
+                            if (fetchAttribute != null)
+                            {
+                                attributeName = fetchAttribute.name;
+
+                                if (fetchAttribute.groupbySpecified && fetchAttribute.groupby == FetchBoolType.@true &&
+                                    fetchSort.descending)
+                                {
+                                    // Sorts on groupby columns always seem to be in ascending order, descending flag is ignored
+                                    return this;
+                                }
+                            }
+                        }
+
+                        if (attributeName != null)
                         {
                             var meta = dataSource.Metadata[fetchXml.Entity.name];
-                            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
+                            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == attributeName && a.AttributeOf == null);
 
                             // Sorting on multi-select picklist fields isn't supported in FetchXML
                             if (attribute is MultiSelectPicklistAttributeMetadata)
@@ -394,12 +412,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
 
                                 // Sorts on the virtual ___name attribute should be applied to the underlying field
-                                if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
+                                if (attribute == null && attributeName.EndsWith("name") == true)
                                 {
-                                    attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
+                                    attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == attributeName.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
 
                                     if (attribute != null)
                                     {
+                                        if (fetchSort.attribute == null)
+                                            return this;
+
                                         fetchSort.attribute = attribute.LogicalName;
 
                                         if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
@@ -425,10 +446,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (linkEntity == null)
                             return this;
 
-                        if (fetchSort.attribute != null)
+                        var attributeName = fetchSort.attribute;
+                        if (fetchSort.alias != null)
+                        {
+                            var fetchAttribute = linkEntity.Items.OfType<FetchAttributeType>().Where(a => a.alias == fetchSort.alias).FirstOrDefault();
+
+                            if (fetchAttribute != null)
+                            {
+                                attributeName = fetchAttribute.name;
+
+                                if (fetchAttribute.groupbySpecified && fetchAttribute.groupby == FetchBoolType.@true &&
+                                    fetchSort.descending)
+                                {
+                                    // Sorts on groupby columns always seem to be in ascending order, descending flag is ignored
+                                    return this;
+                                }
+                            }
+                        }
+
+                        if (attributeName != null)
                         {
                             var meta = dataSource.Metadata[linkEntity.name];
-                            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
+                            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == attributeName && a.AttributeOf == null);
 
                             // Sorting on a lookup Guid or picklist column actually sorts by the associated name field, which isn't what we want
                             // Picklist sorting can be controlled by the useraworderby flag though.
@@ -448,12 +487,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 return this;
 
                             // Sorts on the virtual ___name attribute should be applied to the underlying field
-                            if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
+                            if (attribute == null && attributeName.EndsWith("name") == true)
                             {
-                                attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
+                                attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == attributeName.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
 
                                 if (attribute != null)
                                 {
+                                    if (fetchSort.attribute == null)
+                                        return this;
+
                                     fetchSort.attribute = attribute.LogicalName;
 
                                     if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
