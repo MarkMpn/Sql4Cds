@@ -468,6 +468,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (condition.value == null && (condition.Items == null || condition.Items.Length == 0))
                     continue;
 
+                if (condition.IsVariable)
+                    continue;
+
                 var conditionEntity = entityName;
 
                 if (condition.entityname != null)

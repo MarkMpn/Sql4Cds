@@ -32,6 +32,20 @@ namespace MarkMpn.Sql4Cds.Engine
             DataSources = dataSources;
             Options = options;
             ParameterTypes = parameterTypes;
+            GlobalCalculations = new NestedLoopNode
+            {
+                LeftSource = new ComputeScalarNode
+                {
+                    Source = new ConstantScanNode
+                    {
+                        Values =
+                        {
+                            new Dictionary<string, ScalarExpression>()
+                        }
+                    }
+                },
+                OuterReferences = new Dictionary<string, string>()
+            };
             Log = log ?? (msg => { });
         }
 
@@ -47,6 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine
             DataSources = parentContext.DataSources;
             Options = parentContext.Options;
             ParameterTypes = parameterTypes;
+            GlobalCalculations = parentContext.GlobalCalculations;
             Log = parentContext.Log;
             _parentContext = parentContext;
         }
@@ -72,6 +87,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
 
         /// <summary>
+        /// Returns a <see cref="NestedLoopNode"/> which can be used to calculate global values to be injected into other nodes
+        /// </summary>
+        public NestedLoopNode GlobalCalculations { get; }
+
+        /// <summary>
         /// A callback function to log messages
         /// </summary>
         public Action<Sql4CdsError> Log { get; }
@@ -86,6 +106,25 @@ namespace MarkMpn.Sql4Cds.Engine
                 return _parentContext.GetExpressionName();
 
             return $"Expr{++_expressionCounter}";
+        }
+
+        internal void ResetGlobalCalculations()
+        {
+            GlobalCalculations.OuterReferences.Clear();
+            ((ComputeScalarNode)GlobalCalculations.LeftSource).Columns.Clear();
+        }
+
+        internal IDataExecutionPlanNodeInternal InsertGlobalCalculations(IRootExecutionPlanNodeInternal rootNode, IDataExecutionPlanNodeInternal source)
+        {
+            if (GlobalCalculations.OuterReferences.Count == 0)
+                return source;
+
+            var clone = (NestedLoopNode)GlobalCalculations.Clone();
+            clone.RightSource = source;
+            source.Parent = clone;
+            clone.Parent = rootNode;
+
+            return clone;
         }
     }
 
