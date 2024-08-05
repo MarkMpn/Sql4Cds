@@ -1195,7 +1195,13 @@ namespace MarkMpn.Sql4Cds.XTB
                         var dict = new Dictionary<string, object>();
 
                         for (var i = 0; i < results.Columns.Count; i++)
-                            dict[results.Columns[i].ColumnName] = row[i];
+                        {
+                            // Do not put nulls in the dictionary as the serializer will fail when attempting to read the .Value property
+                            if (row[i] is INullable nullable && nullable.IsNull)
+                                dict[results.Columns[i].ColumnName] = null;
+                            else
+                                dict[results.Columns[i].ColumnName] = row[i];
+                        }
 
                         rows.Add(dict);
                     }

@@ -43,6 +43,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private bool _runningQuery;
         private Dictionary<string, string> _pendingQueries;
         private List<ToolOutput> _toolOutputs;
+        private TimeSpan _toolDelay;
 
         internal CopilotScriptObject(SqlQueryControl control, WebView2 copilotWebView)
         {
@@ -53,6 +54,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _control = control;
             _copilotWebView = copilotWebView;
             _pendingQueries = new Dictionary<string, string>();
+            _toolDelay = TimeSpan.FromSeconds(0.5);
         }
 
         public void Cancel()
@@ -89,7 +91,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             Instructions = definition.Instructions,
                             DefaultTools = definition.Tools,
                         });
-
+                        
                         Settings.Instance.AssistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
                         SettingsManager.Instance.Save(typeof(PluginControl), Settings.Instance);
                     }
@@ -157,6 +159,13 @@ namespace MarkMpn.Sql4Cds.XTB
             _pendingQueries.Remove(id);
         }
 
+        public async Task<string[]> Retry()
+        {
+            var updates = _assistantClient.CreateRunStreamingAsync(_assistantThread, _assistant);
+            await DoRunAsync(updates);
+            return null;
+        }
+
         private async Task DoRunAsync(AsyncResultCollection<StreamingUpdate> updates)
         {
             Func<Task> promptSuggestion = null;
@@ -185,7 +194,27 @@ namespace MarkMpn.Sql4Cds.XTB
                         else if (update is RequiredActionUpdate func)
                         {
                             promptSuggestion = null;
-                            var args = JsonConvert.DeserializeObject<Dictionary<string, string>>(func.FunctionArguments);
+                            Dictionary<string, string> args;
+
+                            try
+                            {
+                                args = JsonConvert.DeserializeObject<Dictionary<string, string>>(func.FunctionArguments);
+                            }
+                            catch (JsonException)
+                            {
+                                if (func.FunctionName == "execute_query")
+                                {
+                                    // Query is sometimes presented directly rather than wrapped in JSON
+                                    args = new Dictionary<string, string>
+                                    {
+                                        ["query"] = func.FunctionArguments
+                                    };
+                                }
+                                else
+                                {
+                                    throw;
+                                }
+                            }
 
                             switch (func.FunctionName)
                             {
@@ -205,7 +234,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                     }
                                     else
                                     {
-                                        var columns = metadata.Attributes.ToDictionary(a => a.LogicalName, a => new { displayName = a.DisplayName?.UserLocalizedLabel?.Label, description = a.Description?.UserLocalizedLabel?.Label, type = a.AttributeTypeName?.Value, options = (a as EnumAttributeMetadata)?.OptionSet?.Options?.ToDictionary(o => o.Value, o => o.Label?.UserLocalizedLabel?.Label), lookupTo = (a as LookupAttributeMetadata)?.Targets?.Select(target => target + "." + dataSource.Metadata[target].PrimaryIdAttribute)?.ToArray() });
+                                        var columns = metadata.Attributes.ToDictionary(a => a.LogicalName, a => new { displayName = a.DisplayName?.UserLocalizedLabel?.Label, description = ShowDescription(a) ? a.Description?.UserLocalizedLabel?.Label : null, type = a.AttributeTypeName?.Value, options = (a as EnumAttributeMetadata)?.OptionSet?.Options?.ToDictionary(o => o.Value, o => o.Label?.UserLocalizedLabel?.Label), lookupTo = (a as LookupAttributeMetadata)?.Targets?.Select(target => target + "." + dataSource.Metadata[target].PrimaryIdAttribute)?.ToArray() });
                                         _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(columns, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })));
                                     }
                                     break;
@@ -444,9 +473,22 @@ namespace MarkMpn.Sql4Cds.XTB
                         }
 
                         if (_toolOutputs.Any() && _pendingQueries.Count == 0 && !_canceled)
+                        {
+                            // Sleep to avoid overloading the API with sequential function calls
+                            await Task.Delay(_toolDelay);
+
                             updates = _assistantClient.SubmitToolOutputsToRunStreamingAsync(_run, _toolOutputs);
+                        }
                     }
-                } while (_run?.Status.IsTerminal == false);
+                } while (_run?.Status.IsTerminal == false && !_canceled);
+
+                if (_run?.LastError != null)
+                {
+                    if (_run.LastError.Code == RunErrorCode.RateLimitExceeded)
+                        _toolDelay = TimeSpan.FromSeconds(_toolDelay.TotalSeconds * 2);
+
+                    await ShowRetryAsync(HttpUtility.HtmlEncode(_run.LastError.Message));
+                }
             }
             catch (Exception ex)
             {
@@ -463,6 +505,36 @@ namespace MarkMpn.Sql4Cds.XTB
                     await Finished();
                 }
             }
+        }
+
+        private bool ShowDescription(AttributeMetadata a)
+        {
+            // Check if the description should be output to the API. Some common attributes are not useful
+            // or are already understood by the model and can be skipped to reduce the required tokens
+            switch (a.LogicalName)
+            {
+                case "createdby":
+                case "createdon":
+                case "createdonbehalfby":
+                case "modifiedby":
+                case "modifiedon":
+                case "modifiedonbehalfby":
+                case "owningbusinessunit":
+                case "owningteam":
+                case "owninguser":
+                case "ownerid":
+                case "transactioncurrencyid":
+                case "versionnumber":
+                case "importsequencenumber":
+                case "overriddencreatedon":
+                case "statecode":
+                case "statuscode":
+                case "timezoneruleversionnumber":
+                case "utcconversiontimezonecode":
+                    return false;
+            }
+
+            return true;
         }
 
         private bool ContainsJoin(string sql)
@@ -497,6 +569,11 @@ namespace MarkMpn.Sql4Cds.XTB
         private async Task ShowExecutePromptAsync(string html, string id)
         {
             await _copilotWebView.ExecuteScriptAsync("showExecutePrompt(" + JsonConvert.SerializeObject(html) + "," + JsonConvert.SerializeObject(id) + ")");
+        }
+
+        private async Task ShowRetryAsync(string html)
+        {
+            await _copilotWebView.ExecuteScriptAsync("showRetryPrompt(" + JsonConvert.SerializeObject(html) + ")");
         }
 
         private async Task RunStarted()

@@ -254,6 +254,32 @@
             div.scrollIntoView(false);
         }
 
+        showRetryPrompt = function (title) {
+            const div = document.createElement('div');
+            div.className = 'suggestion warning';
+            const block = document.createElement('div');
+            block.className = 'block';
+            block.innerHTML = title;
+            const icon = document.getElementById('warning').cloneNode(true);
+            div.appendChild(icon);
+            div.appendChild(block);
+
+            const button = document.createElement('button');
+            button.textContent = 'Retry';
+            button.addEventListener('click', async () => {
+                result.querySelectorAll("button").forEach(b => b.disabled = true);
+                send.className = "disabled";
+
+                showProcessingMessage();
+
+                await window.chrome.webview.hostObjects.sql4cds.Retry();
+            });
+            block.appendChild(button);
+
+            result.appendChild(div);
+            div.scrollIntoView(false);
+        }
+
         sendMessage = async function (message) {
             result.querySelectorAll("button").forEach(b => b.disabled = true);
             send.className = "disabled";
