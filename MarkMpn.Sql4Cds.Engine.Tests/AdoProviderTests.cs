@@ -1461,7 +1461,7 @@ SELECT   @v
 UNION ALL
 SELECT   @n";
 
-                using (var reader = (Sql4CdsDataReader) cmd.ExecuteReader())
+                using (var reader = (Sql4CdsDataReader)cmd.ExecuteReader())
                 {
                     Assert.AreEqual(typeof(object), reader.GetProviderSpecificFieldType(0));
                     Assert.AreEqual(typeof(object), reader.GetFieldType(0));
@@ -1975,7 +1975,7 @@ END CATCH";
             DapperQuery<Guid>(id => id);
         }
 
-        private void DapperQuery<TId>(Func<TId,Guid> selector)
+        private void DapperQuery<TId>(Func<TId, Guid> selector)
         {
             using (var con = new Sql4CdsConnection(_localDataSources))
             {
@@ -2279,6 +2279,30 @@ SELECT * FROM (VALUES ('b', null), ('c', 'd'), ('b', null), ('c', 'd')) AS T(A, 
                     Assert.AreEqual("a", reader.GetString(0));
                     Assert.AreEqual("b", reader.GetString(1));
                     Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MultipleErrors()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT invalid_field1 + invalid_field2, invalid_field_3
+FROM account
+WHERE invalid_field4 = 'test' AND invalid_field5 = 'test'
+ORDER BY invalid_field6, invalid_field7";
+
+                try
+                {
+                    cmd.GeneratePlan(false);
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(7, ex.Errors.Count);
                 }
             }
         }
