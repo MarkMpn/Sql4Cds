@@ -1495,6 +1495,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 cacheKey += comparisonCacheKey;
             }
 
+            if (ex != null)
+                throw ex;
+
             cacheKey += ")";
             sqlType = DataTypeHelpers.Bit;
             return result;

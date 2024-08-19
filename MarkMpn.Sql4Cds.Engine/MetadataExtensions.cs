@@ -69,7 +69,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                if (!writeable)
+                // solutioncomponent entity doesn't return the names of lookup values
+                // https://github.com/MarkMpn/Sql4Cds/issues/524
+                if (!writeable && attrMetadata.EntityLogicalName != "solutioncomponent")
                     yield return new VirtualAttribute("name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), null);
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
