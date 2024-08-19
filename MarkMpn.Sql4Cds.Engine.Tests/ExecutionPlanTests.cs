@@ -2681,10 +2681,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
             Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
             var fetch = AssertNode<FetchXmlScan>(select.Source);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
@@ -2727,12 +2723,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
             Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
             var fetch = AssertNode<FetchXmlScan>(select.Source);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
-            Assert.AreEqual("systemuser.uname", fetch.ColumnMappings[2].SourceColumn);
-            Assert.AreEqual("a.uname", fetch.ColumnMappings[2].OutputColumn);
+            Assert.AreEqual("systemuser.uname", fetch.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("a.uname", fetch.ColumnMappings[0].OutputColumn);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
@@ -6974,12 +6966,10 @@ FROM   account AS r;";
             Assert.AreEqual("b_s", fetch2.Alias);
             CollectionAssert.Contains(fetch2.HiddenAliases, "b_s");
             CollectionAssert.Contains(fetch2.HiddenAliases, "s");
-            Assert.AreEqual("b_s.name", fetch2.ColumnMappings[0].SourceColumn);
-            Assert.AreEqual("b_s.name", fetch2.ColumnMappings[0].OutputColumn);
-            Assert.AreEqual("s.systemuserid", fetch2.ColumnMappings[1].SourceColumn);
-            Assert.AreEqual("b_s.systemuserid", fetch2.ColumnMappings[1].OutputColumn);
-            Assert.AreEqual("s.msdyn_agentType", fetch2.ColumnMappings[2].SourceColumn);
-            Assert.AreEqual("b_s.msdyn_agentType", fetch2.ColumnMappings[2].OutputColumn);
+            Assert.AreEqual("s.systemuserid", fetch2.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("b_s.systemuserid", fetch2.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("s.msdyn_agentType", fetch2.ColumnMappings[1].SourceColumn);
+            Assert.AreEqual("b_s.msdyn_agentType", fetch2.ColumnMappings[1].OutputColumn);
             AssertFetchXml(fetch2, @"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
@@ -8287,6 +8277,80 @@ AND createdon < DATEADD(day, 1, CAST(GETDATE() AS DATE))";
             var fetch2 = AssertNode<FetchXmlScan>(partition.Source);
             var streamAggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
             var fetch3 = AssertNode<FetchXmlScan>(streamAggregate.Source);
+        }
+
+        [TestMethod]
+        public void OptionSetNameFromQueryDefinedTable()
+        {
+            var query = @"
+SELECT a.new_customentityid,
+a.new_optionsetvaluename AS [a_new_optionsetvaluename],
+a.new_optionsetvalue AS [a_new_optionsetvalue]
+FROM (SELECT new_customentityid,
+             new_optionsetvaluename,
+             new_optionsetvalue
+FROM new_customentity
+WHERE new_name IN ('test')) AS a
+ORDER BY a.new_customentityid";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch>
+    <entity name='new_customentity'>
+        <attribute name='new_customentityid' />
+        <attribute name='new_optionsetvalue' />
+        <filter>
+            <condition attribute='new_name' operator='in'>
+                <value>test</value>
+            </condition>
+        </filter>
+        <order attribute='new_customentityid' />
+    </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void OptionSetNameFromQueryDefinedTableWithAlias()
+        {
+            var query = @"
+SELECT a.new_customentityid,
+a.new_optionsetvaluename AS [a_new_optionsetvaluename],
+a.x AS [a_new_optionsetvalue]
+FROM (SELECT new_customentityid,
+             new_optionsetvaluename,
+             new_optionsetvalue AS x
+FROM new_customentity
+WHERE new_name IN ('test')) AS a
+ORDER BY a.new_customentityid";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch>
+    <entity name='new_customentity'>
+        <attribute name='new_customentityid' />
+        <attribute name='new_optionsetvalue' />
+        <filter>
+            <condition attribute='new_name' operator='in'>
+                <value>test</value>
+            </condition>
+        </filter>
+        <order attribute='new_customentityid' />
+    </entity>
+</fetch>");
         }
     }
 }
