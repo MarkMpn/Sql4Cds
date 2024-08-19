@@ -1104,7 +1104,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _lastSchema = null;
         }
 
-        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity, out bool isVirtual)
+        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity, out AttributeMetadata attrMetadata, out bool isVirtual)
         {
             isVirtual = false;
 
@@ -1117,7 +1117,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parts.Length == 1)
             {
                 added = false;
-                return Entity.FindAliasedAttribute(colName, predicate, out linkEntity);
+                var linkAttr = Entity.FindAliasedAttribute(colName, predicate, out linkEntity);
+
+                if (linkAttr != null)
+                    attrMetadata = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == linkAttr.name);
+                else
+                    attrMetadata = null;
+
+                return linkAttr;
             }
 
             var entityName = parts[0];
@@ -1127,16 +1134,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 linkEntity = null;
 
-                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                attrMetadata = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
 
-                if (meta == null)
+                if (attrMetadata == null)
                 {
-                    meta = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                    attrMetadata = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
                     isVirtual = true;
                 }
 
-                if (meta != null)
-                    attr.name = meta.LogicalName;
+                if (attrMetadata != null)
+                    attr.name = attrMetadata.LogicalName;
 
                 if (Entity.Items != null)
                 {
@@ -1161,16 +1168,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 linkEntity = Entity.FindLinkEntity(entityName);
 
-                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                attrMetadata = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
 
-                if (meta == null)
+                if (attrMetadata == null)
                 {
-                    meta = metadata[linkEntity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                    attrMetadata = metadata[linkEntity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
                     isVirtual = true;
                 }
 
-                if (meta != null)
-                    attr.name = meta.LogicalName;
+                if (attrMetadata != null)
+                    attr.name = attrMetadata.LogicalName;
 
                 if (linkEntity.Items != null)
                 {
@@ -1999,7 +2006,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (HiddenAliases.Contains(parts[0], StringComparer.OrdinalIgnoreCase))
                     continue;
 
-                AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out _, out _);
+                AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out _, out _, out _);
             }
 
             // Apply any aliases where possible. Remove each mapping first so they are not ignored by 
@@ -2155,7 +2162,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 })
                 .Select(c =>
                 {
-                    var attr = AddAttribute(c.SourceColumn, null, metadata, out _, out var linkEntity, out _);
+                    var attr = AddAttribute(c.SourceColumn, null, metadata, out _, out var linkEntity, out _, out _);
                     return new { c.Mapping, c.SourceColumn, c.Alias, Attr = attr, LinkEntity = linkEntity };
                 })
                 .Where(c =>

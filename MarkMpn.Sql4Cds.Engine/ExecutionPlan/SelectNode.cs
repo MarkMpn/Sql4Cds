@@ -163,7 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var sourceCol = col.SourceColumn;
                             schema.ContainsColumn(sourceCol, out sourceCol);
-                            fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out _, out _, out _);
+                            fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out _, out _, out _, out _);
                         }
                     }
                 }

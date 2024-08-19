@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -95,9 +96,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (fetch.Entity.name == "audit" && Columns.Any(col => col.StartsWith(fetch.Alias.EscapeIdentifier() + ".objectid")))
                     return this;
 
+                var metadata = context.DataSources[fetch.DataSource].Metadata;
+
+                // Can't apply DISTINCT to partylist attributes
+                // https://github.com/MarkMpn/Sql4Cds/issues/528
+                foreach (var column in Columns)
+                {
+                    if (!schema.ContainsColumn(column, out var normalized))
+                        continue;
+
+                    fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity, out var attrMetadata, out var isVirtual);
+
+                    if (attrMetadata?.AttributeType == AttributeTypeCode.PartyList)
+                        return this;
+                }
+
                 fetch.FetchXml.distinct = true;
                 fetch.FetchXml.distinctSpecified = true;
-                var metadata = context.DataSources[fetch.DataSource].Metadata;
                 var virtualAttr = false;
 
                 // Ensure there is a sort order applied to avoid paging issues
@@ -112,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!schema.ContainsColumn(column, out var normalized))
                             continue;
 
-                        var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity, out var isVirtual);
+                        var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity, out _, out var isVirtual);
 
                         var nameParts = normalized.SplitMultiPartIdentifier();
 

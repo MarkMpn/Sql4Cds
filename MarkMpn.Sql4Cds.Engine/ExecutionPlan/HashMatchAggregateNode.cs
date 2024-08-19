@@ -395,7 +395,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         schema.ContainsColumn(colName, out colName);
 
-                        var attribute = fetchXml.AddAttribute(colName, a => a.groupbySpecified && a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _, out var linkEntity, out _);
+                        var attribute = fetchXml.AddAttribute(colName, a => a.groupbySpecified && a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _, out var linkEntity, out _, out _);
                         attribute.groupby = FetchBoolType.@true;
                         attribute.groupbySpecified = true;
                         attribute.alias = alias;
@@ -495,7 +495,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (attr is MoneyAttributeMetadata money && money.IsBaseCurrency == false)
                             addMultiCurrencyCheck = true;
 
-                        var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _, out _, out var isVirtual);
+                        var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _, out _, out _, out var isVirtual);
 
                         if (isVirtual)
                         {
