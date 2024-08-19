@@ -100,5 +100,25 @@ WHERE  w.category = 5;
 
             Assert.AreEqual(expected, Formatter.Format(original));
         }
+
+        [TestMethod]
+        public void Issue525()
+        {
+            var original = @"SELECT sc1.uniquename AS [aaa]
+FROM (
+	SELECT sc.solutionidname AS uniquename,
+		-- comment
+		sc.objectid
+	FROM solutioncomponent AS sc
+	) AS sc1";
+
+            var expected = @"SELECT sc1.uniquename AS [aaa]
+FROM   (SELECT sc.solutionidname AS uniquename,
+		-- comment
+               sc.objectid
+        FROM   solutioncomponent AS sc) AS sc1;";
+
+            Assert.AreEqual(expected, Formatter.Format(original));
+        }
     }
 }

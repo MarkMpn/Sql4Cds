@@ -77,6 +77,9 @@ namespace MarkMpn.Sql4Cds.XTB
             if (srcToken.TokenType == TSqlTokenType.Variable && dstToken.TokenType == TSqlTokenType.Identifier && dstToken.Text.StartsWith("@"))
                 return true;
 
+            if (srcToken.TokenType == TSqlTokenType.QuotedIdentifier && dstToken.TokenType == TSqlTokenType.Identifier && dstToken.Text.StartsWith("["))
+                return true;
+
             return false;
         }
 
