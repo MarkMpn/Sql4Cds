@@ -1104,8 +1104,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _lastSchema = null;
         }
 
-        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
+        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity, out bool isVirtual)
         {
+            isVirtual = false;
+
             var mapping = ColumnMappings.FirstOrDefault(m => m.OutputColumn == colName);
             if (mapping != null)
                 colName = mapping.SourceColumn;
@@ -1128,7 +1130,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
 
                 if (meta == null)
+                {
                     meta = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                    isVirtual = true;
+                }
 
                 if (meta != null)
                     attr.name = meta.LogicalName;
@@ -1157,8 +1162,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 linkEntity = Entity.FindLinkEntity(entityName);
 
                 var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+
                 if (meta == null)
+                {
                     meta = metadata[linkEntity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                    isVirtual = true;
+                }
 
                 if (meta != null)
                     attr.name = meta.LogicalName;

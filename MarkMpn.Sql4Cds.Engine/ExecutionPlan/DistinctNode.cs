@@ -112,12 +112,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!schema.ContainsColumn(column, out var normalized))
                             continue;
 
-                        var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity);
+                        var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity, out var isVirtual);
 
                         var nameParts = normalized.SplitMultiPartIdentifier();
 
-                        if (attr.name != nameParts[1])
-                            virtualAttr = true;
+                        virtualAttr |= isVirtual;
 
                         if (!sortedAttributes.Add(linkEntity?.alias + "." + attr.name))
                             continue;
