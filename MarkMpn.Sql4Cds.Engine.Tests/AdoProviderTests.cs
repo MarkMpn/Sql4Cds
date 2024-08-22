@@ -2306,5 +2306,140 @@ ORDER BY invalid_field6, invalid_field7";
                 }
             }
         }
+
+        [TestMethod]
+        public void NumericConversions()
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver16#truncating-and-rounding-results
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                // numeric -> numeric = round
+                // numeric -> int = truncate
+                cmd.CommandText = @"
+SELECT CAST(10.6496 AS INT) AS trunc1,
+       CAST(-10.6496 AS INT) AS trunc2,
+       CAST(10.6496 AS NUMERIC) AS round1,
+       CAST(-10.6496 AS NUMERIC) AS round2";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(10, reader.GetInt32(0));
+                    Assert.AreEqual(-10, reader.GetInt32(1));
+                    Assert.AreEqual(11, reader.GetDecimal(2));
+                    Assert.AreEqual(-11, reader.GetDecimal(3));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                // numeric -> money = round
+                cmd.CommandText = "SELECT CAST(10.3496847 AS money)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(10.3497M, reader.GetDecimal(0));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                // money -> int = round
+                // money -> numeric = round
+                cmd.CommandText = @"
+SELECT CAST(CAST(10.6496 AS money) AS int) AS round1,
+       CAST(CAST(-10.6496 AS money) AS numeric) AS round2";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(11, reader.GetInt32(0));
+                    Assert.AreEqual(-11, reader.GetDecimal(1));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                // float -> int = truncate
+                // float -> numeric = round
+                // float -> datetime = round
+                // datetime -> int = round
+                cmd.CommandText = @"
+SELECT CAST(CAST(10.6496 AS float) AS int) AS trunc1,
+       CAST(CAST(-10.6496 AS float) AS numeric) AS round1,
+       CAST(CAST(10.6496 AS float) AS datetime) AS round2,
+       CAST(CAST('2021-01-01' AS datetime) AS int) AS round3";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(10, reader.GetInt32(0));
+                    Assert.AreEqual(-11, reader.GetDecimal(1));
+                    Assert.AreEqual(new DateTime(1900, 1, 11, 15, 35, 25, 440), reader.GetDateTime(2));
+                    Assert.AreEqual(44195, reader.GetInt32(3));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                cmd.CommandText = "select cast(12345.12 as DECIMAL(5, 2))";
+                cmd.GeneratePlan(false);
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Errors.Single().Number);
+                }
+
+                // Implicit string -> numeric conversion
+                // https://stackoverflow.com/questions/68279319/why-does-implicit-conversion-from-some-numeric-values-work-but-not-others
+                cmd.CommandText = "SELECT '185.37' * 2.00";
+
+                try
+                {
+                    cmd.ExecuteScalar();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Number);
+                }
+
+                cmd.CommandText = "SELECT '0.16' * 2.00";
+                Assert.AreEqual(0.32M, cmd.ExecuteScalar());
+
+                // Allow implicit conversion to lower precision/scale
+                cmd.CommandText = @"
+DECLARE @p1 DECIMAL(5, 2) = 123.45;
+SET @p1 = 123.4567;
+SELECT @p1";
+
+                Assert.AreEqual(123.46M, cmd.ExecuteScalar());
+
+                // Allow implicit conversion to higher precision/scale
+                cmd.CommandText = @"
+DECLARE @p1 DECIMAL(5, 2) = 123.45;
+SET @p1 = 123.4;
+SELECT @p1";
+
+                Assert.AreEqual(123.40M, cmd.ExecuteScalar());
+
+                // Fail on implicit conversion to lower precision that would cause truncation
+                cmd.CommandText = @"
+DECLARE @p1 DECIMAL(5, 2) = 123.45;
+SET @p1 = @p1 * 10;
+SELECT @p1";
+
+                try
+                {
+                    cmd.ExecuteScalar();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Number);
+                }
+            }
+        }
     }
 }

@@ -744,7 +744,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(bin, lhsSqlType, rhsSqlType));
 
             // For decimal types, need to work out the precision and scale of the result depending on the type of operation
-            if (type is SqlDataTypeReference sqlTargetType && (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
+            if (type is SqlDataTypeReference sqlTargetType &&
+                (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
+                lhsSqlType is SqlDataTypeReference sqlLhsType &&
+                (sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
+                rhsSqlType is SqlDataTypeReference sqlRhsType &&
+                (sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
             {
                 var p1 = lhsSqlType.GetPrecision();
                 var s1 = lhsSqlType.GetScale();

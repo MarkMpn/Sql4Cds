@@ -95,8 +95,7 @@ FROM   workflow AS w CROSS APPLY OPENJSON (JSON_QUERY(w.clientdata, '$.propertie
        connectionreference AS cr
        ON JSON_VALUE(wfcr.[value], '$.connection.connectionReferenceLogicalName') = cr.connectionreferencelogicalname
 WHERE  w.category = 5;
-
---AND JSON_VALUE(wfcr.[value], '$.connection.connectionReferenceLogicalName') IS NULL;";
+       --AND JSON_VALUE(wfcr.[value], '$.connection.connectionReferenceLogicalName') IS NULL;";
 
             Assert.AreEqual(expected, Formatter.Format(original));
         }

@@ -487,7 +487,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Expression.PropertyOrField(
                             Expression.Subtract(
                                 Expression.Convert(expr, typeof(DateTime)),
-                                Expression.Constant(SqlDateTime.MinValue.Value)
+                                Expression.Constant(new DateTime(1900, 1, 1))
                             ),
                             nameof(TimeSpan.TotalDays)
                         ),
@@ -531,6 +531,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (expr.Type == typeof(SqlString) && to == typeof(SqlXml))
                 expr = Expr.Call(() => ParseXml(Expr.Arg<SqlString>()), expr);
+
+            if (expr.Type == typeof(SqlDecimal) && (to == typeof(SqlInt64) || to == typeof(SqlInt32) || to == typeof(SqlInt16) || to == typeof(SqlByte)))
+            {
+                // Built-in conversion uses rounding, should use truncation
+                // https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver16#truncating-and-rounding-results
+                expr = Expr.Call(() => SqlDecimal.Truncate(Expr.Arg<SqlDecimal>(), Expr.Arg<int>()), expr, Expression.Constant(0));
+            }
 
             if (expr.Type != to)
             {
@@ -729,15 +736,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Apply changes to precision & scale
             if (expr.Type == typeof(SqlDecimal))
             {
+                // Default precision and scale are (18, 0)
+                // https://learn.microsoft.com/en-us/sql/t-sql/data-types/decimal-and-numeric-transact-sql?view=sql-server-ver16#p-precision
+                var precision = 18;
+                var scale = 0;
+
                 if (toSqlType.Parameters.Count > 0)
                 {
-                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out var precision))
+                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out precision))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
 
                     if (precision < 1)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidLengthOrPrecision(toSqlType));
-
-                    var scale = 0;
 
                     if (toSqlType.Parameters.Count > 1)
                     {
@@ -747,14 +757,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (toSqlType.Parameters.Count > 2)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
-
-                    expr = Expr.Call(() => ApplyPrecisionScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()),
-                        expr,
-                        Expression.Constant(precision),
-                        Expression.Constant(scale),
-                        Expression.Constant(from),
-                        Expression.Constant(to));
                 }
+
+                expr = Expr.Call(() => ApplyPrecisionScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()),
+                    expr,
+                    Expression.Constant(precision),
+                    Expression.Constant(scale),
+                    Expression.Constant(from),
+                    Expression.Constant(to));
             }
 
             return expr;
