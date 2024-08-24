@@ -392,15 +392,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Any numeric type can be implicitly converted to any other.
             if (fromType.IsNumeric() && toType.IsNumeric())
-            {
-                // SQL requires a cast between decimal/numeric when precision/scale is reduced
-                if ((fromType == SqlDataTypeOption.Decimal || fromType == SqlDataTypeOption.Numeric) &&
-                    (toType == SqlDataTypeOption.Decimal || toType == SqlDataTypeOption.Numeric) &&
-                    (from.GetPrecision() > to.GetPrecision() || from.GetScale() > to.GetScale()))
-                    return false;
-
                 return true;
-            }
 
             // Any numeric type can be implicitly converted to datetime
             if (fromType.IsNumeric() && (toType == SqlDataTypeOption.DateTime || toType == SqlDataTypeOption.SmallDateTime))
@@ -447,10 +439,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Require explicit conversion from datetime to numeric types
             if ((fromSql?.SqlDataTypeOption == SqlDataTypeOption.DateTime || fromSql?.SqlDataTypeOption == SqlDataTypeOption.SmallDateTime) &&
                 toSql?.SqlDataTypeOption.IsNumeric() == true)
-                return true;
-
-            // Require explicit conversion between numeric types when precision/scale is reduced
-            if (fromSql?.SqlDataTypeOption.IsNumeric() == true && toSql?.SqlDataTypeOption.IsNumeric() == true)
                 return true;
 
             // Require explicit conversion from xml to string/binary types
