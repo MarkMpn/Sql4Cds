@@ -396,7 +396,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .GetLinkEntities()
                 .Where(le => le.Items != null)
                 .SelectMany(le => le.Items.OfType<FetchAttributeType>())
-                .Concat(leftFetch.Entity?.Items.OfType<FetchAttributeType>() ?? Enumerable.Empty<FetchAttributeType>())
+                .Concat(leftFetch.Entity.Items?.OfType<FetchAttributeType>() ?? Enumerable.Empty<FetchAttributeType>())
                 .Select(a => a.alias)
                 .Where(alias => alias != null)
                 .Intersect(

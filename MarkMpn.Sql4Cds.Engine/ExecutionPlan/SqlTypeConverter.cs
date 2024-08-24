@@ -382,16 +382,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var toType = toSql.SqlDataTypeOption;
 
+            // Any numeric type can be implicitly converted to any other.
+            if (fromType.IsNumeric() && toType.IsNumeric())
+                return true;
+
             if (Array.IndexOf(_precendenceOrder, fromType) == -1 ||
                 Array.IndexOf(_precendenceOrder, toType) == -1)
                 return false;
 
             // Anything can be converted to/from strings (except converting string -> entity reference)
             if (fromType.IsStringType() || toType.IsStringType())
-                return true;
-
-            // Any numeric type can be implicitly converted to any other.
-            if (fromType.IsNumeric() && toType.IsNumeric())
                 return true;
 
             // Any numeric type can be implicitly converted to datetime
