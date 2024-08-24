@@ -661,7 +661,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var catchFormatExceptionBlock = Expression.Catch(typeof(FormatException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), conversionError), targetType));
 
-                var overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()), Expression.Constant(from), Expression.Constant(to));
+                var overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<TSqlFragment>()), Expression.Constant(from), Expression.Constant(to), Expression.Constant(convert, typeof(TSqlFragment)));
 
                 if (from.IsSameAs(DataTypeHelpers.Int))
                     overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), Expression.Constant(to), originalExpr);
@@ -700,12 +700,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
                                     valueOnTruncate = "*";
                                 else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
-                                    errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
+                                    errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType, convert);
                             }
                             else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
                                 (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
                             {
-                                errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
+                                errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType, convert);
                             }
                             else if (throwOnTruncate)
                             {
@@ -759,18 +759,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
                 }
 
-                expr = Expr.Call(() => ApplyPrecisionScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()),
+                expr = Expr.Call(() => ApplyPrecisionScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<TSqlFragment>()),
                     expr,
                     Expression.Constant(precision),
                     Expression.Constant(scale),
                     Expression.Constant(from),
-                    Expression.Constant(to));
+                    Expression.Constant(to),
+                    Expression.Constant(convert, typeof(TSqlFragment)));
             }
 
             return expr;
         }
 
-        private static SqlDecimal ApplyPrecisionScale(SqlDecimal value, int precision, int scale, DataTypeReference from, DataTypeReference to)
+        private static SqlDecimal ApplyPrecisionScale(SqlDecimal value, int precision, int scale, DataTypeReference from, DataTypeReference to, TSqlFragment fragment)
         {
             try
             {
@@ -778,7 +779,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             catch (SqlTruncateException)
             {
-                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, to));
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, to, fragment));
             }
         }
 
