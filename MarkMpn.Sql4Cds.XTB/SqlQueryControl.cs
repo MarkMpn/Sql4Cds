@@ -854,7 +854,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             var errorIndex = lines.Take(sql4CdsError.LineNumber - 1).Sum(l => l.Length + 1) + _params.Offset;
                             var errorLength = sql4CdsError.LineNumber > 0 ? lines[sql4CdsError.LineNumber - 1].Length : 0;
 
-                            if (sql4CdsError.Fragment != null)
+                            if (sql4CdsError.Fragment != null && sql4CdsError.Fragment.FragmentLength > 0)
                             {
                                 errorIndex = _params.Offset + sql4CdsError.Fragment.StartOffset;
                                 errorLength = sql4CdsError.Fragment.FragmentLength;
