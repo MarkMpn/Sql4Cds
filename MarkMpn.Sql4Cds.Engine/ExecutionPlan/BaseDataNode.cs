@@ -627,6 +627,73 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         };
                         condition = null;
                     }
+                    else if (op == @operator.ne && type == BooleanComparisonType.IsDistinctFrom)
+                    {
+                        // FetchXML ne operator translates to field1 != field2 OR field1 IS NULL
+                        // IS DISTINCT FROM is equivalent to field1 != field2 OR (field1 IS NULL AND field2 IS NOT NULL) OR (field1 IS NOT NULL AND field2 IS NULL)
+                        // Need to add an extra condition to counteract the automatic "OR field1 IS NULL" part,
+                        // and add the other null checks as well
+                        filter = new filter
+                        {
+                            type = filterType.or,
+                            Items = new object[]
+                            {
+                                new filter
+                                {
+                                    type = filterType.and,
+                                    Items = new object[]
+                                    {
+                                        condition,
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.notnull
+                                        }
+                                    }
+                                },
+                                new filter
+                                {
+                                    type = filterType.and,
+                                    Items = new object[]
+                                    {
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.@null
+                                        },
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias2, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName2, entityAlias2, targetEntityAlias, items),
+                                            @operator = @operator.notnull
+                                        }
+                                    }
+                                },
+                                new filter
+                                {
+                                    type = filterType.and,
+                                    Items = new object[]
+                                    {
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.notnull
+                                        },
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias2, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName2, entityAlias2, targetEntityAlias, items),
+                                            @operator = @operator.@null
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                        condition = null;
+                    }
                     else if (op == @operator.eq && type == BooleanComparisonType.IsNotDistinctFrom)
                     {
                         // FetchXML eq operator does not match records where both fields are null.
