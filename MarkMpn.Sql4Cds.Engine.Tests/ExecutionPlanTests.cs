@@ -8352,5 +8352,56 @@ ORDER BY a.new_customentityid";
     </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void SameAliasInTwoJoinedQueryDefinedTables()
+        {
+            var query = @"
+SELECT a1.test AS a1_test,
+       a2.test AS a2_test
+FROM   (SELECT a.accountid, a.name AS test FROM account a) AS a1
+       LEFT OUTER JOIN
+       (SELECT a.parentaccountid, a.name AS test FROM account a) AS a2
+       ON a2.parentaccountid = a1.accountid";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("a1.test", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a2.test", select.ColumnSet[1].SourceColumn);
+
+            var join = AssertNode<MergeJoinNode>(select.Source);
+            Assert.AreEqual("a1.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("a2.parentaccountid", join.RightAttribute.ToSql());
+
+            var leftFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(leftFetch, @"
+<fetch>
+    <entity name='account'>
+        <attribute name='accountid' />
+        <attribute name='name' alias='test' />
+        <order attribute='accountid' />
+    </entity>
+</fetch>");
+
+            var sort = AssertNode<SortNode>(join.RightSource);
+            Assert.AreEqual("a2.parentaccountid", sort.Sorts[0].ToSql());
+
+            var rightFetch = AssertNode<FetchXmlScan>(sort.Source);
+            AssertFetchXml(rightFetch, @"
+<fetch>
+    <entity name='account'>
+        <attribute name='parentaccountid' />
+        <attribute name='name' alias='test' />
+        <filter>
+            <condition attribute='parentaccountid' operator='not-null' />
+        </filter>
+    </entity>
+</fetch>");
+        }
     }
 }

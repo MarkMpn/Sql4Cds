@@ -378,7 +378,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!FetchXmlScan.IsValidAlias(rightFetch.Alias))
                 return false;
 
-            // Can't fold joins if the two FetchXML instances reuse aliases
+            // Can't fold joins if the two FetchXML instances reuse aliases, either for tables or columns
             if (leftFetch.Entity
                 .GetLinkEntities()
                 .Select(le => le.alias)
@@ -388,6 +388,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .GetLinkEntities()
                     .Select(le => le.alias)
                     .Concat(new[] { rightFetch.Alias }),
+                    StringComparer.OrdinalIgnoreCase)
+                .Any())
+                return false;
+
+            if (leftFetch.Entity
+                .GetLinkEntities()
+                .Where(le => le.Items != null)
+                .SelectMany(le => le.Items.OfType<FetchAttributeType>())
+                .Concat(leftFetch.Entity?.Items.OfType<FetchAttributeType>() ?? Enumerable.Empty<FetchAttributeType>())
+                .Select(a => a.alias)
+                .Where(alias => alias != null)
+                .Intersect(
+                    rightFetch.Entity
+                    .GetLinkEntities()
+                    .Where(le => le.Items != null)
+                    .SelectMany(le => le.Items.OfType<FetchAttributeType>())
+                    .Concat(rightFetch.Entity.Items?.OfType<FetchAttributeType>() ?? Enumerable.Empty<FetchAttributeType>())
+                    .Select(a => a.alias)
+                    .Where(alias => alias != null),
                     StringComparer.OrdinalIgnoreCase)
                 .Any())
                 return false;
