@@ -1,5 +1,44 @@
 # Change Log
 
+## [v9.3.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.3.0) - 2024-08-26
+New SQL support
+* `STRING_SPLIT` function
+* `metadata.alternate_key` table to query entity key metadata
+* `EXCEPT` and `INTERSECT` set operators
+
+Copilot improvements
+* Improved Copilot resiliency when errors occur from OpenAI
+* Show feedback when Copilot attempts to execute an invalid query
+* Require more explicit permission to run queries from Copilot
+
+User experience
+* Expose multiple errors in the same query execution
+* Fixed formatting queries using comments and escaped identifiers
+* Improved highlighting of error lines
+
+FetchXML compatibility improvements
+* Support grouping by date columns in both UTC and local time zones
+* Handle null primary key values returned by virtual entity providers
+* Do not fold `DISTINCT` to queries including `audit.objectid` column
+* Do not fold `DISTINCT` to queries including partylist attributes
+* Do not fold `eq-userid` condition to non-lookup fields
+* Improved moving filters to correct `link-entity`
+* Improved folding sorts to aggregate FetchXML
+* Hide virtual attributes from `solutioncomponent` entity
+* Standardised use of aliases in query-defined tables
+* Fixed use of `IS DISTINCT FROM` operator with cross-column comparisons
+
+Performance improvements
+* Inject dynamic filter values into FetchXML queries via nested loop
+
+Type conversions
+* Fixed converting `datetime` to numeric types
+* Decimal type conversion fixes for improved T-SQL compatibility
+* Improved reporting of arithmetic overflow errors
+* Extended type checking for join comparisons
+* Do not require explicit conversion for different decimal types
+* Do not attempt to statically validate data types of variable filters
+
 ## [v9.2.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.2.0) - 2024-07-11
 
 Added export to CSV/Excel/JSON/Markdown/XML
