@@ -52,6 +52,12 @@ namespace MarkMpn.Sql4Cds.Engine
             Errors = new[] { error };
         }
 
+        public NotSupportedQueryFragmentException(Sql4CdsError[] errors, Exception innerException) : base(errors[0].Message, innerException)
+        {
+            Fragment = errors[0].Fragment;
+            Errors = errors;
+        }
+
         public NotSupportedQueryFragmentException()
         {
         }
@@ -80,5 +86,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
         /// <inheritdoc cref="ISql4CdsErrorException.Errors"/>
         public IReadOnlyList<Sql4CdsError> Errors { get; }
+
+        internal static NotSupportedQueryFragmentException Combine(NotSupportedQueryFragmentException combined, NotSupportedQueryFragmentException additional)
+        {
+            if (combined == null && additional == null)
+                return null;
+
+            if (combined == null)
+                return additional;
+
+            if (additional == null)
+                return combined;
+
+            return new NotSupportedQueryFragmentException(combined.Errors.Concat(additional.Errors).ToArray(), additional);
+        }
     }
 }

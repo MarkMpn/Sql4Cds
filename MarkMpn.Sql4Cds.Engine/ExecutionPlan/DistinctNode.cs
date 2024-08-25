@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -83,11 +84,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!String.IsNullOrEmpty(schema.PrimaryKey) && Columns.Contains(schema.PrimaryKey, StringComparer.OrdinalIgnoreCase))
                 return Source;
 
+            // If we know the source doesn't have more than one record, there is no possibility of duplicate
+            // rows so we can discard the distinct node
+            if (Source.EstimateRowsOut(context) is RowCountEstimateDefiniteRange range && range.Maximum <= 1)
+                return Source;
+
             if (Source is FetchXmlScan fetch)
             {
+                // Can't apply DISTINCT to audit.objectid
+                // https://github.com/MarkMpn/Sql4Cds/issues/519
+                if (fetch.Entity.name == "audit" && Columns.Any(col => col.StartsWith(fetch.Alias.EscapeIdentifier() + ".objectid")))
+                    return this;
+
+                var metadata = context.DataSources[fetch.DataSource].Metadata;
+
+                // Can't apply DISTINCT to partylist attributes
+                // https://github.com/MarkMpn/Sql4Cds/issues/528
+                foreach (var column in Columns)
+                {
+                    if (!schema.ContainsColumn(column, out var normalized))
+                        continue;
+
+                    fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity, out var attrMetadata, out var isVirtual);
+
+                    if (attrMetadata?.AttributeType == AttributeTypeCode.PartyList)
+                        return this;
+                }
+
                 fetch.FetchXml.distinct = true;
                 fetch.FetchXml.distinctSpecified = true;
-                var metadata = context.DataSources[fetch.DataSource].Metadata;
                 var virtualAttr = false;
 
                 // Ensure there is a sort order applied to avoid paging issues
@@ -102,12 +127,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!schema.ContainsColumn(column, out var normalized))
                             continue;
 
-                        var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity);
+                        var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity, out _, out var isVirtual);
 
                         var nameParts = normalized.SplitMultiPartIdentifier();
 
-                        if (attr.name != nameParts[1])
-                            virtualAttr = true;
+                        virtualAttr |= isVirtual;
 
                         if (!sortedAttributes.Add(linkEntity?.alias + "." + attr.name))
                             continue;

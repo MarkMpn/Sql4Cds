@@ -48,6 +48,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public bool SemiJoin { get; set; }
 
         /// <summary>
+        /// Indicates if an anti join should be used (single output row for each row from the left source that does not have a match in the right source)
+        /// </summary>
+        [Category("Join")]
+        [Description("Indicates if an anti join should be used (single output row for each row from the left source that does not have a match in the right source)")]
+        [DisplayName("Anti Join")]
+        public bool AntiJoin { get; set; }
+
+        /// <summary>
         /// For semi joins, lists individual columns that should be created in the output and their corresponding source from the right input
         /// </summary>
         [Category("Join")]
@@ -242,20 +250,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
 
                 case QualifiedJoinType.LeftOuter:
-                    name += "Left Outer";
+                    name += "Left";
                     break;
 
                 case QualifiedJoinType.RightOuter:
-                    name += "Right Outer";
+                    name += "Right";
                     break;
 
                 case QualifiedJoinType.FullOuter:
-                    name += "Full Outer";
+                    name += "Full";
                     break;
             }
 
             if (SemiJoin)
+            {
+                if (AntiJoin)
+                    name += " Anti";
+                
                 name += " Semi";
+            }
+            else if (JoinType != QualifiedJoinType.Inner)
+            {
+               name += " Outer";
+            }
 
             name += " Join)";
 

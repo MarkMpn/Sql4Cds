@@ -48,16 +48,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private IDictionary<string, MetadataProperty> _oneToManyRelationshipCols;
         private IDictionary<string, MetadataProperty> _manyToOneRelationshipCols;
         private IDictionary<string, MetadataProperty> _manyToManyRelationshipCols;
+        private IDictionary<string, MetadataProperty> _keyCols;
 
         private static readonly Dictionary<string, MetadataProperty> _entityProps;
         private static readonly Dictionary<string, MetadataProperty> _oneToManyRelationshipProps;
         private static readonly Dictionary<string, MetadataProperty> _manyToManyRelationshipProps;
+        private static readonly Dictionary<string, MetadataProperty> _keyProps;
         private static readonly Type[] _attributeTypes;
         private static readonly Dictionary<string, AttributeProperty> _attributeProps;
         private static readonly string[] _entityNotNullProps;
         private static readonly string[] _attributeNotNullProps;
         private static readonly string[] _oneToManyRelationshipNotNullProps;
         private static readonly string[] _manyToManyRelationshipNotNullProps;
+        private static readonly string[] _keyNotNullProps;
 
         static MetadataQueryNode()
         {
@@ -100,6 +103,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedManyToManyRelationshipProps.Contains(p.Name))
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
+
+            var excludedKeyProps = new[]
+            {
+                nameof(EntityKeyMetadata.ExtensionData)
+            };
+
+            _keyProps = typeof(EntityKeyMetadata)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => !excludedKeyProps.Contains(p.Name))
                 .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
@@ -177,6 +190,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(p => !IsNullable(p.Type))
                 .Select(p => p.PropertyName)
                 .Union(new[] { nameof(ManyToManyRelationshipMetadata.MetadataId), nameof(ManyToManyRelationshipMetadata.Entity1LogicalName), nameof(ManyToManyRelationshipMetadata.Entity1IntersectAttribute), nameof(ManyToManyRelationshipMetadata.Entity2LogicalName), nameof(ManyToManyRelationshipMetadata.Entity2IntersectAttribute), nameof(ManyToManyRelationshipMetadata.IntersectEntityName) })
+                .ToArray();
+
+            _keyNotNullProps = _keyProps.Values
+                .Where(p => !IsNullable(p.Type))
+                .Select(p => p.PropertyName)
+                .Union(new[] { nameof(EntityKeyMetadata.MetadataId), nameof(EntityKeyMetadata.EntityLogicalName), nameof(EntityKeyMetadata.KeyAttributes) })
                 .ToArray();
         }
 
@@ -258,6 +277,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string ManyToManyRelationshipJoin { get; set; }
 
         /// <summary>
+        /// The alias for key data
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The alias for key data")]
+        [DisplayName("Key Alias")]
+        public string KeyAlias { get; set; }
+
+        /// <summary>
         /// The metadata query to be executed
         /// </summary>
         [Category("Metadata Query")]
@@ -271,6 +298,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _oneToManyRelationshipCols = new Dictionary<string, MetadataProperty>();
             _manyToOneRelationshipCols = new Dictionary<string, MetadataProperty>();
             _manyToManyRelationshipCols = new Dictionary<string, MetadataProperty>();
+            _keyCols = new Dictionary<string, MetadataProperty>();
 
             foreach (var col in requiredColumns)
             {
@@ -351,6 +379,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     _manyToManyRelationshipCols[col] = prop;
                 }
+                else if (parts[0].Equals(KeyAlias, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Query.KeyQuery == null)
+                        Query.KeyQuery = new EntityKeyQueryExpression();
+
+                    if (Query.KeyQuery.Properties == null)
+                        Query.KeyQuery.Properties = new MetadataPropertiesExpression();
+
+                    var prop = _keyProps[parts[1]];
+
+                    if (!Query.KeyQuery.Properties.AllProperties && !Query.KeyQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                        Query.KeyQuery.Properties.PropertyNames.Add(prop.PropertyName);
+
+                    _keyCols[col] = prop;
+                }
             }
 
             NormalizeProperties();
@@ -361,6 +404,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             NormalizeProperties(Query, _entityProps.Values.Select(p => p.PropertyName));
             NormalizeProperties(Query.AttributeQuery, _attributeProps.Values.Select(p => p.PropertyName));
             NormalizeProperties(Query.RelationshipQuery, _oneToManyRelationshipProps.Values.Select(p => p.PropertyName).Union(_manyToManyRelationshipProps.Values.Select(p => p.PropertyName)));
+            NormalizeProperties(Query.KeyQuery, _keyProps.Values.Select(p => p.PropertyName));
         }
 
         private void NormalizeProperties(MetadataQueryExpression query, IEnumerable<string> allProperties)
@@ -382,6 +426,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var entityCount = 100;
             var attributesPerEntity = 1;
             var relationshipsPerEntity = 1;
+            var keysPerEntity = 1;
 
             if (HasEqualityFilter(Query.Criteria, nameof(EntityMetadata.LogicalName)))
             {
@@ -410,7 +455,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            var count = entityCount * attributesPerEntity * relationshipsPerEntity;
+            if (MetadataSource.HasFlag(MetadataSource.Key))
+            {
+                keysPerEntity = 2;
+
+                if (HasEqualityFilter(Query.KeyQuery?.Criteria, nameof(EntityKeyMetadata.LogicalName)))
+                {
+                    keysPerEntity = 1;
+                }
+            }
+
+            var count = entityCount * attributesPerEntity * relationshipsPerEntity * keysPerEntity;
 
             if (count == 1)
                 return RowCountEstimateDefiniteRange.ZeroOrOne;
@@ -451,6 +506,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             CompileFilters(Query.Criteria, ecc, typeof(EntityMetadata));
             CompileFilters(Query.AttributeQuery?.Criteria, ecc, typeof(AttributeMetadata));
             CompileFilters(Query.RelationshipQuery?.Criteria, ecc, typeof(RelationshipMetadataBase));
+            CompileFilters(Query.KeyQuery?.Criteria, ecc, typeof(EntityKeyMetadata));
         }
 
         private void CompileFilters(MetadataFilterExpression criteria, ExpressionCompilationContext ecc, Type targetType)
@@ -692,6 +748,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 childCount++;
             }
 
+            if (MetadataSource.HasFlag(MetadataSource.Key))
+            {
+                var keyProps = (IEnumerable<MetadataProperty>)_keyProps.Values;
+
+                if (Query.KeyQuery?.Properties != null)
+                    keyProps = keyProps.Where(p => Query.KeyQuery.Properties.AllProperties || Query.KeyQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    keyProps = keyProps.OrderBy(p => p.SqlName);
+                else
+                    keyProps = keyProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+                var escapedKeyAlias = KeyAlias.EscapeIdentifier();
+
+                foreach (var prop in keyProps)
+                {
+                    var fullName = $"{escapedKeyAlias}.{prop.SqlName}";
+                    var nullable = true;
+
+                    if (_keyNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.KeyQuery?.Criteria, prop.PropertyName))
+                        nullable = false;
+
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+
+                    if (!aliases.TryGetValue(prop.SqlName, out var a))
+                    {
+                        a = new List<string>();
+                        aliases[prop.SqlName] = a;
+                    }
+
+                    ((List<string>)a).Add(fullName);
+                }
+
+                primaryKey = $"{KeyAlias}.{nameof(EntityKeyMetadata.MetadataId)}";
+                childCount++;
+            }
+
             if (childCount > 1)
                 primaryKey = null;
 
@@ -897,6 +990,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToManyRelationships));
             }
 
+            if (MetadataSource.HasFlag(MetadataSource.Key))
+            {
+                if (query.Properties == null)
+                    query.Properties = new MetadataPropertiesExpression();
+
+                // Ensure the entity metadata contains the keys
+                if (!query.Properties.AllProperties && !query.Properties.PropertyNames.Contains(nameof(EntityMetadata.Keys)))
+                    query.Properties.PropertyNames.Add(nameof(EntityMetadata.Keys));
+            }
+
             if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
@@ -905,20 +1008,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var entityProps = typeof(EntityMetadata).GetProperties().ToDictionary(p => p.Name);
             var oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);
             var manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);
+            var keyProps = typeof(EntityKeyMetadata).GetProperties().ToDictionary(p => p.Name);
 
-            var results = resp.EntityMetadata.Select(e => new { Entity = e, Attribute = (AttributeMetadata)null, Relationship = (RelationshipMetadataBase)null });
+            var results = resp.EntityMetadata.Select(e => new { Entity = e, Attribute = (AttributeMetadata)null, Relationship = (RelationshipMetadataBase)null, Key = (EntityKeyMetadata)null });
 
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
-                results = results.SelectMany(r => r.Entity.Attributes.Select(a => new { Entity = r.Entity, Attribute = a, Relationship = r.Relationship }));
+                results = results.SelectMany(r => r.Entity.Attributes.Select(a => new { Entity = r.Entity, Attribute = a, Relationship = r.Relationship, Key = r.Key }));
 
             if (MetadataSource.HasFlag(MetadataSource.OneToManyRelationship))
-                results = results.SelectMany(r => r.Entity.OneToManyRelationships.Select(om => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)om }));
+                results = results.SelectMany(r => r.Entity.OneToManyRelationships.Select(om => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)om, Key = r.Key }));
 
             if (MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship))
-                results = results.SelectMany(r => r.Entity.ManyToOneRelationships.Select(mo => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mo }));
+                results = results.SelectMany(r => r.Entity.ManyToOneRelationships.Select(mo => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mo, Key = r.Key }));
 
             if (MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
-                results = results.SelectMany(r => r.Entity.ManyToManyRelationships.Where(mm => ManyToManyRelationshipJoin == null || ((string)typeof(ManyToManyRelationshipMetadata).GetProperty(ManyToManyRelationshipJoin).GetValue(mm)) == r.Entity.LogicalName).Select(mm => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mm }));
+                results = results.SelectMany(r => r.Entity.ManyToManyRelationships.Where(mm => ManyToManyRelationshipJoin == null || ((string)typeof(ManyToManyRelationshipMetadata).GetProperty(ManyToManyRelationshipJoin).GetValue(mm)) == r.Entity.LogicalName).Select(mm => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = (RelationshipMetadataBase)mm, Key = r.Key }));
+
+            if (MetadataSource.HasFlag(MetadataSource.Key))
+                results = results.SelectMany(r => r.Entity.Keys.Select(k => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = r.Relationship, Key = k }));
 
             foreach (var result in results)
             {
@@ -977,6 +1084,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         converted[prop.Key] = prop.Value.Accessor(result.Relationship);
                 }
 
+                if (MetadataSource.HasFlag(MetadataSource.Key))
+                {
+                    converted.LogicalName = "key";
+                    converted.Id = result.Key.MetadataId ?? Guid.Empty;
+
+                    foreach (var prop in _keyCols)
+                        converted[prop.Key] = prop.Value.Accessor(result.Key);
+                }
+
+                foreach (var attr in converted.Attributes.ToList())
+                {
+                    if (attr.Value is SqlEntityReference er)
+                    {
+                        var raw = (EntityReference)er;
+
+                        if (raw != null && raw.Id == Guid.Empty)
+                            raw = null;
+
+                        converted[attr.Key] = new SqlEntityReference(DataSource, raw);
+                    }
+                }
+
                 yield return converted;
             }
         }
@@ -986,6 +1115,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ApplyFilterValues(query.Criteria, context);
             ApplyFilterValues(query.AttributeQuery?.Criteria, context);
             ApplyFilterValues(query.RelationshipQuery?.Criteria, context);
+            ApplyFilterValues(query.KeyQuery?.Criteria, context);
         }
 
         private void ApplyFilterValues(MetadataFilterExpression criteria, ExpressionExecutionContext context)
@@ -1086,6 +1216,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ManyToManyRelationshipAlias = ManyToManyRelationshipAlias,
                 ManyToManyRelationshipJoin = ManyToManyRelationshipJoin,
                 ManyToOneRelationshipAlias = ManyToOneRelationshipAlias,
+                KeyAlias = KeyAlias,
                 MetadataSource = MetadataSource,
                 OneToManyRelationshipAlias = OneToManyRelationshipAlias,
                 Query = Query.Clone(),
@@ -1093,7 +1224,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _entityCols = _entityCols,
                 _manyToManyRelationshipCols = _manyToManyRelationshipCols,
                 _manyToOneRelationshipCols = _manyToOneRelationshipCols,
-                _oneToManyRelationshipCols = _oneToManyRelationshipCols
+                _oneToManyRelationshipCols = _oneToManyRelationshipCols,
+                _keyCols = _keyCols
             };
         }
     }
@@ -1106,5 +1238,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         OneToManyRelationship = 4,
         ManyToOneRelationship = 8,
         ManyToManyRelationship = 16,
+        Key = 32
     }
 }

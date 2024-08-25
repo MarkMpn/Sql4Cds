@@ -30,8 +30,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
-            // Not implemented semi joins
+            // Not implemented compound keys
+            // Not implemented anti joins
             // TODO: Handle union & concatenate
+
+            if (LeftAttributes.Count > 1)
+                throw new QueryExecutionException("Merge joins with compound keys is not yet implemented");
+
+            if (AntiJoin)
+                throw new QueryExecutionException("Merge anti joins are not yet implemented");
 
             // Left & Right: GetNext, mark as unmatched
             var left = LeftSource.Execute(context).GetEnumerator().WithPeekAhead();
@@ -185,7 +192,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (nextSide == left)
                 {
-                    if (!leftMatched && (JoinType == QualifiedJoinType.LeftOuter || JoinType == QualifiedJoinType.FullOuter))
+                    if (!leftMatched && (JoinType == QualifiedJoinType.LeftOuter || JoinType == QualifiedJoinType.FullOuter) && (!SemiJoin || DefinedValues.Count > 0))
                         yield return Merge(left.Current, leftSchema, null, rightSchema, false);
 
                     // If we're using the work table, check if the key is about to change in the left input. If so, discard the 
@@ -258,12 +265,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 LeftSource = LeftSource,
                 RightSource = RightSource,
-                LeftAttribute = LeftAttribute,
-                RightAttribute = RightAttribute,
                 JoinType = JoinType,
                 AdditionalJoinCriteria = AdditionalJoinCriteria,
                 SemiJoin = SemiJoin
             };
+
+            foreach (var attr in LeftAttributes)
+                hashJoin.LeftAttributes.Add(attr);
+
+            foreach (var attr in RightAttributes)
+                hashJoin.RightAttributes.Add(attr);
+
+            foreach (var expr in Expressions)
+                hashJoin.Expressions.Add(expr);
 
             foreach (var kvp in DefinedValues)
                 hashJoin.DefinedValues.Add(kvp);
@@ -406,15 +420,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 AdditionalJoinCriteria = AdditionalJoinCriteria,
                 JoinType = JoinType,
-                LeftAttribute = LeftAttribute,
                 LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
-                RightAttribute = RightAttribute,
                 RightSource =  (IDataExecutionPlanNodeInternal)RightSource.Clone(),
                 SemiJoin = SemiJoin,
                 OutputLeftSchema = OutputLeftSchema,
                 OutputRightSchema = OutputRightSchema,
-                ManyToMany = ManyToMany
+                ManyToMany = ManyToMany,
+                ComparisonType = ComparisonType,
+                AntiJoin = AntiJoin,
             };
+
+            foreach (var attr in LeftAttributes)
+                clone.LeftAttributes.Add(attr);
+
+            foreach (var attr in RightAttributes)
+                clone.RightAttributes.Add(attr);
+
+            foreach (var expr in Expressions)
+                clone.Expressions.Add(expr);
 
             foreach (var kvp in DefinedValues)
                 clone.DefinedValues.Add(kvp);

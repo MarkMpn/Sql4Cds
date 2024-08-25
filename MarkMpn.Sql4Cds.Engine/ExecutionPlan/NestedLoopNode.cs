@@ -418,7 +418,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 JoinType = JoinType,
                 LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
                 OuterReferences = OuterReferences,
-                RightSource = (IDataExecutionPlanNodeInternal)RightSource.Clone(),
+                RightSource = (IDataExecutionPlanNodeInternal)RightSource?.Clone(),
                 SemiJoin = SemiJoin,
                 OutputLeftSchema = OutputLeftSchema,
                 OutputRightSchema = OutputRightSchema
@@ -428,7 +428,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 clone.DefinedValues.Add(kvp);
 
             clone.LeftSource.Parent = clone;
-            clone.RightSource.Parent = clone;
+
+            if (clone.RightSource != null)
+                clone.RightSource.Parent = clone;
 
             return clone;
         }

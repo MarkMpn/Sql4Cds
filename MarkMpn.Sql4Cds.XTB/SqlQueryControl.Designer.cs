@@ -100,6 +100,20 @@
             this.splitContainer.SplitterWidth = 2;
             this.splitContainer.TabIndex = 0;
             // 
+            // environmentHighlightLabel
+            // 
+            this.environmentHighlightLabel.BackColor = System.Drawing.Color.Red;
+            this.environmentHighlightLabel.Dock = System.Windows.Forms.DockStyle.Top;
+            this.environmentHighlightLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.environmentHighlightLabel.ForeColor = System.Drawing.Color.White;
+            this.environmentHighlightLabel.Location = new System.Drawing.Point(0, 0);
+            this.environmentHighlightLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            this.environmentHighlightLabel.Name = "environmentHighlightLabel";
+            this.environmentHighlightLabel.Size = new System.Drawing.Size(793, 28);
+            this.environmentHighlightLabel.TabIndex = 0;
+            this.environmentHighlightLabel.Text = "Environment Name";
+            this.environmentHighlightLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
             // tabControl
             // 
             this.tabControl.Controls.Add(this.resultsTabPage);

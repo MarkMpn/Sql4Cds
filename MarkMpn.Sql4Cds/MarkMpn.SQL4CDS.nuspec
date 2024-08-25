@@ -23,29 +23,43 @@ plugins or integrations by writing familiar SQL and converting it.
 Queries can also run using the preview TDS Endpoint. A wide range of SQL functionality is also built
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added Copilot
-Added "Script Table/Function/Prcedure As" menu options
-Improved startup performance
-Added option to change editor font and size
-Added keyboard shortcuts to switch (`Ctrl+[`, `Ctrl+]`) and close (`Ctrl+W`) tabs
-Added export to CSV/Excel
-Simplify filters that can easily be identified as tautologies or contradictions
-Fixed incorrectly matching `null` values in hash joins
-Fixed identification of nullable columns in outer joins
-Handle `createdon` column being null in some system tables
-Fixed use of metadata queries within loops
-Fixed filtering and aggregation special cases with `audit` entity
-Fixed incorrect type conversion errors when using specialized FetchXML condition operators
-Fixed use of `CAST` and `CONVERT` with string types
-Fixed paging when using semi-joins
-Various fixes when querying virtual entities with unreliable providers:
-* values returned as different types
-* attributes using names with different case
-* not honouring `top`, `offset`, `count`, `order`, `filter`
-Improved error reporting:
-* when using `*` instead of column name
-* when passing incorrect number of parameters to aggregate functions
-* when comparing lookup/optionset columns to invalid string values
+    <releaseNotes>New SQL support
+* `STRING_SPLIT` function
+* `metadata.alternate_key` table to query entity key metadata
+* `EXCEPT` and `INTERSECT` set operators
+
+Copilot improvements
+* Improved Copilot resiliency when errors occur from OpenAI
+* Show feedback when Copilot attempts to execute an invalid query
+* Require more explicit permission to run queries from Copilot
+
+User experience
+* Expose multiple errors in the same query execution
+* Fixed formatting queries using comments and escaped identifiers
+* Improved highlighting of error lines
+
+FetchXML compatibility improvements
+* Support grouping by date columns in both UTC and local time zones
+* Handle null primary key values returned by virtual entity providers
+* Do not fold `DISTINCT` to queries including `audit.objectid` column
+* Do not fold `DISTINCT` to queries including partylist attributes
+* Do not fold `eq-userid` condition to non-lookup fields
+* Improved moving filters to correct `link-entity`
+* Improved folding sorts to aggregate FetchXML
+* Hide virtual attributes from `solutioncomponent` entity
+* Standardised use of aliases in query-defined tables
+* Fixed use of `IS DISTINCT FROM` operator with cross-column comparisons
+
+Performance improvements
+* Inject dynamic filter values into FetchXML queries via nested loop
+
+Type conversions
+* Fixed converting `datetime` to numeric types
+* Decimal type conversion fixes for improved T-SQL compatibility
+* Improved reporting of arithmetic overflow errors
+* Extended type checking for join comparisons
+* Do not require explicit conversion for different decimal types
+* Do not attempt to statically validate data types of variable filters
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

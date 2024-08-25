@@ -1461,7 +1461,7 @@ SELECT   @v
 UNION ALL
 SELECT   @n";
 
-                using (var reader = (Sql4CdsDataReader) cmd.ExecuteReader())
+                using (var reader = (Sql4CdsDataReader)cmd.ExecuteReader())
                 {
                     Assert.AreEqual(typeof(object), reader.GetProviderSpecificFieldType(0));
                     Assert.AreEqual(typeof(object), reader.GetFieldType(0));
@@ -1975,7 +1975,7 @@ END CATCH";
             DapperQuery<Guid>(id => id);
         }
 
-        private void DapperQuery<TId>(Func<TId,Guid> selector)
+        private void DapperQuery<TId>(Func<TId, Guid> selector)
         {
             using (var con = new Sql4CdsConnection(_localDataSources))
             {
@@ -2153,6 +2153,291 @@ END CATCH";
                 catch (Sql4CdsException ex)
                 {
                     Assert.AreEqual(102, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Intersect()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c')) AS T(A, B)
+INTERSECT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("b", reader.GetString(0));
+                    Assert.AreEqual("c", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Except()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c')) AS T(A, B)
+EXCEPT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("a", reader.GetString(0));
+                    Assert.AreEqual("b", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void IntersectRemovesDuplicates()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c'), ('a', 'b'), ('b', 'c')) AS T(A, B)
+INTERSECT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd'), ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("b", reader.GetString(0));
+                    Assert.AreEqual("c", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExceptRemovesDuplicates()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', 'c'), ('a', 'b'), ('b', 'c')) AS T(A, B)
+EXCEPT
+SELECT * FROM (VALUES ('b', 'c'), ('c', 'd'), ('b', 'c'), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("a", reader.GetString(0));
+                    Assert.AreEqual("b", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void IntersectHandlesNulls()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', null), ('a', 'b'), ('b', null)) AS T(A, B)
+INTERSECT
+SELECT * FROM (VALUES ('b', null), ('c', 'd'), ('b', null), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("b", reader.GetString(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExceptHandlesNulls()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT * FROM (VALUES ('a', 'b'), ('b', null), ('a', 'b'), ('b', null)) AS T(A, B)
+EXCEPT
+SELECT * FROM (VALUES ('b', null), ('c', 'd'), ('b', null), ('c', 'd')) AS T(A, B)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("a", reader.GetString(0));
+                    Assert.AreEqual("b", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MultipleErrors()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT invalid_field1 + invalid_field2, invalid_field_3
+FROM account
+WHERE invalid_field4 = 'test' AND invalid_field5 = 'test'
+ORDER BY invalid_field6, invalid_field7";
+
+                try
+                {
+                    cmd.GeneratePlan(false);
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(7, ex.Errors.Count);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void NumericConversions()
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver16#truncating-and-rounding-results
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                // numeric -> numeric = round
+                // numeric -> int = truncate
+                cmd.CommandText = @"
+SELECT CAST(10.6496 AS INT) AS trunc1,
+       CAST(-10.6496 AS INT) AS trunc2,
+       CAST(10.6496 AS NUMERIC) AS round1,
+       CAST(-10.6496 AS NUMERIC) AS round2";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(10, reader.GetInt32(0));
+                    Assert.AreEqual(-10, reader.GetInt32(1));
+                    Assert.AreEqual(11, reader.GetDecimal(2));
+                    Assert.AreEqual(-11, reader.GetDecimal(3));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                // numeric -> money = round
+                cmd.CommandText = "SELECT CAST(10.3496847 AS money)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(10.3497M, reader.GetDecimal(0));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                // money -> int = round
+                // money -> numeric = round
+                cmd.CommandText = @"
+SELECT CAST(CAST(10.6496 AS money) AS int) AS round1,
+       CAST(CAST(-10.6496 AS money) AS numeric) AS round2";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(11, reader.GetInt32(0));
+                    Assert.AreEqual(-11, reader.GetDecimal(1));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                // float -> int = truncate
+                // float -> numeric = round
+                // float -> datetime = round
+                // datetime -> int = round
+                cmd.CommandText = @"
+SELECT CAST(CAST(10.6496 AS float) AS int) AS trunc1,
+       CAST(CAST(-10.6496 AS float) AS numeric) AS round1,
+       CAST(CAST(10.6496 AS float) AS datetime) AS round2,
+       CAST(CAST('2021-01-01' AS datetime) AS int) AS round3";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(10, reader.GetInt32(0));
+                    Assert.AreEqual(-11, reader.GetDecimal(1));
+                    Assert.AreEqual(new DateTime(1900, 1, 11, 15, 35, 25, 440), reader.GetDateTime(2));
+                    Assert.AreEqual(44195, reader.GetInt32(3));
+                    Assert.IsFalse(reader.Read());
+                }
+
+                cmd.CommandText = "select cast(12345.12 as DECIMAL(5, 2))";
+                cmd.GeneratePlan(false);
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Errors.Single().Number);
+                }
+
+                // Implicit string -> numeric conversion
+                // https://stackoverflow.com/questions/68279319/why-does-implicit-conversion-from-some-numeric-values-work-but-not-others
+                cmd.CommandText = "SELECT '185.37' * 2.00";
+
+                try
+                {
+                    cmd.ExecuteScalar();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Number);
+                }
+
+                cmd.CommandText = "SELECT '0.16' * 2.00";
+                Assert.AreEqual(0.32M, cmd.ExecuteScalar());
+
+                // Allow implicit conversion to lower precision/scale
+                cmd.CommandText = @"
+DECLARE @p1 DECIMAL(5, 2) = 123.45;
+SET @p1 = 123.4567;
+SELECT @p1";
+
+                Assert.AreEqual(123.46M, cmd.ExecuteScalar());
+
+                // Allow implicit conversion to higher precision/scale
+                cmd.CommandText = @"
+DECLARE @p1 DECIMAL(5, 2) = 123.45;
+SET @p1 = 123.4;
+SELECT @p1";
+
+                Assert.AreEqual(123.40M, cmd.ExecuteScalar());
+
+                // Fail on implicit conversion to lower precision that would cause truncation
+                cmd.CommandText = @"
+DECLARE @p1 DECIMAL(5, 2) = 123.45;
+SET @p1 = @p1 * 10;
+SELECT @p1";
+
+                try
+                {
+                    cmd.ExecuteScalar();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Number);
                 }
             }
         }

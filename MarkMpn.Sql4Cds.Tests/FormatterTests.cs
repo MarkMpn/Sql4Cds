@@ -95,8 +95,27 @@ FROM   workflow AS w CROSS APPLY OPENJSON (JSON_QUERY(w.clientdata, '$.propertie
        connectionreference AS cr
        ON JSON_VALUE(wfcr.[value], '$.connection.connectionReferenceLogicalName') = cr.connectionreferencelogicalname
 WHERE  w.category = 5;
+       --AND JSON_VALUE(wfcr.[value], '$.connection.connectionReferenceLogicalName') IS NULL;";
 
---AND JSON_VALUE(wfcr.[value], '$.connection.connectionReferenceLogicalName') IS NULL;";
+            Assert.AreEqual(expected, Formatter.Format(original));
+        }
+
+        [TestMethod]
+        public void Issue525()
+        {
+            var original = @"SELECT sc1.uniquename AS [aaa]
+FROM (
+	SELECT sc.solutionidname AS uniquename,
+		-- comment
+		sc.objectid
+	FROM solutioncomponent AS sc
+	) AS sc1";
+
+            var expected = @"SELECT sc1.uniquename AS [aaa]
+FROM   (SELECT sc.solutionidname AS uniquename,
+		-- comment
+               sc.objectid
+        FROM   solutioncomponent AS sc) AS sc1;";
 
             Assert.AreEqual(expected, Formatter.Format(original));
         }

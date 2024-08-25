@@ -81,6 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            context.ResetGlobalCalculations();
+
             Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
@@ -99,6 +101,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = alias.Source;
                 Source.Parent = this;
             }
+
+            Source = context.InsertGlobalCalculations(this, Source);
 
             return new[] { this };
         }
@@ -159,108 +163,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var sourceCol = col.SourceColumn;
                             schema.ContainsColumn(sourceCol, out sourceCol);
-                            fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out _, out _);
+                            fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out _, out _, out _, out _);
                         }
                     }
                 }
 
                 // Finally, check what aliases we can fold down to the FetchXML.
-                // Ignore:
-                // 1. columns that have more than 1 alias
-                // 2. aliases that are invalid for FetchXML
-                // 3. attributes that are included via an <all-attributes/>
-                // 4. virtual ___name or ___type attributes
                 if (!hasStar)
-                {
-                    var aliasedColumns = columnSet
-                        .Where(c => !c.AllColumns)
-                        .Select(c =>
-                        {
-                            var sourceCol = c.SourceColumn;
-                            schema.ContainsColumn(sourceCol, out sourceCol);
-
-                            return new { Mapping = c, SourceColumn = sourceCol, Alias = c.OutputColumn };
-                        })
-                        .Select(c =>
-                        {
-                            // Check which underlying attribute the data is coming from, handling virtual attributes
-                            var parts = c.SourceColumn.SplitMultiPartIdentifier();
-                            var entityName = fetchXml.Entity.name;
-                            var attrName = parts.Last();
-
-                            if (parts.Length > 1 && !parts[0].Equals(fetchXml.Alias))
-                                entityName = fetchXml.Entity.FindLinkEntity(parts[0])?.name;
-
-                            if (entityName == null)
-                                return null;
-
-                            var metadata = dataSource.Metadata;
-                            var meta = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                            var isVirtual = false;
-                            if (meta == null)
-                            {
-                                meta = metadata[entityName].FindBaseAttributeFromVirtualAttribute(attrName, out _);
-                                if (meta != null)
-                                    isVirtual = true;
-                            }
-
-                            return new { c.Mapping, c.SourceColumn, c.Alias, meta?.LogicalName, IsVirtual = isVirtual };
-                        })
-                        .Where(c => c?.LogicalName != null) // Ignore attributes we can't find in the metadata
-                        .GroupBy(c => c.LogicalName, StringComparer.OrdinalIgnoreCase)
-                        .Where(g => g.Count() == 1) // Ignore attributes that appear multiple times, either as physical or virtual attributes
-                        .Select(g => g.Single())
-                        .Where(c => c.IsVirtual == false) // Ignore virtual attributes
-                        .GroupBy(c => c.Alias, StringComparer.OrdinalIgnoreCase)
-                        .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple columns using the same alias
-                        .Select(g => g.Single())
-                        .Where(c =>
-                        {
-                            var parts = c.SourceColumn.SplitMultiPartIdentifier();
-
-                            if (parts.Length > 1 && aliasStars.Contains(parts[0]))
-                                return false; // Don't fold aliases if we're using an <all-attributes/>
-
-                            if (c.Alias.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase))
-                                return false; // Don't fold aliases if we're using the original source name
-
-                            if (!FetchXmlScan.IsValidAlias(c.Alias))
-                                return false; // Don't fold aliases if they contain invalid characters
-
-                            if (fetchXml.ColumnMappings.Any(m => m.OutputColumn == c.SourceColumn))
-                                return false; // Don't fold aliases if they're already aliased in the FetchXmlScan node
-
-                            return true;
-                        })
-                        .Select(c =>
-                        {
-                            var attr = fetchXml.AddAttribute(c.SourceColumn, null, dataSource.Metadata, out _, out var linkEntity);
-                            return new { c.Mapping, c.SourceColumn, c.Alias, Attr = attr, LinkEntity = linkEntity };
-                        })
-                        .Where(c =>
-                        {
-                            var items = c.LinkEntity?.Items ?? fetchXml.Entity.Items;
-
-                            // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
-                            // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
-                            if (items != null && items.OfType<FetchOrderType>().Any(order => order.attribute == c.Attr.name) && fetchXml.AllPages)
-                                return false;
-
-                            // Don't fold the alias if it's on the audit table, it seems to break the provider
-                            if (c.LinkEntity != null && c.LinkEntity.name == "audit" ||
-                                c.LinkEntity == null && fetchXml.Entity.name == "audit")
-                                return false;
-
-                            return true;
-                        })
-                        .ToList();
-
-                    foreach (var aliasedColumn in aliasedColumns)
-                    {
-                        aliasedColumn.Attr.alias = aliasedColumn.Alias;
-                        aliasedColumn.Mapping.SourceColumn = aliasedColumn.SourceColumn.SplitMultiPartIdentifier()[0] + "." + aliasedColumn.Alias;
-                    }
-                }
+                    fetchXml.AddAliases(columnSet, schema, dataSource.Metadata);
             }
         }
 
@@ -302,6 +212,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         metadata.Query.RelationshipQuery.Properties = new MetadataPropertiesExpression();
 
                     metadata.Query.RelationshipQuery.Properties.AllProperties = true;
+                }
+
+                if (metadata.MetadataSource.HasFlag(MetadataSource.Key) && (hasStar || aliasStars.Contains(metadata.KeyAlias)))
+                {
+                    if (metadata.Query.KeyQuery == null)
+                        metadata.Query.KeyQuery = new EntityKeyQueryExpression();
+
+                    if (metadata.Query.KeyQuery.Properties == null)
+                        metadata.Query.KeyQuery.Properties = new MetadataPropertiesExpression();
+
+                    metadata.Query.KeyQuery.Properties.AllProperties = true;
                 }
             }
         }

@@ -2591,53 +2591,88 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SelectNode ConvertBinaryQuery(BinaryQueryExpression binary, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeCompilationContext context)
         {
-            if (binary.BinaryQueryExpressionType != BinaryQueryExpressionType.Union)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(binary, binary.BinaryQueryExpressionType.ToString()));
-
             var left = ConvertSelectStatement(binary.FirstQueryExpression, hints, outerSchema, outerReferences, context);
             var right = ConvertSelectStatement(binary.SecondQueryExpression, hints, outerSchema, outerReferences, context);
 
-            var concat = left.Source as ConcatenateNode;
-
-            if (concat == null)
-            {
-                concat = new ConcatenateNode();
-
-                concat.Sources.Add(left.Source);
-
-                left.ExpandWildcardColumns(context);
-
-                foreach (var col in left.ColumnSet)
-                {
-                    concat.ColumnSet.Add(new ConcatenateColumn
-                    {
-                        OutputColumn = context.GetExpressionName(),
-                        SourceColumns = { col.SourceColumn },
-                        SourceExpressions = { col.SourceExpression }
-                    });
-                }
-            }
-
-            concat.Sources.Add(right.Source);
-
+            left.ExpandWildcardColumns(context);
             right.ExpandWildcardColumns(context);
 
-            if (concat.ColumnSet.Count != right.ColumnSet.Count)
+            if (left.ColumnSet.Count != right.ColumnSet.Count)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.SetOperationWithDifferentColumnCounts(binary));
 
-            for (var i = 0; i < concat.ColumnSet.Count; i++)
+            IDataExecutionPlanNodeInternal node;
+
+            if (binary.BinaryQueryExpressionType == BinaryQueryExpressionType.Union)
             {
-                concat.ColumnSet[i].SourceColumns.Add(right.ColumnSet[i].SourceColumn);
-                concat.ColumnSet[i].SourceExpressions.Add(right.ColumnSet[i].SourceExpression);
+                var concat = left.Source as ConcatenateNode;
+
+                if (concat == null)
+                {
+                    concat = new ConcatenateNode();
+
+                    concat.Sources.Add(left.Source);
+
+                    foreach (var col in left.ColumnSet)
+                    {
+                        concat.ColumnSet.Add(new ConcatenateColumn
+                        {
+                            OutputColumn = context.GetExpressionName(),
+                            SourceColumns = { col.SourceColumn },
+                            SourceExpressions = { col.SourceExpression }
+                        });
+                    }
+                }
+
+                concat.Sources.Add(right.Source);
+
+                for (var i = 0; i < concat.ColumnSet.Count; i++)
+                {
+                    concat.ColumnSet[i].SourceColumns.Add(right.ColumnSet[i].SourceColumn);
+                    concat.ColumnSet[i].SourceExpressions.Add(right.ColumnSet[i].SourceExpression);
+                }
+
+                node = concat;
+
+                if (!binary.All)
+                {
+                    var distinct = new DistinctNode { Source = node };
+                    distinct.Columns.AddRange(concat.ColumnSet.Select(col => col.OutputColumn));
+                    node = distinct;
+                }
             }
-
-            var node = (IDataExecutionPlanNodeInternal)concat;
-
-            if (!binary.All)
+            else
             {
-                var distinct = new DistinctNode { Source = node };
-                distinct.Columns.AddRange(concat.ColumnSet.Select(col => col.OutputColumn));
-                node = distinct;
+                // EXCEPT & INTERSECT require distinct inputs
+                var leftSource = left.Source;
+                var rightSource = right.Source;
+
+                leftSource = new DistinctNode { Source = leftSource };
+                ((DistinctNode)leftSource).Columns.AddRange(left.ColumnSet.Select(col => col.SourceColumn));
+
+                rightSource = new DistinctNode { Source = rightSource };
+                ((DistinctNode)rightSource).Columns.AddRange(right.ColumnSet.Select(col => col.SourceColumn));
+
+                // Create the join node
+                node = new HashJoinNode
+                {
+                    LeftSource = leftSource,
+                    RightSource = rightSource,
+                    JoinType = QualifiedJoinType.LeftOuter,
+                    SemiJoin = true,
+                    AntiJoin = binary.BinaryQueryExpressionType == BinaryQueryExpressionType.Except,
+                    OutputRightSchema = false,
+                    ComparisonType = BooleanComparisonType.IsNotDistinctFrom
+                };
+
+                // Join on all the columns
+                for (var i = 0; i < left.ColumnSet.Count; i++)
+                {
+                    var leftCol = left.ColumnSet[i];
+                    var rightCol = right.ColumnSet[i];
+
+                    ((HashJoinNode)node).LeftAttributes.Add(leftCol.SourceColumn.ToColumnReference());
+                    ((HashJoinNode)node).RightAttributes.Add(rightCol.SourceColumn.ToColumnReference());
+                }
             }
 
             // Aliases to be used for sorting are:
@@ -2651,6 +2686,7 @@ namespace MarkMpn.Sql4Cds.Engine
             //
             // can sort by col1, x and y
             var leftSchema = left.Source.GetSchema(context);
+            var combinedSchema = node.GetSchema(context);
             var aliases = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             for (var i = 0; i < left.ColumnSet.Count; i++)
@@ -2663,7 +2699,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         aliases.Add(left.ColumnSet[i].OutputColumn, aliasedCols);
                     }
 
-                    aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                    //aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                    aliasedCols.Add(combinedSchema.Schema.Skip(i).First().Key);
                 }
 
                 var leftSourceCol = leftSchema.Schema[left.ColumnSet[i].SourceColumn];
@@ -2681,16 +2718,17 @@ namespace MarkMpn.Sql4Cds.Engine
                             aliases.Add(sourceColName, aliasedCols);
                         }
 
-                        aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                        //aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
+                        aliasedCols.Add(combinedSchema.Schema.Skip(i).First().Key);
                     }
                 }
             }
 
-            node = ConvertOrderByClause(node, hints, binary.OrderByClause, concat.ColumnSet.Select(col => col.OutputColumn.ToColumnReference()).ToArray(), aliases, binary, context, outerSchema, outerReferences, null);
+            node = ConvertOrderByClause(node, hints, binary.OrderByClause, combinedSchema.Schema.Select(col => col.Key.ToColumnReference()).ToArray(), aliases, binary, context, outerSchema, outerReferences, null);
             node = ConvertOffsetClause(node, binary.OffsetClause, context);
 
-            var select = new SelectNode { Source = node, LogicalSourceSchema = concat.GetSchema(context) };
-            select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, SourceExpression = col.SourceExpressions[0], OutputColumn = left.ColumnSet[i].OutputColumn }));
+            var select = new SelectNode { Source = node, LogicalSourceSchema = combinedSchema };
+            select.ColumnSet.AddRange(combinedSchema.Schema.Select((col, i) => new SelectColumn { SourceColumn = col.Key, SourceExpression = col.Key.ToColumnReference(), OutputColumn = left.ColumnSet[i].OutputColumn }));
 
             if (binary.ForClause is XmlForClause forXml)
                 ConvertForXmlClause(select, forXml, context);
@@ -2729,27 +2767,82 @@ namespace MarkMpn.Sql4Cds.Engine
             var normalizeColNamesVisitor = new NormalizeColNamesVisitor(logicalSchema);
             querySpec.Accept(normalizeColNamesVisitor);
 
-            node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
-            node = ConvertExistsSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
+            // Now we've got the initial schema we can try processing each remaining part of the query.
+            // We can continue processing subsequent parts even if we hit an error as each one doesn't change
+            // the schema for later ones, so we can report multiple errors together
+            NotSupportedQueryFragmentException exception = null;
+
+            // Generate the joins necesary for any IN or EXISTS subqueries so we can handle them later as simple
+            // scalar expressions
+            try
+            {
+                node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
+
+            try
+            {
+                node = ConvertExistsSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
 
             // Add filters from WHERE
-            node = ConvertWhereClause(node, hints, querySpec.WhereClause, outerSchema, outerReferences, context, querySpec);
+            try
+            {
+                node = ConvertWhereClause(node, hints, querySpec.WhereClause, outerSchema, outerReferences, context, querySpec);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
 
             // Add aggregates from GROUP BY/SELECT/HAVING/ORDER BY
+            INodeSchema nonAggregateSchema;
             var preGroupByNode = node;
-            node = ConvertGroupByAggregates(node, querySpec, context, outerSchema, outerReferences);
-            var nonAggregateSchema = preGroupByNode == node ? null : preGroupByNode.GetSchema(context);
+
+            try
+            {
+                node = ConvertGroupByAggregates(node, querySpec, context, outerSchema, outerReferences);
+                nonAggregateSchema = preGroupByNode == node ? null : preGroupByNode.GetSchema(context);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                nonAggregateSchema = null;
+            }
 
             // Add filters from HAVING
-            node = ConvertHavingClause(node, hints, querySpec.HavingClause, context, outerSchema, outerReferences, querySpec, nonAggregateSchema);
+            try
+            {
+                node = ConvertHavingClause(node, hints, querySpec.HavingClause, context, outerSchema, outerReferences, querySpec, nonAggregateSchema);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
 
             // Add DISTINCT
             var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
             node = distinct ?? node;
 
             // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, context, outerSchema, outerReferences, nonAggregateSchema, logicalSchema);
-            node = selectNode.Source;
+            SelectNode selectNode = null;
+
+            try
+            {
+                selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, context, outerSchema, outerReferences, nonAggregateSchema, logicalSchema);
+                node = selectNode.Source;
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
 
             // Add sorts from ORDER BY
             var selectFields = new List<ScalarExpression>();
@@ -2772,36 +2865,72 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var aliases = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var col in selectNode.ColumnSet)
+            if (selectNode != null)
             {
-                if (String.IsNullOrEmpty(col.OutputColumn))
-                    continue;
-
-                if (!aliases.TryGetValue(col.OutputColumn, out var aliasedCols))
+                foreach (var col in selectNode.ColumnSet)
                 {
-                    aliasedCols = new List<string>();
-                    aliases.Add(col.OutputColumn, aliasedCols);
-                }
+                    if (String.IsNullOrEmpty(col.OutputColumn))
+                        continue;
 
-                aliasedCols.Add(col.SourceColumn);
+                    if (!aliases.TryGetValue(col.OutputColumn, out var aliasedCols))
+                    {
+                        aliasedCols = new List<string>();
+                        aliases.Add(col.OutputColumn, aliasedCols);
+                    }
+
+                    aliasedCols.Add(col.SourceColumn);
+                }
             }
 
-            node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), aliases, querySpec, context, outerSchema, outerReferences, nonAggregateSchema);
+            try
+            {
+                node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), aliases, querySpec, context, outerSchema, outerReferences, nonAggregateSchema);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
 
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTopWithOffset(querySpec.TopRowFilter));
+                exception = NotSupportedQueryFragmentException.Combine(exception, new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTopWithOffset(querySpec.TopRowFilter)));
 
-            node = ConvertTopClause(node, querySpec.TopRowFilter, querySpec.OrderByClause, context);
-            node = ConvertOffsetClause(node, querySpec.OffsetClause, context);
+            try
+            {
+                node = ConvertTopClause(node, querySpec.TopRowFilter, querySpec.OrderByClause, context);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
 
-            selectNode.Source = node;
+            try
+            {
+                node = ConvertOffsetClause(node, querySpec.OffsetClause, context);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
+
+            if (selectNode != null)
+                selectNode.Source = node;
 
             // Convert to XML
-            if (querySpec.ForClause is XmlForClause forXml)
-                ConvertForXmlClause(selectNode, forXml, context);
-            else if (querySpec.ForClause != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(querySpec.ForClause, "FOR"));
+            try
+            {
+                if (querySpec.ForClause is XmlForClause forXml)
+                    ConvertForXmlClause(selectNode, forXml, context);
+                else if (querySpec.ForClause != null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(querySpec.ForClause, "FOR"));
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
+
+            if (exception != null)
+                throw exception;
 
             return selectNode;
         }
@@ -2883,8 +3012,22 @@ namespace MarkMpn.Sql4Cds.Engine
             if (visitor.InSubqueries.Count == 0)
                 return source;
 
+            NotSupportedQueryFragmentException exception = null;
+
             foreach (var inSubquery in visitor.InSubqueries)
-                source = ConvertInSubquery(source, hints, query, inSubquery, context, outerSchema, outerReferences);
+            {
+                try
+                {
+                    source = ConvertInSubquery(source, hints, query, inSubquery, context, outerSchema, outerReferences);
+                }
+                catch (NotSupportedQueryFragmentException ex)
+                {
+                    exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                }
+            }
+
+            if (exception != null)
+                throw exception;
 
             return source;
         }
@@ -3032,8 +3175,22 @@ namespace MarkMpn.Sql4Cds.Engine
             if (visitor.ExistsSubqueries.Count == 0)
                 return source;
 
+            NotSupportedQueryFragmentException exception = null;
+
             foreach (var existsSubquery in visitor.ExistsSubqueries)
-                source = ConvertExistsSubquery(source, hints, query, existsSubquery, context, outerSchema, outerReferences);
+            {
+                try
+                {
+                    source = ConvertExistsSubquery(source, hints, query, existsSubquery, context, outerSchema, outerReferences);
+                }
+                catch (NotSupportedQueryFragmentException ex)
+                {
+                    exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                }
+            }
+
+            if (exception != null)
+                throw exception;
 
             return source;
         }
@@ -3619,10 +3776,20 @@ namespace MarkMpn.Sql4Cds.Engine
             if (orderByClause == null)
                 return source;
 
+            NotSupportedQueryFragmentException exception = null;
+
             CaptureOuterReferences(outerSchema, source, orderByClause, context, outerReferences);
 
             var computeScalar = new ComputeScalarNode { Source = source };
-            ConvertScalarSubqueries(orderByClause, hints, ref source, computeScalar, context, query);
+
+            try
+            {
+                ConvertScalarSubqueries(orderByClause, hints, ref source, computeScalar, context, query);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
 
             var schema = source.GetSchema(context);
             var sort = new SortNode { Source = source };
@@ -3635,7 +3802,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     aliases.TryGetValue(orderByCol.GetColumnName(), out var aliasedCols))
                 {
                     if (aliasedCols.Count > 1)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousColumnName(orderByCol));
+                        exception = NotSupportedQueryFragmentException.Combine(exception, new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousColumnName(orderByCol)));
 
                     order.Expression = aliasedCols[0].ToColumnReference();
                     order.ScriptTokenStream = null;
@@ -3654,14 +3821,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (index < 0 || index >= selectList.Length)
                     {
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOrderByColumnNumber(orderBy))
+                        exception = NotSupportedQueryFragmentException.Combine(exception, new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOrderByColumnNumber(orderBy))
                         {
                             Suggestion = $"Must be between 1 and {selectList.Length}"
-                        };
+                        });
                     }
-
-                    orderBy.Expression = selectList[index];
-                    orderBy.ScriptTokenStream = null;
+                    else
+                    {
+                        orderBy.Expression = selectList[index];
+                        orderBy.ScriptTokenStream = null;
+                    }
                 }
 
                 // Anything complex expression should be pre-calculated
@@ -3669,18 +3838,35 @@ namespace MarkMpn.Sql4Cds.Engine
                     !(orderBy.Expression is VariableReference) &&
                     !(orderBy.Expression is Literal))
                 {
-                    var calculated = ComputeScalarExpression(orderBy.Expression, hints, query, computeScalar, nonAggregateSchema, context, ref source);
-                    sort.Source = source;
-                    schema = source.GetSchema(context);
+                    try
+                    {
+                        var calculated = ComputeScalarExpression(orderBy.Expression, hints, query, computeScalar, nonAggregateSchema, context, ref source);
+                        sort.Source = source;
+                        schema = source.GetSchema(context);
 
-                    calculationRewrites[orderBy.Expression] = calculated.ToColumnReference();
+                        calculationRewrites[orderBy.Expression] = calculated.ToColumnReference();
+                    }
+                    catch (NotSupportedQueryFragmentException ex)
+                    {
+                        exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                    }
                 }
 
                 // Validate the expression
-                orderBy.Expression.GetType(GetExpressionContext(schema, context, nonAggregateSchema), out _);
+                try
+                {
+                    orderBy.Expression.GetType(GetExpressionContext(schema, context, nonAggregateSchema), out _);
+                }
+                catch (NotSupportedQueryFragmentException ex)
+                {
+                    exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                }
 
                 sort.Sorts.Add(orderBy.Clone());
             }
+
+            if (exception != null)
+                throw exception;
 
             // Use the calculated expressions in the sort and anywhere else that uses the same expression
             if (calculationRewrites.Any())
@@ -3780,90 +3966,102 @@ namespace MarkMpn.Sql4Cds.Engine
                 Source = distinct?.Source ?? node
             };
 
+            NotSupportedQueryFragmentException exception = null;
+
             foreach (var element in selectElements)
             {
-                CaptureOuterReferences(outerSchema, computeScalar, element, context, outerReferences);
-
-                if (element is SelectScalarExpression scalar)
+                try
                 {
-                    if (scalar.Expression is ColumnReferenceExpression col)
+                    CaptureOuterReferences(outerSchema, computeScalar, element, context, outerReferences);
+
+                    if (element is SelectScalarExpression scalar)
                     {
-                        // Check the expression is valid. This will throw an exception in case of missing columns etc.
-                        col.GetType(GetExpressionContext(schema, context, nonAggregateSchema), out var colType);
-                        if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
-                            throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
+                        if (scalar.Expression is ColumnReferenceExpression col)
+                        {
+                            // Check the expression is valid. This will throw an exception in case of missing columns etc.
+                            col.GetType(GetExpressionContext(schema, context, nonAggregateSchema), out var colType);
+                            if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
+                                throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
 
-                        var colName = col.GetColumnName();
+                            var colName = col.GetColumnName();
 
-                        schema.ContainsColumn(colName, out colName);
+                            schema.ContainsColumn(colName, out colName);
 
-                        var alias = scalar.ColumnName?.Value;
+                            var alias = scalar.ColumnName?.Value;
 
-                        // If column has come from a calculation, don't expose the internal Expr{x} name
-                        if (alias == null && !schema.Schema[colName].IsCalculated)
-                            alias = col.MultiPartIdentifier.Identifiers.Last().Value;
+                            // If column has come from a calculation, don't expose the internal Expr{x} name
+                            if (alias == null && !schema.Schema[colName].IsCalculated)
+                                alias = col.MultiPartIdentifier.Identifiers.Last().Value;
+
+                            select.ColumnSet.Add(new SelectColumn
+                            {
+                                SourceColumn = colName,
+                                SourceExpression = scalar.Expression,
+                                OutputColumn = alias
+                            });
+                        }
+                        else
+                        {
+                            var scalarSource = distinct?.Source ?? node;
+                            var alias = ComputeScalarExpression(scalar.Expression, hints, query, computeScalar, nonAggregateSchema, context, ref scalarSource);
+
+                            var scalarSchema = computeScalar.GetSchema(context);
+                            var colType = scalarSchema.Schema[alias].Type;
+                            if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
+                                throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
+
+                            if (distinct != null)
+                                distinct.Source = scalarSource;
+                            else
+                                node = scalarSource;
+
+                            select.ColumnSet.Add(new SelectColumn
+                            {
+                                SourceColumn = alias,
+                                SourceExpression = scalar.Expression,
+                                OutputColumn = scalar.ColumnName?.Value
+                            });
+                        }
+                    }
+                    else if (element is SelectStarExpression star)
+                    {
+                        var colName = star.Qualifier == null ? null : String.Join(".", star.Qualifier.Identifiers.Select(id => id.Value));
+
+                        var cols = schema.Schema.Keys
+                            .Where(col => colName == null || col.StartsWith(colName + ".", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+                        if (colName != null && cols.Count == 0)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnPrefix(star));
+
+                        // Can't select no-collation columns
+                        foreach (var col in cols)
+                        {
+                            var colType = schema.Schema[col].Type;
+                            if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
+                                exception = NotSupportedQueryFragmentException.Combine(exception, new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError));
+                        }
 
                         select.ColumnSet.Add(new SelectColumn
                         {
                             SourceColumn = colName,
-                            SourceExpression = scalar.Expression,
-                            OutputColumn = alias
+                            SourceExpression = star,
+                            AllColumns = true
                         });
                     }
                     else
                     {
-                        var scalarSource = distinct?.Source ?? node;
-                        var alias = ComputeScalarExpression(scalar.Expression, hints, query, computeScalar, nonAggregateSchema, context, ref scalarSource);
-
-                        var scalarSchema = computeScalar.GetSchema(context);
-                        var colType = scalarSchema.Schema[alias].Type;
-                        if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
-                            throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
-
-                        if (distinct != null)
-                            distinct.Source = scalarSource;
-                        else
-                            node = scalarSource;
-
-                        select.ColumnSet.Add(new SelectColumn
-                        {
-                            SourceColumn = alias,
-                            SourceExpression = scalar.Expression,
-                            OutputColumn = scalar.ColumnName?.Value
-                        });
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(element, "SELECT"));
                     }
                 }
-                else if (element is SelectStarExpression star)
+                catch (NotSupportedQueryFragmentException ex)
                 {
-                    var colName = star.Qualifier == null ? null : String.Join(".", star.Qualifier.Identifiers.Select(id => id.Value));
-
-                    var cols = schema.Schema.Keys
-                        .Where(col => colName == null || col.StartsWith(colName + ".", StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-
-                    if (colName != null && cols.Count == 0)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnPrefix(star));
-
-                    // Can't select no-collation columns
-                    foreach (var col in cols)
-                    {
-                        var colType = schema.Schema[col].Type;
-                        if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
-                            throw new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError);
-                    }
-
-                    select.ColumnSet.Add(new SelectColumn
-                    {
-                        SourceColumn = colName,
-                        SourceExpression = star,
-                        AllColumns = true
-                    });
-                }
-                else
-                {
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(element, "SELECT"));
+                    exception = NotSupportedQueryFragmentException.Combine(exception, ex);
                 }
             }
+
+            if (exception != null)
+                throw exception;
 
             var newSource = computeScalar.Columns.Any() ? computeScalar : computeScalar.Source;
 
@@ -4439,6 +4637,16 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
+                    if (entityName.Equals("alternate_key", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            DataSource = dataSource.Name,
+                            MetadataSource = MetadataSource.Key,
+                            KeyAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
                     if (entityName.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
                     {
                         return new GlobalOptionSetQueryNode
@@ -4600,6 +4808,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         LeftAttribute = joinConditionVisitor.LhsKey.Clone(),
                         RightSource = rhs,
                         RightAttribute = joinConditionVisitor.RhsKey.Clone(),
+                        Expressions = { joinConditionVisitor.JoinCondition },
                         JoinType = join.QualifiedJoinType,
                         AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };
@@ -4612,6 +4821,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         LeftAttribute = joinConditionVisitor.RhsKey.Clone(),
                         RightSource = lhs,
                         RightAttribute = joinConditionVisitor.LhsKey.Clone(),
+                        Expressions = { joinConditionVisitor.JoinCondition },
                         AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };
 
@@ -4642,6 +4852,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         LeftAttribute = joinConditionVisitor.LhsKey.Clone(),
                         RightSource = rhs,
                         RightAttribute = joinConditionVisitor.RhsKey.Clone(),
+                        Expressions = { joinConditionVisitor.JoinCondition },
                         JoinType = join.QualifiedJoinType,
                         AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };

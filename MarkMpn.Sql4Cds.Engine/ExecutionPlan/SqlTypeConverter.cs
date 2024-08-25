@@ -382,6 +382,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var toType = toSql.SqlDataTypeOption;
 
+            // Any numeric type can be implicitly converted to any other.
+            if (fromType.IsNumeric() && toType.IsNumeric())
+                return true;
+
             if (Array.IndexOf(_precendenceOrder, fromType) == -1 ||
                 Array.IndexOf(_precendenceOrder, toType) == -1)
                 return false;
@@ -389,18 +393,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Anything can be converted to/from strings (except converting string -> entity reference)
             if (fromType.IsStringType() || toType.IsStringType())
                 return true;
-
-            // Any numeric type can be implicitly converted to any other.
-            if (fromType.IsNumeric() && toType.IsNumeric())
-            {
-                // SQL requires a cast between decimal/numeric when precision/scale is reduced
-                if ((fromType == SqlDataTypeOption.Decimal || fromType == SqlDataTypeOption.Numeric) &&
-                    (toType == SqlDataTypeOption.Decimal || toType == SqlDataTypeOption.Numeric) &&
-                    (from.GetPrecision() > to.GetPrecision() || from.GetScale() > to.GetScale()))
-                    return false;
-
-                return true;
-            }
 
             // Any numeric type can be implicitly converted to datetime
             if (fromType.IsNumeric() && (toType == SqlDataTypeOption.DateTime || toType == SqlDataTypeOption.SmallDateTime))
@@ -449,10 +441,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 toSql?.SqlDataTypeOption.IsNumeric() == true)
                 return true;
 
-            // Require explicit conversion between numeric types when precision/scale is reduced
-            if (fromSql?.SqlDataTypeOption.IsNumeric() == true && toSql?.SqlDataTypeOption.IsNumeric() == true)
-                return true;
-
             // Require explicit conversion from xml to string/binary types
             if (fromXml != null && toSql != null && (toSql.SqlDataTypeOption.IsStringType() || toSql.SqlDataTypeOption == SqlDataTypeOption.Binary || toSql.SqlDataTypeOption == SqlDataTypeOption.VarBinary))
                 return true;
@@ -487,7 +475,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Expression.PropertyOrField(
                             Expression.Subtract(
                                 Expression.Convert(expr, typeof(DateTime)),
-                                Expression.Constant(SqlDateTime.MinValue)
+                                Expression.Constant(new DateTime(1900, 1, 1))
                             ),
                             nameof(TimeSpan.TotalDays)
                         ),
@@ -531,6 +519,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (expr.Type == typeof(SqlString) && to == typeof(SqlXml))
                 expr = Expr.Call(() => ParseXml(Expr.Arg<SqlString>()), expr);
+
+            if (expr.Type == typeof(SqlDecimal) && (to == typeof(SqlInt64) || to == typeof(SqlInt32) || to == typeof(SqlInt16) || to == typeof(SqlByte)))
+            {
+                // Built-in conversion uses rounding, should use truncation
+                // https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver16#truncating-and-rounding-results
+                expr = Expr.Call(() => SqlDecimal.Truncate(Expr.Arg<SqlDecimal>(), Expr.Arg<int>()), expr, Expression.Constant(0));
+            }
 
             if (expr.Type != to)
             {
@@ -654,7 +649,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var catchFormatExceptionBlock = Expression.Catch(typeof(FormatException), Expression.Throw(Expression.New(typeof(QueryExecutionException).GetConstructor(new[] { typeof(Sql4CdsError) }), conversionError), targetType));
 
-                var overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()), Expression.Constant(from), Expression.Constant(to));
+                var overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<TSqlFragment>()), Expression.Constant(from), Expression.Constant(to), Expression.Constant(convert, typeof(TSqlFragment)));
 
                 if (from.IsSameAs(DataTypeHelpers.Int))
                     overflowError = Expr.Call(() => Sql4CdsError.ArithmeticOverflow(Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), Expression.Constant(to), originalExpr);
@@ -693,12 +688,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
                                     valueOnTruncate = "*";
                                 else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
-                                    errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
+                                    errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType, convert);
                             }
                             else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
                                 (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
                             {
-                                errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType);
+                                errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType, convert);
                             }
                             else if (throwOnTruncate)
                             {
@@ -729,15 +724,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Apply changes to precision & scale
             if (expr.Type == typeof(SqlDecimal))
             {
+                // Default precision and scale are (18, 0)
+                // https://learn.microsoft.com/en-us/sql/t-sql/data-types/decimal-and-numeric-transact-sql?view=sql-server-ver16#p-precision
+                var precision = 18;
+                var scale = 0;
+
                 if (toSqlType.Parameters.Count > 0)
                 {
-                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out var precision))
+                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out precision))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
 
                     if (precision < 1)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidLengthOrPrecision(toSqlType));
-
-                    var scale = 0;
 
                     if (toSqlType.Parameters.Count > 1)
                     {
@@ -747,20 +745,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (toSqlType.Parameters.Count > 2)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
-
-                    expr = Expr.Call(() => ApplyPrecisionScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()),
-                        expr,
-                        Expression.Constant(precision),
-                        Expression.Constant(scale),
-                        Expression.Constant(from),
-                        Expression.Constant(to));
                 }
+
+                expr = Expr.Call(() => ApplyPrecisionScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<TSqlFragment>()),
+                    expr,
+                    Expression.Constant(precision),
+                    Expression.Constant(scale),
+                    Expression.Constant(from),
+                    Expression.Constant(to),
+                    Expression.Constant(convert, typeof(TSqlFragment)));
             }
 
             return expr;
         }
 
-        private static SqlDecimal ApplyPrecisionScale(SqlDecimal value, int precision, int scale, DataTypeReference from, DataTypeReference to)
+        private static SqlDecimal ApplyPrecisionScale(SqlDecimal value, int precision, int scale, DataTypeReference from, DataTypeReference to, TSqlFragment fragment)
         {
             try
             {
@@ -768,7 +767,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             catch (SqlTruncateException)
             {
-                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, to));
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, to, fragment));
             }
         }
 

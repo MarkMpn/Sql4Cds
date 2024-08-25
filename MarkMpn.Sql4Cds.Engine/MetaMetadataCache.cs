@@ -87,12 +87,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Reuse the schema exposed by the nodes that actually execute the metadata queries
             var metadataNode = new MetadataQueryNode();
-            metadataNode.MetadataSource = MetadataSource.Entity | MetadataSource.Attribute | MetadataSource.OneToManyRelationship | MetadataSource.ManyToOneRelationship | MetadataSource.ManyToManyRelationship;
+            metadataNode.MetadataSource = MetadataSource.Entity | MetadataSource.Attribute | MetadataSource.OneToManyRelationship | MetadataSource.ManyToOneRelationship | MetadataSource.ManyToManyRelationship | MetadataSource.Key;
             metadataNode.EntityAlias = "entity";
             metadataNode.AttributeAlias = "attribute";
             metadataNode.OneToManyRelationshipAlias = "relationship_1_n";
             metadataNode.ManyToOneRelationshipAlias = "relationship_n_1";
             metadataNode.ManyToManyRelationshipAlias = "relationship_n_n";
+            metadataNode.KeyAlias = "alternate_key";
 
             var metadataSchema = metadataNode.GetSchema(new NodeCompilationContext(null, new StubOptions(), null, null));
 
@@ -101,6 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _customMetadata["metadata." + metadataNode.OneToManyRelationshipAlias] = SchemaToMetadata(metadataSchema, metadataNode.OneToManyRelationshipAlias);
             _customMetadata["metadata." + metadataNode.ManyToOneRelationshipAlias] = SchemaToMetadata(metadataSchema, metadataNode.ManyToOneRelationshipAlias);
             _customMetadata["metadata." + metadataNode.ManyToManyRelationshipAlias] = SchemaToMetadata(metadataSchema, metadataNode.ManyToManyRelationshipAlias);
+            _customMetadata["metadata." + metadataNode.KeyAlias] = SchemaToMetadata(metadataSchema, metadataNode.KeyAlias);
 
             var optionsetNode = new GlobalOptionSetQueryNode();
             optionsetNode.Alias = "globaloptionset";
@@ -243,6 +245,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 return new UniqueIdentifierAttributeMetadata();
             if (type == typeof(SqlString))
                 return new StringAttributeMetadata();
+            if (type == typeof(SqlEntityReference))
+                return new LookupAttributeMetadata();
 
             throw new ArgumentOutOfRangeException(nameof(type), $"Unexpected attribute type {type}");
         }

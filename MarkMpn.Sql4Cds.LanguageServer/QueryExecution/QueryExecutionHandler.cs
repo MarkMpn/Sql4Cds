@@ -426,6 +426,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                 if (sql4CdsException?.Errors != null)
                 {
+                    var diagnostics = new List<Diagnostic>();
+
                     foreach (var sql4CdsError in sql4CdsException.Errors)
                     {
                         var parts = new List<string>
@@ -468,7 +470,56 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 IsError = true
                             }
                         });
+
+                        if (sql4CdsError.Fragment != null && sql4CdsError.Fragment.FragmentLength > 0)
+                        {
+                            var lines = sql4CdsError.Fragment.ToSql().Split('\n');
+
+                            diagnostics.Add(new Diagnostic
+                            {
+                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                {
+                                    Start = new Position
+                                    {
+                                        Line = sql4CdsError.Fragment.StartLine - 1 + selection.StartLine,
+                                        Character = sql4CdsError.Fragment.StartColumn - 1 + (sql4CdsError.Fragment.StartLine == 1 ? selection.StartColumn : 0)
+                                    },
+                                    End = new Position
+                                    {
+                                        Line = sql4CdsError.Fragment.StartLine - 1 + selection.StartLine + lines.Length - 1,
+                                        Character = lines.Length > 1 ? lines.Last().Length - 1 : sql4CdsError.Fragment.StartColumn - 1 + (sql4CdsError.Fragment.StartLine == 1 ? selection.StartColumn : 0) + sql4CdsError.Fragment.FragmentLength
+                                    }
+                                },
+                                Message = sql4CdsError.Message
+                            });
+                        }
+                        else
+                        {
+                            diagnostics.Add(new Diagnostic
+                            {
+                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                {
+                                    Start = new Position
+                                    {
+                                        Line = Math.Max(sql4CdsError.LineNumber, 1) - 1 + selection.StartLine,
+                                        Character = 0
+                                    },
+                                    End = new Position
+                                    {
+                                        Line = Math.Max(sql4CdsError.LineNumber, 1) - 1 + selection.StartLine,
+                                        Character = qry.Split('\n')[Math.Max(sql4CdsError.LineNumber, 1) - 1].Length
+                                    }
+                                },
+                                Message = sql4CdsError.Message
+                            });
+                        }
                     }
+
+                    await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
+                    {
+                        Uri = new Uri(request.OwnerUri),
+                        Diagnostics = diagnostics.ToArray()
+                    });
                 }
 
                 await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
@@ -513,35 +564,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     }
                                 },
                                 Message = parseException.Message
-                            }
-                        }
-                    });
-                }
-                else if (error is NotSupportedQueryFragmentException queryException)
-                {
-                    var lines = queryException.Fragment.ToSql().Split('\n');
-
-                    await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
-                    {
-                        Uri = new Uri(request.OwnerUri),
-                        Diagnostics = new[]
-                        {
-                            new Diagnostic
-                            {
-                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
-                                {
-                                    Start = new Position
-                                    {
-                                        Line = queryException.Fragment.StartLine - 1 + selection.StartLine,
-                                        Character = queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? selection.StartColumn : 0)
-                                    },
-                                    End = new Position
-                                    {
-                                        Line = queryException.Fragment.StartLine - 1 + selection.StartLine + lines.Length - 1,
-                                        Character = lines.Length > 1 ? lines.Last().Length - 1 : queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? selection.StartColumn : 0) + queryException.Fragment.FragmentLength
-                                    }
-                                },
-                                Message = queryException.Message
                             }
                         }
                     });

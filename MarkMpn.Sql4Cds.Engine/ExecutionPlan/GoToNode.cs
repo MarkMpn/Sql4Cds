@@ -120,7 +120,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             if (Source != null)
+            {
+                context.ResetGlobalCalculations();
                 Source = Source.FoldQuery(context, hints);
+                Source = context.InsertGlobalCalculations(this, Source);
+            }
 
             _condition = Condition?.Compile(new ExpressionCompilationContext(context, null, null));
 

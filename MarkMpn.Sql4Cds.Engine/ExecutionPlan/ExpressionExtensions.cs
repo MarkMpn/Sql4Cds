@@ -8,6 +8,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -206,12 +207,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return expression;
         }
 
-        private static Expression InvokeSubExpression<TParent, TChild>(this TParent parent, Func<TParent, TChild> child, Expression<Func<TParent, TChild>> subExpressionSelector, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
+        private static Expression InvokeSubExpression<TParent, TChild>(this TParent parent, Func<TParent, TChild> child, Expression<Func<TParent, TChild>> subExpressionSelector, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey, out NotSupportedQueryFragmentException exception)
             where TParent : TSqlFragment
             where TChild : TSqlFragment
         {
             // Build an expression to invoke the child expression from within the context of the parent expression
-            child(parent).ToExpression(context, false, out _, out sqlType, out cacheKey);
+            try
+            {
+                child(parent).ToExpression(context, false, out _, out sqlType, out cacheKey);
+                exception = null;
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                sqlType = null;
+                cacheKey = null;
+                exception = ex;
+                return null;
+            }
+
             var details = _intermediateCache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = child(parent).ToExpression(context, true, out var parameters, out _, out _);
@@ -231,12 +244,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expression.Invoke(details.Lambda, contextParam, subExpr);
         }
 
-        private static Expression InvokeSubExpression<TParent, TChild>(this TParent parent, Func<TParent, TChild> child, Expression<Func<TParent, int, TChild>> subExpressionSelector, int index, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
+        private static Expression InvokeSubExpression<TParent, TChild>(this TParent parent, Func<TParent, TChild> child, Expression<Func<TParent, int, TChild>> subExpressionSelector, int index, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey, out NotSupportedQueryFragmentException exception)
             where TParent : TSqlFragment
             where TChild : TSqlFragment
         {
             // Build an expression to invoke the child expression from within the context of the parent expression
-            child(parent).ToExpression(context, false, out _, out sqlType, out cacheKey);
+            try
+            {
+                child(parent).ToExpression(context, false, out _, out sqlType, out cacheKey);
+                exception = null;
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                sqlType = null;
+                cacheKey = null;
+                exception = ex;
+                return null;
+            }
+
             var details = _intermediateCache.GetOrAdd(cacheKey, __ =>
             {
                 var converted = child(parent).ToExpression(context, true, out var parameters, out _, out _);
@@ -467,19 +492,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Special case for field = func() where func is defined in FetchXmlConditionMethods
             if (cmp.FirstExpression is ColumnReferenceExpression &&
                 cmp.ComparisonType == BooleanComparisonType.Equals &&
-                cmp.SecondExpression is FunctionCall func
+                cmp.SecondExpression is FunctionCall func &&
+                Enum.TryParse<@operator>(func.FunctionName.Value.ToLowerInvariant(), out _)
                 )
             {
                 var parameters = func.Parameters.Select((p, index) =>
                 {
-                    var paramExpr = func.InvokeSubExpression(x => x.Parameters[index], (x, i) => x.Parameters[i], index, context, contextParam, exprParam, createExpression, out var paramType, out var paramCacheKey);
-                    return new { Expression = paramExpr, Type = paramType, CacheKey = paramCacheKey };
+                    var paramExpr = func.InvokeSubExpression(x => x.Parameters[index], (x, i) => x.Parameters[i], index, context, contextParam, exprParam, createExpression, out var paramType, out var paramCacheKey, out var paramEx);
+                    return new { Expression = paramExpr, Type = paramType, CacheKey = paramCacheKey, Exception = paramEx };
                 }).ToList();
-                var colExpr = cmp.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var colType, out var colCacheKey);
-                parameters.Insert(0, new { Expression = colExpr, Type = colType, CacheKey = colCacheKey });
+                var colExpr = cmp.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var colType, out var colCacheKey, out var colEx);
+                parameters.Insert(0, new { Expression = colExpr, Type = colType, CacheKey = colCacheKey, Exception = colEx });
                 var paramTypes = parameters.Select(p => p.Type).ToArray();
                 var paramCacheKeys = parameters.Select(p => p.CacheKey).ToArray();
                 var paramExpressions = parameters.Select(p => p.Expression).ToArray();
+                var paramExceptions = parameters.Select(p => p.Exception).Where(e => e != null).Aggregate<NotSupportedQueryFragmentException,NotSupportedQueryFragmentException>(null, (ex1, ex2) => NotSupportedQueryFragmentException.Combine(ex1, ex2));
+
+                if (paramExceptions != null)
+                    throw paramExceptions;
 
                 var fetchXmlComparison = GetMethod(context, typeof(FetchXmlConditionMethods), context.PrimaryDataSource, func, paramTypes, paramCacheKeys, false, contextParam, createExpression, ref paramExpressions, out sqlType, out var funcCacheKey);
 
@@ -492,8 +522,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = DataTypeHelpers.Bit;
 
-            var lhs = cmp.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var lhsType, out var lhsCacheKey);
-            var rhs = cmp.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var rhsType, out var rhsCacheKey);
+            var lhs = cmp.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var lhsType, out var lhsCacheKey, out var lhsException);
+            var rhs = cmp.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var rhsType, out var rhsCacheKey, out var rhsException);
+
+            if (lhsException != null || rhsException != null)
+                throw NotSupportedQueryFragmentException.Combine(lhsException, rhsException);
 
             var operation = Regex.Replace(cmp.ComparisonType.ToString(), "[a-z][A-Z]", m => (m.Value[0] + " " + m.Value[1]).ToLowerInvariant());
 
@@ -575,8 +608,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             sqlType = DataTypeHelpers.Bit;
 
-            var lhs = distinct.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var lhsType, out var lhsCacheKey);
-            var rhs = distinct.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var rhsType, out var rhsCacheKey);
+            var lhs = distinct.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var lhsType, out var lhsCacheKey, out var lhsException);
+            var rhs = distinct.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var rhsType, out var rhsCacheKey, out var rhsException);
+
+            if (lhsException != null || rhsException != null)
+                throw NotSupportedQueryFragmentException.Combine(lhsException, rhsException);
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(lhsType, rhsType, context.PrimaryDataSource, distinct, distinct.IsNot ? "is not distinct from" : "is distinct from", out var type))
             {
@@ -654,8 +690,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             sqlType = DataTypeHelpers.Bit;
 
-            var lhs = bin.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out _, out var lhsCacheKey);
-            var rhs = bin.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out _, out var rhsCacheKey);
+            var lhs = bin.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out _, out var lhsCacheKey, out var lhsException);
+            var rhs = bin.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out _, out var rhsCacheKey, out var rhsException);
+
+            if (lhsException != null || rhsException != null)
+                throw NotSupportedQueryFragmentException.Combine(lhsException, rhsException);
 
             if (createExpression)
             {
@@ -684,21 +723,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(BooleanParenthesisExpression paren, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var expr = paren.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+            var expr = paren.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey, out var exception);
+
+            if (exception != null)
+                throw exception;
+
             cacheKey = "(" + cacheKey + ")";
             return expr;
         }
 
         private static Expression ToExpression(Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression bin, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var lhs = bin.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, true, out var lhsSqlType, out var lhsCacheKey);
-            var rhs = bin.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, true, out var rhsSqlType, out var rhsCacheKey);
+            var lhs = bin.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, true, out var lhsSqlType, out var lhsCacheKey, out var lhsException);
+            var rhs = bin.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, true, out var rhsSqlType, out var rhsCacheKey, out var rhsException);
+
+            if (lhsException != null || rhsException != null)
+                throw NotSupportedQueryFragmentException.Combine(lhsException, rhsException);
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(lhsSqlType, rhsSqlType, context.PrimaryDataSource, bin, bin.BinaryExpressionType.ToString().ToLowerInvariant(), out var type))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(bin, lhsSqlType, rhsSqlType));
 
             // For decimal types, need to work out the precision and scale of the result depending on the type of operation
-            if (type is SqlDataTypeReference sqlTargetType && (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
+            if (type is SqlDataTypeReference sqlTargetType &&
+                (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
+                lhsSqlType is SqlDataTypeReference sqlLhsType &&
+                (sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
+                rhsSqlType is SqlDataTypeReference sqlRhsType &&
+                (sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
             {
                 var p1 = lhsSqlType.GetPrecision();
                 var s1 = lhsSqlType.GetScale();
@@ -912,19 +963,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         ))
                     {
                         // Check parameter is an expected datepart value
+                        NotSupportedQueryFragmentException ex = null;
                         if (!(param is ColumnReferenceExpression col) || col.MultiPartIdentifier.Identifiers.Count != 1)
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameter(param, 1, "datepart"));
-
-                        try
                         {
-                            ExpressionFunctions.DatePartToInterval(col.MultiPartIdentifier.Identifiers.Single().Value);
+                            ex = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameter(param, 1, "datepart"));
+                            col = null;
                         }
-                        catch
+                        else
                         {
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "datepart"));
+                            try
+                            {
+                                ExpressionFunctions.DatePartToInterval(col.MultiPartIdentifier.Identifiers.Single().Value);
+                            }
+                            catch
+                            {
+                                ex = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "datepart"));
+                            }
                         }
 
-                        return new { Expression = createExpression ? (Expression)Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value) : null, Type = (DataTypeReference)DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), CacheKey = col.MultiPartIdentifier.Identifiers.Single().Value };
+                        if (ex != null)
+                            return new { Expression = default(Expression), Type = default(DataTypeReference), CacheKey = default(string), Exception = ex };
+
+                        return new { Expression = createExpression ? (Expression)Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value) : null, Type = (DataTypeReference)DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), CacheKey = col.MultiPartIdentifier.Identifiers.Single().Value, Exception = ex };
                     }
 
                     // Special case for ISJSON - second optional parameter looks like a field but is actually a JSON data type
@@ -932,7 +992,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         // Check parameter is an expected datepart value
                         if (!(param is ColumnReferenceExpression col) || col.MultiPartIdentifier.Identifiers.Count != 1)
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameter(param, 2, "isjson"));
+                            return new { Expression = default(Expression), Type = default(DataTypeReference), CacheKey = default(string), Exception = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameter(param, 2, "isjson")) };
 
                         switch (col.MultiPartIdentifier.Identifiers.Single().Value.ToLowerInvariant())
                         {
@@ -943,23 +1003,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 break;
 
                             default:
-                               throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "isjson"));
+                               return new { Expression = default(Expression), Type = default(DataTypeReference), CacheKey = default(string), Exception = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "isjson")) };
                         }
 
-                        return new { Expression = createExpression ? (Expression)Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value) : null, Type = (DataTypeReference)DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), CacheKey = col.MultiPartIdentifier.Identifiers.Single().Value };
+                        return new { Expression = createExpression ? (Expression)Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value) : null, Type = (DataTypeReference)DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), CacheKey = col.MultiPartIdentifier.Identifiers.Single().Value, Exception = default(NotSupportedQueryFragmentException) };
                     }
                     
-                    var paramExpr = func.InvokeSubExpression(x => x.Parameters[index], (x, i) => x.Parameters[i], index, context, contextParam, exprParam, createExpression, out var paramType, out var paramCacheKey);
-                    return new { Expression = paramExpr, Type = paramType, CacheKey = paramCacheKey };
+                    var paramExpr = func.InvokeSubExpression(x => x.Parameters[index], (x, i) => x.Parameters[i], index, context, contextParam, exprParam, createExpression, out var paramType, out var paramCacheKey, out var paramException);
+                    return new { Expression = paramExpr, Type = paramType, CacheKey = paramCacheKey, Exception = paramException };
                 })
                 .ToList();
 
             if (func.CallTarget != null)
             {
                 // If this function has a target (e.g. xml functions), add the target as the first parameter
-                var targetParam = func.InvokeSubExpression(x => x.CallTarget, x => x.CallTarget, context, contextParam, exprParam, createExpression, out var targetType, out var targetCacheKey);
-                paramExpressionsWithType.Insert(0, new { Expression = targetParam, Type = targetType, CacheKey = targetCacheKey });
+                var targetParam = func.InvokeSubExpression(x => x.CallTarget, x => x.CallTarget, context, contextParam, exprParam, createExpression, out var targetType, out var targetCacheKey, out var targetException);
+                paramExpressionsWithType.Insert(0, new { Expression = targetParam, Type = targetType, CacheKey = targetCacheKey, Exception = targetException });
             }
+
+            var paramExceptions = paramExpressionsWithType
+                .Select(p => p.Exception)
+                .Where(e => e != null)
+                .Aggregate<NotSupportedQueryFragmentException, NotSupportedQueryFragmentException>(null, (ex1, ex2) => NotSupportedQueryFragmentException.Combine(ex1, ex2));
+
+            if (paramExceptions != null)
+                throw paramExceptions;
 
             paramExpressions = paramExpressionsWithType
                 .Select(kvp => kvp.Expression)
@@ -1295,7 +1363,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // change so we can return it without any further processing
             if (func.FunctionName.Value == "ExplicitCollation" && func.Parameters.Count == 1)
             {
-                var converted = func.InvokeSubExpression(x => x.Parameters[0], (x, i) => x.Parameters[i], 0, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+                var converted = func.InvokeSubExpression(x => x.Parameters[0], (x, i) => x.Parameters[i], 0, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey, out var ex);
+
+                if (ex != null)
+                    throw ex;
 
                 if (!(sqlType is SqlDataTypeReferenceWithCollation coll) ||
                     !coll.SqlDataTypeOption.IsStringType() ||
@@ -1334,21 +1405,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this ParenthesisExpression paren, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var expr = paren.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+            var expr = paren.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey, out var ex);
+
+            if (ex != null)
+                throw ex;
+
             cacheKey = "(" + cacheKey + ")";
             return expr;
         }
 
         private static Expression ToExpression(this ExpressionCallTarget callTarget, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var expr = callTarget.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+            var expr = callTarget.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey, out var ex);
+
+            if (ex != null)
+                throw ex;
+
             cacheKey += "<CallTarget>";
             return expr;
         }
 
         private static Expression ToExpression(this Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var value = unary.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+            var value = unary.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey, out var ex);
+
+            if (ex != null)
+                throw ex;
             
             switch (unary.UnaryExpressionType)
             {
@@ -1374,7 +1456,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (inPred.Subquery != null)
                 throw new NotSupportedQueryFragmentException("Subquery should have been eliminated by query plan", inPred);
 
-            var exprValue = inPred.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out var exprType, out cacheKey);
+            var exprValue = inPred.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out var exprType, out cacheKey, out var ex);
             if (inPred.NotDefined)
                 cacheKey += " NOT IN (";
             else
@@ -1384,7 +1466,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             for (var i = 0; i < inPred.Values.Count; i++)
             {
-                var comparisonValue = inPred.InvokeSubExpression(x => x.Values[i], (x, j) => x.Values[j], i, context, contextParam, exprParam, createExpression, out var comparisonType, out var comparisonCacheKey);
+                var comparisonValue = inPred.InvokeSubExpression(x => x.Values[i], (x, j) => x.Values[j], i, context, contextParam, exprParam, createExpression, out var comparisonType, out var comparisonCacheKey, out var comparisonEx);
+
+                ex = NotSupportedQueryFragmentException.Combine(ex, comparisonEx);
+
+                if (ex != null)
+                    continue;
 
                 if (!SqlTypeConverter.CanMakeConsistentTypes(exprType, comparisonType, context.PrimaryDataSource, inPred, "in", out var type))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(inPred, exprType, comparisonType));
@@ -1412,6 +1499,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 cacheKey += comparisonCacheKey;
             }
+
+            if (ex != null)
+                throw ex;
 
             cacheKey += ")";
             sqlType = DataTypeHelpers.Bit;
@@ -1454,7 +1544,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this BooleanIsNullExpression isNull, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var value = isNull.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out _, out cacheKey);
+            var value = isNull.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out _, out cacheKey, out var ex);
+
+            if (ex != null)
+                throw ex;
+
             value = createExpression ? SqlTypeConverter.NullCheck(value) : null;
 
             if (isNull.IsNot)
@@ -1476,10 +1570,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             DataTypeReference escapeType = null;
             string escapeCacheKey = null;
+            NotSupportedQueryFragmentException escapeEx = null;
 
-            var value = like.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
-            var pattern = like.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var patternType, out var patternCacheKey);
-            var escape = like.EscapeExpression == null ? null : like.InvokeSubExpression(x => x.EscapeExpression, x => x.EscapeExpression, context, contextParam, exprParam, createExpression, out escapeType, out escapeCacheKey);
+            var value = like.InvokeSubExpression(x => x.FirstExpression, x => x.FirstExpression, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey, out var valueEx);
+            var pattern = like.InvokeSubExpression(x => x.SecondExpression, x => x.SecondExpression, context, contextParam, exprParam, createExpression, out var patternType, out var patternCacheKey, out var patternEx);
+            var escape = like.EscapeExpression == null ? null : like.InvokeSubExpression(x => x.EscapeExpression, x => x.EscapeExpression, context, contextParam, exprParam, createExpression, out escapeType, out escapeCacheKey, out escapeEx);
+
+            if (valueEx != null || patternEx != null || escapeEx != null)
+                throw NotSupportedQueryFragmentException.Combine(valueEx, NotSupportedQueryFragmentException.Combine(patternEx, escapeEx));
 
             sqlType = DataTypeHelpers.Bit;
             var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
@@ -1732,21 +1830,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this SimpleCaseExpression simpleCase, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
             // Convert all the different elements to expressions
-            var value = simpleCase.InvokeSubExpression(x => x.InputExpression, x => x.InputExpression, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
+            var value = simpleCase.InvokeSubExpression(x => x.InputExpression, x => x.InputExpression, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey, out var valueEx);
             var whenClauses = simpleCase.WhenClauses.Select((_, index) =>
             {
-                var whenExpr = simpleCase.InvokeSubExpression(x => x.WhenClauses[index].WhenExpression, (x, i) => x.WhenClauses[i].WhenExpression, index, context, contextParam, exprParam, createExpression, out var whenType, out var whenCacheKey);
-                return new { Expression = whenExpr, Type = whenType, CacheKey = whenCacheKey };
+                var whenExpr = simpleCase.InvokeSubExpression(x => x.WhenClauses[index].WhenExpression, (x, i) => x.WhenClauses[i].WhenExpression, index, context, contextParam, exprParam, createExpression, out var whenType, out var whenCacheKey, out var whenEx);
+                return new { Expression = whenExpr, Type = whenType, CacheKey = whenCacheKey, Exception = whenEx };
             }).ToList();
             var caseTypes = new DataTypeReference[whenClauses.Count];
             var thenClauses = simpleCase.WhenClauses.Select((_, index) =>
             {
-                var thenExpr = simpleCase.InvokeSubExpression(x => x.WhenClauses[index].ThenExpression, (x, i) => x.WhenClauses[i].ThenExpression, index, context, contextParam, exprParam, createExpression, out var thenType, out var thenCacheKey);
-                return new { Expression = thenExpr, Type = thenType, CacheKey = thenCacheKey };
+                var thenExpr = simpleCase.InvokeSubExpression(x => x.WhenClauses[index].ThenExpression, (x, i) => x.WhenClauses[i].ThenExpression, index, context, contextParam, exprParam, createExpression, out var thenType, out var thenCacheKey, out var thenEx);
+                return new { Expression = thenExpr, Type = thenType, CacheKey = thenCacheKey, Exception = thenEx };
             }).ToList();
             DataTypeReference elseType = null;
             string elseCacheKey = null;
-            var elseValue = simpleCase.ElseExpression == null ? null : simpleCase.InvokeSubExpression(x => x.ElseExpression, x => x.ElseExpression, context, contextParam, exprParam, createExpression, out elseType, out elseCacheKey);
+            NotSupportedQueryFragmentException elseEx = null;
+            var elseValue = simpleCase.ElseExpression == null ? null : simpleCase.InvokeSubExpression(x => x.ElseExpression, x => x.ElseExpression, context, contextParam, exprParam, createExpression, out elseType, out elseCacheKey, out elseEx);
+
+            var finalEx = valueEx;
+            foreach (var whenEx in whenClauses.Select(x => x.Exception))
+                finalEx = NotSupportedQueryFragmentException.Combine(finalEx, whenEx);
+            foreach (var thenEx in thenClauses.Select(x => x.Exception))
+                finalEx = NotSupportedQueryFragmentException.Combine(finalEx, thenEx);
+            finalEx = NotSupportedQueryFragmentException.Combine(finalEx, elseEx);
+
+            if (finalEx != null)
+                throw finalEx;
 
             // First pass to determine final return type
             DataTypeReference type = null;
@@ -1834,17 +1943,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Convert all the different elements to expressions
             var whenClauses = searchedCase.WhenClauses.Select((_, index) =>
             {
-                var whenExpr = searchedCase.InvokeSubExpression(x => x.WhenClauses[index].WhenExpression, (x, i) => x.WhenClauses[i].WhenExpression, index, context, contextParam, exprParam, createExpression, out var whenType, out var whenCacheKey);
-                return new { Expression = whenExpr, Type = whenType, CacheKey = whenCacheKey };
+                var whenExpr = searchedCase.InvokeSubExpression(x => x.WhenClauses[index].WhenExpression, (x, i) => x.WhenClauses[i].WhenExpression, index, context, contextParam, exprParam, createExpression, out var whenType, out var whenCacheKey, out var whenEx);
+                return new { Expression = whenExpr, Type = whenType, CacheKey = whenCacheKey, Exception = whenEx };
             }).ToList();
             var thenClauses = searchedCase.WhenClauses.Select((_, index) =>
             {
-                var thenExpr = searchedCase.InvokeSubExpression(x => x.WhenClauses[index].ThenExpression, (x, i) => x.WhenClauses[i].ThenExpression, index, context, contextParam, exprParam, createExpression, out var thenType, out var thenCacheKey );
-                return new { Expression = thenExpr, Type = thenType, CacheKey = thenCacheKey };
+                var thenExpr = searchedCase.InvokeSubExpression(x => x.WhenClauses[index].ThenExpression, (x, i) => x.WhenClauses[i].ThenExpression, index, context, contextParam, exprParam, createExpression, out var thenType, out var thenCacheKey, out var thenEx );
+                return new { Expression = thenExpr, Type = thenType, CacheKey = thenCacheKey, Exception = thenEx };
             }).ToList();
             DataTypeReference elseType = null;
             string elseCacheKey = null;
-            var elseValue = searchedCase.ElseExpression == null ? null : searchedCase.InvokeSubExpression(x => x.ElseExpression, x => x.ElseExpression, context, contextParam, exprParam, createExpression, out elseType, out elseCacheKey);
+            NotSupportedQueryFragmentException elseEx = null;
+            var elseValue = searchedCase.ElseExpression == null ? null : searchedCase.InvokeSubExpression(x => x.ElseExpression, x => x.ElseExpression, context, contextParam, exprParam, createExpression, out elseType, out elseCacheKey, out elseEx);
+
+            NotSupportedQueryFragmentException finalEx = null;
+            foreach (var whenEx in whenClauses.Select(x => x.Exception))
+                finalEx = NotSupportedQueryFragmentException.Combine(finalEx, whenEx);
+            foreach (var thenEx in thenClauses.Select(x => x.Exception))
+                finalEx = NotSupportedQueryFragmentException.Combine(finalEx, thenEx);
+            finalEx = NotSupportedQueryFragmentException.Combine(finalEx, elseEx);
+
+            if (finalEx != null)
+                throw finalEx;
 
             // First pass to determine final return type
             DataTypeReference type = null;
@@ -1916,7 +2036,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this BooleanNotExpression not, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var value = not.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+            var value = not.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey, out var ex);
+
+            if (ex != null)
+                throw ex;
+
             cacheKey = "NOT " + cacheKey;
             return createExpression ? Expression.Convert(Expression.IsFalse(value), typeof(SqlBoolean)) : null;
         }
@@ -2038,10 +2162,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this ConvertCall convert, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var value = convert.InvokeSubExpression(x => x.Parameter, x => x.Parameter, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
+            var value = convert.InvokeSubExpression(x => x.Parameter, x => x.Parameter, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey, out var valueEx);
             DataTypeReference styleType = null;
             string styleCacheKey = null;
-            var style = convert.Style == null ? null : convert.InvokeSubExpression(x => x.Style, x => x.Style, context, contextParam, exprParam, createExpression, out styleType, out styleCacheKey);
+            NotSupportedQueryFragmentException styleEx = null;
+            var style = convert.Style == null ? null : convert.InvokeSubExpression(x => x.Style, x => x.Style, context, contextParam, exprParam, createExpression, out styleType, out styleCacheKey, out styleEx);
+
+            if (valueEx != null || styleEx != null)
+                throw NotSupportedQueryFragmentException.Combine(valueEx, styleEx);
 
             sqlType = convert.DataType;
 
@@ -2082,7 +2210,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this CastCall cast, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            var value = cast.InvokeSubExpression(x => x.Parameter, x => x.Parameter, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
+            var value = cast.InvokeSubExpression(x => x.Parameter, x => x.Parameter, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey, out var valueEx);
+
+            if (valueEx != null)
+                throw valueEx;
+
             sqlType = cast.DataType;
 
             return Convert(context, value, valueType, valueCacheKey, ref sqlType, null, null, null, cast, "CAST", out cacheKey);
@@ -2108,7 +2240,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fullText.LanguageTerm != null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(fullText.LanguageTerm, "LANGUAGE"));
 
-            var col = fullText.InvokeSubExpression(x => x.Columns[0], (x, i) => x.Columns[i], 0, context, contextParam, exprParam, createExpression, out var colType, out var colCacheKey);
+            var col = fullText.InvokeSubExpression(x => x.Columns[0], (x, i) => x.Columns[i], 0, context, contextParam, exprParam, createExpression, out var colType, out var colCacheKey, out var colEx);
+            var value = fullText.InvokeSubExpression(x => x.Value, x => x.Value, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey, out var valueEx);
+
+            if (colEx != null || valueEx != null)
+                throw NotSupportedQueryFragmentException.Combine(colEx, valueEx);
+
             var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(colType, stringType))
@@ -2127,7 +2264,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return createExpression ? Expr.Call(() => Contains(Expr.Arg<SqlString>(), Expr.Arg<Regex[]>()), col, Expression.Constant(words)) : null;
             }
 
-            var value = fullText.InvokeSubExpression(x => x.Value, x => x.Value, context, contextParam, exprParam, createExpression, out var valueType, out var valueCacheKey);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, stringType))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(fullText.Value, valueType, stringType));
@@ -2414,7 +2550,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var parameterlessVisitor = new ParameterlessCollectingVisitor();
             expr.Accept(parameterlessVisitor);
 
-            if (parameterlessVisitor.ParameterlessCalls.Any(p => p.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp))
+            if (parameterlessVisitor.ParameterlessCalls.Count > 0)
+                return false;
+
+            // Check if all functions in the expression are deterministic
+            var functionVisitor = new FunctionCollectingVisitor();
+            expr.Accept(functionVisitor);
+
+            if (functionVisitor.Functions.Any(f => !f.IsDeterministic(context)))
                 return false;
 
             var evaluationContext = new ExpressionExecutionContext(context);
@@ -2473,6 +2616,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var evaluationContext = new ExpressionExecutionContext(context);
             value = expr.Compile(context)(evaluationContext);
+
+            return true;
+        }
+
+        public static bool IsDeterministic(this FunctionCall functionCall, ExpressionCompilationContext context)
+        {
+            // The function itself must be defined as deterministic
+            var method = GetMethod(functionCall, context, null, null, false, out _, out _, out _);
+
+            if (method == null)
+                return false;
+
+            var attr = method.GetCustomAttribute<Microsoft.SqlServer.Server.SqlFunctionAttribute>();
+
+            if (attr == null)
+                return false;
+
+            if (!attr.IsDeterministic)
+                return false;
+
+            // All the parameters must also be deterministic
+            foreach (var param in functionCall.Parameters)
+            {
+                if (!param.IsConstantValueExpression(context, out _))
+                    return false;
+            }
 
             return true;
         }

@@ -67,6 +67,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CopilotScriptObject.cs" />
     <Compile Include="CreateCopilotAssistantForm.cs">
       <SubType>Form</SubType>
     </Compile>

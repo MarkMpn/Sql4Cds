@@ -468,6 +468,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (condition.value == null && (condition.Items == null || condition.Items.Length == 0))
                     continue;
 
+                if (condition.IsVariable)
+                    continue;
+
                 var conditionEntity = entityName;
 
                 if (condition.entityname != null)
@@ -1101,8 +1104,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _lastSchema = null;
         }
 
-        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
+        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity, out AttributeMetadata attrMetadata, out bool isVirtual)
         {
+            isVirtual = false;
+
             var mapping = ColumnMappings.FirstOrDefault(m => m.OutputColumn == colName);
             if (mapping != null)
                 colName = mapping.SourceColumn;
@@ -1112,7 +1117,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parts.Length == 1)
             {
                 added = false;
-                return Entity.FindAliasedAttribute(colName, predicate, out linkEntity);
+                var linkAttr = Entity.FindAliasedAttribute(colName, predicate, out linkEntity);
+
+                if (linkAttr != null)
+                    attrMetadata = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == linkAttr.name);
+                else
+                    attrMetadata = null;
+
+                return linkAttr;
             }
 
             var entityName = parts[0];
@@ -1122,13 +1134,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 linkEntity = null;
 
-                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                attrMetadata = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
 
-                if (meta == null)
-                    meta = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                if (attrMetadata == null)
+                {
+                    attrMetadata = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                    isVirtual = true;
+                }
 
-                if (meta != null)
-                    attr.name = meta.LogicalName;
+                if (attrMetadata != null)
+                    attr.name = attrMetadata.LogicalName;
 
                 if (Entity.Items != null)
                 {
@@ -1153,12 +1168,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 linkEntity = Entity.FindLinkEntity(entityName);
 
-                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
-                if (meta == null)
-                    meta = metadata[linkEntity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                attrMetadata = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
 
-                if (meta != null)
-                    attr.name = meta.LogicalName;
+                if (attrMetadata == null)
+                {
+                    attrMetadata = metadata[linkEntity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
+                    isVirtual = true;
+                }
+
+                if (attrMetadata != null)
+                    attr.name = attrMetadata.LogicalName;
 
                 if (linkEntity.Items != null)
                 {
@@ -1777,7 +1796,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var entityNames = filter.Items
                 .OfType<condition>()
                 .Select(c => c.entityname)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Union(filter.Items.OfType<filter>().Select(GetConsistentEntityName))
                 .ToList();
 
             if (entityNames.Count != 1)
@@ -1987,15 +2006,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (HiddenAliases.Contains(parts[0], StringComparer.OrdinalIgnoreCase))
                     continue;
 
-                var attr = AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out var linkEntity);
+                AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out _, out _, out _);
+            }
 
-                if (mapping != null && !mapping.AllColumns && attr != null)
+            // Apply any aliases where possible. Remove each mapping first so they are not ignored by 
+            // the AddAliases method. Alter the output column to the second part of the alias, e.g.
+            // if mapping a.firstname to a.fname, the requested alias should be simply "fname" for AddAliases
+            // to work.
+            var mappings = new Dictionary<SelectColumn,int>();
+
+            for (var i = ColumnMappings.Count - 1; i >= 0; i--)
+            {
+                var mapping = ColumnMappings[i];
+
+                if (mapping.SourceColumn == null || mapping.OutputColumn == null)
+                    continue;
+
+                var sourceParts = mapping.SourceColumn.SplitMultiPartIdentifier();
+                var outputParts = mapping.OutputColumn.SplitMultiPartIdentifier();
+
+                if (sourceParts.Length == 2 &&
+                    outputParts.Length == 2 &&
+                    sourceParts[0].Equals(outputParts[0], StringComparison.OrdinalIgnoreCase))
                 {
-                    if (attr.name != parts[1] && IsValidAlias(parts[1]))
-                        attr.alias = parts[1];
-
-                    mapping.SourceColumn = (linkEntity?.alias ?? Alias).EscapeIdentifier() + "." + (attr.alias ?? attr.name).EscapeIdentifier();
+                    ColumnMappings.RemoveAt(i);
+                    mappings.Add(new SelectColumn
+                    {
+                        SourceColumn = mapping.SourceColumn,
+                        OutputColumn = outputParts[1],
+                        SourceExpression = mapping.SourceExpression
+                    }, i);
                 }
+            }
+
+            AddAliases(mappings.Keys.ToList(), schema, dataSource.Metadata);
+
+            foreach (var mapping in mappings.OrderBy(kvp => kvp.Value))
+            {
+                var sourceParts = mapping.Key.SourceColumn.SplitMultiPartIdentifier();
+                var outputParts = mapping.Key.OutputColumn.SplitMultiPartIdentifier();
+
+                if (sourceParts.Length == 2 && outputParts.Length == 1)
+                    mapping.Key.OutputColumn = sourceParts[0] + "." + outputParts[0];
+
+                ColumnMappings.Insert(mapping.Value, mapping.Key);
             }
 
             // If there is no attribute requested the server will return everything instead of nothing, so
@@ -2033,6 +2087,107 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             NormalizeAttributes(context.DataSources);
             SetDefaultPageSize(context);
+        }
+
+        public void AddAliases(List<SelectColumn> columnSet, INodeSchema schema, IAttributeMetadataCache metadata)
+        {
+            var aliasStars = new HashSet<string>(Entity.GetLinkEntities().Where(le => le.Items != null && le.Items.OfType<allattributes>().Any()).Select(le => le.alias), StringComparer.OrdinalIgnoreCase);
+            if (Entity.Items != null && Entity.Items.OfType<allattributes>().Any())
+                aliasStars.Add(Alias);
+
+            // Check what aliases we can fold down to the FetchXML.
+            // Ignore:
+            // 1. columns that have more than 1 alias
+            // 2. aliases that are invalid for FetchXML
+            // 3. attributes that are included via an <all-attributes/>
+            // 4. virtual ___name or ___type attributes
+            var aliasedColumns = columnSet
+                .Where(c => !c.AllColumns)
+                .Select(c =>
+                {
+                    var sourceCol = c.SourceColumn;
+                    schema.ContainsColumn(sourceCol, out sourceCol);
+
+                    return new { Mapping = c, SourceColumn = sourceCol, Alias = c.OutputColumn };
+                })
+                .Select(c =>
+                {
+                    // Check which underlying attribute the data is coming from, handling virtual attributes
+                    var parts = c.SourceColumn.SplitMultiPartIdentifier();
+                    var entityName = Entity.name;
+                    var attrName = parts.Last();
+
+                    if (parts.Length > 1 && !parts[0].Equals(Alias))
+                        entityName = Entity.FindLinkEntity(parts[0])?.name;
+
+                    if (entityName == null)
+                        return null;
+
+                    var meta = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                    var isVirtual = false;
+                    if (meta == null)
+                    {
+                        meta = metadata[entityName].FindBaseAttributeFromVirtualAttribute(attrName, out _);
+                        if (meta != null)
+                            isVirtual = true;
+                    }
+
+                    return new { c.Mapping, c.SourceColumn, c.Alias, meta?.LogicalName, IsVirtual = isVirtual };
+                })
+                .Where(c => c?.LogicalName != null) // Ignore attributes we can't find in the metadata
+                .GroupBy(c => c.LogicalName, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() == 1) // Ignore attributes that appear multiple times, either as physical or virtual attributes
+                .Select(g => g.Single())
+                .Where(c => c.IsVirtual == false) // Ignore virtual attributes
+                .GroupBy(c => c.Alias, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple columns using the same alias
+                .Select(g => g.Single())
+                .Where(c =>
+                {
+                    var parts = c.SourceColumn.SplitMultiPartIdentifier();
+
+                    if (parts.Length > 1 && aliasStars.Contains(parts[0]))
+                        return false; // Don't fold aliases if we're using an <all-attributes/>
+
+                    if (c.Alias.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase))
+                        return false; // Don't fold aliases if we're using the original source name
+
+                    if (!FetchXmlScan.IsValidAlias(c.Alias))
+                        return false; // Don't fold aliases if they contain invalid characters
+
+                    if (ColumnMappings.Any(m => m.OutputColumn == c.SourceColumn))
+                        return false; // Don't fold aliases if they're already aliased in the FetchXmlScan node
+
+                    return true;
+                })
+                .Select(c =>
+                {
+                    var attr = AddAttribute(c.SourceColumn, null, metadata, out _, out var linkEntity, out _, out _);
+                    return new { c.Mapping, c.SourceColumn, c.Alias, Attr = attr, LinkEntity = linkEntity };
+                })
+                .Where(c =>
+                {
+                    var items = c.LinkEntity?.Items ?? Entity.Items;
+
+                    // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
+                    // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
+                    if (items != null && items.OfType<FetchOrderType>().Any(order => order.attribute == c.Attr.name) && AllPages)
+                        return false;
+
+                    // Don't fold the alias if it's on the audit table, it seems to break the provider
+                    if (c.LinkEntity != null && c.LinkEntity.name == "audit" ||
+                        c.LinkEntity == null && Entity.name == "audit")
+                        return false;
+
+                    return true;
+                })
+                .ToList();
+
+            foreach (var aliasedColumn in aliasedColumns)
+            {
+                aliasedColumn.Attr.alias = aliasedColumn.Alias;
+                aliasedColumn.Mapping.SourceColumn = aliasedColumn.SourceColumn.SplitMultiPartIdentifier()[0] + "." + aliasedColumn.Alias;
+            }
         }
 
         private void AddPrimaryIdAttribute(FetchEntityType entity, DataSource dataSource)
@@ -2177,6 +2332,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void FinishedFolding()
         {
             ReturnFullSchema = false;
+
+            // Remove any mappings that have no effect
+            for (var i = ColumnMappings.Count - 1; i >= 0; i--)
+            {
+                if (ColumnMappings[i].OutputColumn == ColumnMappings[i].SourceColumn)
+                    ColumnMappings.RemoveAt(i);
+            }
         }
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)

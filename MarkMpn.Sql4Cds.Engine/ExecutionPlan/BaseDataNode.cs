@@ -370,7 +370,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
                 if (field == null || (literal == null && func == null && variable == null && parameterless == null && globalVariable == null && (field2 == null || !dataSource.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(expressionContext, out literal)))
-                    return false;
+                {
+                    if (field != null && !expr.GetColumns().Any())
+                    {
+                        // Need to evaluate other expressions at runtime, but can then inject the result into the FetchXML as a parameter
+                        var exprName = context.GetExpressionName();
+                        var referenceName = "@" + context.GetExpressionName();
+                        ((ComputeScalarNode)context.GlobalCalculations.LeftSource).Columns[exprName] = expr;
+                        context.GlobalCalculations.OuterReferences[exprName] = referenceName;
+                        variable = new VariableReference { Name = referenceName };
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
 
                 // Select the correct FetchXML operator
                 @operator op;
@@ -407,6 +421,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     default:
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(comparison)) { Suggestion = "Unsupported comparison type" };
                 }
+
+                // Find the entity that the condition applies to, which may be different to the entity that the condition FetchXML element will be 
+                // added within
+                var columnName = field.GetColumnName();
+                if (!schema.ContainsColumn(columnName, out columnName))
+                    return false;
+
+                var parts = columnName.SplitMultiPartIdentifier();
+
+                if (parts.Length != 2)
+                    return false;
+
+                var entityAlias = parts[0];
+                var attrName = parts[1];
+
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityAlias))
+                    return false;
+
+                if (barredPrefixes != null && barredPrefixes.Contains(entityAlias))
+                    return false;
+
+                var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+
+                var meta = dataSource.Metadata[entityName];
 
                 ValueExpression[] values = null;
 
@@ -474,59 +512,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(comparison)) { Suggestion = "Unsupported FetchXML function use. Only <field> = <func>(<param>) usage is supported" };
                     }
                 }
-                else if (func != null)
+                else if (parameterless != null &&
+                    parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp &&
+                    (op == @operator.eq || op == @operator.ne) &&
+                    meta.Attributes.SingleOrDefault(a => a.LogicalName == RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items)) is LookupAttributeMetadata)
                 {
-                    if (func.IsConstantValueExpression(expressionContext, out literal))
-                        values = new[] { literal };
-                    else
-                        return false;
-                }
-                else if (parameterless != null)
-                {
-                    if (parameterless.IsConstantValueExpression(expressionContext, out literal))
-                    {
-                        values = new[] { literal };
-                    }
-                    else if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.eq)
+                    if (op == @operator.eq)
                     {
                         op = @operator.equserid;
                     }
-                    else if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.ne)
+                    else if (op == @operator.ne)
                     {
                         op = @operator.neuserid;
                     }
-                    else
-                    {
-                        return false;
-                    }
                 }
-
-                // Find the entity that the condition applies to, which may be different to the entity that the condition FetchXML element will be 
-                // added within
-                var columnName = field.GetColumnName();
-                if (!schema.ContainsColumn(columnName, out columnName))
+                else if (expr.IsConstantValueExpression(expressionContext, out literal))
+                {
+                    values = new[] { literal };
+                }
+                else if (!expr.GetColumns().Any())
+                {
+                    // Need to evaluate other expressions at runtime, but can then inject the result into the FetchXML as a parameter
+                    var exprName = context.GetExpressionName();
+                    var referenceName = "@" + context.GetExpressionName();
+                    ((ComputeScalarNode)context.GlobalCalculations.LeftSource).Columns[exprName] = expr;
+                    context.GlobalCalculations.OuterReferences[exprName] = referenceName;
+                    values = new[] { new VariableReference { Name = referenceName } };
+                }
+                else if (field2 == null)
+                {
                     return false;
-
-                var parts = columnName.SplitMultiPartIdentifier();
-
-                if (parts.Length != 2)
-                    return false;
-
-                var entityAlias = parts[0];
-                var attrName = parts[1];
-
-                if (allowedPrefix != null && !allowedPrefix.Equals(entityAlias))
-                    return false;
-
-                if (barredPrefixes != null && barredPrefixes.Contains(entityAlias))
-                    return false;
-
-                var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+                }
 
                 if (IsInvalidAuditFilter(targetEntityName, entityName, items, attrName, op))
                     return false;
-
-                var meta = dataSource.Metadata[entityName];
 
                 if (field2 == null)
                 {
@@ -603,6 +622,73 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     entityname = StandardizeAlias(entityAlias2, targetEntityAlias, items),
                                     attribute = RemoveAttributeAlias(attrName2, entityAlias2, targetEntityAlias, items),
                                     @operator = @operator.notnull
+                                }
+                            }
+                        };
+                        condition = null;
+                    }
+                    else if (op == @operator.ne && type == BooleanComparisonType.IsDistinctFrom)
+                    {
+                        // FetchXML ne operator translates to field1 != field2 OR field1 IS NULL
+                        // IS DISTINCT FROM is equivalent to field1 != field2 OR (field1 IS NULL AND field2 IS NOT NULL) OR (field1 IS NOT NULL AND field2 IS NULL)
+                        // Need to add an extra condition to counteract the automatic "OR field1 IS NULL" part,
+                        // and add the other null checks as well
+                        filter = new filter
+                        {
+                            type = filterType.or,
+                            Items = new object[]
+                            {
+                                new filter
+                                {
+                                    type = filterType.and,
+                                    Items = new object[]
+                                    {
+                                        condition,
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.notnull
+                                        }
+                                    }
+                                },
+                                new filter
+                                {
+                                    type = filterType.and,
+                                    Items = new object[]
+                                    {
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.@null
+                                        },
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias2, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName2, entityAlias2, targetEntityAlias, items),
+                                            @operator = @operator.notnull
+                                        }
+                                    }
+                                },
+                                new filter
+                                {
+                                    type = filterType.and,
+                                    Items = new object[]
+                                    {
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items),
+                                            @operator = @operator.notnull
+                                        },
+                                        new condition
+                                        {
+                                            entityname = StandardizeAlias(entityAlias2, targetEntityAlias, items),
+                                            attribute = RemoveAttributeAlias(attrName2, entityAlias2, targetEntityAlias, items),
+                                            @operator = @operator.@null
+                                        }
+                                    }
                                 }
                             }
                         };

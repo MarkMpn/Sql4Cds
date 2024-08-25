@@ -2681,10 +2681,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
             Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
             var fetch = AssertNode<FetchXmlScan>(select.Source);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
@@ -2727,12 +2723,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("a.fname", select.ColumnSet[1].SourceColumn);
             Assert.AreEqual("a.lname", select.ColumnSet[2].SourceColumn);
             var fetch = AssertNode<FetchXmlScan>(select.Source);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].SourceColumn);
-            Assert.AreEqual("a.fname", fetch.ColumnMappings[0].OutputColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].SourceColumn);
-            Assert.AreEqual("a.lname", fetch.ColumnMappings[1].OutputColumn);
-            Assert.AreEqual("systemuser.uname", fetch.ColumnMappings[2].SourceColumn);
-            Assert.AreEqual("a.uname", fetch.ColumnMappings[2].OutputColumn);
+            Assert.AreEqual("systemuser.uname", fetch.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("a.uname", fetch.ColumnMappings[0].OutputColumn);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
@@ -4031,6 +4023,120 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                         <filter>
                             <condition attribute='ownerid' operator='eq-userid' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotFoldEqualsCurrentUserOnStringField()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT systemuserid FROM systemuser WHERE domainname = CURRENT_USER";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["Expr1"]);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            Assert.AreEqual("CURRENT_USER", compute.Columns["Expr1"].ToSql());
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            Assert.AreEqual(1, constant.Values.Count);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='systemuser'>
+                        <attribute name='systemuserid' />
+                        <filter>
+                            <condition attribute='domainname' operator='eq' value='@Expr2' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UseNestedLoopToInjectDynamicFilterValue_GlobalVariable()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT * FROM account WHERE turnover = CAST(CURRENT_TIMESTAMP AS int)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["Expr1"]);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            Assert.AreEqual("CAST(CURRENT_TIMESTAMP AS int)", compute.Columns["Expr1"].ToSql());
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            Assert.AreEqual(1, constant.Values.Count);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='turnover' operator='eq' value='@Expr2' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UseNestedLoopToInjectDynamicFilterValue_NonDeterministicFunction()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT * FROM account WHERE turnover = CAST(GETDATE() AS int)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["Expr1"]);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            Assert.AreEqual("CAST(GETDATE() AS int)", compute.Columns["Expr1"].ToSql());
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            Assert.AreEqual(1, constant.Values.Count);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='turnover' operator='eq' value='@Expr2' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotUseNestedLoopToInjectDynamicFilterValue_DeterministicFunction()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT * FROM account WHERE turnover = CAST(LEFT('1test', 1) AS int) + 1";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='turnover' operator='eq' value='2' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -5826,6 +5932,57 @@ UPDATE account SET employees = @employees WHERE name = @name";
         }
 
         [TestMethod]
+        public void CollationConflictJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM prod.dbo.account p INNER JOIN french.dbo.account f ON p.name = f.name";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(468, ex.Errors.Single().Number);
+            }
+        }
+
+        [TestMethod]
+        public void TypeConflictJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM account p INNER JOIN account f ON p.accountid = f.turnover";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(206, ex.Errors.Single().Number);
+            }
+        }
+
+        [TestMethod]
+        public void TypeConflictCrossInstanceJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM prod.dbo.account p INNER JOIN french.dbo.account f ON p.accountid = f.turnover";
+
+            try
+            {
+                planBuilder.Build(query, null, out _);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual(206, ex.Errors.Single().Number);
+            }
+        }
+
+        [TestMethod]
         public void ExplicitCollation()
         {
             var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
@@ -6034,6 +6191,33 @@ UPDATE account SET employees = @employees WHERE name = @name";
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='audit'>
                         <attribute name='auditid' />
+                        <attribute name='objectid' />
+                        <attribute name='objecttypecode' />
+                    </entity>
+                </fetch>");
+        }
+
+        [DataTestMethod]
+        [DataRow("objectid")]
+        [DataRow("objectidname")]
+        [DataRow("objectidtype")]
+        public void SelectAuditObjectIdDistinct(string column)
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/296
+            // https://github.com/MarkMpn/Sql4Cds/issues/519
+            // We need to add the objecttypecode attribute to the FetchXML for the first issue, but combining this
+            // with DISTINCT doesn't work because of the second issue.
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = $"SELECT DISTINCT {column} AS o FROM audit";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var distinct = AssertNode<DistinctNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(distinct.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
                         <attribute name='objectid' />
                         <attribute name='objecttypecode' />
                     </entity>
@@ -6782,12 +6966,10 @@ FROM   account AS r;";
             Assert.AreEqual("b_s", fetch2.Alias);
             CollectionAssert.Contains(fetch2.HiddenAliases, "b_s");
             CollectionAssert.Contains(fetch2.HiddenAliases, "s");
-            Assert.AreEqual("b_s.name", fetch2.ColumnMappings[0].SourceColumn);
-            Assert.AreEqual("b_s.name", fetch2.ColumnMappings[0].OutputColumn);
-            Assert.AreEqual("s.systemuserid", fetch2.ColumnMappings[1].SourceColumn);
-            Assert.AreEqual("b_s.systemuserid", fetch2.ColumnMappings[1].OutputColumn);
-            Assert.AreEqual("s.msdyn_agentType", fetch2.ColumnMappings[2].SourceColumn);
-            Assert.AreEqual("b_s.msdyn_agentType", fetch2.ColumnMappings[2].OutputColumn);
+            Assert.AreEqual("s.systemuserid", fetch2.ColumnMappings[0].SourceColumn);
+            Assert.AreEqual("b_s.systemuserid", fetch2.ColumnMappings[0].OutputColumn);
+            Assert.AreEqual("s.msdyn_agentType", fetch2.ColumnMappings[1].SourceColumn);
+            Assert.AreEqual("b_s.msdyn_agentType", fetch2.ColumnMappings[1].OutputColumn);
             AssertFetchXml(fetch2, @"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
@@ -8067,6 +8249,159 @@ WHERE  a.entitylogicalname IN ('team')";
             Assert.AreEqual("p", metadata_p.EntityAlias);
             var metadata_a = AssertNode<MetadataQueryNode>(join.RightSource);
             Assert.AreEqual("a", metadata_a.AttributeAlias);
+        }
+
+        [TestMethod]
+        public void AggregateWithDynamicFilterValues()
+        {
+            var query = @"
+SELECT COUNT(*) AS AccountCount
+FROM account
+WHERE createdon >= CAST(GETDATE() AS DATE)
+AND createdon < DATEADD(day, 1, CAST(GETDATE() AS DATE))";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            var compute = AssertNode<ComputeScalarNode>(loop.LeftSource);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+            var tryCatch1 = AssertNode<TryCatchNode>(loop.RightSource);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var fetch1 = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
+            var partition = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            var fetch2 = AssertNode<FetchXmlScan>(partition.Source);
+            var streamAggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
+            var fetch3 = AssertNode<FetchXmlScan>(streamAggregate.Source);
+        }
+
+        [TestMethod]
+        public void OptionSetNameFromQueryDefinedTable()
+        {
+            var query = @"
+SELECT a.new_customentityid,
+a.new_optionsetvaluename AS [a_new_optionsetvaluename],
+a.new_optionsetvalue AS [a_new_optionsetvalue]
+FROM (SELECT new_customentityid,
+             new_optionsetvaluename,
+             new_optionsetvalue
+FROM new_customentity
+WHERE new_name IN ('test')) AS a
+ORDER BY a.new_customentityid";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch>
+    <entity name='new_customentity'>
+        <attribute name='new_customentityid' />
+        <attribute name='new_optionsetvalue' />
+        <filter>
+            <condition attribute='new_name' operator='in'>
+                <value>test</value>
+            </condition>
+        </filter>
+        <order attribute='new_customentityid' />
+    </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void OptionSetNameFromQueryDefinedTableWithAlias()
+        {
+            var query = @"
+SELECT a.new_customentityid,
+a.new_optionsetvaluename AS [a_new_optionsetvaluename],
+a.x AS [a_new_optionsetvalue]
+FROM (SELECT new_customentityid,
+             new_optionsetvaluename,
+             new_optionsetvalue AS x
+FROM new_customentity
+WHERE new_name IN ('test')) AS a
+ORDER BY a.new_customentityid";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch>
+    <entity name='new_customentity'>
+        <attribute name='new_customentityid' />
+        <attribute name='new_optionsetvalue' />
+        <filter>
+            <condition attribute='new_name' operator='in'>
+                <value>test</value>
+            </condition>
+        </filter>
+        <order attribute='new_customentityid' />
+    </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void SameAliasInTwoJoinedQueryDefinedTables()
+        {
+            var query = @"
+SELECT a1.test AS a1_test,
+       a2.test AS a2_test
+FROM   (SELECT a.accountid, a.name AS test FROM account a) AS a1
+       LEFT OUTER JOIN
+       (SELECT a.parentaccountid, a.name AS test FROM account a) AS a2
+       ON a2.parentaccountid = a1.accountid";
+
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("a1.test", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("a2.test", select.ColumnSet[1].SourceColumn);
+
+            var join = AssertNode<MergeJoinNode>(select.Source);
+            Assert.AreEqual("a1.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("a2.parentaccountid", join.RightAttribute.ToSql());
+
+            var leftFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(leftFetch, @"
+<fetch>
+    <entity name='account'>
+        <attribute name='accountid' />
+        <attribute name='name' alias='test' />
+        <order attribute='accountid' />
+    </entity>
+</fetch>");
+
+            var sort = AssertNode<SortNode>(join.RightSource);
+            Assert.AreEqual("a2.parentaccountid", sort.Sorts[0].ToSql());
+
+            var rightFetch = AssertNode<FetchXmlScan>(sort.Source);
+            AssertFetchXml(rightFetch, @"
+<fetch>
+    <entity name='account'>
+        <attribute name='parentaccountid' />
+        <attribute name='name' alias='test' />
+        <filter>
+            <condition attribute='parentaccountid' operator='not-null' />
+        </filter>
+    </entity>
+</fetch>");
         }
     }
 }

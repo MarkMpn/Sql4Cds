@@ -138,9 +138,9 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(1001, type, (SqlInt32)type.StartLine, (SqlInt32)precision);
         }
 
-        internal static Sql4CdsError ArithmeticOverflow(DataTypeReference sourceType, DataTypeReference targetType)
+        internal static Sql4CdsError ArithmeticOverflow(DataTypeReference sourceType, DataTypeReference targetType, TSqlFragment fragment)
         {
-            return Create(8115, targetType, GetTypeName(sourceType), GetTypeName(targetType));
+            return Create(8115, fragment, GetTypeName(sourceType), GetTypeName(targetType));
         }
 
         internal static Sql4CdsError ArithmeticOverflow(DataTypeReference targetType, SqlInt32 value)
@@ -789,6 +789,20 @@ namespace MarkMpn.Sql4Cds.Engine
                 return "xml";
             
             return ((UserDataTypeReference)type).Name.ToSql();
+        }
+
+        /// <summary>
+        /// Creates a copy of this error for a specific fragment
+        /// </summary>
+        /// <param name="expression">The fragment the error should be applied to</param>
+        /// <returns></returns>
+        /// <exception cref="NotImplementedException"></exception>
+        internal Sql4CdsError ForFragment(BooleanComparisonExpression expression)
+        {
+            if (expression == null)
+                return this;
+
+            return new Sql4CdsError(Class, -1, Number, Procedure, Server, State, Message, expression);
         }
     }
 
