@@ -2035,7 +2035,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, selectNode.ColumnSet.Count);
             Assert.AreEqual("globaloptionset.displayname", selectNode.ColumnSet[0].SourceColumn);
             var filterNode = (FilterNode)selectNode.Source;
-            Assert.AreEqual("globaloptionset.name = 'test'", filterNode.Filter.ToSql());
+            Assert.AreEqual("globaloptionset.name = 'test'", filterNode.Filter.ToNormalizedSql());
             var optionsetNode = (GlobalOptionSetQueryNode)filterNode.Source;
 
             var dataReader = selectNode.Execute(new NodeExecutionContext(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, INullable>(), null), CommandBehavior.Default);
