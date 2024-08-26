@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             if (expression != replaced)
             {
                 property.SetValue(target, replaced);
-                target.ScriptTokenStream = null;
+                //target.ScriptTokenStream = null;
             }
 
             return name;
