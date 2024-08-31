@@ -8403,5 +8403,35 @@ FROM   (SELECT a.accountid, a.name AS test FROM account a) AS a1
     </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void EntityKeyIndexStatusFilter()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/534
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+SELECT ak.entitylogicalname,
+       ak.logicalname,
+       ak.entitykeyindexstatus
+FROM   metadata.alternate_key AS ak
+WHERE  ak.entitykeyindexstatus = 'Failed';";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var meta = AssertNode<MetadataQueryNode>(filter.Source);
+
+            // Deserializer doesn't understand EntityKeyIndexStatus values, so we need to filter manually
+            Assert.AreEqual("ak.entitykeyindexstatus = 'Failed'", filter.Filter.ToNormalizedSql());
+
+            Assert.AreEqual(MetadataSource.Key, meta.MetadataSource);
+            Assert.AreEqual("ak", meta.KeyAlias);
+            CollectionAssert.AreEqual(new[] { "EntityLogicalName", "LogicalName", "EntityKeyIndexStatus" }, meta.Query.KeyQuery.Properties.PropertyNames);
+            Assert.AreEqual(0, meta.Query.KeyQuery.Criteria.Conditions.Count);
+        }
     }
 }
