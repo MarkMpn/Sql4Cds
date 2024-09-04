@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             if ((e.Count > Settings.Instance.InsertWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
             {
-                var msg = $"Insert will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                var msg = $"Insert will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
@@ -85,7 +85,7 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             if ((e.Count > Settings.Instance.UpdateWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
             {
-                var msg = $"Update will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                var msg = $"Update will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
@@ -107,7 +107,7 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             if ((e.Count > Settings.Instance.DeleteWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
             {
-                var msg = $"Delete will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                var msg = $"Delete will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 

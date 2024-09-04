@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -55,12 +56,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
+                Microsoft.Xrm.Sdk.Query.QueryExpression query;
+                EntityMetadata meta;
+
                 using (_timer.Run())
                 {
                     Source.ApplyParameterValues(context);
-                    var query = ((FetchXmlToQueryExpressionResponse)dataSource.Connection.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Source.FetchXmlString })).Query;
-                    var meta = dataSource.Metadata[query.EntityName];
+                    query = ((FetchXmlToQueryExpressionResponse)dataSource.Connection.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Source.FetchXmlString })).Query;
+                    meta = dataSource.Metadata[query.EntityName];
+                }
 
+                // Check again that the update is allowed. Don't count any UI interaction in the execution time
+                var confirmArgs = new ConfirmDmlStatementEventArgs(Int32.MaxValue, meta, false);
+                if (context.Options.CancellationToken.IsCancellationRequested)
+                    confirmArgs.Cancel = true;
+                context.Options.ConfirmDelete(confirmArgs);
+                if (confirmArgs.Cancel)
+                    throw new QueryExecutionException(new Sql4CdsError(11, 0, 0, null, null, 0, "DELETE cancelled by user", null));
+
+                using (_timer.Run())
+                {
                     var req = new BulkDeleteRequest
                     {
                         JobName = $"SQL 4 CDS {GetDisplayName(0, meta)} Bulk Delete Job",

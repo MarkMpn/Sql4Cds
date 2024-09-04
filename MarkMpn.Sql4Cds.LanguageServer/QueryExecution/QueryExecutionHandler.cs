@@ -208,7 +208,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                 if ((e.Count > threshold || e.BypassCustomPluginExecution) && !bypassWarnings)
                 {
-                    var msg = $"{operation} will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                    var msg = $"{operation} will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
                     if (e.BypassCustomPluginExecution)
                         msg += " This operation will bypass any custom plugins.";
                     msg += " Do you want to proceed?";
