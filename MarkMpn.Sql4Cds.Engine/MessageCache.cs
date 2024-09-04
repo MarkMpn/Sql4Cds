@@ -351,7 +351,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // 2. The response fields must be EITHER:
             //    a. A single field of an entity-derived type, OR
             //    b. A single field of an entity collection, OR
-            //    c. one or more fields of a scalar type
+            //    c. A single field of an array of a scalar type, OR
+            //    d. one or more fields of a scalar type
 
             if (InputParameters.Any(p => p.Type == null))
                 return false;
@@ -384,10 +385,13 @@ namespace MarkMpn.Sql4Cds.Engine
             if (OutputParameters.Count > 1)
                 return false;
 
-            if ((OutputParameters[0].Type == typeof(Entity) && OutputParameters[0].OTC != null) || OutputParameters[0].Type == typeof(AuditDetail))
+            if (OutputParameters[0].Type == typeof(Entity) || OutputParameters[0].Type == typeof(AuditDetail))
                 return true;
 
-            if ((OutputParameters[0].Type == typeof(EntityCollection) && OutputParameters[0].OTC != null) || OutputParameters[0].Type == typeof(AuditDetailCollection))
+            if (OutputParameters[0].Type == typeof(EntityCollection) || OutputParameters[0].Type == typeof(AuditDetailCollection))
+                return true;
+
+            if (OutputParameters[0].Type.IsArray && MessageParameter.IsScalarType(OutputParameters[0].Type.GetElementType()))
                 return true;
 
             return false;
@@ -430,8 +434,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns><c>true</c> if the <see cref="Type"/> is a scalar type</returns>
         public bool IsScalarType()
         {
-            var type = Type;
+            return IsScalarType(Type);
+        }
 
+        internal static bool IsScalarType(Type type)
+        {
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
                 type = type.GetGenericArguments()[0];
 
@@ -440,12 +447,22 @@ namespace MarkMpn.Sql4Cds.Engine
                 type == typeof(Money))
                 return true;
 
+            // Entity values can be converted to JSON strings and so can be treated as scalar values
+            if (type == typeof(Entity))
+                return true;
+
             return false;
         }
 
         /// <summary>
         /// Returns the SQL data type for the parameter
         /// </summary>
-        public Microsoft.SqlServer.TransactSql.ScriptDom.DataTypeReference GetSqlDataType(DataSource dataSource) => SqlTypeConverter.NetToSqlType(Type).ToSqlType(dataSource);
+        public Microsoft.SqlServer.TransactSql.ScriptDom.DataTypeReference GetSqlDataType(DataSource dataSource)
+        {
+            if (Type == typeof(Entity))
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource?.DefaultCollation ?? Collation.USEnglish, CollationLabel.Implicit);
+
+            return SqlTypeConverter.NetToSqlType(Type).ToSqlType(dataSource);
+        }
     }
 }

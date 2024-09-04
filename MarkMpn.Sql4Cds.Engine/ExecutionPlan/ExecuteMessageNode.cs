@@ -17,6 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private Dictionary<string, Func<ExpressionExecutionContext, object>> _inputParameters;
         private string _primaryKeyColumn;
+        private bool _isExpando;
 
         /// <summary>
         /// The SQL string that the query was converted from
@@ -129,11 +130,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var sourceSqlType = value.Value.GetType(expressionContext, out _);
                     var destNetType = ValueTypes[value.Key];
+                    if (destNetType == typeof(Entity))
+                        destNetType = typeof(string);
                     var destSqlType = SqlTypeConverter.NetToSqlType(destNetType);
                     var expr = value.Value.Compile(expressionContext);
                     var sqlConversion = SqlTypeConverter.GetConversion(sourceSqlType, destSqlType);
                     var netConversion = SqlTypeConverter.GetConversion(destSqlType, destNetType);
-                    return (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => netConversion(sqlConversion(expr(ctx))));
+                    var conversion = (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => netConversion(sqlConversion(expr(ctx))));
+                    if (ValueTypes[value.Key] == typeof(Entity))
+                    {
+                        var conversionToString = conversion;
+                        conversion = (ExpressionExecutionContext ctx) =>
+                        {
+                            var s = (string)conversionToString(ctx);
+                            return DeserializeAttributeValues(s);
+                        };
+                    }
+                    return conversion;
                 });
 
             BypassCustomPluginExecution = GetBypassPluginExecution(hints, context.Options);
@@ -171,12 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private void SetOutputSchema(DataSource dataSource, Message message, TSqlFragment source)
         {
             // Add the response fields to the node schema
-            if (message.OutputParameters.All(f => f.IsScalarType()))
-            {
-                foreach (var value in message.OutputParameters)
-                    AddSchemaColumn(value.Name, value.GetSqlDataType(dataSource));
-            }
-            else
+            if (message.OutputParameters.Count == 1 && (message.OutputParameters[0].Type == typeof(Entity) || !message.OutputParameters[0].IsScalarType()))
             {
                 var firstValue = message.OutputParameters.Single();
                 var audit = false;
@@ -201,22 +209,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     EntityCollectionResponseParameter = firstValue.Name;
 
-                foreach (var attrMetadata in dataSource.Metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
+                if (otc == null)
                 {
-                    AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource, false));
+                    _isExpando = true;
 
-                    // Add standard virtual attributes
-                    foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
-                        AddSchemaColumn(attrMetadata.LogicalName + virtualAttr.Suffix, virtualAttr.DataType);
+                    if (type == typeof(Entity) || type == typeof(EntityCollection))
+                        AddSchemaColumn(firstValue.Name, DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit));
+                    else if (type.IsArray)
+                        AddSchemaColumn(firstValue.Name, SqlTypeConverter.NetToSqlType(type.GetElementType()).ToSqlType(dataSource));
                 }
-
-                if (audit)
+                else
                 {
-                    AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-                    AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
-                }
+                    foreach (var attrMetadata in dataSource.Metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
+                    {
+                        AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource, false));
 
-                _primaryKeyColumn = PrefixWithAlias(dataSource.Metadata[otc.Value].PrimaryIdAttribute);
+                        // Add standard virtual attributes
+                        foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
+                            AddSchemaColumn(attrMetadata.LogicalName + virtualAttr.Suffix, virtualAttr.DataType);
+                    }
+
+                    if (audit)
+                    {
+                        AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                        AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                    }
+
+                    _primaryKeyColumn = PrefixWithAlias(dataSource.Metadata[otc.Value].PrimaryIdAttribute);
+                }
+            }
+            else
+            {
+                foreach (var value in message.OutputParameters)
+                    AddSchemaColumn(value.Name, value.GetSqlDataType(dataSource));
             }
 
             if (!String.IsNullOrEmpty(PagingParameter) && EntityCollectionResponseParameter == null)
@@ -327,9 +352,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     entities.PagingCookie = audit.PagingCookie;
                     entities.TotalRecordCount = audit.TotalRecordCount;
                 }
-                else
+                else if (response[EntityCollectionResponseParameter] is EntityCollection collection)
                 {
                     entities = (EntityCollection)response[EntityCollectionResponseParameter];
+
+                    if (_isExpando)
+                    {
+                        // Convert entity to JSON
+                        for (var i = 0; i < entities.Entities.Count; i++)
+                        {
+                            var json = SerializeAttributeValues(entities.Entities[i]);
+                            var entity = new Entity
+                            {
+                                [EntityCollectionResponseParameter] = json
+                            };
+                            entities.Entities[i] = entity;
+                        }
+                    }
+                }
+                else if (response[EntityCollectionResponseParameter].GetType().IsArray)
+                {
+                    entities = new EntityCollection();
+
+                    foreach (var value in (Array)response[EntityCollectionResponseParameter])
+                        entities.Entities.Add(new Entity { [EntityCollectionResponseParameter] = value });
+                }
+                else
+                {
+                    throw new QueryExecutionException($"Unexpected response type for {EntityCollectionResponseParameter}");
                 }
             }
             else if (EntityResponseParameter != null)
@@ -339,6 +389,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (response[EntityResponseParameter] is AuditDetail audit)
                     entity = GetAuditEntity(audit);
+                else if (_isExpando)
+                    entity = new Entity { [EntityResponseParameter] = SerializeAttributeValues((Entity)response[EntityResponseParameter]) };
                 else
                     entity = (Entity)response[EntityResponseParameter];
 
@@ -369,18 +421,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Attribute list could vary from record to record depending on the entity type being audited,
                 // so can't expose this as a definite list of columns. Instead, serialize them as a string and
                 // allow the values to be accessed later using some custom functions.
-                entity["newvalues"] = SerializeAttributeAuditValues(attributeAudit.NewValue);
-                entity["oldvalues"] = SerializeAttributeAuditValues(attributeAudit.OldValue);
+                entity["newvalues"] = SerializeAttributeValues(attributeAudit.NewValue);
+                entity["oldvalues"] = SerializeAttributeValues(attributeAudit.OldValue);
             }
 
             return entity;
         }
 
-        private string SerializeAttributeAuditValues(Entity entity)
+        private string SerializeAttributeValues(Entity entity)
         {
+            if (entity == null)
+                return null;
+
             var values = new Dictionary<string, object>();
 
-            if (entity != null && entity.Attributes != null)
+            if (!String.IsNullOrEmpty(entity.LogicalName))
+                values["@odata.type"] = entity.LogicalName;
+
+            if (entity.Id != Guid.Empty)
+                values["@odata.id"] = entity.Id;
+
+            if (entity.Attributes != null)
             {
                 foreach (var attribute in entity.Attributes)
                 {
@@ -402,10 +463,80 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         values[attribute.Key] = attribute.Value;
                     }
+
+                    // Add type annotation for any types that aren't going to be natively deserialized to the same type
+                    if (attribute.Value != null && !(attribute.Value is string) && !(attribute.Value is bool) && !(attribute.Value is int))
+                        values[attribute.Key + "@odata.type"] = attribute.Value.GetType().Name;
                 }
             }
 
             return JsonConvert.SerializeObject(values);
+        }
+
+        private Entity DeserializeAttributeValues(string s)
+        {
+            if (String.IsNullOrEmpty(s))
+                return null;
+
+            var values = JsonConvert.DeserializeObject<Dictionary<string, object>>(s);
+            var entity = new Entity();
+
+            // Extrac the type and ID from known fields
+            if (values.TryGetValue("@odata.type", out var type))
+                entity.LogicalName = (string)type;
+
+            if (values.TryGetValue("@odata.id", out var id))
+                entity.Id = Guid.Parse((string)id);
+
+            // Look for any other typed values
+            foreach (var value in values)
+            {
+                if (value.Key.StartsWith("@odata.") || value.Key.EndsWith("@odata.type"))
+                    continue;
+
+                if ((value.Key.EndsWith("name") || value.Key.EndsWith("type")) && values.ContainsKey(value.Key.Substring(0, value.Key.Length - 4) + "@odata.type"))
+                    continue;
+
+                if (!values.TryGetValue(value.Key + "@odata.type", out var valueType))
+                {
+                    // Pass through the value as-is
+                    entity[value.Key] = value.Value;
+                }
+                else
+                {
+                    // Convert the value to the requested XRM type
+                    switch ((string)valueType)
+                    {
+
+                       case "OptionSetValue":
+                            entity[value.Key] = new OptionSetValue((int)value.Value);
+                            break;
+
+                        case "Money":
+                            entity[value.Key] = new Money((decimal)value.Value);
+                            break;
+
+                        case "EntityReference":
+                            var er = new EntityReference();
+                            er.Id = Guid.Parse((string)value.Value);
+
+                            if (values.TryGetValue(value.Key + "type", out var erType))
+                                er.LogicalName = (string)erType;
+
+                            if (values.TryGetValue(value.Key + "name", out var erName))
+                                er.Name = (string)erName;
+
+                            entity[value.Key] = er;
+                            break;
+
+                        default:
+                            entity[value.Key] = value.Value;
+                            break;
+                    }
+                }
+            }
+
+            return entity;
         }
 
         private void OnRetrievedEntity(Entity entity, IQueryExecutionOptions options, DataSource dataSource)
@@ -490,6 +621,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
                 _primaryKeyColumn = _primaryKeyColumn,
                 PagingParameter = PagingParameter,
+                _isExpando = _isExpando,
             };
 
             foreach (var value in Values)
