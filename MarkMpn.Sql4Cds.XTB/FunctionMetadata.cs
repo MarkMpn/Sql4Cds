@@ -202,6 +202,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
             [Description("Generates an error message and initiates error processing for the session")]
             public abstract void raiserror(string msg_str, int severity, int state, object[] parameters);
+
+            [Description("Creates a unique value of type uniqueidentifier")]
+            public abstract Guid newid();
         }
     }
 }

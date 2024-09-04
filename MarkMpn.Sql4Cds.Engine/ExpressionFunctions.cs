@@ -1374,6 +1374,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return (context?.PrimaryDataSource.DefaultCollation ?? Collation.USEnglish).ToSqlString(msg);
         }
+
+        [SqlFunction(IsDeterministic = false)]
+        public static SqlGuid NewId()
+        {
+            return Guid.NewGuid();
+        }
     }
 
     /// <summary>
