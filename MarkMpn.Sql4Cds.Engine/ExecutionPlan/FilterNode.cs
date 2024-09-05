@@ -2292,6 +2292,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 prop.Name == nameof(AttributeMetadata.SourceType))
                 return false;
 
+            // Filtering on types that the KnownTypesResolver can't handle is not supported
+            // https://github.com/MarkMpn/Sql4Cds/issues/534
+            if (!new KnownTypesResolver().ResolvedTypes.ContainsKey(targetValueType.Name))
+                return false;
+
             // String comparisons will be executed case-sensitively, but all other comparisons are case-insensitive. For consistency, don't allow
             // comparisons on string properties except those where we know the expected case.
             if (targetValueType == typeof(string))
