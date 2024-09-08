@@ -313,7 +313,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!req.Requests.All(r => r is CreateRequest))
                 return base.ExecuteMultiple(dataSource, org, meta, req);
 
-            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "CreateMultiple"))
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider || meta.DataProviderId == null && dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "CreateMultiple"))
             {
                 // Elastic tables can use CreateMultiple for better performance than ExecuteMultiple
                 var entities = new EntityCollection { EntityName = meta.LogicalName };
