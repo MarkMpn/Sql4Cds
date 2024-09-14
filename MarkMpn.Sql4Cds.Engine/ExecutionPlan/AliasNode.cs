@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 // Remove any unused columns
                 var unusedColumns = constant.Schema.Keys
-                    .Where(sourceCol => !ColumnSet.Any(col => col.SourceColumn.SplitMultiPartIdentifier().Last().EscapeIdentifier() == sourceCol))
+                    .Where(sourceCol => !ColumnSet.Any(col => (String.IsNullOrEmpty(constant.Alias) && col.SourceColumn == sourceCol) || (!String.IsNullOrEmpty(constant.Alias) && col.SourceColumn == constant.Alias.EscapeIdentifier() + "." + sourceCol)))
                     .ToList();
 
                 foreach (var col in unusedColumns)
@@ -145,7 +145,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Copy/rename any columns using the new aliases
                 foreach (var col in ColumnSet)
                 {
-                    var sourceColumn = col.SourceColumn.SplitMultiPartIdentifier().Last();
+                    var sourceColumn = constant.Alias == null ? col.SourceColumn : col.SourceColumn.SplitMultiPartIdentifier().Last();
 
                     if (String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != col.SourceColumn ||
                         !String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != constant.Alias.EscapeIdentifier() + "." + col.SourceColumn)
