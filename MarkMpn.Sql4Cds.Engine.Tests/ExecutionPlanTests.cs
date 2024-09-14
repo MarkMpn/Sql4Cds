@@ -8433,5 +8433,44 @@ WHERE  ak.entitykeyindexstatus = 'Failed';";
             CollectionAssert.AreEqual(new[] { "EntityLogicalName", "LogicalName", "EntityKeyIndexStatus" }, meta.Query.KeyQuery.Properties.PropertyNames);
             Assert.AreEqual(0, meta.Query.KeyQuery.Criteria.Conditions.Count);
         }
+
+        [TestMethod]
+        public void OuterApplyOuterReference()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/547
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+SELECT *
+FROM (
+    SELECT a.accountid,
+           a.name
+    FROM   account a) AS q1
+FULL OUTER JOIN (
+    SELECT c.contactid,
+           c.parentcustomerid,
+           c.fullname
+    FROM   contact c) AS q2
+    ON q1.accountid = q2.parentcustomerid
+OUTER APPLY (
+    SELECT CASE WHEN q1.accountid = q2.parentcustomerid THEN 1 ELSE 0 END AS [flag]
+) AS q3
+WHERE q3.flag = 0";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var apply = AssertNode<NestedLoopNode>(select.Source);
+            var join = AssertNode<MergeJoinNode>(apply.LeftSource);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var fetch2 = AssertNode<FetchXmlScan>(sort.Source);
+            var alias = AssertNode<AliasNode>(apply.RightSource);
+            var filter = AssertNode<FilterNode>(alias.Source);
+            var compute = AssertNode<ComputeScalarNode>(filter.Source);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+        }
     }
 }
