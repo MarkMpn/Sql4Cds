@@ -8463,6 +8463,7 @@ WHERE q3.flag = 0";
 
             var select = AssertNode<SelectNode>(plans[0]);
             var apply = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.Inner, apply.JoinType);
             var join = AssertNode<MergeJoinNode>(apply.LeftSource);
             var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
             var sort = AssertNode<SortNode>(join.RightSource);
@@ -8470,6 +8471,38 @@ WHERE q3.flag = 0";
             var alias = AssertNode<AliasNode>(apply.RightSource);
             var filter = AssertNode<FilterNode>(alias.Source);
             var compute = AssertNode<ComputeScalarNode>(filter.Source);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+        }
+
+        [TestMethod]
+        public void FilterOnOuterApply()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/548
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+SELECT *
+FROM (
+    SELECT a.accountid,
+           a.name
+    FROM   account a) AS q1
+OUTER APPLY (
+    SELECT IIF(q1.name = 'Test1', 1, 0) AS [flag1],
+           IIF(q1.name = 'Test2', 1, 0) AS [flag2]
+) AS q2
+WHERE q2.flag1 = 1 OR q2.flag2 = 1";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var apply = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, apply.JoinType);
+            Assert.AreEqual("q2.flag1 = 1 OR q2.flag2 = 1", apply.JoinCondition.ToSql());
+            var fetch = AssertNode<FetchXmlScan>(apply.LeftSource);
+            var alias = AssertNode<AliasNode>(apply.RightSource);
+            var compute = AssertNode<ComputeScalarNode>(alias.Source);
             var constant = AssertNode<ConstantScanNode>(compute.Source);
         }
     }
