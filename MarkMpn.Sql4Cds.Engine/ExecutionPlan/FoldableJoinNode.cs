@@ -124,7 +124,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             IDataExecutionPlanNodeInternal folded = null;
 
-            if (LeftAttributes.Count == 1 && ComparisonType == BooleanComparisonType.Equals)
+            if (LeftAttributes.Count == 1 && ComparisonType == BooleanComparisonType.Equals && JoinType != QualifiedJoinType.FullOuter)
             {
                 var leftFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter ? LeftSource as FilterNode : null;
                 var rightFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter ? RightSource as FilterNode : null;
