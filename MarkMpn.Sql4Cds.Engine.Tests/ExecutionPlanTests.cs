@@ -8497,9 +8497,11 @@ WHERE q2.flag1 = 1 OR q2.flag2 = 1";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var apply = AssertNode<NestedLoopNode>(select.Source);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("q2.flag1 = 1 OR q2.flag2 = 1", filter.Filter.ToSql());
+            var apply = AssertNode<NestedLoopNode>(filter.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, apply.JoinType);
-            Assert.AreEqual("q2.flag1 = 1 OR q2.flag2 = 1", apply.JoinCondition.ToSql());
+            Assert.IsNull(apply.JoinCondition);
             var fetch = AssertNode<FetchXmlScan>(apply.LeftSource);
             var alias = AssertNode<AliasNode>(apply.RightSource);
             var compute = AssertNode<ComputeScalarNode>(alias.Source);

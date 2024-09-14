@@ -356,7 +356,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Filter == null)
                 return false;
 
-            if (!(Source is NestedLoopNode loop))
+            if (!(Source is NestedLoopNode loop) || loop.JoinType != QualifiedJoinType.Inner)
                 return false;
 
             // Can't move the filter to the loop condition if we're using any of the defined values created by the loop
