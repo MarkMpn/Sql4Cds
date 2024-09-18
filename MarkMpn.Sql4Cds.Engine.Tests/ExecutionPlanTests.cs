@@ -8507,5 +8507,32 @@ WHERE q2.flag1 = 1 OR q2.flag2 = 1";
             var compute = AssertNode<ComputeScalarNode>(alias.Source);
             var constant = AssertNode<ConstantScanNode>(compute.Source);
         }
+
+        [TestMethod]
+        public void ScalarSubqueryWithoutAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+SELECT a.accountid,
+(SELECT fullname FROM contact WHERE contactid = a.primarycontactid)
+FROM account a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch>
+    <entity name='account'>
+        <attribute name='accountid' />
+        <link-entity name='contact' to='primarycontactid' from='contactid' alias='Expr2' link-type='outer'>
+            <attribute name='fullname' />
+        </link-entity>
+    </entity>
+</fetch>");
+        }
     }
 }
