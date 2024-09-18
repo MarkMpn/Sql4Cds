@@ -2441,5 +2441,30 @@ SELECT @p1";
                 }
             }
         }
+
+        [TestMethod]
+        public void QueryDerivedTableWithContradiction()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/546
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"
+SELECT *
+FROM (SELECT a.accountid
+      FROM   account AS a
+      WHERE  1 != 1) AS sub";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+
+                    if (reader.Read())
+                        Assert.Fail();
+                }
+            }
+        }
     }
 }

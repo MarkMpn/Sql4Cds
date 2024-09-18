@@ -8433,5 +8433,106 @@ WHERE  ak.entitykeyindexstatus = 'Failed';";
             CollectionAssert.AreEqual(new[] { "EntityLogicalName", "LogicalName", "EntityKeyIndexStatus" }, meta.Query.KeyQuery.Properties.PropertyNames);
             Assert.AreEqual(0, meta.Query.KeyQuery.Criteria.Conditions.Count);
         }
+
+        [TestMethod]
+        public void OuterApplyOuterReference()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/547
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+SELECT *
+FROM (
+    SELECT a.accountid,
+           a.name
+    FROM   account a) AS q1
+FULL OUTER JOIN (
+    SELECT c.contactid,
+           c.parentcustomerid,
+           c.fullname
+    FROM   contact c) AS q2
+    ON q1.accountid = q2.parentcustomerid
+OUTER APPLY (
+    SELECT CASE WHEN q1.accountid = q2.parentcustomerid THEN 1 ELSE 0 END AS [flag]
+) AS q3
+WHERE q3.flag = 0";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var apply = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.Inner, apply.JoinType);
+            var join = AssertNode<MergeJoinNode>(apply.LeftSource);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var fetch2 = AssertNode<FetchXmlScan>(sort.Source);
+            var alias = AssertNode<AliasNode>(apply.RightSource);
+            var filter = AssertNode<FilterNode>(alias.Source);
+            var compute = AssertNode<ComputeScalarNode>(filter.Source);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+        }
+
+        [TestMethod]
+        public void FilterOnOuterApply()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/548
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+SELECT *
+FROM (
+    SELECT a.accountid,
+           a.name
+    FROM   account a) AS q1
+OUTER APPLY (
+    SELECT IIF(q1.name = 'Test1', 1, 0) AS [flag1],
+           IIF(q1.name = 'Test2', 1, 0) AS [flag2]
+) AS q2
+WHERE q2.flag1 = 1 OR q2.flag2 = 1";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("q2.flag1 = 1 OR q2.flag2 = 1", filter.Filter.ToSql());
+            var apply = AssertNode<NestedLoopNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, apply.JoinType);
+            Assert.IsNull(apply.JoinCondition);
+            var fetch = AssertNode<FetchXmlScan>(apply.LeftSource);
+            var alias = AssertNode<AliasNode>(apply.RightSource);
+            var compute = AssertNode<ComputeScalarNode>(alias.Source);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+        }
+
+        [TestMethod]
+        public void ScalarSubqueryWithoutAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = @"
+SELECT a.accountid,
+(SELECT fullname FROM contact WHERE contactid = a.primarycontactid)
+FROM account a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch>
+    <entity name='account'>
+        <attribute name='accountid' />
+        <link-entity name='contact' to='primarycontactid' from='contactid' alias='Expr2' link-type='outer'>
+            <attribute name='fullname' />
+        </link-entity>
+    </entity>
+</fetch>");
+        }
     }
 }

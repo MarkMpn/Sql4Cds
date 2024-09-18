@@ -169,6 +169,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LeftAttribute = RightAttribute;
                 RightAttribute = leftAttr;
 
+                (_leftKeyAccessors, _rightKeyAccessors) = (_rightKeyAccessors, _leftKeyAccessors);
+
                 if (JoinType == QualifiedJoinType.LeftOuter)
                     JoinType = QualifiedJoinType.RightOuter;
                 else if (JoinType == QualifiedJoinType.RightOuter)

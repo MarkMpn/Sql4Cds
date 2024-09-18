@@ -691,24 +691,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 else
                                     options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount - threadCount + 1:N0}-{newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0}, {threadCount:N0} threads)...");
 
-                                try
+                                while (true)
                                 {
-                                    var response = dataSource.Execute(threadLocalState.Service, request);
-                                    Interlocked.Increment(ref count);
-
-                                    responseHandler?.Invoke(response);
-                                }
-                                catch (FaultException<OrganizationServiceFault> ex)
-                                {
-                                    if (FilterErrors(context, request, ex.Detail))
+                                    try
                                     {
-                                        if (ContinueOnError)
-                                            fault = fault ?? ex.Detail;
-                                        else
-                                            throw;
-                                    }
+                                        var response = dataSource.Execute(threadLocalState.Service, request);
+                                        Interlocked.Increment(ref count);
 
-                                    Interlocked.Increment(ref errorCount);
+                                        responseHandler?.Invoke(response);
+                                        break;
+                                    }
+                                    catch (FaultException<OrganizationServiceFault> ex)
+                                    {
+                                        if (ex.Detail.ErrorCode == 429 || // Virtual/elastic tables
+                                            ex.Detail.ErrorCode == -2147015902 || // Number of requests exceeded the limit of 6000 over time window of 300 seconds.
+                                            ex.Detail.ErrorCode == -2147015903 || // Combined execution time of incoming requests exceeded limit of 1,200,000 milliseconds over time window of 300 seconds. Decrease number of concurrent requests or reduce the duration of requests and try again later.
+                                            ex.Detail.ErrorCode == -2147015898) // Number of concurrent requests exceeded the limit of 52.
+                                        {
+                                            // In case throttling isn't handled by normal retry logic in the service client
+                                            var retryAfterSeconds = 2;
+
+                                            if (ex.Detail.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && (retryAfter is int || retryAfter is string s && Int32.TryParse(s, out _)))
+                                                retryAfterSeconds = Convert.ToInt32(retryAfter);
+
+                                            Thread.Sleep(retryAfterSeconds * 1000);
+                                            continue;
+                                        }
+
+                                        if (FilterErrors(context, request, ex.Detail))
+                                        {
+                                            if (ContinueOnError)
+                                                fault = fault ?? ex.Detail;
+                                            else
+                                                throw;
+                                        }
+
+                                        Interlocked.Increment(ref errorCount);
+                                        break;
+                                    }
                                 }
                             }
                             else

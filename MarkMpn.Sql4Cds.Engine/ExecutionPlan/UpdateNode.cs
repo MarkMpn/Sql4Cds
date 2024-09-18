@@ -591,7 +591,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Ignore errors trying to update records that don't exist - record may have been deleted by another
             // process in parallel.
-            return fault.ErrorCode != -2147220969 && fault.ErrorCode != -2147185406 && fault.ErrorCode != -2147220969 && fault.ErrorCode != 404;
+            return fault.ErrorCode != -2147185406 && // IsvAbortedNotFound
+                fault.ErrorCode != -2147220969 && // ObjectDoesNotExist
+                fault.ErrorCode != 404; // Elastic tables
         }
 
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
@@ -599,7 +601,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!req.Requests.All(r => r is UpdateRequest))
                 return base.ExecuteMultiple(dataSource, org, meta, req);
 
-            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "UpdateMultiple"))
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider || meta.DataProviderId == null && dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "UpdateMultiple"))
             {
                 // Elastic tables can use UpdateMultiple for better performance than ExecuteMultiple
                 var entities = new EntityCollection { EntityName = meta.LogicalName };

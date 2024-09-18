@@ -2144,6 +2144,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Select(g => g.Single())
                 .Where(c =>
                 {
+                    if (c.Alias == null)
+                        return false; // Don't fold null aliases, e.g. scalar subqueries
+
                     var parts = c.SourceColumn.SplitMultiPartIdentifier();
 
                     if (parts.Length > 1 && aliasStars.Contains(parts[0]))

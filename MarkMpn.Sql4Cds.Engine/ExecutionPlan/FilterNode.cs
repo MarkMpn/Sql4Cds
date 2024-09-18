@@ -356,7 +356,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Filter == null)
                 return false;
 
-            if (!(Source is NestedLoopNode loop))
+            if (!(Source is NestedLoopNode loop) || loop.JoinType != QualifiedJoinType.Inner)
                 return false;
 
             // Can't move the filter to the loop condition if we're using any of the defined values created by the loop
@@ -790,7 +790,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (outerSource != null)
                 {
-                    var outerSchema = outerSource.GetSchema(context);
+                    // If we are enforcing a non-null constraint on the outer source, we can convert the join to an inner join
+                    // To get the schema of the outer source, we need to include any outer references that are used in the join condition
+                    var outerContext = context;
+                    
+                    if (join.JoinType == QualifiedJoinType.LeftOuter && join is NestedLoopNode loop && loop.OuterReferences != null && loop.OuterReferences.Count > 0)
+                    {
+                        var leftSchema = join.LeftSource.GetSchema(context);
+
+                        var innerParameterTypes = context.ParameterTypes
+                            .Concat(loop.OuterReferences.Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type)))
+                            .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+
+                        outerContext = new NodeCompilationContext(context, innerParameterTypes);
+                    }
+
+                    var outerSchema = outerSource.GetSchema(outerContext);
 
                     if (notNullColumns.Any(col => outerSchema.ContainsColumn(col, out _)))
                         join.JoinType = QualifiedJoinType.Inner;

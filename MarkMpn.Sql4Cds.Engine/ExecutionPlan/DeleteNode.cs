@@ -275,7 +275,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Ignore errors trying to delete records that don't exist - record may have been deleted by another
             // process in parallel.
-            return fault.ErrorCode != -2147220891 && fault.ErrorCode != -2147185406 && fault.ErrorCode != -2147220969 && fault.ErrorCode != 404;
+            return fault.ErrorCode != -2147185406 && // IsvAbortedNotFound
+                fault.ErrorCode != -2147220969 && // ObjectDoesNotExist
+                fault.ErrorCode != 404; // Elastic tables
         }
 
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)

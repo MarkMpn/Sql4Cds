@@ -193,8 +193,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var joinColumns = JoinCondition.GetColumns().ToList();
                 var hasLeftColumn = joinColumns.Any(c => leftSchema.ContainsColumn(c, out _));
                 var hasRightColumn = joinColumns.Any(c => rightSchema.ContainsColumn(c, out _));
+                var foldedFilter = false;
 
-                if (!hasLeftColumn)
+                if (!hasLeftColumn && JoinType == QualifiedJoinType.Inner)
                 {
                     // Join condition doesn't reference columns from the left source, so we can remove it from the join
                     // and apply it as a filter to the right source. Inner source will often have a table spool - add the filter
@@ -206,17 +207,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     RightSource = RightSource.FoldQuery(innerContext, hints);
                     RightSource.Parent = this;
+                    foldedFilter = true;
                 }
 
-                if (!hasRightColumn)
+                if (!hasRightColumn && (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter))
                 {
                     // Join condition doesn't reference columns from the right source, so we can remove it from the join
                     // and apply it as a filter to the left source
                     LeftSource = new FilterNode { Source = LeftSource, Filter = JoinCondition }.FoldQuery(context, hints);
                     LeftSource.Parent = this;
+                    foldedFilter = true;
                 }
 
-                if (!hasLeftColumn || !hasRightColumn)
+                if (foldedFilter)
                     JoinCondition = null;
             }
 
