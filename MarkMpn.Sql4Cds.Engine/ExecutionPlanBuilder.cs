@@ -1738,6 +1738,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var primaryKey = targetMetadata.PrimaryIdAttribute;
             string secondaryKey = null;
+            string activityTypeCode = null;
             var requiredFields = new List<string>();
 
             if (targetMetadata.LogicalName == "listmember")
@@ -1760,6 +1761,10 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 primaryKey = "objectid";
                 secondaryKey = "principalid";
+            }
+            else if (targetMetadata.LogicalName == "activitypointer")
+            {
+                activityTypeCode = "activitytypecode";
             }
 
             if (deleteTarget.TargetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
@@ -1877,10 +1882,88 @@ namespace MarkMpn.Sql4Cds.Engine
             if (secondaryKey != null)
                 requiredFields.Add(secondaryKey);
 
+            if (activityTypeCode != null)
+                requiredFields.Add(activityTypeCode);
+
             if (targetMetadata.LogicalName == "principalobjectaccess")
             {
                 requiredFields.Add("objecttypecode");
                 requiredFields.Add("principaltypecode");
+
+                // In case any of the records are for an activity, include the activitytypecode by joining to the activitypointer table
+                queryExpression.SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = new ScalarSubquery
+                    {
+                        QueryExpression = new QuerySpecification
+                        {
+                            SelectElements =
+                            {
+                                new SelectScalarExpression
+                                {
+                                    Expression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = "activitypointer" },
+                                                new Identifier { Value = "activitytypecode" }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            FromClause = new FromClause
+                            {
+                                TableReferences =
+                                {
+                                    new NamedTableReference
+                                    {
+                                        SchemaObject = new SchemaObjectName
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = "activitypointer" }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            WhereClause = new WhereClause
+                            {
+                                SearchCondition = new BooleanComparisonExpression
+                                {
+                                    FirstExpression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = targetAlias },
+                                                new Identifier { Value = "objectid" }
+                                            }
+                                        }
+                                    },
+                                    ComparisonType = BooleanComparisonType.Equals,
+                                    SecondExpression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = "activitypointer" },
+                                                new Identifier { Value = "activityid" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "activitytypecode" } }
+                });
+                activityTypeCode = "activitytypecode";
             }
 
             foreach (var field in requiredFields)
@@ -1920,16 +2003,20 @@ namespace MarkMpn.Sql4Cds.Engine
             if (source is SelectNode select)
             {
                 deleteNode.Source = select.Source;
-                deleteNode.PrimaryIdSource = $"{targetAlias}.{primaryKey}";
+                deleteNode.PrimaryIdSource = select.ColumnSet.Single(c => c.OutputColumn == primaryKey).SourceColumn;
 
                 if (secondaryKey != null)
-                    deleteNode.SecondaryIdSource = $"{targetAlias}.{secondaryKey}";
+                    deleteNode.SecondaryIdSource = select.ColumnSet.Single(c => c.OutputColumn == secondaryKey).SourceColumn;
+
+                if (activityTypeCode != null)
+                    deleteNode.ActivityTypeCodeSource = select.ColumnSet.Single(c => c.OutputColumn == activityTypeCode).SourceColumn;
             }
             else
             {
                 deleteNode.Source = source;
                 deleteNode.PrimaryIdSource = primaryKey;
                 deleteNode.SecondaryIdSource = secondaryKey;
+                deleteNode.ActivityTypeCodeSource = activityTypeCode;
             }
 
             return deleteNode;

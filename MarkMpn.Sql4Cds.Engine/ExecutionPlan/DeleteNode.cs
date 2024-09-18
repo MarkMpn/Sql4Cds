@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading;
@@ -49,6 +50,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("SecondaryId Source")]
         public string SecondaryIdSource { get; set; }
 
+        /// <summary>
+        /// The column that contains the type code of the records to delete (used for activity records)
+        /// </summary>
+        [Category("Delete")]
+        [Description("The column that contains the type code of the records to delete (used for activity records)")]
+        [DisplayName("ActivityTypeCode Source")]
+        public string ActivityTypeCodeSource { get; set; }
+
         [Category("Delete")]
         public override int MaxDOP { get; set; }
 
@@ -71,6 +80,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (SecondaryIdSource != null && !requiredColumns.Contains(SecondaryIdSource))
                 requiredColumns.Add(SecondaryIdSource);
 
+            if (ActivityTypeCodeSource != null && !requiredColumns.Contains(ActivityTypeCodeSource))
+                requiredColumns.Add(ActivityTypeCodeSource);
+
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
@@ -89,7 +101,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source is FetchXmlScan fetch &&
                 LogicalName == fetch.Entity.name &&
                 PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
-                String.IsNullOrEmpty(SecondaryIdSource))
+                String.IsNullOrEmpty(SecondaryIdSource) &&
+                String.IsNullOrEmpty(ActivityTypeCodeSource))
             {
                 return new[] { new BulkDeleteJobNode { DataSource = DataSource, Source = fetch } };
             }
@@ -104,6 +117,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (SecondaryIdSource != null && columnRenamings.TryGetValue(SecondaryIdSource, out var secondaryIdSourceRenamed))
                 SecondaryIdSource = secondaryIdSourceRenamed;
+
+            if (ActivityTypeCodeSource != null && columnRenamings.TryGetValue(ActivityTypeCodeSource, out var activityTypeCodeSourceRenamed))
+                ActivityTypeCodeSource = activityTypeCodeSourceRenamed;
         }
 
         public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
@@ -217,11 +233,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (meta.LogicalName == "principalobjectaccess")
             {
-                return new RevokeAccessRequest
+                var revoke = new RevokeAccessRequest
                 {
                     Target = (EntityReference)primaryIdAccessor(entity),
                     Revokee = (EntityReference)secondaryIdAccessor(entity)
                 };
+
+                // Special case for activitypointer - need to set the specific activity type code
+                var activityTypeCode = entity.GetAttributeValue<SqlString>(ActivityTypeCodeSource);
+                if (!activityTypeCode.IsNull)
+                    revoke.Target.LogicalName = activityTypeCode.Value;
+
+                return revoke;
             }
 
             var id = (Guid)primaryIdAccessor(entity);
@@ -266,6 +289,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         ["partitionid"] = secondaryIdAccessor(entity)
                     }
                 };
+            }
+
+            // Special case for activitypointer - need to set the specific activity type code
+            if (ActivityTypeCodeSource != null)
+            {
+                var activityTypeCode = entity.GetAttributeValue<SqlString>(ActivityTypeCodeSource);
+                if (!activityTypeCode.IsNull)
+                    req.Target.LogicalName = activityTypeCode.Value;
             }
 
             return req;
@@ -399,6 +430,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 MaxDOP = MaxDOP,
                 PrimaryIdSource = PrimaryIdSource,
                 SecondaryIdSource = SecondaryIdSource,
+                ActivityTypeCodeSource = ActivityTypeCodeSource,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
