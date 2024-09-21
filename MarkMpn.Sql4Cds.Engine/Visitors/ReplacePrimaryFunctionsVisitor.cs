@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 foreach (var expr in coalesce.Expressions)
                     caseExpr.WhenClauses.Add(new SearchedWhenClause
                     {
-                        WhenExpression = new BooleanIsNullExpression { Expression = expr, IsNot = true },
+                        WhenExpression = new BooleanIsNullExpression { Expression = expr.Clone(), IsNot = true },
                         ThenExpression = expr
                     });
 
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                             WhenExpression = new BooleanComparisonExpression
                             {
                                 ComparisonType = BooleanComparisonType.Equals,
-                                FirstExpression = nullif.FirstExpression,
+                                FirstExpression = nullif.FirstExpression.Clone(),
                                 SecondExpression = nullif.SecondExpression
                             },
                             ThenExpression = new NullLiteral()

@@ -3371,7 +3371,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var delete = AssertNode<DeleteNode>(plans[0]);
             Assert.AreEqual("account", delete.LogicalName);
-            Assert.AreEqual("account.accountid", delete.PrimaryIdSource);
+            Assert.AreEqual("account.accountid", delete.ColumnMappings["accountid"]);
             var fetch = AssertNode<FetchXmlScan>(delete.Source);
             AssertFetchXml(fetch, @"
                 <fetch>

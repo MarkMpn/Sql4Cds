@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading;
@@ -139,6 +140,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var fullMappings = new Dictionary<string, UpdateMapping>(ColumnMappings);
                     fullMappings[meta.PrimaryIdAttribute] = new UpdateMapping { OldValueColumn = PrimaryIdSource, NewValueColumn = PrimaryIdSource };
+
+                    // Entity type codes will be presented as a string but the mapping compilation will try to convert
+                    // them to an int, so remove it and we can access the string directly
+                    if (LogicalName == "principalobjectaccess")
+                    {
+                        fullMappings.Remove("objecttypecode");
+                        fullMappings.Remove("principaltypecode");
+                    }
+                    else if (LogicalName == "activitypointer")
+                    {
+                        fullMappings.Remove("activitytypecode");
+                    }
+
                     newAttributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings.Where(kvp => kvp.Value.NewValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.NewValueColumn), schema, dateTimeKind, entities);
                     oldAttributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings.Where(kvp => kvp.Value.OldValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.OldValueColumn), schema, dateTimeKind, entities);
                     primaryIdAccessor = newAttributeAccessors[meta.PrimaryIdAttribute];
@@ -270,11 +284,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                             else if (meta.LogicalName == "principalobjectaccess")
                             {
-                                var objectIdPrev = preImage.GetAttributeValue<EntityReference>("objectid");
-                                var principalIdPrev = preImage.GetAttributeValue<EntityReference>("principalid");
+                                var objectIdPrev = preImage.GetAttributeValue<Guid>("objectid");
+                                var objectTypeCodePrev = entity.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"].OldValueColumn).Value;
+                                var principalIdPrev = preImage.GetAttributeValue<Guid>("principalid");
+                                var principalTypeCodePrev = entity.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"].OldValueColumn).Value;
                                 var accessMaskPrev = (AccessRights)preImage.GetAttributeValue<int>("accessrightsmask");
-                                var objectIdNew = update.GetAttributeValue<EntityReference>("objectid") ?? objectIdPrev;
-                                var principalIdNew = update.GetAttributeValue<EntityReference>("principalid") ?? principalIdPrev;
+                                var objectIdNew = update.GetAttributeValue<Guid?>("objectid") ?? objectIdPrev;
+                                var objectTypeCodeNew = ColumnMappings["objecttypecode"].NewValueColumn != null ? update.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"].NewValueColumn).Value : objectTypeCodePrev;
+                                var principalIdNew = update.GetAttributeValue<Guid?>("principalid") ?? principalIdPrev;
+                                var principalTypeCodeNew = ColumnMappings["principaltypecode"].NewValueColumn != null ? update.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"].NewValueColumn).Value : principalTypeCodePrev;
                                 var accessMaskNew = (AccessRights?)update.GetAttributeValue<int>("accessrightsmask") ?? accessMaskPrev;
 
                                 // Check if we need to remove any previous share permissions
@@ -282,8 +300,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     requests.Add(new RevokeAccessRequest
                                     {
-                                        Target = objectIdPrev,
-                                        Revokee = principalIdPrev
+                                        Target = new EntityReference(objectTypeCodePrev, objectIdPrev),
+                                        Revokee = new EntityReference(principalTypeCodePrev, principalIdPrev)
                                     });
                                 }
 
@@ -292,10 +310,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     requests.Add(new GrantAccessRequest
                                     {
-                                        Target = objectIdNew,
+                                        Target = new EntityReference(objectTypeCodeNew, objectIdNew),
                                         PrincipalAccess = new PrincipalAccess
                                         {
-                                            Principal = principalIdNew,
+                                            Principal = new EntityReference(principalTypeCodeNew, principalIdNew),
                                             AccessMask = accessMaskNew
                                         }
                                     });
@@ -569,6 +587,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 update[attr.LogicalName] = value;
             }
 
+            // Special case for activitypointer - need to set the specific activity type code
+            if (LogicalName == "activitypointer")
+                update.LogicalName = entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"].OldValueColumn).Value;
+
             return update;
         }
 
@@ -601,7 +623,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!req.Requests.All(r => r is UpdateRequest))
                 return base.ExecuteMultiple(dataSource, org, meta, req);
 
-            if (meta.DataProviderId == DataProviders.ElasticDataProvider || meta.DataProviderId == null && dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "UpdateMultiple"))
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider || meta.DataProviderId == null &&
+                dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "UpdateMultiple") &&
+                req.Requests.Cast<UpdateRequest>().GroupBy(r => r.Target.LogicalName).Count() == 1)
             {
                 // Elastic tables can use UpdateMultiple for better performance than ExecuteMultiple
                 var entities = new EntityCollection { EntityName = meta.LogicalName };
