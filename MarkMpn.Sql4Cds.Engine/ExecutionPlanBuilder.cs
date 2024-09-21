@@ -1736,30 +1736,40 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
             }
 
-            var primaryKey = targetMetadata.PrimaryIdAttribute;
-            string secondaryKey = null;
-            var requiredFields = new List<string>();
+            var columnMappings = new Dictionary<string, string>();
 
             if (targetMetadata.LogicalName == "listmember")
             {
-                primaryKey = "listid";
-                secondaryKey = "entityid";
+                columnMappings["listid"] = "listid";
+                columnMappings["entityid"] = "entityid";
             }
             else if (targetMetadata.IsIntersect == true)
             {
                 var relationship = targetMetadata.ManyToManyRelationships.Single();
-                primaryKey = relationship.Entity1IntersectAttribute;
-                secondaryKey = relationship.Entity2IntersectAttribute;
+                columnMappings[relationship.Entity1IntersectAttribute] = relationship.Entity1IntersectAttribute;
+                columnMappings[relationship.Entity2IntersectAttribute] = relationship.Entity2IntersectAttribute;
             }
             else if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
             {
                 // Elastic tables need the partitionid as part of the primary key
-                secondaryKey = "partitionid";
+                columnMappings[targetMetadata.PrimaryIdAttribute] = targetMetadata.PrimaryIdAttribute;
+                columnMappings["partitionid"] = "partitionid";
             }
             else if (targetMetadata.LogicalName == "principalobjectaccess")
             {
-                primaryKey = "objectid";
-                secondaryKey = "principalid";
+                columnMappings["objectid"] = "objectid";
+                columnMappings["objecttypecode"] = "objecttypecode";
+                columnMappings["principalid"] = "principalid";
+                columnMappings["principaltypecode"] = "principaltypecode";
+            }
+            else if (targetMetadata.LogicalName == "activitypointer")
+            {
+                columnMappings["activityid"] = "activityid";
+                columnMappings["activitytypecode"] = "activitytypecode";
+            }
+            else
+            {
+                columnMappings[targetMetadata.PrimaryIdAttribute] = targetMetadata.PrimaryIdAttribute;
             }
 
             if (deleteTarget.TargetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
@@ -1770,8 +1780,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // We need to join the recycle bin entry to the deleteditemreference table to get the actual record to delete. We can only
                 // do this on a single ID field, so reject any deletes that need composite keys
-                if (secondaryKey != null)
+                if (columnMappings.Count > 1)
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete, "Recycle bin records using a composite key cannot be deleted directly. Delete the associated record from the dbo.deleteitemreference table instead"));
+
+                var primaryKey = columnMappings.Single().Key;
 
                 queryExpression.SelectElements.Add(new SelectScalarExpression
                 {
@@ -1866,70 +1878,139 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
-                primaryKey = "deleteditemreferenceid";
-                secondaryKey = null;
+                columnMappings.Clear();
+                columnMappings["deleteditemreferenceid"] = "deleteditemreferenceid";
                 targetMetadata = dataSource.Metadata["deleteditemreference"];
                 targetAlias = "deleteditemreference";
             }
 
-            requiredFields.Add(primaryKey);
-
-            if (secondaryKey != null)
-                requiredFields.Add(secondaryKey);
-
-            if (targetMetadata.LogicalName == "principalobjectaccess")
+            foreach (var columnMapping in columnMappings)
             {
-                requiredFields.Add("objecttypecode");
-                requiredFields.Add("principaltypecode");
-            }
-
-            foreach (var field in requiredFields)
-            {
-                queryExpression.SelectElements.Add(new SelectScalarExpression
+                ScalarExpression expression = new ColumnReferenceExpression
                 {
-                    Expression = new ColumnReferenceExpression
+                    MultiPartIdentifier = new MultiPartIdentifier
                     {
-                        MultiPartIdentifier = new MultiPartIdentifier
+                        Identifiers =
                         {
-                            Identifiers =
-                            {
-                                new Identifier { Value = targetAlias },
-                                new Identifier { Value = field }
-                            }
+                            new Identifier { Value = targetAlias },
+                            new Identifier { Value = columnMapping.Value }
                         }
-                    },
-                    ColumnName = new IdentifierOrValueExpression
-                    {
-                        Identifier = new Identifier { Value = field }
                     }
-                });
+                };
+
+                if (targetMetadata.LogicalName == "principalobjectaccess" && columnMapping.Key == "objecttypecode")
+                {
+                    // In case any of the records are for an activity, include the activitytypecode by joining to the activitypointer table
+                    expression = new CoalesceExpression
+                    {
+                        Expressions =
+                        {
+                            new ScalarSubquery
+                            {
+                                QueryExpression = new QuerySpecification
+                                {
+                                    SelectElements =
+                                    {
+                                        new SelectScalarExpression
+                                        {
+                                            Expression = new ColumnReferenceExpression
+                                            {
+                                                MultiPartIdentifier = new MultiPartIdentifier
+                                                {
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = "activitypointer" },
+                                                        new Identifier { Value = "activitytypecode" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    FromClause = new FromClause
+                                    {
+                                        TableReferences =
+                                    {
+                                        new NamedTableReference
+                                        {
+                                            SchemaObject = new SchemaObjectName
+                                            {
+                                                Identifiers =
+                                                {
+                                                    new Identifier { Value = "activitypointer" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    },
+                                    WhereClause = new WhereClause
+                                    {
+                                        SearchCondition = new BooleanComparisonExpression
+                                        {
+                                            FirstExpression = new ColumnReferenceExpression
+                                            {
+                                                MultiPartIdentifier = new MultiPartIdentifier
+                                                {
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = targetAlias },
+                                                        new Identifier { Value = "objectid" }
+                                                    }
+                                                }
+                                            },
+                                            ComparisonType = BooleanComparisonType.Equals,
+                                            SecondExpression = new ColumnReferenceExpression
+                                            {
+                                                MultiPartIdentifier = new MultiPartIdentifier
+                                                {
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = "activitypointer" },
+                                                        new Identifier { Value = "activityid" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            expression
+                        }
+                    };
+                }
+
+                queryExpression.SelectElements.Add(
+                    new SelectScalarExpression
+                    {
+                        Expression = expression,
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = columnMapping.Key } }
+                    });
             }
 
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
             CopyDmlHintsToSelectStatement(hints, selectStatement);
 
+            selectStatement.Accept(new ReplacePrimaryFunctionsVisitor());
             var source = ConvertSelectStatement(selectStatement);
 
             // Add DELETE
             var deleteNode = new DeleteNode
             {
                 LogicalName = targetMetadata.LogicalName,
-                DataSource = dataSource.Name,
+                DataSource = dataSource.Name
             };
 
             if (source is SelectNode select)
             {
                 deleteNode.Source = select.Source;
-                deleteNode.PrimaryIdSource = $"{targetAlias}.{primaryKey}";
+                deleteNode.ColumnMappings = new Dictionary<string, string>();
 
-                if (secondaryKey != null)
-                    deleteNode.SecondaryIdSource = $"{targetAlias}.{secondaryKey}";
+                foreach (var columnMapping in columnMappings)
+                    deleteNode.ColumnMappings[columnMapping.Key] = select.ColumnSet.Single(c => c.OutputColumn == columnMapping.Key).SourceColumn;
             }
             else
             {
                 deleteNode.Source = source;
-                deleteNode.PrimaryIdSource = primaryKey;
-                deleteNode.SecondaryIdSource = secondaryKey;
+                deleteNode.ColumnMappings = columnMappings;
             }
 
             return deleteNode;
@@ -2208,21 +2289,109 @@ namespace MarkMpn.Sql4Cds.Engine
                 existingAttributes.Add("accessrightsmask");
             }
 
+            // activitypointer is polymorphic so we need to include the activitytypecode
+            if (targetLogicalName == "activitypointer")
+            {
+                existingAttributes.Add("activitytypecode");
+            }
+
             foreach (var existingAttribute in existingAttributes)
             {
+                var expression = (ScalarExpression)new ColumnReferenceExpression
+                {
+                    MultiPartIdentifier = new MultiPartIdentifier
+                    {
+                        Identifiers =
+                        {
+                            new Identifier { Value = targetAlias },
+                            new Identifier { Value = existingAttribute }
+                        }
+                    }
+                };
+
+                if (targetLogicalName == "principalobjectaccess" && existingAttribute == "objecttypecode")
+                {
+                    // In case any of the records are for an activity, include the activitytypecode by joining to the activitypointer table
+                    expression = new CoalesceExpression
+                    {
+                        Expressions =
+                        {
+                            new ScalarSubquery
+                            {
+                                QueryExpression = new QuerySpecification
+                                {
+                                    SelectElements =
+                                    {
+                                        new SelectScalarExpression
+                                        {
+                                            Expression = new ColumnReferenceExpression
+                                            {
+                                                MultiPartIdentifier = new MultiPartIdentifier
+                                                {
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = "activitypointer" },
+                                                        new Identifier { Value = "activitytypecode" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    FromClause = new FromClause
+                                    {
+                                        TableReferences =
+                                    {
+                                        new NamedTableReference
+                                        {
+                                            SchemaObject = new SchemaObjectName
+                                            {
+                                                Identifiers =
+                                                {
+                                                    new Identifier { Value = "activitypointer" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    },
+                                    WhereClause = new WhereClause
+                                    {
+                                        SearchCondition = new BooleanComparisonExpression
+                                        {
+                                            FirstExpression = new ColumnReferenceExpression
+                                            {
+                                                MultiPartIdentifier = new MultiPartIdentifier
+                                                {
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = targetAlias },
+                                                        new Identifier { Value = "objectid" }
+                                                    }
+                                                }
+                                            },
+                                            ComparisonType = BooleanComparisonType.Equals,
+                                            SecondExpression = new ColumnReferenceExpression
+                                            {
+                                                MultiPartIdentifier = new MultiPartIdentifier
+                                                {
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = "activitypointer" },
+                                                        new Identifier { Value = "activityid" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            expression
+                        }
+                    };
+                }
+
                 queryExpression.SelectElements.Add(new SelectScalarExpression
                 {
-                    Expression = new ColumnReferenceExpression
-                    {
-                        MultiPartIdentifier = new MultiPartIdentifier
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = targetAlias },
-                                new Identifier { Value = existingAttribute }
-                            }
-                        }
-                    },
+                    Expression = expression,
                     ColumnName = new IdentifierOrValueExpression
                     {
                         Identifier = new Identifier { Value = "existing_" + existingAttribute }
@@ -2233,6 +2402,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
             CopyDmlHintsToSelectStatement(hints, selectStatement);
 
+            selectStatement.Accept(new ReplacePrimaryFunctionsVisitor());
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE

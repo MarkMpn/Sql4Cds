@@ -405,9 +405,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!attributes.TryGetValue(destAttributeName, out var attr) || attr.AttributeOf != null)
                     continue;
 
-                if (metadata.LogicalName == "principalobjectaccess" && (attr.LogicalName == "objecttypecode" || attr.LogicalName == "principaltypecode"))
-                    continue;
-
                 var sourceSqlType = schema.Schema[sourceColumnName].Type;
                 var destType = attr.GetAttributeType();
                 var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(dataSource, true);
@@ -435,8 +432,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Expression convertedExpr;
                     var lookupAttr = attr as LookupAttributeMetadata;
 
-                    if (lookupAttr != null && lookupAttr.AttributeType != AttributeTypeCode.PartyList && metadata.IsIntersect != true ||
-                        metadata.LogicalName == "principalobjectaccess" && (attr.LogicalName == "objectid" || attr.LogicalName == "principalid"))
+                    if (lookupAttr != null && lookupAttr.AttributeType != AttributeTypeCode.PartyList && metadata.IsIntersect != true)
                     {
                         if (sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference))
                         {
@@ -460,9 +456,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             else
                             {
                                 var typeColName = destAttributeName + "type";
-
-                                if (metadata.LogicalName == "principalobjectaccess" && (attr.LogicalName == "objectid" || attr.LogicalName == "principalid"))
-                                    typeColName = destAttributeName.Replace("id", "typecode");
 
                                 var sourceTargetColumnName = mappings[typeColName];
                                 var sourceTargetType = schema.Schema[sourceTargetColumnName].Type;

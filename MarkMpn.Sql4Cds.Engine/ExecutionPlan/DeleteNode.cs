@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading;
@@ -34,20 +35,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string LogicalName { get; set; }
 
         /// <summary>
-        /// The column that contains the primary ID of the records to delete
+        /// The columns that are used for the delete requests and their corresponding source columns
         /// </summary>
         [Category("Delete")]
-        [Description("The column that contains the primary ID of the records to delete")]
-        [DisplayName("PrimaryId Source")]
-        public string PrimaryIdSource { get; set; }
-
-        /// <summary>
-        /// The column that contains the secondary ID of the records to delete (used for many-to-many intersect and elastic tables)
-        /// </summary>
-        [Category("Delete")]
-        [Description("The column that contains the secondary ID of the records to delete (used for many-to-many intersect and elastic tables)")]
-        [DisplayName("SecondaryId Source")]
-        public string SecondaryIdSource { get; set; }
+        [Description("The columns that are used for the delete requests and their corresponding source columns")]
+        [DisplayName("Column Mappings")]
+        public Dictionary<string, string> ColumnMappings { get; set; }
 
         [Category("Delete")]
         public override int MaxDOP { get; set; }
@@ -65,11 +58,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            if (!requiredColumns.Contains(PrimaryIdSource))
-                requiredColumns.Add(PrimaryIdSource);
-
-            if (SecondaryIdSource != null && !requiredColumns.Contains(SecondaryIdSource))
-                requiredColumns.Add(SecondaryIdSource);
+            foreach (var col in ColumnMappings.Values)
+            {
+                if (!requiredColumns.Contains(col))
+                    requiredColumns.Add(col);
+            }
 
             Source.AddRequiredColumns(context, requiredColumns);
         }
@@ -88,10 +81,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if ((context.Options.UseBulkDelete || LogicalName == "audit") &&
                 Source is FetchXmlScan fetch &&
                 LogicalName == fetch.Entity.name &&
-                PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
-                String.IsNullOrEmpty(SecondaryIdSource))
+                ColumnMappings.Count == 1)
             {
-                return new[] { new BulkDeleteJobNode { DataSource = DataSource, Source = fetch } };
+                var metadata = dataSource.Metadata[LogicalName];
+
+                if (ColumnMappings.TryGetValue(metadata.PrimaryIdAttribute, out var primaryIdSource) &&
+                    primaryIdSource == $"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}")
+                {
+                    return new[] { new BulkDeleteJobNode { DataSource = DataSource, Source = fetch } };
+                }
             }
 
             return new[] { this };
@@ -99,11 +97,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
         {
-            if (columnRenamings.TryGetValue(PrimaryIdSource, out var primaryIdSourceRenamed))
-                PrimaryIdSource = primaryIdSourceRenamed;
+            var renamedMappings = new Dictionary<string, string>();
 
-            if (SecondaryIdSource != null && columnRenamings.TryGetValue(SecondaryIdSource, out var secondaryIdSourceRenamed))
-                SecondaryIdSource = secondaryIdSourceRenamed;
+            foreach (var mapping in ColumnMappings)
+            {
+                if (columnRenamings.TryGetValue(mapping.Value, out var renamed))
+                    renamedMappings[mapping.Key] = renamed;
+                else
+                    renamedMappings[mapping.Key] = mapping.Value;
+            }
         }
 
         public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
@@ -117,9 +119,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 List<Entity> entities;
                 EntityMetadata meta;
-                Func<Entity, object> primaryIdAccessor;
-                Func<Entity, object> secondaryIdAccessor = null;
-
+                Dictionary<string, Func<Entity, object>> attributeAccessors;
+                
                 using (_timer.Run())
                 {
                     entities = GetDmlSourceEntities(context, out var schema);
@@ -127,50 +128,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
                     var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                    var primaryKey = meta.PrimaryIdAttribute;
-                    string secondaryKey = null;
 
-                    // Special cases for the keys used for intersect entities
-                    if (meta.LogicalName == "listmember")
+                    var mappingsToCompile = ColumnMappings;
+
+                    // Entity type codes will be presented as a string but the mapping compilation will try to convert
+                    // them to an int, so remove it and we can access the string directly
+                    if (LogicalName == "principalobjectaccess")
                     {
-                        primaryKey = "listid";
-                        secondaryKey = "entityid";
+                        mappingsToCompile = new Dictionary<string, string>(ColumnMappings);
+                        mappingsToCompile.Remove("objecttypecode");
+                        mappingsToCompile.Remove("principaltypecode");
                     }
-                    else if (meta.IsIntersect == true)
+                    else if (LogicalName == "activitypointer")
                     {
-                        var relationship = meta.ManyToManyRelationships.Single();
-                        primaryKey = relationship.Entity1IntersectAttribute;
-                        secondaryKey = relationship.Entity2IntersectAttribute;
-                    }
-                    else if (meta.LogicalName == "principalobjectaccess")
-                    {
-                        primaryKey = "objectid";
-                        secondaryKey = "principalid";
-                    }
-                    else if (meta.DataProviderId == DataProviders.ElasticDataProvider)
-                    {
-                        secondaryKey = "partitionid";
+                        mappingsToCompile = new Dictionary<string, string>(ColumnMappings);
+                        mappingsToCompile.Remove("activitytypecode");
                     }
 
-                    var fullMappings = new Dictionary<string, string>
-                    {
-                        [primaryKey] = PrimaryIdSource
-                    };
-
-                    if (secondaryKey != null)
-                        fullMappings[secondaryKey] = SecondaryIdSource;
-                    
-                    if (meta.LogicalName == "principalobjectaccess")
-                    {
-                        fullMappings["objecttypecode"] = PrimaryIdSource.Replace("id", "typecode");
-                        fullMappings["principaltypecode"] = SecondaryIdSource.Replace("id", "typecode");
-                    }
-
-                    var attributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings, schema, dateTimeKind, entities);
-                    primaryIdAccessor = attributeAccessors[primaryKey];
-
-                    if (SecondaryIdSource != null)
-                        secondaryIdAccessor = attributeAccessors[secondaryKey];
+                    attributeAccessors = CompileColumnMappings(dataSource, LogicalName, mappingsToCompile, schema, dateTimeKind, entities);
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
@@ -188,7 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         context.Options,
                         entities,
                         meta,
-                        entity => CreateDeleteRequest(meta, entity, primaryIdAccessor, secondaryIdAccessor),
+                        entity => CreateDeleteRequest(meta, entity, attributeAccessors),
                         new OperationNames
                         {
                             InProgressUppercase = "Deleting",
@@ -213,43 +188,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity, Func<Entity,object> primaryIdAccessor, Func<Entity,object> secondaryIdAccessor)
+        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity, Dictionary<string,Func<Entity,object>> attributeAccessors)
         {
             if (meta.LogicalName == "principalobjectaccess")
             {
+                var objectId = (Guid)attributeAccessors["objectid"](entity);
+                var objectTypeCode = entity.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"]).Value;
+                var principalId = (Guid)attributeAccessors["principalid"](entity);
+                var principalTypeCode = entity.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"]).Value;
+
                 return new RevokeAccessRequest
                 {
-                    Target = (EntityReference)primaryIdAccessor(entity),
-                    Revokee = (EntityReference)secondaryIdAccessor(entity)
+                    Target = new EntityReference(objectTypeCode, objectId),
+                    Revokee = new EntityReference(principalTypeCode, principalId)
                 };
             }
 
-            var id = (Guid)primaryIdAccessor(entity);
-
             // Special case messages for intersect entities
-            if (meta.IsIntersect == true)
+            if (meta.LogicalName == "listmember")
             {
-                var secondaryId = (Guid)secondaryIdAccessor(entity);
-
-                if (meta.LogicalName == "listmember")
+                return new RemoveMemberListRequest
                 {
-                    return new RemoveMemberListRequest
-                    {
-                        ListId = id,
-                        EntityId = secondaryId
-                    };
-                }
-
+                    ListId = (Guid)attributeAccessors["listid"](entity),
+                    EntityId = (Guid)attributeAccessors["entityid"](entity)
+                };
+            }
+            else if (meta.IsIntersect == true)
+            {
                 var relationship = meta.ManyToManyRelationships.Single();
+
+                var targetId = (Guid)attributeAccessors[relationship.Entity1IntersectAttribute](entity);
+                var relatedId = (Guid)attributeAccessors[relationship.Entity2IntersectAttribute](entity);
 
                 return new DisassociateRequest
                 {
-                    Target = new EntityReference(relationship.Entity1LogicalName, id),
-                    RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, secondaryId) },
+                    Target = new EntityReference(relationship.Entity1LogicalName, targetId),
+                    RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, relatedId) },
                     Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
                 };
             }
 
+            var id = (Guid)attributeAccessors[meta.PrimaryIdAttribute](entity);
             var req = new DeleteRequest
             {
                 Target = new EntityReference(LogicalName, id)
@@ -263,10 +242,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     KeyAttributes =
                     {
                         [meta.PrimaryIdAttribute] = id,
-                        ["partitionid"] = secondaryIdAccessor(entity)
+                        ["partitionid"] = attributeAccessors["partitionid"](entity)
                     }
                 };
             }
+
+            // Special case for activitypointer - need to set the specific activity type code
+            if (LogicalName == "activitypointer")
+                req.Target.LogicalName = entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"]).Value;
 
             return req;
         }
@@ -286,6 +269,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return base.ExecuteMultiple(dataSource, org, meta, req);
 
             if (meta.DataProviderId == DataProviders.ElasticDataProvider
+                && req.Requests.Cast<DeleteRequest>().GroupBy(r => r.Target.LogicalName).Count() == 1
                 // DeleteMultiple is only supported on elastic tables, even if other tables do define the message
                 /* || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple")*/)
             {
@@ -397,8 +381,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
-                PrimaryIdSource = PrimaryIdSource,
-                SecondaryIdSource = SecondaryIdSource,
+                ColumnMappings = ColumnMappings,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
