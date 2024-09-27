@@ -92,6 +92,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            // Replace a source query with a list of known IDs if possible
+            FoldIdsToConstantScan(context, hints, LogicalName, ColumnMappings);
+
             return new[] { this };
         }
 

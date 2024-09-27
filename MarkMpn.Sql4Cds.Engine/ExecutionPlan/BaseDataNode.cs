@@ -387,40 +387,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Select the correct FetchXML operator
-                @operator op;
-
-                switch (type)
-                {
-                    case BooleanComparisonType.Equals:
-                    case BooleanComparisonType.IsNotDistinctFrom:
-                        op = @operator.eq;
-                        break;
-
-                    case BooleanComparisonType.GreaterThan:
-                        op = @operator.gt;
-                        break;
-
-                    case BooleanComparisonType.GreaterThanOrEqualTo:
-                        op = @operator.ge;
-                        break;
-
-                    case BooleanComparisonType.LessThan:
-                        op = @operator.lt;
-                        break;
-
-                    case BooleanComparisonType.LessThanOrEqualTo:
-                        op = @operator.le;
-                        break;
-
-                    case BooleanComparisonType.NotEqualToBrackets:
-                    case BooleanComparisonType.NotEqualToExclamation:
-                    case BooleanComparisonType.IsDistinctFrom:
-                        op = @operator.ne;
-                        break;
-
-                    default:
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(comparison)) { Suggestion = "Unsupported comparison type" };
-                }
+                if (!type.TryConvertToFetchXml(out var op))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(comparison)) { Suggestion = "Unsupported comparison type" };
 
                 // Find the entity that the condition applies to, which may be different to the entity that the condition FetchXML element will be 
                 // added within

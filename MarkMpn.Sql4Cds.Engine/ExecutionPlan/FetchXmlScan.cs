@@ -2549,6 +2549,83 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return FindParameterizedConditions().Keys;
         }
 
+        internal IExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, Dictionary<string, string> mappings)
+        {
+            if (Entity.name != logicalName)
+                return this;
+
+            if (Entity.GetLinkEntities().Any())
+                return this;
+
+            var filters = Entity.Items.OfType<filter>().ToList();
+
+            if (filters.Count != 1)
+                return this;
+
+            if (!filters[0].Items.All(x => x is condition))
+                return this;
+
+            var dataSource = context.DataSources[DataSource];
+            var metadata = dataSource.Metadata[logicalName];
+            var conditions = filters[0].Items.Cast<condition>().ToList();
+            var schema = GetSchema(context);
+            var constantScan = new ConstantScanNode
+            {
+                Alias = Alias
+            };
+
+            foreach (var col in mappings)
+                constantScan.Schema[col.Value.SplitMultiPartIdentifier().Last()] = schema.Schema[col.Value];
+
+            // We can handle compound keys, but only if they are all ANDed together
+            if (mappings.Count > 1 && filters[0].type == filterType.and)
+            {
+                var values = new Dictionary<string, ScalarExpression>();
+
+                foreach (var mapping in mappings)
+                {
+                    var condition = conditions.FirstOrDefault(c => c.attribute == mapping.Value.SplitMultiPartIdentifier()[1]);
+                    if (condition == null)
+                        return this;
+
+                    if (condition.@operator != @operator.eq)
+                        return this;
+
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+                    values[condition.attribute] = attribute.GetDmlValue(condition.value, dataSource);
+                }
+
+                constantScan.Values.Add(values);
+                return constantScan;
+            }
+
+            // We can also handle multiple values for a single key being ORed together
+            else if (mappings.Count == 1 &&
+                conditions.All(c => c.attribute == metadata.PrimaryIdAttribute) &&
+                conditions.All(c => c.@operator == @operator.eq || c.@operator == @operator.@in) &&
+                (conditions.Count == 1 || filters[0].type == filterType.or))
+            {
+                foreach (var condition in conditions)
+                {
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+
+                    if (condition.@operator == @operator.eq)
+                    {
+                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                    }
+                    else if (condition.@operator == @operator.@in)
+                    {
+                        foreach (var value in condition.Items)
+                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                    }
+                }
+
+                return constantScan;
+            }
+
+            return this;
+        }
+
         public override string ToString()
         {
             return "FetchXML Query";

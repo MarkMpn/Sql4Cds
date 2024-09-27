@@ -235,6 +235,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return continueOnError;
         }
 
+        protected void FoldIdsToConstantScan(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, Dictionary<string, string> columnMappings)
+        {
+            if (hints != null && hints.OfType<UseHintList>().Any(hint => hint.Hints.Any(s => s.Value.Equals("NO_DIRECT_DML", StringComparison.OrdinalIgnoreCase))))
+                return;
+
+            if (Source is FetchXmlScan fetch)
+                Source = fetch.FoldDmlSource(context, hints, logicalName, columnMappings);
+            else if (Source is SqlNode sql)
+                Source = sql.FoldDmlSource(context, hints, logicalName, columnMappings);
+        }
+
         /// <summary>
         /// Changes the name of source columns
         /// </summary>

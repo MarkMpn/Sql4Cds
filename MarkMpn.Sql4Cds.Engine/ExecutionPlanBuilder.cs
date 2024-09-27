@@ -2627,7 +2627,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         var sql = new SqlNode
                         {
                             DataSource = Options.PrimaryDataSource,
-                            Sql = select.ToSql()
+                            Sql = select.ToSql(),
+                            SelectStatement = select
                         };
 
                         var variables = new VariableCollectingVisitor();

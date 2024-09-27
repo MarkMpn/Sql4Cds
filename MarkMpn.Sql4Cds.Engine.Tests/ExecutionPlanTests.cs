@@ -8534,5 +8534,20 @@ FROM account a";
     </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void DeleteByIdUsesConstantScan()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "DELETE FROM account WHERE accountid = '1D3AACA6-DEA4-490F-973E-E4181D4BE11C'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var delete = AssertNode<DeleteNode>(plans[0]);
+            var constant = AssertNode<ConstantScanNode>(delete.Source);
+        }
     }
 }

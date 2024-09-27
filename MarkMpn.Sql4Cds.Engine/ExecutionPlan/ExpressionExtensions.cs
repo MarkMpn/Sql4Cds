@@ -2710,6 +2710,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        /// <summary>
+        /// Returns the equivalent Fetch XML condition operator for this comparison
+        /// </summary>
+        /// <param name="cmp">The comparison type to convert to Fetch XML</param>
+        /// <returns>The equivalent Fetch XML condition operator for this comparison</returns>
+        public static bool TryConvertToFetchXml(this BooleanComparisonType cmp, out @operator op)
+        {
+            switch (cmp)
+            {
+                case BooleanComparisonType.Equals:
+                case BooleanComparisonType.IsNotDistinctFrom:
+                    op = @operator.eq;
+                    break;
+
+                case BooleanComparisonType.GreaterThan:
+                    op = @operator.gt;
+                    break;
+
+                case BooleanComparisonType.GreaterThanOrEqualTo:
+                    op = @operator.ge;
+                    break;
+
+                case BooleanComparisonType.LessThan:
+                    op = @operator.lt;
+                    break;
+
+                case BooleanComparisonType.LessThanOrEqualTo:
+                    op = @operator.le;
+                    break;
+
+                case BooleanComparisonType.NotEqualToBrackets:
+                case BooleanComparisonType.NotEqualToExclamation:
+                case BooleanComparisonType.IsDistinctFrom:
+                    op = @operator.ne;
+                    break;
+
+                default:
+                    op = @operator.eq;
+                    return false;
+            }
+
+            return true;
+        }
+
         private static string GetTypeKey(DataTypeReference type, bool includeStringLength)
         {
             if (type is XmlDataTypeReference)

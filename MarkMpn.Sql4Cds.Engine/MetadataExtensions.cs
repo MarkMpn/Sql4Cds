@@ -251,6 +251,46 @@ namespace MarkMpn.Sql4Cds.Engine
 
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
+
+        /// <summary>
+        /// Converts a constant string value to an expression that generates the value of the appropriate type for use in a DML operation
+        /// </summary>
+        /// <param name="attribute">The attribute to convert the value for</param>
+        /// <param name="value">The string representation of the value</param>
+        /// <param name="dataSource">The data source that the operation will be performed in</param>
+        /// <returns>An expression that returns the value in the appropriate type</returns>
+        public static ScalarExpression GetDmlValue(this AttributeMetadata attribute, string value, DataSource dataSource)
+        {
+            var expr = (ScalarExpression)new StringLiteral { Value = value };
+
+            var attrType = attribute.GetAttributeSqlType(dataSource, false);
+
+            if (attrType is SqlDataTypeReference sqlType && sqlType.SqlDataTypeOption.IsStringType())
+                return expr;
+
+            if (attribute.IsPrimaryId == true)
+            {
+                expr = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = nameof(ExpressionFunctions.CreateLookup) },
+                    Parameters =
+                    {
+                        new StringLiteral { Value = attribute.EntityLogicalName },
+                        expr
+                    }
+                };
+            }
+            else
+            {
+                expr = new CastCall
+                {
+                    Parameter = expr,
+                    DataType = attrType
+                };
+            }
+
+            return expr;
+        }
     }
 
     /// <summary>

@@ -9,8 +9,12 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
+using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -52,6 +56,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         [Browsable(false)]
         public HashSet<string> Parameters { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        internal SelectStatement SelectStatement { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -225,6 +231,113 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
+        internal IExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, Dictionary<string, string> mappings)
+        {
+            if (!(SelectStatement?.QueryExpression is QuerySpecification querySpec))
+                return this;
+
+            if (querySpec.FromClause == null || querySpec.FromClause.TableReferences.Count != 1 || !(querySpec.FromClause.TableReferences[0] is NamedTableReference table))
+                return this;
+
+            if (table.SchemaObject.BaseIdentifier.Value != logicalName)
+                return this;
+
+            if (querySpec.WhereClause == null || querySpec.WhereClause.SearchCondition == null)
+                return this;
+
+            var filterVisitor = new SimpleFilterVisitor();
+            querySpec.WhereClause.SearchCondition.Accept(filterVisitor);
+
+            if (filterVisitor.BinaryType == null)
+                return this;
+
+            var dataSource = context.DataSources[DataSource];
+            var metadata = dataSource.Metadata[logicalName];
+            var conditions = filterVisitor.Conditions.ToList();
+
+            if (!TryGetDmlSchema(dataSource, metadata, querySpec, out var schema))
+                return this;
+
+            var constantScan = new ConstantScanNode();
+
+            foreach (var col in mappings)
+                constantScan.Schema[col.Value.SplitMultiPartIdentifier().Last()] = new ColumnDefinition(schema[col.Value], true, false);
+
+            // We can handle compound keys, but only if they are all ANDed together
+            if (mappings.Count > 1 && filterVisitor.BinaryType == BooleanBinaryExpressionType.And)
+            {
+                var values = new Dictionary<string, ScalarExpression>();
+
+                foreach (var mapping in mappings)
+                {
+                    var condition = conditions.FirstOrDefault(c => c.attribute == mapping.Value.SplitMultiPartIdentifier()[1]);
+                    if (condition == null)
+                        return this;
+
+                    if (condition.@operator != @operator.eq)
+                        return this;
+
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+                    values[condition.attribute] = attribute.GetDmlValue(condition.value, dataSource);
+                }
+
+                constantScan.Values.Add(values);
+                return constantScan;
+            }
+
+            // We can also handle multiple values for a single key being ORed together
+            else if (mappings.Count == 1 &&
+                conditions.All(c => c.attribute == metadata.PrimaryIdAttribute) &&
+                conditions.All(c => c.@operator == @operator.eq || c.@operator == @operator.@in) &&
+                (conditions.Count == 1 || filterVisitor.BinaryType == BooleanBinaryExpressionType.Or))
+            {
+                foreach (var condition in conditions)
+                {
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+
+                    if (condition.@operator == @operator.eq)
+                    {
+                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                    }
+                    else if (condition.@operator == @operator.@in)
+                    {
+                        foreach (var value in condition.Items)
+                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                    }
+                }
+
+                return constantScan;
+            }
+
+            return this;
+        }
+
+        private bool TryGetDmlSchema(DataSource dataSource, EntityMetadata metadata, QuerySpecification querySpec, out Dictionary<string, DataTypeReference> schema)
+        {
+            schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var select in querySpec.SelectElements)
+            {
+                if (!(select is SelectScalarExpression scalar))
+                    return false;
+
+                if (!(scalar.Expression is ColumnReferenceExpression col))
+                    return false;
+
+                var attribute = metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(col.MultiPartIdentifier.Identifiers.Last().Value, StringComparison.OrdinalIgnoreCase));
+
+                if (attribute == null)
+                    return false;
+
+                var type = attribute.GetAttributeSqlType(dataSource, false);
+                var name = scalar.ColumnName?.Value ?? attribute.LogicalName;
+
+                schema[name] = type;
+            }
+
+            return true;
+        }
+
         public override string ToString()
         {
             return "TDS Endpoint";
@@ -239,7 +352,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Index = Index,
                 Length = Length,
                 LineNumber = LineNumber,
-                Parameters = Parameters
+                Parameters = Parameters,
+                SelectStatement = SelectStatement
             };
         }
     }

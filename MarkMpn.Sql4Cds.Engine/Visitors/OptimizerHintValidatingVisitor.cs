@@ -60,12 +60,18 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // Ignore duplicate keys on insert, equivalent to IGNORE_DUP_KEY option on creation of index
             "IGNORE_DUP_KEY",
+
+            // Custom hint to disable converting DML source queries to constant scans
+            "NO_DIRECT_DML",
         };
 
         private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             // DML-related hint can be removed from the SELECT statement sent to the TDS Endpoint
             "BYPASS_CUSTOM_PLUGIN_EXECUTION",
+            
+            // Custom hint to disable converting DML source queries to constant scans
+            "NO_DIRECT_DML",
         };
 
         private static readonly string[] _tsqlQueryHintPrefixes = new[]
