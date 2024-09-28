@@ -709,7 +709,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (inPred.Subquery != null)
                     return false;
 
-                if (!inPred.Values.All(v => v is Literal))
+                if (!inPred.Values.All(v => v is ValueExpression))
                     return false;
 
                 var columnName = inCol.GetColumnName();
@@ -732,7 +732,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var meta = dataSource.Metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, op, inPred.Values.Cast<Literal>().ToArray(), dataSource, targetEntityAlias, items, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, null, op, inPred.Values.Cast<ValueExpression>().ToArray(), dataSource, targetEntityAlias, items, out condition, out filter);
             }
 
             if (criteria is BooleanIsNullExpression isNull)

@@ -8549,5 +8549,37 @@ FROM account a";
             var delete = AssertNode<DeleteNode>(plans[0]);
             var constant = AssertNode<ConstantScanNode>(delete.Source);
         }
+
+        [TestMethod]
+        public void InVariables()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "SELECT name FROM account WHERE accountid IN (@Id1, @Id2)";
+            var parameterTypes = new Dictionary<string, DataTypeReference>
+            {
+                ["@Id1"] = DataTypeHelpers.UniqueIdentifier,
+                ["@Id2"] = DataTypeHelpers.UniqueIdentifier
+            };
+
+            var plans = planBuilder.Build(query, parameterTypes, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+    <entity name='account'>
+        <attribute name='name' />
+        <filter>
+            <condition attribute='accountid' operator='in'>
+                <value generator:IsVariable='true'>@Id1</value>
+                <value generator:IsVariable='true'>@Id2</value>
+            </condition>
+        </filter>
+    </entity>
+</fetch>");
+        }
     }
 }
