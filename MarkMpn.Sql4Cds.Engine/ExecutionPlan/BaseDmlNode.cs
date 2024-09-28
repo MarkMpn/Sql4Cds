@@ -235,15 +235,64 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return continueOnError;
         }
 
-        protected void FoldIdsToConstantScan(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, Dictionary<string, string> columnMappings)
+        protected void FoldIdsToConstantScan(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns)
         {
             if (hints != null && hints.OfType<UseHintList>().Any(hint => hint.Hints.Any(s => s.Value.Equals("NO_DIRECT_DML", StringComparison.OrdinalIgnoreCase))))
                 return;
 
-            if (Source is FetchXmlScan fetch)
-                Source = fetch.FoldDmlSource(context, hints, logicalName, columnMappings);
+            // Work out the fields that we should use as the primary key for these records.
+            var dataSource = context.DataSources[DataSource];
+            var targetMetadata = dataSource.Metadata[logicalName];
+            var keyAttributes = new[] { targetMetadata.PrimaryIdAttribute };
+
+            if (targetMetadata.LogicalName == "listmember")
+            {
+                keyAttributes = new[] { "listid", "entityid" };
+            }
+            else if (targetMetadata.IsIntersect == true)
+            {
+                var relationship = targetMetadata.ManyToManyRelationships.Single();
+                keyAttributes = new[] { relationship.Entity1IntersectAttribute, relationship.Entity2IntersectAttribute };
+            }
+            else if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // Elastic tables need the partitionid as part of the primary key
+                keyAttributes = new[] { targetMetadata.PrimaryIdAttribute, "partitionid" };
+            }
+            else if (targetMetadata.LogicalName == "activitypointer")
+            {
+                // Can't do DML operations on base activitypointer table, need to read the record to
+                // find the concrete activity type.
+                return;
+            }
+
+            // Skip any ComputeScalar node that is being used to generate additional values,
+            // unless they reference additional values in the data source
+            var compute = Source as ComputeScalarNode;
+
+            if (compute != null)
+            {
+                if (compute.Columns.Any(c => c.Value.GetColumns().Except(keyAttributes).Any()))
+                    return;
+
+                // Ignore any columns being created by the ComputeScalar node
+                foreach (var col in compute.Columns)
+                    requiredColumns = requiredColumns.Except(new[] { col.Key }).ToArray();
+            }
+
+            if ((compute?.Source ?? Source) is FetchXmlScan fetch)
+            {
+                var folded = fetch.FoldDmlSource(context, hints, logicalName, requiredColumns, keyAttributes);
+
+                if (compute != null)
+                    compute.Source = folded;
+                else
+                    Source = folded;
+            }
             else if (Source is SqlNode sql)
-                Source = sql.FoldDmlSource(context, hints, logicalName, columnMappings);
+            {
+                Source = sql.FoldDmlSource(context, hints, logicalName, requiredColumns, keyAttributes);
+            }
         }
 
         /// <summary>

@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -257,15 +258,21 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="attribute">The attribute to convert the value for</param>
         /// <param name="value">The string representation of the value</param>
+        /// <param name="isVariable">Indicates if the value is a variable name</param>
+        /// <param name="context">The context that the expression is being compiled in</param>
         /// <param name="dataSource">The data source that the operation will be performed in</param>
         /// <returns>An expression that returns the value in the appropriate type</returns>
-        public static ScalarExpression GetDmlValue(this AttributeMetadata attribute, string value, DataSource dataSource)
+        internal static ScalarExpression GetDmlValue(this AttributeMetadata attribute, string value, bool isVariable, ExpressionCompilationContext context, DataSource dataSource)
         {
             var expr = (ScalarExpression)new StringLiteral { Value = value };
 
+            if (isVariable)
+                expr = new VariableReference { Name = value };
+
+            expr.GetType(context, out var exprType);
             var attrType = attribute.GetAttributeSqlType(dataSource, false);
 
-            if (attrType is SqlDataTypeReference sqlType && sqlType.SqlDataTypeOption.IsStringType())
+            if (DataTypeHelpers.IsSameAs(exprType, attrType))
                 return expr;
 
             if (attribute.IsPrimaryId == true)

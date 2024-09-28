@@ -2549,9 +2549,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return FindParameterizedConditions().Keys;
         }
 
-        internal IExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, Dictionary<string, string> mappings)
+        internal IDataExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns, string[] keyAttributes)
         {
-            if (Entity.name != logicalName)
+            if (Entity.name != logicalName || Entity.Items == null)
+                return this;
+
+            // Can't produce any values except the primary key
+            var requiredAttributes = requiredColumns
+                .Select(col => col.SplitMultiPartIdentifier().Last())
+                .ToArray();
+
+            if (requiredAttributes.Except(keyAttributes).Any())
                 return this;
 
             if (Entity.GetLinkEntities().Any())
@@ -2565,26 +2573,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!filters[0].Items.All(x => x is condition))
                 return this;
 
+            if (filters[0].Items.Cast<condition>().Any(c => c.ValueOf != null))
+                return this;
+
             var dataSource = context.DataSources[DataSource];
             var metadata = dataSource.Metadata[logicalName];
             var conditions = filters[0].Items.Cast<condition>().ToList();
+            var ecc = new ExpressionCompilationContext(context, null, null);
             var schema = GetSchema(context);
             var constantScan = new ConstantScanNode
             {
                 Alias = Alias
             };
 
-            foreach (var col in mappings)
-                constantScan.Schema[col.Value.SplitMultiPartIdentifier().Last()] = schema.Schema[col.Value];
+            for (var i = 0; i < requiredColumns.Length; i++)
+                constantScan.Schema[requiredAttributes[i]] = schema.Schema[requiredColumns[i]];
 
             // We can handle compound keys, but only if they are all ANDed together
-            if (mappings.Count > 1 && filters[0].type == filterType.and)
+            if (keyAttributes.Length > 1 && filters[0].type == filterType.and)
             {
                 var values = new Dictionary<string, ScalarExpression>();
 
-                foreach (var mapping in mappings)
+                foreach (var keyAttribute in keyAttributes)
                 {
-                    var condition = conditions.FirstOrDefault(c => c.attribute == mapping.Value.SplitMultiPartIdentifier()[1]);
+                    var condition = conditions.FirstOrDefault(c => c.attribute == keyAttribute);
                     if (condition == null)
                         return this;
 
@@ -2592,7 +2604,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return this;
 
                     var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
-                    values[condition.attribute] = attribute.GetDmlValue(condition.value, dataSource);
+                    values[condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource);
                 }
 
                 constantScan.Values.Add(values);
@@ -2600,7 +2612,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // We can also handle multiple values for a single key being ORed together
-            else if (mappings.Count == 1 &&
+            else if (keyAttributes.Length == 1 &&
                 conditions.All(c => c.attribute == metadata.PrimaryIdAttribute) &&
                 conditions.All(c => c.@operator == @operator.eq || c.@operator == @operator.@in) &&
                 (conditions.Count == 1 || filters[0].type == filterType.or))
@@ -2611,12 +2623,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (condition.@operator == @operator.eq)
                     {
-                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource) });
                     }
                     else if (condition.@operator == @operator.@in)
                     {
                         foreach (var value in condition.Items)
-                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(value.Value, value.IsVariable, ecc, dataSource) });
                     }
                 }
 

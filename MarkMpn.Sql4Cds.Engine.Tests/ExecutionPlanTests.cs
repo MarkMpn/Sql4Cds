@@ -8551,6 +8551,85 @@ FROM account a";
         }
 
         [TestMethod]
+        public void DeleteByIdWithGlobalVariableUsesConstantScan()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "DELETE FROM account WHERE accountid = @@IDENTITY";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var delete = AssertNode<DeleteNode>(plans[0]);
+            var constant = AssertNode<ConstantScanNode>(delete.Source);
+        }
+
+        [TestMethod]
+        public void DeleteByIdWithVariableUsesConstantScan()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "DELETE FROM account WHERE accountid = @Id";
+            var parameterTypes = new Dictionary<string, DataTypeReference>
+            {
+                ["@Id"] = DataTypeHelpers.UniqueIdentifier
+            };
+            var plans = planBuilder.Build(query, parameterTypes, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var delete = AssertNode<DeleteNode>(plans[0]);
+            var constant = AssertNode<ConstantScanNode>(delete.Source);
+        }
+
+        [TestMethod]
+        public void DeleteByNameDoesNotUseConstantScan()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "DELETE FROM account WHERE name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var delete = AssertNode<DeleteNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(delete.Source);
+        }
+
+        [TestMethod]
+        public void UpdateByIdUsesConstantScan()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "UPDATE account SET name = 'test' WHERE accountid = '1D3AACA6-DEA4-490F-973E-E4181D4BE11C'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
+            var constant = AssertNode<ConstantScanNode>(computeScalar.Source);
+        }
+
+        [TestMethod]
+        public void UpdateByIdCopyingFieldUsesConstantScan()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+
+            var query = "UPDATE account SET name = owneridname WHERE accountid = '1D3AACA6-DEA4-490F-973E-E4181D4BE11C'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(update.Source);
+        }
+
+        [TestMethod]
         public void InVariables()
         {
             var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);

@@ -46,7 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             }
             else if (node is BooleanComparisonExpression cmp)
             {
-                if (cmp.FirstExpression is ColumnReferenceExpression col1 && cmp.SecondExpression is Literal lit2)
+                if (cmp.FirstExpression is ColumnReferenceExpression col1 && cmp.SecondExpression is ValueExpression lit2)
                 {
                     if (!cmp.ComparisonType.TryConvertToFetchXml(out var op))
                         _invalid = true;
@@ -55,10 +55,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     {
                         attribute = col1.MultiPartIdentifier.Identifiers.Last().Value,
                         @operator = op,
-                        value = lit2.Value
+                        value = GetValue(lit2),
+                        IsVariable = !(lit2 is Literal)
                     });
                 }
-                else if (cmp.FirstExpression is Literal lit1 && cmp.SecondExpression is ColumnReferenceExpression col2)
+                else if (cmp.FirstExpression is ValueExpression lit1 && cmp.SecondExpression is ColumnReferenceExpression col2)
                 {
                     if (!cmp.ComparisonType.TransitiveComparison().TryConvertToFetchXml(out var op))
                         _invalid = true;
@@ -67,7 +68,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     {
                         attribute = col2.MultiPartIdentifier.Identifiers.Last().Value,
                         @operator = op,
-                        value = lit1.Value
+                        value = GetValue(lit1),
+                        IsVariable = !(lit1 is Literal)
                     });
                 }
                 else
@@ -76,13 +78,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     _invalid = true;
                 }
             }
-            else if (node is InPredicate @in && @in.Expression is ColumnReferenceExpression inCol && @in.Subquery == null && @in.Values.All(v => v is Literal))
+            else if (node is InPredicate @in && @in.Expression is ColumnReferenceExpression inCol && @in.Subquery == null && @in.Values.All(v => v is ValueExpression))
             {
                 _conditions.Add(new condition
                 {
                     attribute = inCol.MultiPartIdentifier.Identifiers.Last().Value,
                     @operator = @operator.@in,
-                    Items = @in.Values.Cast<Literal>().Select(l => new conditionValue { Value = l.Value }).ToArray()
+                    Items = @in.Values.Cast<ValueExpression>().Select(l => new conditionValue { Value = GetValue(l), IsVariable = !(l is Literal) }).ToArray()
                 });
             }
             else
@@ -90,6 +92,20 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 // Unsupported
                 _invalid = true;
             }
+        }
+
+        private string GetValue(ValueExpression expr)
+        {
+            if (expr is Literal lit)
+                return lit.Value;
+
+            if (expr is GlobalVariableExpression g)
+                return g.Name;
+
+            if (expr is VariableReference v)
+                return v.Name;
+
+            throw new NotSupportedException("Unknown value type");
         }
 
         /// <summary>

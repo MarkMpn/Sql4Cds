@@ -231,7 +231,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
-        internal IExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, Dictionary<string, string> mappings)
+        internal IExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns, string[] keyAttributes)
         {
             if (!(SelectStatement?.QueryExpression is QuerySpecification querySpec))
                 return this;
@@ -254,23 +254,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var dataSource = context.DataSources[DataSource];
             var metadata = dataSource.Metadata[logicalName];
             var conditions = filterVisitor.Conditions.ToList();
+            var ecc = new ExpressionCompilationContext(context, null, null);
 
-            if (!TryGetDmlSchema(dataSource, metadata, querySpec, out var schema))
+            if (!TryGetDmlSchema(dataSource, metadata, querySpec, new ExpressionCompilationContext(context, null, null), out var schema, out var literalValues))
+                return this;
+
+            // Every column must either be a literal or a key attribute
+            if (requiredColumns.Except(literalValues.Keys).Except(keyAttributes).Any())
                 return this;
 
             var constantScan = new ConstantScanNode();
 
-            foreach (var col in mappings)
-                constantScan.Schema[col.Value.SplitMultiPartIdentifier().Last()] = new ColumnDefinition(schema[col.Value], true, false);
+            foreach (var col in requiredColumns)
+                constantScan.Schema[col.SplitMultiPartIdentifier().Last()] = new ColumnDefinition(schema[col], true, false);
 
             // We can handle compound keys, but only if they are all ANDed together
-            if (mappings.Count > 1 && filterVisitor.BinaryType == BooleanBinaryExpressionType.And)
+            if (keyAttributes.Length > 1 && filterVisitor.BinaryType == BooleanBinaryExpressionType.And)
             {
                 var values = new Dictionary<string, ScalarExpression>();
 
-                foreach (var mapping in mappings)
+                foreach (var col in requiredColumns)
                 {
-                    var condition = conditions.FirstOrDefault(c => c.attribute == mapping.Value.SplitMultiPartIdentifier()[1]);
+                    if (literalValues.ContainsKey(col))
+                        continue;
+
+                    var condition = conditions.FirstOrDefault(c => c.attribute == col.SplitMultiPartIdentifier().Last());
                     if (condition == null)
                         return this;
 
@@ -278,15 +286,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return this;
 
                     var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
-                    values[condition.attribute] = attribute.GetDmlValue(condition.value, dataSource);
+                    values[condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource);
                 }
 
                 constantScan.Values.Add(values);
+
+                AddLiteralValues(constantScan, literalValues);
                 return constantScan;
             }
 
             // We can also handle multiple values for a single key being ORed together
-            else if (mappings.Count == 1 &&
+            else if (keyAttributes.Length == 1 &&
                 conditions.All(c => c.attribute == metadata.PrimaryIdAttribute) &&
                 conditions.All(c => c.@operator == @operator.eq || c.@operator == @operator.@in) &&
                 (conditions.Count == 1 || filterVisitor.BinaryType == BooleanBinaryExpressionType.Or))
@@ -297,29 +307,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (condition.@operator == @operator.eq)
                     {
-                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource) });
                     }
                     else if (condition.@operator == @operator.@in)
                     {
                         foreach (var value in condition.Items)
-                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, dataSource) });
+                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(value.Value, value.IsVariable, ecc, dataSource) });
                     }
                 }
 
+                AddLiteralValues(constantScan, literalValues);
                 return constantScan;
             }
 
             return this;
         }
 
-        private bool TryGetDmlSchema(DataSource dataSource, EntityMetadata metadata, QuerySpecification querySpec, out Dictionary<string, DataTypeReference> schema)
+        private void AddLiteralValues(ConstantScanNode constantScan, Dictionary<string, ScalarExpression> literalValues)
+        {
+            foreach (var row in constantScan.Values)
+            {
+                foreach (var value in literalValues)
+                {
+                    row[value.Key] = value.Value;
+                }
+            }
+        }
+
+        private bool TryGetDmlSchema(DataSource dataSource, EntityMetadata metadata, QuerySpecification querySpec, ExpressionCompilationContext context, out Dictionary<string, DataTypeReference> schema, out Dictionary<string, ScalarExpression> literalValues)
         {
             schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            literalValues = new Dictionary<string, ScalarExpression>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var select in querySpec.SelectElements)
             {
                 if (!(select is SelectScalarExpression scalar))
                     return false;
+
+                if (!scalar.Expression.GetColumns().Any() && scalar.ColumnName?.Value != null)
+                {
+                    scalar.Expression.GetType(context, out var literalType);
+                    schema[scalar.ColumnName.Value] = literalType;
+                    literalValues[scalar.ColumnName.Value] = scalar.Expression;
+                    continue;
+                }
 
                 if (!(scalar.Expression is ColumnReferenceExpression col))
                     return false;

@@ -98,7 +98,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             UseLegacyUpdateMessages = GetUseLegacyUpdateMessages(context, hints);
 
-            return base.FoldQuery(context, hints);
+            var result = base.FoldQuery(context, hints);
+
+            if (result.Length != 1 || result[0] != this)
+                return result;
+
+            // If we don't need to use any of the original values and we're filtering by ID we can bypass reading
+            // the record to update
+            if (ColumnMappings.Values.All(m => m.OldValueColumn == null))
+            {
+                var dataSource = context.DataSources[DataSource];
+                var meta = dataSource.Metadata[LogicalName];
+
+                var requiredColumns = ColumnMappings
+                    .Select(kvp => kvp.Value.NewValueColumn)
+                    .Union(new[] { PrimaryIdSource })
+                    .ToArray();
+
+                FoldIdsToConstantScan(context, hints, LogicalName, requiredColumns);
+            }
+
+            return new[] { this };
         }
 
         private bool GetUseLegacyUpdateMessages(NodeCompilationContext context, IList<OptimizerHint> queryHints)
