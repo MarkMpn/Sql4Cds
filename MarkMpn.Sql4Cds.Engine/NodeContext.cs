@@ -47,6 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 OuterReferences = new Dictionary<string, string>()
             };
             Log = log ?? (msg => { });
+            DateFormat = DateFormat.mdy;
         }
 
         /// <summary>
@@ -63,6 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ParameterTypes = parameterTypes;
             GlobalCalculations = parentContext.GlobalCalculations;
             Log = parentContext.Log;
+            DateFormat = parentContext.DateFormat;
             _parentContext = parentContext;
         }
 
@@ -95,6 +97,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// A callback function to log messages
         /// </summary>
         public Action<Sql4CdsError> Log { get; }
+
+        /// <summary>
+        /// Returns or sets the current SET DATEFORMAT option
+        /// </summary>
+        public DateFormat DateFormat { get; set; }
 
         /// <summary>
         /// Generates a unique name for an expression
@@ -153,10 +160,42 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Creates a new <see cref="NodeExecutionContext"/> based on a <see cref="NodeCompilationContext"/>
+        /// </summary>
+        /// <param name="parentContext">The <see cref="NodeCompilationContext"/> to inherit settings from</param>
+        /// <param name="parameterValues">The values to use for any parameters</param>
+        public NodeExecutionContext(
+            NodeCompilationContext parentContext,
+            IDictionary<string, INullable> parameterValues)
+            : base(parentContext, parentContext.ParameterTypes)
+        {
+            ParameterValues = parameterValues;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NodeExecutionContext"/> based on another context but with additional parameters for a subquery
+        /// </summary>
+        /// <param name="parentContext">The <see cref="NodeExecutionContext"/> to inherit settings from</param>
+        /// <param name="parameterTypes">The names and types of the parameters that are available to the subquery</param>
+        /// <param name="parameterValues">The current value of each parameter</param>
+        public NodeExecutionContext(
+            NodeExecutionContext parentContext,
+            IDictionary<string, DataTypeReference> parameterTypes,
+            IDictionary<string, INullable> parameterValues)
+            : base(parentContext, parameterTypes)
+        {
+            ParameterValues = parameterValues;
+            DateFormat = parentContext.DateFormat;
+        }
+
+        /// <summary>
         /// Returns the current value of each parameter
         /// </summary>
         public IDictionary<string, INullable> ParameterValues { get; }
 
+        /// <summary>
+        /// Returns or sets the current error
+        /// </summary>
         public Sql4CdsError Error { get; set; }
     }
 

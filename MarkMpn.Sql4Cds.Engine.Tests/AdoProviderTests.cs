@@ -2466,5 +2466,35 @@ FROM (SELECT a.accountid
                 }
             }
         }
+
+        [TestMethod]
+        public void DateTimeStringLiterals()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                // https://learn.microsoft.com/en-us/sql/t-sql/data-types/date-transact-sql?view=sql-server-ver16#examples
+                cmd.CommandText = @"
+SELECT
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS TIME(7)) AS 'time',
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS DATE) AS 'date',
+    CAST('2022-05-08 12:35:29.123' AS SMALLDATETIME) AS 'smalldatetime',
+    CAST('2022-05-08 12:35:29.123' AS DATETIME) AS 'datetime',
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS DATETIME2(7)) AS 'datetime2',
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS DATETIMEOFFSET(7)) AS 'datetimeoffset';";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(new TimeSpan(12, 35, 29) + TimeSpan.FromTicks(1234567), reader.GetValue(0));
+                    Assert.AreEqual(new DateTime(2022, 5, 8), reader.GetValue(1));
+                    Assert.AreEqual(new DateTime(2022, 5, 8, 12, 35, 0), reader.GetValue(2));
+                    Assert.AreEqual(new DateTime(2022, 5, 8, 12, 35, 29, 123), reader.GetValue(3));
+                    Assert.AreEqual(new DateTime(2022, 5, 8, 12, 35, 29) + TimeSpan.FromTicks(1234567), reader.GetValue(4));
+                    Assert.AreEqual(new DateTimeOffset(new DateTime(2022, 5, 8, 12, 35, 29) + TimeSpan.FromTicks(1234567), new TimeSpan(12, 15, 0)), reader.GetValue(5));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

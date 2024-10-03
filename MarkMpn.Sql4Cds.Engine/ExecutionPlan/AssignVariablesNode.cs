@@ -50,11 +50,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var entities = GetDmlSourceEntities(context, out var schema);
                 var valueAccessors = CompileValueAccessors(schema, entities, context.ParameterTypes);
+                var eec = new ExpressionExecutionContext(context);
 
                 foreach (var entity in entities)
                 {
+                    eec.Entity = entity;
+
                     foreach (var variable in Variables)
-                        context.ParameterValues[variable.VariableName] = (INullable)valueAccessors[variable.VariableName](entity);
+                        context.ParameterValues[variable.VariableName] = (INullable)valueAccessors[variable.VariableName](eec);
 
                     count++;
                 }
@@ -74,10 +77,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="attributes">The attributes in the target metadata</param>
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileValueAccessors(INodeSchema schema, List<Entity> entities, IDictionary<string, DataTypeReference> variableTypes)
+        protected Dictionary<string, Func<ExpressionExecutionContext, object>> CompileValueAccessors(INodeSchema schema, List<Entity> entities, IDictionary<string, DataTypeReference> variableTypes)
         {
-            var valueAccessors = new Dictionary<string, Func<Entity, object>>();
-            var entityParam = Expression.Parameter(typeof(Entity));
+            var valueAccessors = new Dictionary<string, Func<ExpressionExecutionContext, object>>();
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
 
             foreach (var mapping in Variables)
             {
@@ -94,7 +97,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var destNetType = destSqlType.ToNetType(out _);
 
-                var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
+                var entity = Expression.Property(contextParam, nameof(ExpressionExecutionContext.Entity));
+                var expr = (Expression)Expression.Property(entity, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
 
                 if (sourceSqlType.IsSameAs(DataTypeHelpers.Int) && !SqlTypeConverter.CanChangeTypeExplicit(sourceSqlType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
@@ -108,12 +112,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expr = Expression.Convert(expr, sourceSqlType.ToNetType(out _));
 
                     // Convert to destination SQL type
-                    expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+                    expr = SqlTypeConverter.Convert(expr, contextParam, sourceSqlType, destSqlType);
                 }
 
                 expr = Expr.Box(expr);
 
-                valueAccessors[destVariableName] = Expression.Lambda<Func<Entity, object>>(expr, entityParam).Compile();
+                valueAccessors[destVariableName] = Expression.Lambda<Func<ExpressionExecutionContext, object>>(expr, contextParam).Compile();
             }
 
             return valueAccessors;

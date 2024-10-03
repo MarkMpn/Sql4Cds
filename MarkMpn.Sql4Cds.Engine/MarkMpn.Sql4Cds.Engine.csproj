@@ -36,7 +36,6 @@
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="161.8834.0" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
     <PackageReference Include="XPath2.Extensions" Version="1.1.3" />
-    <Reference Include="Microsoft.VisualBasic" Condition=" '$(TargetFramework)' == 'net462' " />
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' And '$(TargetFramework)' == 'net462' ">

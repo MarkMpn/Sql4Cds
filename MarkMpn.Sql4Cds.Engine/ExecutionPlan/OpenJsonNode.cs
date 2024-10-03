@@ -15,7 +15,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Func<ExpressionExecutionContext, object> _jsonExpression;
         private Func<ExpressionExecutionContext, object> _pathExpression;
         private Collation _jsonCollation;
-        private List<Func<INullable, INullable>> _conversions;
+        private List<Func<INullable, ExpressionExecutionContext, INullable>> _conversions;
 
         private static readonly Collation _keyCollation;
 
@@ -279,7 +279,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        yield return TokenToEntity(prop.Value, schema, mappings);
+                        yield return TokenToEntity(prop.Value, schema, mappings, eec);
                     }
                 }
             }
@@ -304,7 +304,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        yield return TokenToEntity(item, schema, mappings);
+                        yield return TokenToEntity(item, schema, mappings, eec);
                     }
 
                     i++;
@@ -319,7 +319,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private Entity TokenToEntity(JsonElement token, INodeSchema schema, JsonPath[] mappings)
+        private Entity TokenToEntity(JsonElement token, INodeSchema schema, JsonPath[] mappings, ExpressionExecutionContext context)
         {
             var result = new Entity();
 
@@ -373,7 +373,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 var sqlStringValue = Collation.USEnglish.ToSqlString(stringValue);
-                var sqlValue = _conversions[i](sqlStringValue);
+                var sqlValue = _conversions[i](sqlStringValue, context);
 
                 result[PrefixWithAlias(Schema[i].ColumnDefinition.ColumnIdentifier.Value, null)] = sqlValue;
             }

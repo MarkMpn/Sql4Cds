@@ -228,6 +228,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(245, sourceValue, Collation.USEnglish.ToSqlString(GetTypeName(sourceType)), (SqlInt32)sourceValue.Value.Length, Collation.USEnglish.ToSqlString(sourceValue.Value), Collation.USEnglish.ToSqlString(GetTypeName(targetType)));
         }
 
+        internal static Sql4CdsError ConversionOutOfRange(DataTypeReference sourceType, DataTypeReference targetType)
+        {
+            return Create(242, sourceType, Collation.USEnglish.ToSqlString(GetTypeName(sourceType)), Collation.USEnglish.ToSqlString(GetTypeName(targetType)));
+        }
+
         internal static Sql4CdsError CollationConflict(TSqlFragment fragment, Collation source, Collation target, string operationName)
         {
             return Create(468, fragment, (SqlInt32)(source?.Name.Length ?? 0), Collation.USEnglish.ToSqlString(source?.Name), (SqlInt32)(target?.Name.Length ?? 0), Collation.USEnglish.ToSqlString(target?.Name), Collation.USEnglish.ToSqlString(operationName));

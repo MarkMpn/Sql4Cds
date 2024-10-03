@@ -36,8 +36,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
             var expressionExecutionContext = new ExpressionExecutionContext(context);
-            var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(expressionCompilationContext)(expressionExecutionContext));
-            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(expressionCompilationContext)(expressionExecutionContext));
+            var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(expressionCompilationContext)(expressionExecutionContext), expressionExecutionContext);
+            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(expressionCompilationContext)(expressionExecutionContext), expressionExecutionContext);
 
             if (offset < 0)
                 throw new QueryExecutionException(Sql4CdsError.Create(10742, null));
@@ -78,8 +78,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return this;
 
                 var expressionExecutionContext = new ExpressionExecutionContext(expressionCompilationContext);
-                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(expressionCompilationContext)(expressionExecutionContext));
-                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(expressionCompilationContext)(expressionExecutionContext));
+                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(expressionCompilationContext)(expressionExecutionContext), expressionExecutionContext);
+                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(expressionCompilationContext)(expressionExecutionContext), expressionExecutionContext);
                 var page = offset / count;
 
                 if (page * count == offset && count <= 5000)

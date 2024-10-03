@@ -26,7 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             public string SqlName { get; set; }
             public string PropertyName { get; set; }
-            public Func<object,object> Accessor { get; set; }
+            public Func<object,ExpressionExecutionContext,object> Accessor { get; set; }
             public DataTypeReference SqlType { get; set; }
             public Type Type { get; set; }
             public IComparable[] DataMemberOrder { get; set; }
@@ -36,7 +36,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             public string SqlName { get; set; }
             public string PropertyName { get; set; }
-            public IDictionary<Type, Func<object,object>> Accessors { get; set; }
+            public IDictionary<Type, Func<object,ExpressionExecutionContext,object>> Accessors { get; set; }
             public DataTypeReference SqlType { get; set; }
             public Type Type { get; set; }
             public bool IsNullable { get; set; }
@@ -552,7 +552,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var targetNetType = targetSqlType.ToNetType(out _);
             var netConverter = SqlTypeConverter.GetConversion(targetNetType, targetValueType);
 
-            return new CompiledExpression(expression, context => netConverter(sqlConverter((INullable)expr(context))));
+            return new CompiledExpression(expression, context => netConverter(sqlConverter((INullable)expr(context), context), context));
         }
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
@@ -843,10 +843,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return SqlTypeConverter.NetToSqlType(propType).ToSqlType(null);
         }
 
-        internal static Func<object,object> GetPropertyAccessor(PropertyInfo prop, Type targetType)
+        internal static Func<object,ExpressionExecutionContext,object> GetPropertyAccessor(PropertyInfo prop, Type targetType)
         {
             var rawParam = Expression.Parameter(typeof(object));
-            var param = SqlTypeConverter.Convert(rawParam, prop.DeclaringType);
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
+            var param = SqlTypeConverter.Convert(rawParam, contextParam, prop.DeclaringType);
             var value = (Expression)Expression.Property(param, prop);
 
             // Extract base value from complex types
@@ -869,13 +870,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 value = Expression.Property(value, nameof(Label.UserLocalizedLabel));
 
             if (value.Type == typeof(LocalizedLabel))
-                value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), SqlTypeConverter.Convert(Expression.Constant(null), typeof(string)), Expression.Property(value, nameof(LocalizedLabel.Label)));
+                value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), Expression.Constant(null, typeof(string)), Expression.Property(value, nameof(LocalizedLabel.Label)));
 
             if (value.Type.IsEnum)
                 value = Expression.Call(value, nameof(Enum.ToString), Array.Empty<Type>());
 
             if (typeof(MetadataBase).IsAssignableFrom(value.Type))
-                value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), SqlTypeConverter.Convert(Expression.Constant(null), typeof(Guid?)), Expression.Property(value, nameof(MetadataBase.MetadataId)));
+                value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), Expression.Constant(null, typeof(Guid?)), Expression.Property(value, nameof(MetadataBase.MetadataId)));
 
             var directConversionType = SqlTypeConverter.NetToSqlType(value.Type);
 
@@ -887,10 +888,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (value.Type == typeof(string) && directConversionType == typeof(SqlString) && targetType == typeof(SqlString))
                 converted = Expr.Call(() => ApplyCollation(Expr.Arg<string>()), value);
             else
-                converted = SqlTypeConverter.Convert(value, directConversionType);
+                converted = SqlTypeConverter.Convert(value, contextParam, directConversionType);
 
             if (targetType != directConversionType)
-                converted = SqlTypeConverter.Convert(converted, targetType);
+                converted = SqlTypeConverter.Convert(converted, contextParam, targetType);
 
             // Return null literal if final value is null
             if (!value.Type.IsValueType)
@@ -904,7 +905,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Compile the function
             value = Expr.Box(value);
-            var func = (Func<object,object>) Expression.Lambda(value, rawParam).Compile();
+            var func = (Func<object,ExpressionExecutionContext,object>) Expression.Lambda(value, rawParam, contextParam).Compile();
             return func;
         }
 
@@ -1009,6 +1010,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);
             var manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);
             var keyProps = typeof(EntityKeyMetadata).GetProperties().ToDictionary(p => p.Name);
+            var eec = new ExpressionExecutionContext(context);
 
             var results = resp.EntityMetadata.Select(e => new { Entity = e, Attribute = (AttributeMetadata)null, Relationship = (RelationshipMetadataBase)null, Key = (EntityKeyMetadata)null });
 
@@ -1037,7 +1039,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     converted.Id = result.Entity.MetadataId ?? Guid.Empty;
 
                     foreach (var prop in _entityCols)
-                        converted[prop.Key] = prop.Value.Accessor(result.Entity);
+                        converted[prop.Key] = prop.Value.Accessor(result.Entity, eec);
                 }
 
                 if (MetadataSource.HasFlag(MetadataSource.Attribute))
@@ -1053,7 +1055,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             continue;
                         }
 
-                        converted[prop.Key] = accessor(result.Attribute);
+                        converted[prop.Key] = accessor(result.Attribute, eec);
                     }
                 }
 
@@ -1063,7 +1065,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     converted.Id = result.Relationship.MetadataId ?? Guid.Empty;
 
                     foreach (var prop in _oneToManyRelationshipCols)
-                        converted[prop.Key] = prop.Value.Accessor(result.Relationship);
+                        converted[prop.Key] = prop.Value.Accessor(result.Relationship, eec);
                 }
 
                 if (MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship))
@@ -1072,7 +1074,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     converted.Id = result.Relationship.MetadataId ?? Guid.Empty;
 
                     foreach (var prop in _manyToOneRelationshipCols)
-                        converted[prop.Key] = prop.Value.Accessor(result.Relationship);
+                        converted[prop.Key] = prop.Value.Accessor(result.Relationship, eec);
                 }
 
                 if (MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
@@ -1081,7 +1083,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     converted.Id = result.Relationship.MetadataId ?? Guid.Empty;
 
                     foreach (var prop in _manyToManyRelationshipCols)
-                        converted[prop.Key] = prop.Value.Accessor(result.Relationship);
+                        converted[prop.Key] = prop.Value.Accessor(result.Relationship, eec);
                 }
 
                 if (MetadataSource.HasFlag(MetadataSource.Key))
@@ -1090,7 +1092,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     converted.Id = result.Key.MetadataId ?? Guid.Empty;
 
                     foreach (var prop in _keyCols)
-                        converted[prop.Key] = prop.Value.Accessor(result.Key);
+                        converted[prop.Key] = prop.Value.Accessor(result.Key, eec);
                 }
 
                 foreach (var attr in converted.Attributes.ToList())

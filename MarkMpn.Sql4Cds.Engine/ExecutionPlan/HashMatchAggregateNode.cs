@@ -58,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 executionContext.Entity = entity;
 
                 foreach (var func in values.Values)
-                    func.AggregateFunction.NextRecord(func.State);
+                    func.AggregateFunction.NextRecord(func.State, executionContext);
             }
 
             foreach (var group in groups)

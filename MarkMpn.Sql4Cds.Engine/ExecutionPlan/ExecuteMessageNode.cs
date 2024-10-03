@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var expr = value.Value.Compile(expressionContext);
                     var sqlConversion = SqlTypeConverter.GetConversion(sourceSqlType, destSqlType);
                     var netConversion = SqlTypeConverter.GetConversion(destSqlType, destNetType);
-                    var conversion = (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => netConversion(sqlConversion(expr(ctx))));
+                    var conversion = (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => netConversion(sqlConversion(expr(ctx), ctx), ctx));
                     if (ValueTypes[value.Key] == typeof(Entity))
                     {
                         var conversionToString = conversion;

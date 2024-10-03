@@ -92,10 +92,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="state">The current state of the aggregation</param>
         /// <returns>The new state of the aggregation</returns>
-        public virtual void NextRecord(object state)
+        public virtual void NextRecord(object state, ExpressionExecutionContext context)
         {
             var value = _selector();
-            Update(value, state);
+            Update(value, context, state);
         }
 
         /// <summary>
@@ -103,10 +103,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="state">The current state of the aggregation</param>
         /// <returns>The new state of the aggregation</returns>
-        public virtual void NextPartition(object state)
+        public virtual void NextPartition(object state, ExpressionExecutionContext context)
         {
             var value = _selector();
-            UpdatePartition(value, state);
+            UpdatePartition(value, context, state);
         }
 
         /// <summary>
@@ -114,14 +114,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="value"></param>
         /// <param name="state">The current state of the aggregation</param>
-        protected abstract void Update(object value, object state);
+        protected abstract void Update(object value, ExpressionExecutionContext context, object state);
 
         /// <summary>
         /// Updates the aggregation state based on a value extracted from the partition <see cref="Entity"/>
         /// </summary>
         /// <param name="value"></param>
         /// <param name="state">The current state of the aggregation</param>
-        protected abstract void UpdatePartition(object value, object state);
+        protected abstract void UpdatePartition(object value, ExpressionExecutionContext context, object state);
 
         /// <summary>
         /// Returns the current value of this aggregation
@@ -184,20 +184,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _count = new CountColumn(selector);
         }
 
-        public override void NextRecord(object state)
+        public override void NextRecord(object state, ExpressionExecutionContext context)
         {
             var s = (State)state;
 
-            _sum.NextRecord(s.SumState);
-            _count.NextRecord(s.CountState);
+            _sum.NextRecord(s.SumState, context);
+            _count.NextRecord(s.CountState, context);
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             throw new NotImplementedException();
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
             throw new InvalidOperationException();
         }
@@ -253,13 +253,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             var s = (State)state;
             s.Value = s.Value + 1;
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
             var s = (State)state;
             s.Value = s.Value + (SqlInt32)value;
@@ -297,7 +297,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
@@ -306,7 +306,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             s.Value = s.Value + 1;
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
             var s = (State)state;
             s.Value = s.Value + (SqlInt32)value;
@@ -350,7 +350,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Type = type;
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
@@ -363,9 +363,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 s.Value = cmp;
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
-            Update(value, state);
+            Update(value, context, state);
         }
 
         public override object GetValue(object state)
@@ -406,7 +406,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Type = type;
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
@@ -420,9 +420,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 s.Value = cmp;
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
-            Update(value, state);
+            Update(value, context, state);
         }
 
         public override object GetValue(object state)
@@ -454,7 +454,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         private readonly SqlDataTypeOption _type;
-        private readonly Func<object, object> _valueSelector;
+        private readonly Func<object, ExpressionExecutionContext, object> _valueSelector;
 
         /// <summary>
         /// Creates a new <see cref="Sum"/>
@@ -467,15 +467,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _type = ((SqlDataTypeReference)returnType).SqlDataTypeOption;
 
             var valueParam = Expression.Parameter(typeof(object));
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
             var unboxed = Expression.Unbox(valueParam, sourceType.ToNetType(out _));
-            var conversion = SqlTypeConverter.Convert(unboxed, sourceType, returnType);
+            var conversion = SqlTypeConverter.Convert(unboxed, contextParam, sourceType, returnType);
             conversion = Expr.Box(conversion);
-            _valueSelector = (Func<object, object>) Expression.Lambda(conversion, valueParam).Compile();
+            _valueSelector = (Func<object, ExpressionExecutionContext, object>) Expression.Lambda(conversion, valueParam, contextParam).Compile();
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
-            var d = (INullable)_valueSelector(value);
+            var d = (INullable)_valueSelector(value, context);
 
             if (d.IsNull)
                 return;
@@ -509,9 +510,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
-            Update(value, state);
+            Update(value, context, state);
         }
 
         public override object GetValue(object state)
@@ -569,7 +570,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Type = type;
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             var s = (State)state;
             if (s.Done)
@@ -579,7 +580,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             s.Done = true;
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
             throw new InvalidOperationException();
         }
@@ -611,7 +612,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public SqlString Value { get; set; }
         }
 
-        private Func<object, SqlString> _valueSelector;
+        private Func<object, ExpressionExecutionContext, SqlString> _valueSelector;
 
         /// <summary>
         /// Creates a new <see cref="Sum"/>
@@ -622,17 +623,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Type = returnType;
 
             var valueParam = Expression.Parameter(typeof(object));
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
             var unboxed = Expression.Unbox(valueParam, sourceType.ToNetType(out _));
-            var conversion = SqlTypeConverter.Convert(unboxed, sourceType, returnType);
+            var conversion = SqlTypeConverter.Convert(unboxed, contextParam, sourceType, returnType);
             conversion = Expr.Convert(conversion, typeof(SqlString));
-            _valueSelector = (Func<object, SqlString>)Expression.Lambda(conversion, valueParam).Compile();
+            _valueSelector = (Func<object, ExpressionExecutionContext, SqlString>)Expression.Lambda(conversion, valueParam, contextParam).Compile();
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             var s = (State)state;
 
-            var str = _valueSelector(value);
+            var str = _valueSelector(value, context);
 
             if (str.IsNull)
                 return;
@@ -643,7 +645,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 s.Value += Separator + str;
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
             throw new InvalidOperationException();
         }
@@ -687,21 +689,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override DataTypeReference Type => _func.Type;
 
-        public override void NextRecord(object state)
+        public override void NextRecord(object state, ExpressionExecutionContext context)
         {
             var value = _selector();
             var s = (State)state;
 
             if (s.Distinct.Add(value))
-                _func.NextRecord(s.InnerState);
+                _func.NextRecord(s.InnerState, context);
         }
 
-        protected override void UpdatePartition(object value, object state)
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
         {
             throw new InvalidOperationException();
         }
 
-        protected override void Update(object value, object state)
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
         {
             throw new NotImplementedException();
         }

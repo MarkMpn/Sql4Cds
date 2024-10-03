@@ -93,10 +93,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), new ApplicationException("Ambiguous username"));
 
                     // Precompile mappings with type conversions
+                    var eec = new ExpressionExecutionContext(context) { Entity = entities[0] };
                     var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
                     var userIdAccessor = attributeAccessors["systemuserid"];
 
-                    var userId = (Guid)userIdAccessor(entities[0]);
+                    var userId = (Guid)userIdAccessor(eec);
 
                     PropertyInfo callerIdProp;
 

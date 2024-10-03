@@ -11,16 +11,20 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     struct SqlVariant : INullable, IComparable
     {
+        private readonly ExpressionExecutionContext _context;
+
         private SqlVariant(bool @null)
         {
             BaseType = DataTypeHelpers.Variant;
             Value = null;
+            _context = null;
         }
 
-        public SqlVariant(DataTypeReference baseType, INullable value)
+        public SqlVariant(DataTypeReference baseType, INullable value, ExpressionExecutionContext context)
         {
             BaseType = baseType ?? throw new ArgumentNullException(nameof(baseType));
             Value = value ?? throw new ArgumentNullException(nameof(value));
+            _context = context ?? throw new ArgumentNullException(nameof(context));
         }
 
         public static readonly SqlVariant Null = new SqlVariant(true);
@@ -77,8 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!SqlTypeConverter.CanMakeConsistentTypes(BaseType, sqlVariant.BaseType, null, null, null, out var consistentType))
                 throw new ArgumentException();
 
-            var value1 = SqlTypeConverter.GetConversion(BaseType, consistentType)(Value);
-            var value2 = SqlTypeConverter.GetConversion(sqlVariant.BaseType, consistentType)(sqlVariant.Value);
+            var value1 = SqlTypeConverter.GetConversion(BaseType, consistentType)(Value, _context);
+            var value2 = SqlTypeConverter.GetConversion(sqlVariant.BaseType, consistentType)(sqlVariant.Value, sqlVariant._context);
 
             if (!(value1 is IComparable comparable1))
                 throw new ArgumentException();

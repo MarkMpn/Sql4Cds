@@ -199,7 +199,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 partitionParameterValues[kvp.Key] = kvp.Value;
                         }
 
-                        var partitionContext = new NodeExecutionContext(context.DataSources, context.Options, context.ParameterTypes, partitionParameterValues, context.Log);
+                        var partitionContext = new NodeExecutionContext(context, context.ParameterTypes, partitionParameterValues);
 
                         return new { Context = partitionContext, Fetch = fetch };
                     },
@@ -335,7 +335,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expressionContext.Entity = entity;
 
                     foreach (var func in values.Values)
-                        func.AggregateFunction.NextPartition(func.State);
+                        func.AggregateFunction.NextPartition(func.State, expressionContext);
                 }
             }
         }

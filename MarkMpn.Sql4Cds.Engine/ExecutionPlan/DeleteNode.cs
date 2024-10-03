@@ -122,7 +122,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 List<Entity> entities;
                 EntityMetadata meta;
-                Dictionary<string, Func<Entity, object>> attributeAccessors;
+                Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors;
+                var eec = new ExpressionExecutionContext(context);
                 
                 using (_timer.Run())
                 {
@@ -166,7 +167,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         context.Options,
                         entities,
                         meta,
-                        entity => CreateDeleteRequest(meta, entity, attributeAccessors),
+                        entity =>
+                        {
+                            eec.Entity = entity;
+                            return CreateDeleteRequest(meta, eec, attributeAccessors);
+                        },
                         new OperationNames
                         {
                             InProgressUppercase = "Deleting",
@@ -191,14 +196,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity, Dictionary<string,Func<Entity,object>> attributeAccessors)
+        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string,Func<ExpressionExecutionContext,object>> attributeAccessors)
         {
             if (meta.LogicalName == "principalobjectaccess")
             {
-                var objectId = (Guid)attributeAccessors["objectid"](entity);
-                var objectTypeCode = entity.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"]).Value;
-                var principalId = (Guid)attributeAccessors["principalid"](entity);
-                var principalTypeCode = entity.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"]).Value;
+                var objectId = (Guid)attributeAccessors["objectid"](context);
+                var objectTypeCode = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"]).Value;
+                var principalId = (Guid)attributeAccessors["principalid"](context);
+                var principalTypeCode = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"]).Value;
 
                 return new RevokeAccessRequest
                 {
@@ -212,16 +217,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 return new RemoveMemberListRequest
                 {
-                    ListId = (Guid)attributeAccessors["listid"](entity),
-                    EntityId = (Guid)attributeAccessors["entityid"](entity)
+                    ListId = (Guid)attributeAccessors["listid"](context),
+                    EntityId = (Guid)attributeAccessors["entityid"](context)
                 };
             }
             else if (meta.IsIntersect == true)
             {
                 var relationship = meta.ManyToManyRelationships.Single();
 
-                var targetId = (Guid)attributeAccessors[relationship.Entity1IntersectAttribute](entity);
-                var relatedId = (Guid)attributeAccessors[relationship.Entity2IntersectAttribute](entity);
+                var targetId = (Guid)attributeAccessors[relationship.Entity1IntersectAttribute](context);
+                var relatedId = (Guid)attributeAccessors[relationship.Entity2IntersectAttribute](context);
 
                 return new DisassociateRequest
                 {
@@ -231,7 +236,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            var id = (Guid)attributeAccessors[meta.PrimaryIdAttribute](entity);
+            var id = (Guid)attributeAccessors[meta.PrimaryIdAttribute](context);
             var req = new DeleteRequest
             {
                 Target = new EntityReference(LogicalName, id)
@@ -245,14 +250,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     KeyAttributes =
                     {
                         [meta.PrimaryIdAttribute] = id,
-                        ["partitionid"] = attributeAccessors["partitionid"](entity)
+                        ["partitionid"] = attributeAccessors["partitionid"](context)
                     }
                 };
             }
 
             // Special case for activitypointer - need to set the specific activity type code
             if (LogicalName == "activitypointer")
-                req.Target.LogicalName = entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"]).Value;
+                req.Target.LogicalName = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"]).Value;
 
             return req;
         }

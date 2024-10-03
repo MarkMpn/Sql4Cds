@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expressionExecutionContext.Entity = entity;
 
                 foreach (var func in states.Values)
-                    func.AggregateFunction.NextRecord(func.State);
+                    func.AggregateFunction.NextRecord(func.State, expressionExecutionContext);
             }
 
             if (states != null)

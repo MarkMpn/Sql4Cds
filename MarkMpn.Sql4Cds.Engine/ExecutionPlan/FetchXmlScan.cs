@@ -284,12 +284,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var schema = GetSchema(context);
+            var eec = new ExpressionExecutionContext(context);
 
             ApplyParameterValues(context);
 
             FindEntityNameGroupings(dataSource.Metadata);
 
-            VerifyFilterValueTypes(Entity.name, Entity.Items, dataSource);
+            VerifyFilterValueTypes(Entity.name, Entity.Items, dataSource, eec);
 
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
@@ -454,14 +455,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void VerifyFilterValueTypes(string entityName, object[] items, DataSource dataSource)
+        private void VerifyFilterValueTypes(string entityName, object[] items, DataSource dataSource, ExpressionExecutionContext context)
         {
             if (items == null)
                 return;
 
             // Check the value(s) supplied for filter values can be converted to the expected types
             foreach (var filter in items.OfType<filter>())
-                VerifyFilterValueTypes(entityName, filter.Items, dataSource);
+                VerifyFilterValueTypes(entityName, filter.Items, dataSource, context);
             
             foreach (var condition in items.OfType<condition>())
             {
@@ -517,17 +518,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var conversion = SqlTypeConverter.GetConversion(DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), attrType);
 
                 if (condition.value != null)
-                    conversion(dataSource.DefaultCollation.ToSqlString(condition.value));
+                    conversion(dataSource.DefaultCollation.ToSqlString(condition.value), context);
 
                 if (condition.Items != null)
                 {
                     foreach (var value in condition.Items)
-                        conversion(dataSource.DefaultCollation.ToSqlString(value.Value));
+                        conversion(dataSource.DefaultCollation.ToSqlString(value.Value), context);
                 }
             }
 
             foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-                VerifyFilterValueTypes(linkEntity.name, linkEntity.Items, dataSource);
+                VerifyFilterValueTypes(linkEntity.name, linkEntity.Items, dataSource, context);
         }
 
         private void AddPagingFilters(filter filter, IQueryExecutionOptions options)

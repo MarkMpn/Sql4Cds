@@ -1,7 +1,6 @@
 ﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
 using System;
 using System.Collections.Generic;
@@ -194,13 +193,69 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The modified date</returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver15"/>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlDateTime DateAdd(SqlString datepart, SqlDouble number, SqlDateTime date)
+        public static SqlDateTime DateAdd(SqlString datepart, SqlInt32 number, SqlDateTime date)
         {
             if (number.IsNull || date.IsNull)
                 return SqlDateTime.Null;
 
-            var interval = DatePartToInterval(datepart.Value);
-            var value = DateAndTime.DateAdd(interval, number.Value, date.Value);
+            if (!TryParseDatePart(datepart.Value, out var interval))
+                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+
+            DateTime value;
+
+            switch (interval)
+            {
+                case Engine.DatePart.Year:
+                    value = date.Value.AddYears(number.Value);
+                    break;
+
+                case Engine.DatePart.Quarter:
+                    value = date.Value.AddMonths(number.Value * 3);
+                    break;
+
+                case Engine.DatePart.Month:
+                    value = date.Value.AddMonths(number.Value);
+                    break;
+
+                case Engine.DatePart.DayOfYear:
+                case Engine.DatePart.Day:
+                case Engine.DatePart.WeekDay:
+                    value = date.Value.AddDays(number.Value);
+                    break;
+
+                case Engine.DatePart.Week:
+                    value = date.Value.AddDays(number.Value * 7);
+                    break;
+
+                case Engine.DatePart.Hour:
+                    value = date.Value.AddHours(number.Value);
+                    break;
+
+                case Engine.DatePart.Minute:
+                    value = date.Value.AddMinutes(number.Value);
+                    break;
+
+                case Engine.DatePart.Second:
+                    value = date.Value.AddSeconds(number.Value);
+                    break;
+
+                case Engine.DatePart.Millisecond:
+                    value = date.Value.AddMilliseconds(number.Value);
+                    break;
+
+                case Engine.DatePart.Microsecond:
+                    value = date.Value.AddTicks(number.Value * 10);
+                    break;
+
+                case Engine.DatePart.Nanosecond:
+                    // TODO: Check data type & precision
+                    // https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver16#fractional-seconds-precision
+                    value = date.Value.AddTicks(number.Value / 100);
+                    break;
+
+                default:
+                    throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+            }
 
             // DateAdd loses the Kind property for some interval types - add it back in again
             if (value.Kind == DateTimeKind.Unspecified)
@@ -223,8 +278,116 @@ namespace MarkMpn.Sql4Cds.Engine
             if (startdate.IsNull || enddate.IsNull)
                 return SqlInt32.Null;
 
-            var interval = DatePartToInterval(datepart.Value);
-            return (int) DateAndTime.DateDiff(interval, startdate.Value, enddate.Value);
+            if (!TryParseDatePart(datepart.Value, out var interval))
+                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+            
+            startdate = DateTrunc(datepart, startdate);
+            enddate = DateTrunc(datepart, enddate);
+
+            switch (interval)
+            {
+                case Engine.DatePart.Year:
+                    return enddate.Value.Year - startdate.Value.Year;
+
+                case Engine.DatePart.Quarter:
+                    var endQuarter = enddate.Value.Year * 4 + (enddate.Value.Month - 1) / 3 + 1;
+                    var startQuarter = startdate.Value.Year * 4 + (startdate.Value.Month - 1) / 3 + 1;
+                    return endQuarter - startQuarter;
+
+                case Engine.DatePart.Month:
+                    return (enddate.Value.Year - startdate.Value.Year) * 12 + enddate.Value.Month - startdate.Value.Month;
+
+                case Engine.DatePart.DayOfYear:
+                case Engine.DatePart.Day:
+                case Engine.DatePart.WeekDay:
+                    return (enddate.Value - startdate.Value).Days;
+
+                case Engine.DatePart.Week:
+                case Engine.DatePart.ISOWeek:
+                    return (enddate.Value - startdate.Value).Days / 7;
+
+                case Engine.DatePart.Hour:
+                    return (int)(enddate.Value - startdate.Value).TotalHours;
+
+                case Engine.DatePart.Minute:
+                    return (int)(enddate.Value - startdate.Value).TotalMinutes;
+
+                case Engine.DatePart.Second:
+                    return (int)(enddate.Value - startdate.Value).TotalSeconds;
+
+                case Engine.DatePart.Millisecond:
+                    return (int)(enddate.Value - startdate.Value).TotalMilliseconds;
+
+                case Engine.DatePart.Microsecond:
+                    return (int)((enddate.Value - startdate.Value).Ticks / 10);
+
+                case Engine.DatePart.Nanosecond:
+                    return (int)((enddate.Value - startdate.Value).Ticks * 100);
+
+                default:
+                    throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+            }
+        }
+
+        /// <summary>
+        /// Implements the DATETRUNC function
+        /// </summary>
+        /// <param name="datepart">Specifies the precision for truncation</param>
+        /// <param name="date">The date value to be truncated</param>
+        /// <returns>The truncated version of the date</returns>
+        /// <see href="https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql?view=sql-server-ver16"/>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDateTime DateTrunc(SqlString datepart, SqlDateTime date)
+        {
+            if (date.IsNull)
+                return SqlDateTime.Null;
+
+            if (!TryParseDatePart(datepart.Value, out var interval))
+                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+
+            switch (interval)
+            {
+                case Engine.DatePart.Year:
+                    return new DateTime(date.Value.Year, 1, 1);
+
+                case Engine.DatePart.Quarter:
+                    return new DateTime(date.Value.Year, ((date.Value.Month - 1) / 3 + 1) * 3, 1);
+
+                case Engine.DatePart.Month:
+                    return new DateTime(date.Value.Year, date.Value.Month, 1);
+
+                case Engine.DatePart.DayOfYear:
+                case Engine.DatePart.Day:
+                    return date.Value.Date;
+
+                case Engine.DatePart.Week:
+                    return date.Value.Date.AddDays(-(int)date.Value.DayOfWeek);
+
+                case Engine.DatePart.ISOWeek:
+                    var day = (int)date.Value.DayOfWeek;
+                    if (day == 0)
+                        day = 7;
+
+                    return date.Value.Date.AddDays(-day + 1);
+
+                case Engine.DatePart.Hour:
+                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, 0, 0);
+
+                case Engine.DatePart.Minute:
+                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, 0);
+
+                case Engine.DatePart.Second:
+                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, date.Value.Second);
+
+                case Engine.DatePart.Millisecond:
+                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, date.Value.Second, date.Value.Millisecond);
+
+                case Engine.DatePart.Microsecond:
+                    // TODO: Check data type & precision
+
+                default:
+                    throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+            }
         }
 
         /// <summary>
@@ -234,75 +397,163 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="date">The date to extract the <paramref name="datepart"/> from</param>
         /// <returns>The <paramref name="datepart"/> of the <paramref name="date"/></returns>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlInt32 DatePart(SqlString datepart, SqlDateTime date)
+        public static SqlInt32 DatePart(SqlString datepart, SqlDateTimeOffset date)
         {
             if (date.IsNull)
                 return SqlInt32.Null;
 
-            var interval = DatePartToInterval(datepart.Value);
-            return DateAndTime.DatePart(interval, date.Value);
+            if (!TryParseDatePart(datepart.Value, out var interval))
+                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+
+            switch (interval)
+            {
+                case Engine.DatePart.Year:
+                    return date.Value.Year;
+
+                case Engine.DatePart.Quarter:
+                    return (date.Value.Month - 1) / 3 + 1;
+
+                case Engine.DatePart.Month:
+                    return date.Value.Month;
+
+                case Engine.DatePart.DayOfYear:
+                    return date.Value.DayOfYear;
+
+                case Engine.DatePart.Day:
+                    return date.Value.Day;
+
+                case Engine.DatePart.Week:
+                    return CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(date.Value.DateTime, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Sunday);
+
+                case Engine.DatePart.WeekDay:
+                    return (int)date.Value.DayOfWeek;
+
+                case Engine.DatePart.Hour:
+                    return date.Value.Hour;
+
+                case Engine.DatePart.Minute:
+                    return date.Value.Minute;
+
+                case Engine.DatePart.Second:
+                    return date.Value.Second;
+
+                case Engine.DatePart.Millisecond:
+                    return date.Value.Millisecond;
+
+                case Engine.DatePart.Microsecond:
+                    return (int)(date.Value.Ticks % 10_000_000) / 10;
+
+                case Engine.DatePart.Nanosecond:
+                    return (int)(date.Value.Ticks % 10_000_000) * 100;
+
+                case Engine.DatePart.TZOffset:
+                    return (int)date.Value.Offset.TotalMinutes;
+
+                case Engine.DatePart.ISOWeek:
+                    return CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(date.Value.DateTime, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+
+                default:
+                    throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+            }
         }
 
         /// <summary>
-        /// Converts the SQL datepart argument names to the equivalent enum values used by VisualBasic
+        /// Converts the SQL datepart argument names to the equivalent enum value
         /// </summary>
         /// <param name="datepart">The SQL name for the datepart argument</param>
-        /// <returns>The equivalent <see cref="DateInterval"/> value</returns>
-        internal static DateInterval DatePartToInterval(string datepart)
+        /// <returns>The equivalent <see cref="DatePart"/> value</returns>
+        internal static bool TryParseDatePart(string datepart, out DatePart parsed)
         {
             switch (datepart.ToLower())
             {
                 case "year":
                 case "yy":
                 case "yyyy":
-                    return DateInterval.Year;
+                    parsed = Engine.DatePart.Year;
+                    return true;
 
                 case "quarter":
                 case "qq":
                 case "q":
-                    return DateInterval.Quarter;
+                    parsed = Engine.DatePart.Quarter;
+                    return true;
 
                 case "month":
                 case "mm":
                 case "m":
-                    return DateInterval.Month;
+                    parsed = Engine.DatePart.Month;
+                    return true;
 
                 case "dayofyear":
                 case "dy":
                 case "y":
-                    return DateInterval.DayOfYear;
+                    parsed = Engine.DatePart.DayOfYear;
+                    return true;
 
                 case "day":
                 case "dd":
                 case "d":
-                    return DateInterval.Day;
-
-                case "weekday":
-                case "dw":
-                case "w":
-                    return DateInterval.Weekday;
+                    parsed = Engine.DatePart.Day;
+                    return true;
 
                 case "week":
                 case "wk":
                 case "ww":
-                    return DateInterval.WeekOfYear;
+                    parsed = Engine.DatePart.Week;
+                    return true;
+
+                case "weekday":
+                case "dw":
+                case "w": // Abbreviation is lised for DATEADD but not DATEPART
+                    parsed = Engine.DatePart.WeekDay;
+                    return true;
 
                 case "hour":
                 case "hh":
-                    return DateInterval.Hour;
+                    parsed = Engine.DatePart.Hour;
+                    return true;
 
                 case "minute":
-                case "mi":
+                case "mi": // Abbreviation is lised for DATEADD but not DATEPART
                 case "n":
-                    return DateInterval.Minute;
+                    parsed = Engine.DatePart.Minute;
+                    return true;
 
                 case "second":
                 case "ss":
                 case "s":
-                    return DateInterval.Second;
+                    parsed = Engine.DatePart.Second;
+                    return true;
+
+                case "millisecond":
+                case "ms":
+                    parsed = Engine.DatePart.Millisecond;
+                    return true;
+
+                case "microsecond":
+                case "mcs":
+                    parsed = Engine.DatePart.Microsecond;
+                    return true;
+
+                case "nanosecond":
+                case "ns":
+                    parsed = Engine.DatePart.Nanosecond;
+                    return true;
+
+                case "tzoffset":
+                case "tz":
+                    parsed = Engine.DatePart.TZOffset;
+                    return true;
+
+                case "iso_week":
+                case "isowk":
+                case "isoww":
+                    parsed = Engine.DatePart.ISOWeek;
+                    return true;
 
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(datepart), $"Unsupported DATEPART value {datepart}");
+                    parsed = Engine.DatePart.Year;
+                    return false;
             }
         }
 
@@ -940,7 +1191,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryExecutionException(Sql4CdsError.NotSupported(null, $"XPath return type '{result.GetType().Name}'"));
 
             if (sqlValue.GetType() != targetNetType)
-                sqlValue = (INullable) SqlTypeConverter.ChangeType(sqlValue, targetNetType);
+                sqlValue = (INullable) SqlTypeConverter.ChangeType(sqlValue, targetNetType, context);
 
             return sqlValue;
         }
@@ -988,25 +1239,25 @@ namespace MarkMpn.Sql4Cds.Engine
             switch (propertyName.Value.ToLowerInvariant())
             {
                 case "collation":
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(dataSource.DefaultCollation.Name));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(dataSource.DefaultCollation.Name), context);
 
                 case "collationid":
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(dataSource.DefaultCollation.LCID));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(dataSource.DefaultCollation.LCID), context);
 
                 case "comparisonstyle":
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32((int)dataSource.DefaultCollation.CompareOptions));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32((int)dataSource.DefaultCollation.CompareOptions), context);
 
                 case "edition":
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString("Enterprise Edition"));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString("Enterprise Edition"), context);
 
                 case "editionid":
-                    return new SqlVariant(DataTypeHelpers.BigInt, new SqlInt64(1804890536));
+                    return new SqlVariant(DataTypeHelpers.BigInt, new SqlInt64(1804890536), context);
 
                 case "enginedition":
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(3));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(3), context);
 
                 case "issingleuser":
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(0));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(0), context);
 
                 case "machinename":
                 case "servername":
@@ -1019,13 +1270,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (svc != null)
                         machineName = svc.CrmConnectOrgUriActual.Host;
 #endif
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(machineName));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(machineName), context);
 
                 case "pathseparator":
-                    return new SqlVariant(DataTypeHelpers.NVarChar(1, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(Path.DirectorySeparatorChar.ToString()));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(1, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(Path.DirectorySeparatorChar.ToString()), context);
 
                 case "processid":
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(System.Diagnostics.Process.GetCurrentProcess().Id));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(System.Diagnostics.Process.GetCurrentProcess().Id), context);
 
                 case "productversion":
                     string orgVersion = null;
@@ -1041,14 +1292,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (orgVersion == null)
                         orgVersion = ((RetrieveVersionResponse)dataSource.Execute(new RetrieveVersionRequest())).Version;
 
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(orgVersion));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(orgVersion), context);
             }
 
             return SqlVariant.Null;
         }
 
         [SqlFunction(IsDeterministic = false)]
-        public static SqlVariant Sql_Variant_Property(SqlVariant expression, SqlString property)
+        public static SqlVariant Sql_Variant_Property(SqlVariant expression, SqlString property, ExpressionExecutionContext context)
         {
             if (property.IsNull)
                 return SqlVariant.Null;
@@ -1057,42 +1308,42 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 case "basetype":
                     if (expression.BaseType == null)
-                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), SqlString.Null);
+                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), SqlString.Null, context);
 
                     if (expression.BaseType is SqlDataTypeReference sqlType)
-                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(sqlType.SqlDataTypeOption.ToString().ToLowerInvariant()));
+                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(sqlType.SqlDataTypeOption.ToString().ToLowerInvariant()), context);
 
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(expression.BaseType.ToSql()));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(expression.BaseType.ToSql()), context);
 
                 case "precision":
                     if (expression.BaseType == null)
-                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null, context);
 
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetPrecision()));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetPrecision()), context);
 
                 case "scale":
                     if (expression.BaseType == null)
-                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null, context);
 
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetScale()));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetScale()), context);
 
                 case "totalbytes":
                     if (expression.BaseType == null)
-                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null, context);
 
-                    return new SqlVariant(DataTypeHelpers.Int, DataLength<INullable>(expression.Value, expression.BaseType));
+                    return new SqlVariant(DataTypeHelpers.Int, DataLength<INullable>(expression.Value, expression.BaseType), context);
 
                 case "collation":
                     if (!(expression.BaseType is SqlDataTypeReferenceWithCollation coll))
-                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), SqlString.Null);
+                        return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), SqlString.Null, context);
 
-                    return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(coll.Collation.Name));
+                    return new SqlVariant(DataTypeHelpers.NVarChar(128, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString(coll.Collation.Name), context);
 
                 case "maxlength":
                     if (expression.BaseType == null)
-                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null);
+                        return new SqlVariant(DataTypeHelpers.Int, SqlInt32.Null, context);
 
-                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetSize()));
+                    return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(expression.BaseType.GetSize()), context);
             }
 
             return SqlVariant.Null;
@@ -1682,5 +1933,27 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Method)]
     class CollationSensitiveAttribute : Attribute
     {
+    }
+
+    /// <summary>
+    /// The available date parts for the DATEPART function
+    /// </summary>
+    enum DatePart
+    {
+        Year,
+        Quarter,
+        Month,
+        DayOfYear,
+        Day,
+        Week,
+        WeekDay,
+        Hour,
+        Minute,
+        Second,
+        Millisecond,
+        Microsecond,
+        Nanosecond,
+        TZOffset,
+        ISOWeek,
     }
 }

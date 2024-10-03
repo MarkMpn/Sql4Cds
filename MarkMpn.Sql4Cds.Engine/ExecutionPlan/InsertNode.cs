@@ -116,8 +116,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 List<Entity> entities;
                 EntityMetadata meta;
                 Dictionary<string, AttributeMetadata> attributes;
-                Dictionary<string, Func<Entity, object>> attributeAccessors;
-                Func<Entity, object> primaryIdAccessor;
+                Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors;
+                Func<ExpressionExecutionContext, object> primaryIdAccessor;
+                var eec = new ExpressionExecutionContext(context);
 
                 using (_timer.Run())
                 {
@@ -146,7 +147,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         context.Options,
                         entities,
                         meta,
-                        entity => CreateInsertRequest(meta, entity, attributeAccessors, primaryIdAccessor, attributes),
+                        entity =>
+                        {
+                            eec.Entity = entity;
+                            return CreateInsertRequest(meta, eec, attributeAccessors, primaryIdAccessor, attributes);
+                        },
                         new OperationNames
                         {
                             InProgressUppercase = "Inserting",
@@ -173,13 +178,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private OrganizationRequest CreateInsertRequest(EntityMetadata meta, Entity entity, Dictionary<string,Func<Entity,object>> attributeAccessors, Func<Entity,object> primaryIdAccessor, Dictionary<string,AttributeMetadata> attributes)
+        private OrganizationRequest CreateInsertRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string,Func<ExpressionExecutionContext,object>> attributeAccessors, Func<ExpressionExecutionContext,object> primaryIdAccessor, Dictionary<string,AttributeMetadata> attributes)
         {
             // Special cases for intersect entities
             if (LogicalName == "listmember")
             {
-                var listId = GetNotNull<Guid>("listid", entity, attributeAccessors);
-                var entityId = GetNotNull<Guid>("entityid", entity, attributeAccessors);
+                var listId = GetNotNull<Guid>("listid", context, attributeAccessors);
+                var entityId = GetNotNull<Guid>("entityid", context, attributeAccessors);
 
                 return new AddMemberListRequest
                 {
@@ -194,8 +199,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // the relationship that this is the intersect entity for
                 var relationship = meta.ManyToManyRelationships.Single();
 
-                var e1 = GetNotNull<Guid>(relationship.Entity1IntersectAttribute, entity, attributeAccessors);
-                var e2 = GetNotNull<Guid>(relationship.Entity2IntersectAttribute, entity, attributeAccessors);
+                var e1 = GetNotNull<Guid>(relationship.Entity1IntersectAttribute, context, attributeAccessors);
+                var e2 = GetNotNull<Guid>(relationship.Entity2IntersectAttribute, context, attributeAccessors);
 
                 return new AssociateRequest
                 {
@@ -208,9 +213,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (LogicalName == "principalobjectaccess")
             {
                 // Insert into principalobjectaccess is equivalent to a share
-                var objectId = GetNotNull<EntityReference>("objectid", entity, attributeAccessors);
-                var principalId = GetNotNull<EntityReference>("principalid", entity, attributeAccessors);
-                var accessRightsMask = GetNotNull<int>("accessrightsmask", entity, attributeAccessors);
+                var objectId = GetNotNull<EntityReference>("objectid", context, attributeAccessors);
+                var principalId = GetNotNull<EntityReference>("principalid", context, attributeAccessors);
+                var accessRightsMask = GetNotNull<int>("accessrightsmask", context, attributeAccessors);
 
                 return new GrantAccessRequest
                 {
@@ -226,7 +231,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var insert = new Entity(LogicalName);
 
             if (primaryIdAccessor != null)
-                insert.Id = (Guid) primaryIdAccessor(entity);
+                insert.Id = (Guid) primaryIdAccessor(context);
 
             foreach (var attributeAccessor in attributeAccessors)
             {
@@ -238,7 +243,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
                     continue;
 
-                var value = attributeAccessor.Value(entity);
+                var value = attributeAccessor.Value(context);
 
                 insert[attr.LogicalName] = value;
             }
@@ -246,9 +251,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new CreateRequest { Target = insert };
         }
 
-        private T GetNotNull<T>(string attribute, Entity entity, Dictionary<string, Func<Entity, object>> attributeAccessors)
+        private T GetNotNull<T>(string attribute, ExpressionExecutionContext context, Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors)
         {
-            var value = attributeAccessors[attribute](entity);
+            var value = attributeAccessors[attribute](context);
 
             if (value == null)
                 throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = attribute }, new Identifier { Value = LogicalName }, "Insert"));
