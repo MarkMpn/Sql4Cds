@@ -397,7 +397,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="date">The date to extract the <paramref name="datepart"/> from</param>
         /// <returns>The <paramref name="datepart"/> of the <paramref name="date"/></returns>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlInt32 DatePart(SqlString datepart, SqlDateTimeOffset date)
+        public static SqlInt32 DatePart(SqlString datepart, SqlDateTimeOffset date, [SourceType(nameof(date))] DataTypeReference dateType)
         {
             if (date.IsNull)
                 return SqlInt32.Null;
@@ -405,28 +405,51 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!TryParseDatePart(datepart.Value, out var interval))
                 throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
 
+            var sqlDateType = dateType as SqlDataTypeReference;
+
             switch (interval)
             {
                 case Engine.DatePart.Year:
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return date.Value.Year;
 
                 case Engine.DatePart.Quarter:
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return (date.Value.Month - 1) / 3 + 1;
 
                 case Engine.DatePart.Month:
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return date.Value.Month;
 
                 case Engine.DatePart.DayOfYear:
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return date.Value.DayOfYear;
 
                 case Engine.DatePart.Day:
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return date.Value.Day;
 
                 case Engine.DatePart.Week:
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(date.Value.DateTime, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Sunday);
 
                 case Engine.DatePart.WeekDay:
-                    return (int)date.Value.DayOfWeek;
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
+                    return (int)date.Value.DayOfWeek + 1;
 
                 case Engine.DatePart.Hour:
                     return date.Value.Hour;
@@ -447,9 +470,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     return (int)(date.Value.Ticks % 10_000_000) * 100;
 
                 case Engine.DatePart.TZOffset:
+                    if (sqlDateType?.SqlDataTypeOption != SqlDataTypeOption.DateTimeOffset && sqlDateType?.SqlDataTypeOption != SqlDataTypeOption.DateTime2)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return (int)date.Value.Offset.TotalMinutes;
 
                 case Engine.DatePart.ISOWeek:
+                    if (sqlDateType?.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
+
                     return CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(date.Value.DateTime, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
 
                 default:
@@ -725,7 +754,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="value">Any expression</param>
         /// <returns></returns>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlInt32 DataLength<T>(T value, [SourceType] DataTypeReference type)
+        public static SqlInt32 DataLength<T>(T value, [SourceType(nameof(value))] DataTypeReference type)
             where T:INullable
         {
             if (value.IsNull)
@@ -982,7 +1011,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="culture">Optional argument specifying a culture</param>
         /// <returns></returns>
         [SqlFunction(IsDeterministic = false)]
-        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture, [SourceType] DataTypeReference type, ExpressionExecutionContext context)
+        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture, [SourceType(nameof(value))] DataTypeReference type, ExpressionExecutionContext context)
             where T : INullable
         {
             if (value.IsNull)
@@ -1912,11 +1941,20 @@ namespace MarkMpn.Sql4Cds.Engine
     }
 
     /// <summary>
-    /// Indicates that the parameter gives the type of the preceding parameter
+    /// Indicates that the parameter gives the orignal SQL type of another parameter
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter)]
     class SourceTypeAttribute : Attribute
     {
+        public SourceTypeAttribute(string sourceParameter)
+        {
+            SourceParameter = sourceParameter;
+        }
+
+        /// <summary>
+        /// Returns the name of the parameter this provides the original type of
+        /// </summary>
+        public string SourceParameter { get; }
     }
 
     /// <summary>

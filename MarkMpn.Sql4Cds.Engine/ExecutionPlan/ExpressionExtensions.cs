@@ -1077,7 +1077,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var method = correctParameterCount[0].Method;
             var parameters = correctParameterCount[0].Parameters;
-            DataTypeReference sourceType = null;
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
             cacheKey = method.Name;
 
             if (correctParameterCount[0].Method.IsGenericMethodDefinition)
@@ -1091,10 +1091,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     for (var i = 0; i < genericArguments.Length; i++)
                     {
                         if (param.ParameterType == genericArguments[i] && genericArgumentValues[i] == null)
-                        {
                             genericArgumentValues[i] = paramTypes[i].ToNetType(out _);
-                            sourceType = paramTypes[i];
-                        }
                     }
                 }
 
@@ -1189,14 +1186,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (paramType == typeof(DataTypeReference))
                 {
-                    if (parameters[i].GetCustomAttribute<SourceTypeAttribute>() != null)
+                    var sourceType = parameters[i].GetCustomAttribute<SourceTypeAttribute>();
+                    if (sourceType != null)
                     {
-                        cacheKey += $"(TYPE:{sourceType.ToSql()})";
+                        cacheKey += $"(TYPE:{parameterTypes[sourceType.SourceParameter].ToSql()})";
                         if (createExpression)
                         {
                             var paramsWithType = new Expression[paramExpressions.Length + 1];
                             paramExpressions.CopyTo(paramsWithType, 0);
-                            paramsWithType[i] = Expression.Constant(sourceType);
+                            paramsWithType[i] = Expression.Constant(parameterTypes[sourceType.SourceParameter]);
                             paramExpressions = paramsWithType;
                         }
                         hiddenParams++;
@@ -1238,6 +1236,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (paramType != typeof(INullable) && !SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i - hiddenParams], paramType.ToSqlType(primaryDataSource)))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(i < paramOffset ? func : func.Parameters[i - paramOffset], paramTypes[i], paramType.ToSqlType(primaryDataSource)));
+
+                parameterTypes[parameters[i].Name] = paramTypes[i - hiddenParams];
             }
 
             for (var i = parameters.Length; i < paramTypes.Length; i++)
