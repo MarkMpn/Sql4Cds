@@ -2518,5 +2518,85 @@ select cast(@dt as float), cast(@dt as int)";
                 }
             }
         }
+
+        [DataTestMethod]
+        [DataRow("year", 2007)]
+        [DataRow("yyyy", 2007)]
+        [DataRow("yy", 2007)]
+        [DataRow("quarter", 4)]
+        [DataRow("qq", 4)]
+        [DataRow("q", 4)]
+        [DataRow("month", 10)]
+        [DataRow("mm", 10)]
+        [DataRow("m", 10)]
+        [DataRow("dayofyear", 303)]
+        [DataRow("dy", 303)]
+        [DataRow("y", 303)]
+        [DataRow("day", 30)]
+        [DataRow("dd", 30)]
+        [DataRow("d", 30)]
+        [DataRow("week", 44)]
+        [DataRow("wk", 44)]
+        [DataRow("ww", 44)]
+        [DataRow("weekday", 3)]
+        [DataRow("dw", 3)]
+        [DataRow("hour", 12)]
+        [DataRow("hh", 12)]
+        [DataRow("minute", 15)]
+        [DataRow("n", 15)]
+        [DataRow("second", 32)]
+        [DataRow("ss", 32)]
+        [DataRow("s", 32)]
+        [DataRow("millisecond", 123)]
+        [DataRow("ms", 123)]
+        [DataRow("microsecond", 123456)]
+        [DataRow("mcs", 123456)]
+        [DataRow("nanosecond", 123456700)]
+        [DataRow("ns", 123456700)]
+        [DataRow("tzoffset", 310)]
+        [DataRow("tz", 310)]
+        [DataRow("iso_week", 44)]
+        [DataRow("isowk", 44)]
+        [DataRow("isoww", 44)]
+        public void DatePartExamples1(string datepart, int expected)
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#return-value
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT DATEPART({datepart}, '2007-10-30 12:15:32.1234567 +05:10')";
+                Assert.AreEqual(expected, cmd.ExecuteScalar());
+            }
+        }
+
+        [DataTestMethod]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#week-and-weekday-datepart-arguments
+        // Using default SET DATEFIRST 7
+        [DataRow("week", "'2007-04-21 '", 16)]
+        [DataRow("weekday", "'2007-04-21 '", 7)]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#default-returned-for-a-datepart-that-isnt-in-a-date-argument
+        [DataRow("year", "'12:10:30.123'", 1900)]
+        [DataRow("month", "'12:10:30.123'", 1)]
+        [DataRow("day", "'12:10:30.123'", 1)]
+        [DataRow("dayofyear", "'12:10:30.123'", 1)]
+        [DataRow("weekday", "'12:10:30.123'", 2)]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#fractional-seconds
+        [DataRow("millisecond", "'00:00:01.1234567'", 123)]
+        [DataRow("microsecond", "'00:00:01.1234567'", 123456)]
+        [DataRow("nanosecond", "'00:00:01.1234567'", 123456700)]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#examples
+        [DataRow("year", "0", 1900)]
+        [DataRow("month", "0", 1)]
+        [DataRow("day", "0", 1)]
+        public void DatePartExamples2(string datepart, string date, int expected)
+        {
+            // Assorted examples from https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT DATEPART({datepart}, {date})";
+                Assert.AreEqual(expected, cmd.ExecuteScalar());
+            }
+        }
     }
 }

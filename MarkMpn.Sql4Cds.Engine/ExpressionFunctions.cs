@@ -470,7 +470,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     return (int)(date.Value.Ticks % 10_000_000) * 100;
 
                 case Engine.DatePart.TZOffset:
-                    if (sqlDateType?.SqlDataTypeOption != SqlDataTypeOption.DateTimeOffset && sqlDateType?.SqlDataTypeOption != SqlDataTypeOption.DateTime2)
+                    if (sqlDateType?.SqlDataTypeOption != SqlDataTypeOption.DateTimeOffset && sqlDateType?.SqlDataTypeOption != SqlDataTypeOption.DateTime2 && sqlDateType?.SqlDataTypeOption.IsStringType() != true)
                         throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datepart", dateType));
 
                     return (int)date.Value.Offset.TotalMinutes;

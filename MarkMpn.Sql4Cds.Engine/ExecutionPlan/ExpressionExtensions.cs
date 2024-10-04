@@ -1006,6 +1006,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     
                     var paramExpr = func.InvokeSubExpression(x => x.Parameters[index], (x, i) => x.Parameters[i], index, context, contextParam, exprParam, createExpression, out var paramType, out var paramCacheKey, out var paramException);
+
+                    // Special case for DATEPART - second parameter can accept any datetime family type. Function is implemented
+                    // to accept datetimeoffset for highest precision, but also needs to accept numeric types which can't be converted
+                    // to datetimeoffset. Convert them to datetime first
+                    if (index == 1 &&
+                        func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
+                        paramType is SqlDataTypeReference paramSqlType &&
+                        paramSqlType.SqlDataTypeOption.IsNumeric())
+                    {
+                        var dateTimeType = (DataTypeReference) DataTypeHelpers.DateTime;
+                        paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
+                        paramType = dateTimeType;
+                    }
+
                     return new { Expression = paramExpr, Type = paramType, CacheKey = paramCacheKey, Exception = paramException };
                 })
                 .ToList();

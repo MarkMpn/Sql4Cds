@@ -930,7 +930,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 .Concat(allDateFormats.SelectMany(d => allTimeFormats.Select(t => d + " " + t)))
                 .ToArray();
 
-            if (!DateTimeOffset.TryParseExact(value.Value, allDateTimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            if (!DateTimeOffset.TryParseExact(value.Value.Trim(), allDateTimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
             {
                 if (DateTimeOffset.TryParseExact(value.Value, allTimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out parsed))
                 {
@@ -1083,7 +1083,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 .SelectMany(f => SqlToNetFormatString(f))
                 .ToArray();
 
-            if (!DateTime.TryParseExact(value.Value, allFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            if (!DateTime.TryParseExact(value.Value.Trim(), allFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
             {
                 date = SqlDateTime.Null;
                 return false;
