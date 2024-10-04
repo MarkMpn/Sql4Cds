@@ -468,25 +468,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>An expression to generate values of the required type</returns>
         public static Expression Convert(Expression expr, Expression context, Type to)
         {
-            if (expr.Type == typeof(SqlDateTime) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
+            if ((expr.Type == typeof(SqlDateTime) || expr.Type == typeof(SqlSmallDateTime)) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
             {
+                // Conversion from datetime types to numeric types uses the number of days since 1900-01-01
+                Expression converted;
+
+                if (expr.Type == typeof(SqlDateTime))
+                    converted = Expression.Convert(expr, typeof(DateTime));
+                else
+                    converted = Expression.PropertyOrField(expr, nameof(SqlSmallDateTime.Value));
+
+                converted = Expression.PropertyOrField(
+                    Expression.Subtract(
+                        converted,
+                        Expression.Constant(new DateTime(1900, 1, 1))
+                    ),
+                    nameof(TimeSpan.TotalDays)
+                );
+
+                // Round the value when converting from datetime to an integer type, rather than
+                // using the standard double -> int truncation
+                if (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64))
+                {
+                    converted = Expr.Call(() => Math.Round(Expr.Arg<double>()), converted);
+                }
+
+                // Convert the result to a SqlDouble and handle null values
                 expr = Expression.Condition(
                     Expression.PropertyOrField(expr, nameof(SqlDateTime.IsNull)),
                     Expression.Constant(SqlDouble.Null),
-                    Expression.Convert(
-                        Expression.PropertyOrField(
-                            Expression.Subtract(
-                                Expression.Convert(expr, typeof(DateTime)),
-                                Expression.Constant(new DateTime(1900, 1, 1))
-                            ),
-                            nameof(TimeSpan.TotalDays)
-                        ),
-                        typeof(SqlDouble)
+                    Expression.Convert(converted, typeof(SqlDouble)
                     )
                 );
             }
 
-            if ((expr.Type == typeof(SqlBoolean) || expr.Type == typeof(SqlByte) || expr.Type == typeof(SqlInt16) || expr.Type == typeof(SqlInt32) || expr.Type == typeof(SqlInt64) || expr.Type == typeof(SqlDecimal) || expr.Type == typeof(SqlSingle) || expr.Type == typeof(SqlDouble)) && to == typeof(SqlDateTime))
+            if ((expr.Type == typeof(SqlBoolean) || expr.Type == typeof(SqlByte) || expr.Type == typeof(SqlInt16) || expr.Type == typeof(SqlInt32) || expr.Type == typeof(SqlInt64) || expr.Type == typeof(SqlDecimal) || expr.Type == typeof(SqlSingle) || expr.Type == typeof(SqlDouble)) && (to == typeof(SqlDateTime) || to == typeof(SqlSmallDateTime)))
             {
                 expr = Expression.Condition(
                     NullCheck(expr),

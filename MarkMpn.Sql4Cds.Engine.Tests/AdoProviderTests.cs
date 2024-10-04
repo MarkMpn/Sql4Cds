@@ -2496,5 +2496,27 @@ SELECT
                 }
             }
         }
+
+        [DataTestMethod]
+        [DataRow("datetime")]
+        [DataRow("smalldatetime")]
+        public void DateTimeToNumeric(string type)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+declare @dt {type} = '2024-10-04 12:01:00'
+select cast(@dt as float), cast(@dt as int)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(45567.500694444439, reader.GetDouble(0));
+                    Assert.AreEqual(45568, reader.GetInt32(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }
