@@ -418,12 +418,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 case SqlDataTypeOption.DateTime:
                     return 3;
 
-                case SqlDataTypeOption.DateTimeOffset:
-                    return 7;
-
                 case SqlDataTypeOption.SmallDateTime:
                     return 0;
 
+                case SqlDataTypeOption.DateTimeOffset:
                 case SqlDataTypeOption.DateTime2:
                 case SqlDataTypeOption.Time:
                     if (dataType.Parameters.Count == 0 ||

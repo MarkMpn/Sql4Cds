@@ -226,5 +226,106 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 Assert.AreEqual(9810, ex.Errors.Single().Number);
             }
         }
+
+        [DataTestMethod]
+        [DataRow("weekday")]
+        [DataRow("tzoffset")]
+        [DataRow("nanosecond")]
+        public void DateTrunc_InvalidDateParts(string datepart)
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql?view=sql-server-ver16#datepart
+            try
+            {
+                ExpressionFunctions.DateTrunc(datepart, new SqlDateTime(new DateTime(2024, 1, 1)), DataTypeHelpers.DateTime);
+                Assert.Fail();
+            }
+            catch (QueryExecutionException ex)
+            {
+                Assert.AreEqual(9810, ex.Errors.Single().Number);
+            }
+        }
+
+        [DataTestMethod]
+        // date doesn't support any of the time-based dateparts
+        [DataRow("date", "hour")]
+        [DataRow("date", "minute")]
+        [DataRow("date", "second")]
+        [DataRow("date", "millisecond")]
+        [DataRow("date", "microsecond")]
+
+        // datetime doesn't support microsecond
+        [DataRow("datetime", "microsecond")]
+
+        // smalldatetime doesn't support millisecond or microsecond
+        [DataRow("smalldatetime", "millisecond")]
+        [DataRow("smalldatetime", "microsecond")]
+
+        // datetime2, datetimeoffset and time vary depending on scale
+        [DataRow("datetime2(1)", "millisecond")]
+        [DataRow("datetime2(1)", "microsecond")]
+        [DataRow("datetime2(2)", "millisecond")]
+        [DataRow("datetime2(2)", "microsecond")]
+        [DataRow("datetime2(3)", "microsecond")]
+        [DataRow("datetime2(4)", "microsecond")]
+        [DataRow("datetime2(5)", "microsecond")]
+
+        [DataRow("datetimeoffset(1)", "millisecond")]
+        [DataRow("datetimeoffset(1)", "microsecond")]
+        [DataRow("datetimeoffset(2)", "millisecond")]
+        [DataRow("datetimeoffset(2)", "microsecond")]
+        [DataRow("datetimeoffset(3)", "microsecond")]
+        [DataRow("datetimeoffset(4)", "microsecond")]
+        [DataRow("datetimeoffset(5)", "microsecond")]
+
+        [DataRow("time(1)", "millisecond")]
+        [DataRow("time(1)", "microsecond")]
+        [DataRow("time(2)", "millisecond")]
+        [DataRow("time(2)", "microsecond")]
+        [DataRow("time(3)", "microsecond")]
+        [DataRow("time(4)", "microsecond")]
+        [DataRow("time(5)", "microsecond")]
+
+        // time also doesn't support any date-based dateparts
+        [DataRow("time", "year")]
+        [DataRow("time", "quarter")]
+        [DataRow("time", "month")]
+        [DataRow("time", "dayofyear")]
+        [DataRow("time", "day")]
+        [DataRow("time", "week")]
+        public void DateTrunc_RequiresMinimalPrecision(string datetype, string datepart)
+        {
+            DataTypeHelpers.TryParse(null, datetype, out var type);
+
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql?view=sql-server-ver16#fractional-time-scale-precision
+            try
+            {
+                ExpressionFunctions.DateTrunc(datepart, new SqlDateTime(new DateTime(2024, 1, 1)), type);
+                Assert.Fail();
+            }
+            catch (QueryExecutionException ex)
+            {
+                Assert.AreEqual(9810, ex.Errors.Single().Number);
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("year", "2021-01-01 00:00:00.0000000")]
+        [DataRow("quarter", "2021-10-01 00:00:00.0000000")]
+        [DataRow("month", "2021-12-01 00:00:00.0000000")]
+        [DataRow("week", "2021-12-05 00:00:00.0000000")]
+        [DataRow("iso_week", "2021-12-06 00:00:00.0000000")]
+        [DataRow("dayofyear", "2021-12-08 00:00:00.0000000")]
+        [DataRow("day", "2021-12-08 00:00:00.0000000")]
+        [DataRow("hour", "2021-12-08 11:00:00.0000000")]
+        [DataRow("minute", "2021-12-08 11:30:00.0000000")]
+        [DataRow("second", "2021-12-08 11:30:15.0000000")]
+        [DataRow("millisecond", "2021-12-08 11:30:15.1230000")]
+        [DataRow("microsecond", "2021-12-08 11:30:15.1234560")]
+        public void DateTrunc_Values(string datepart, string expected)
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql?view=sql-server-ver16#a-use-different-datepart-options
+            var actual = ExpressionFunctions.DateTrunc(datepart, new SqlDateTime2(new DateTime(2021, 12, 8, 11, 30, 15).AddTicks(1234567)), DataTypeHelpers.DateTime2(7));
+            Assert.AreEqual(expected, actual.Value.ToString("yyyy-MM-dd HH:mm:ss.fffffff"));
+        }
     }
 }

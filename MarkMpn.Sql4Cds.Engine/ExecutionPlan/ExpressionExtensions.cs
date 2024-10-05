@@ -954,12 +954,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var paramExpressionsWithType = func.Parameters
                 .Select((param, index) =>
                 {
-                    // Special case for DATEPART / DATEDIFF / DATEADD - first parameter looks like a field but is actually an identifier
+                    // Special case for DATEPART / DATEDIFF / DATEADD / DATETRUNC - first parameter looks like a field but is actually an identifier
                     if (index == 0 &&
                         (
                             func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
                             func.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
-                            func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase)
+                            func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase) ||
+                            func.FunctionName.Value.Equals("DATETRUNC", StringComparison.OrdinalIgnoreCase)
                         ))
                     {
                         // Check parameter is an expected datepart value
@@ -1009,10 +1010,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // to datetimeoffset. Convert them to datetime first
                     if (index == 1 &&
                         func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
-                        paramType is SqlDataTypeReference paramSqlType &&
-                        paramSqlType.SqlDataTypeOption.IsNumeric())
+                        paramType is SqlDataTypeReference datePartParamSqlType &&
+                        datePartParamSqlType.SqlDataTypeOption.IsNumeric())
                     {
                         var dateTimeType = (DataTypeReference) DataTypeHelpers.DateTime;
+                        paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
+                        paramType = dateTimeType;
+                    }
+
+                    // Special case for DATETRUNC - second parameter can accept any datetime family type. String values should be
+                    // implicitly converted to datetime2. Numeric values are not supported for DATETRUNC
+                    if (index == 1 &&
+                        func.FunctionName.Value.Equals("DATETRUNC", StringComparison.OrdinalIgnoreCase) &&
+                        paramType is SqlDataTypeReference dateTruncParamSqlType &&
+                        dateTruncParamSqlType.SqlDataTypeOption.IsStringType())
+                    {
+                        var dateTimeType = (DataTypeReference)DataTypeHelpers.DateTime2(7);
                         paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
                         paramType = dateTimeType;
                     }
@@ -1023,8 +1036,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // to datetime
                     if (index == 2 &&
                         func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase) &&
-                        paramType is SqlDataTypeReference paramSqlType2 &&
-                        (paramSqlType2.SqlDataTypeOption.IsNumeric() || paramSqlType2.SqlDataTypeOption.IsStringType()))
+                        paramType is SqlDataTypeReference dateAddParamSqlType &&
+                        (dateAddParamSqlType.SqlDataTypeOption.IsNumeric() || dateAddParamSqlType.SqlDataTypeOption.IsStringType()))
                     {
                         var dateTimeType = (DataTypeReference) DataTypeHelpers.DateTime;
                         paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);

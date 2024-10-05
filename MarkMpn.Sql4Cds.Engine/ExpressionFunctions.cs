@@ -199,7 +199,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return SqlDateTime.Null;
 
             if (!TryParseDatePart(datepart.Value, out var interval))
-                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "dateadd"));
 
             if (interval == Engine.DatePart.TZOffset)
                 throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "dateadd", dateType));
@@ -298,16 +298,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The number of whole <paramref name="datepart"/> units between <paramref name="startdate"/> and <paramref name="enddate"/></returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver15"/>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlInt32 DateDiff(SqlString datepart, SqlDateTime startdate, SqlDateTime enddate)
+        public static SqlInt32 DateDiff(SqlString datepart, SqlDateTimeOffset startdate, SqlDateTimeOffset enddate, [SourceType(nameof(startdate))] DataTypeReference startdateType, [SourceType(nameof(enddate))] DataTypeReference enddateType)
         {
             if (startdate.IsNull || enddate.IsNull)
                 return SqlInt32.Null;
 
             if (!TryParseDatePart(datepart.Value, out var interval))
-                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
-            
-            startdate = DateTrunc(datepart, startdate);
-            enddate = DateTrunc(datepart, enddate);
+                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datediff"));
+
+            startdate = DateTrunc(datepart, startdate, startdateType);
+            enddate = DateTrunc(datepart, enddate, enddateType);
 
             switch (interval)
             {
@@ -362,56 +362,97 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The truncated version of the date</returns>
         /// <see href="https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql?view=sql-server-ver16"/>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlDateTime DateTrunc(SqlString datepart, SqlDateTime date)
+        public static SqlDateTimeOffset DateTrunc(SqlString datepart, SqlDateTimeOffset date, [SourceType(nameof(date)), TargetType] DataTypeReference dateType)
         {
             if (date.IsNull)
-                return SqlDateTime.Null;
+                return SqlDateTimeOffset.Null;
 
             if (!TryParseDatePart(datepart.Value, out var interval))
-                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+                throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datetrunc"));
+
+            if (interval == Engine.DatePart.WeekDay || interval == Engine.DatePart.TZOffset || interval == Engine.DatePart.Nanosecond)
+                throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+            if (!(dateType is SqlDataTypeReference sqlDateType))
+                throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+            var scale = dateType.GetScale();
 
             switch (interval)
             {
                 case Engine.DatePart.Year:
-                    return new DateTime(date.Value.Year, 1, 1);
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Year, 1, 1, 0, 0, 0, date.Value.Offset);
 
                 case Engine.DatePart.Quarter:
-                    return new DateTime(date.Value.Year, ((date.Value.Month - 1) / 3 + 1) * 3, 1);
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Year, (((date.Value.Month - 1) / 3) * 3) + 1, 1, 0, 0, 0, date.Value.Offset);
 
                 case Engine.DatePart.Month:
-                    return new DateTime(date.Value.Year, date.Value.Month, 1);
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Year, date.Value.Month, 1, 0, 0, 0, date.Value.Offset);
 
                 case Engine.DatePart.DayOfYear:
                 case Engine.DatePart.Day:
-                    return date.Value.Date;
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Date, date.Value.Offset);
 
                 case Engine.DatePart.Week:
-                    return date.Value.Date.AddDays(-(int)date.Value.DayOfWeek);
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Date, date.Value.Offset).AddDays(-(int)date.Value.DayOfWeek);
 
                 case Engine.DatePart.ISOWeek:
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Time)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
                     var day = (int)date.Value.DayOfWeek;
                     if (day == 0)
                         day = 7;
 
-                    return date.Value.Date.AddDays(-day + 1);
+                    return new DateTimeOffset(date.Value.Date, date.Value.Offset).AddDays(-day + 1);
 
                 case Engine.DatePart.Hour:
-                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, 0, 0);
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Date)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, 0, 0, date.Value.Offset);
 
                 case Engine.DatePart.Minute:
-                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, 0);
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Date)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, 0, date.Value.Offset);
 
                 case Engine.DatePart.Second:
-                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, date.Value.Second);
+                    if (sqlDateType.SqlDataTypeOption == SqlDataTypeOption.Date)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, date.Value.Second, date.Value.Offset);
 
                 case Engine.DatePart.Millisecond:
-                    return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, date.Value.Second, date.Value.Millisecond);
+                    if (scale < 3)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return new DateTimeOffset(date.Value.Year, date.Value.Month, date.Value.Day, date.Value.Hour, date.Value.Minute, date.Value.Second, date.Value.Millisecond, date.Value.Offset);
 
                 case Engine.DatePart.Microsecond:
-                    // TODO: Check data type & precision
+                    if (scale < 6)
+                        throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
+
+                    return date.Value.AddTicks(-date.Value.Ticks % 10);
 
                 default:
-                    throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+                    throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "datetrunc", dateType));
             }
         }
 
