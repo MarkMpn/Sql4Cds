@@ -790,6 +790,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(9810, fragment, (SqlInt32)part.Length, Collation.USEnglish.ToSqlString(part), (SqlInt32)function.Length, Collation.USEnglish.ToSqlString(function), Collation.USEnglish.ToSqlString(GetTypeName(dataType)));
         }
 
+        internal static Sql4CdsError AdditionOverflow(TSqlFragment fragment, DataTypeReference type)
+        {
+            return Create(517, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type)));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

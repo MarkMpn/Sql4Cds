@@ -2598,5 +2598,62 @@ select cast(@dt as float), cast(@dt as int)";
                 Assert.AreEqual(expected, cmd.ExecuteScalar());
             }
         }
+
+        [DataTestMethod]
+        [DataRow("date", "day")]
+        [DataRow("smalldatetime", "hour")]
+        [DataRow("datetime", "hour")]
+        [DataRow("datetime2", "hour")]
+        [DataRow("datetimeoffset", "hour")]
+        [DataRow("time", "hour")]
+        [DataRow("varchar(100)", "hour")]
+        public void DateAddReturnsOriginalDataType(string type, string datePart)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+DECLARE @dt {type} = '2024-10-04 12:01:02';
+SELECT DATEADD({datePart}, 1, @dt);" ;
+
+                if (type == "varchar(100)")
+                    type = "datetime";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+
+                    Assert.AreEqual(type, schema.Rows[0]["DataTypeName"]);
+
+                    Assert.IsTrue(reader.Read());
+                    
+                    switch (type)
+                    {
+                        case "date":
+                            Assert.AreEqual(new DateTime(2024, 10, 5), reader.GetValue(0));
+                            break;
+
+                        case "smalldatetime":
+                            Assert.AreEqual(new DateTime(2024, 10, 4, 13, 1, 0), reader.GetValue(0));
+                            break;
+
+                        case "datetime":
+                        case "datetime2":
+                            Assert.AreEqual(new DateTime(2024, 10, 4, 13, 1, 2), reader.GetValue(0));
+                            break;
+
+                        case "datetimeoffset":
+                            Assert.AreEqual(new DateTimeOffset(2024, 10, 4, 13, 1, 2, TimeSpan.Zero), reader.GetValue(0));
+                            break;
+
+                        case "time":
+                            Assert.AreEqual(new TimeSpan(13, 1, 2), reader.GetValue(0));
+                            break;
+                    }
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

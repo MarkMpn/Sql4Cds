@@ -974,9 +974,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             ex = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "datepart"));
                         }
 
-                        // TODO: tzoffset and iso_week are only value for DATEPART, not DATEDIFF or DATEADD
-                        // What error does SQL Server throw?
-
                         if (ex != null)
                             return new { Expression = default(Expression), Type = default(DataTypeReference), CacheKey = default(string), Exception = ex };
 
@@ -1014,6 +1011,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
                         paramType is SqlDataTypeReference paramSqlType &&
                         paramSqlType.SqlDataTypeOption.IsNumeric())
+                    {
+                        var dateTimeType = (DataTypeReference) DataTypeHelpers.DateTime;
+                        paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
+                        paramType = dateTimeType;
+                    }
+
+                    // Special case for DATEADD - third parameter can accept any datetime family type. Function is implemented
+                    // to accept datetimeoffset for highest precision, but also needs to accept numeric types which can't be converted
+                    // to datetimeoffset. Convert them to datetime first. Can also accept string values which should be converted
+                    // to datetime
+                    if (index == 2 &&
+                        func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase) &&
+                        paramType is SqlDataTypeReference paramSqlType2 &&
+                        (paramSqlType2.SqlDataTypeOption.IsNumeric() || paramSqlType2.SqlDataTypeOption.IsStringType()))
                     {
                         var dateTimeType = (DataTypeReference) DataTypeHelpers.DateTime;
                         paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
@@ -1212,6 +1223,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             paramExpressions = paramsWithType;
                         }
                         hiddenParams++;
+
+                        if (parameters[i].GetCustomAttribute<TargetTypeAttribute>() != null)
+                            sqlType = parameterTypes[sourceType.SourceParameter];
                     }
                     else
                     {
@@ -1407,7 +1421,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var expr = (Expression) Expression.Call(method, paramValues);
 
-            if (expr.Type == typeof(object) && parameters.Any(p => p.GetCustomAttribute<TargetTypeAttribute>() != null))
+            if (parameters.Any(p => p.GetCustomAttribute<TargetTypeAttribute>() != null))
                 expr = Expression.Convert(expr, sqlType.ToNetType(out _));
 
             return expr;

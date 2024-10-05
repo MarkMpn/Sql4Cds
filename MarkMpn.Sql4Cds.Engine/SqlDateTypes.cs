@@ -16,12 +16,25 @@ namespace MarkMpn.Sql4Cds.Engine
         public SqlSmallDateTime(DateTime? dt)
         {
             if (dt == null)
+            {
                 _dt = dt;
+            }
             else
-                _dt = dt.Value - TimeSpan.FromTicks(dt.Value.Ticks % TimeSpan.TicksPerMinute);
+            {
+                // Value is rounded to the nearest minute
+                // https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver16#return-values-for-a-smalldatetime-date-and-a-second-or-fractional-seconds-datepart
+                _dt = new DateTime(dt.Value.Year, dt.Value.Month, dt.Value.Day, dt.Value.Hour, dt.Value.Minute, 0);
+
+                if (dt.Value.TimeOfDay.Seconds >= 30)
+                    _dt = _dt.Value.AddMinutes(1);
+            }
         }
 
         public static readonly SqlSmallDateTime Null = new SqlSmallDateTime(null);
+
+        public static readonly SqlSmallDateTime MinValue = new SqlSmallDateTime(new DateTime(1900, 1, 1));
+
+        public static readonly SqlSmallDateTime MaxValue = new SqlSmallDateTime(new DateTime(2079, 6, 6, 23, 59, 0));
 
         public bool IsNull => _dt == null;
 

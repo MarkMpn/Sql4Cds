@@ -193,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The modified date</returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver15"/>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlDateTime DateAdd(SqlString datepart, SqlInt32 number, SqlDateTime date)
+        public static SqlDateTimeOffset DateAdd(SqlString datepart, SqlInt32 number, SqlDateTimeOffset date, [SourceType(nameof(date)), TargetType] DataTypeReference dateType)
         {
             if (number.IsNull || date.IsNull)
                 return SqlDateTime.Null;
@@ -201,65 +201,90 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!TryParseDatePart(datepart.Value, out var interval))
                 throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
 
-            DateTime value;
+            if (interval == Engine.DatePart.TZOffset)
+                throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "dateadd", dateType));
 
-            switch (interval)
+            DateTimeOffset value;
+
+            try
             {
-                case Engine.DatePart.Year:
-                    value = date.Value.AddYears(number.Value);
-                    break;
+                switch (interval)
+                {
+                    case Engine.DatePart.Year:
+                        value = date.Value.AddYears(number.Value);
+                        break;
 
-                case Engine.DatePart.Quarter:
-                    value = date.Value.AddMonths(number.Value * 3);
-                    break;
+                    case Engine.DatePart.Quarter:
+                        value = date.Value.AddMonths(number.Value * 3);
+                        break;
 
-                case Engine.DatePart.Month:
-                    value = date.Value.AddMonths(number.Value);
-                    break;
+                    case Engine.DatePart.Month:
+                        value = date.Value.AddMonths(number.Value);
+                        break;
 
-                case Engine.DatePart.DayOfYear:
-                case Engine.DatePart.Day:
-                case Engine.DatePart.WeekDay:
-                    value = date.Value.AddDays(number.Value);
-                    break;
+                    case Engine.DatePart.DayOfYear:
+                    case Engine.DatePart.Day:
+                    case Engine.DatePart.WeekDay:
+                        value = date.Value.AddDays(number.Value);
+                        break;
 
-                case Engine.DatePart.Week:
-                    value = date.Value.AddDays(number.Value * 7);
-                    break;
+                    case Engine.DatePart.Week:
+                        value = date.Value.AddDays(number.Value * 7);
+                        break;
 
-                case Engine.DatePart.Hour:
-                    value = date.Value.AddHours(number.Value);
-                    break;
+                    case Engine.DatePart.Hour:
+                        value = date.Value.AddHours(number.Value);
+                        break;
 
-                case Engine.DatePart.Minute:
-                    value = date.Value.AddMinutes(number.Value);
-                    break;
+                    case Engine.DatePart.Minute:
+                        value = date.Value.AddMinutes(number.Value);
+                        break;
 
-                case Engine.DatePart.Second:
-                    value = date.Value.AddSeconds(number.Value);
-                    break;
+                    case Engine.DatePart.Second:
+                        value = date.Value.AddSeconds(number.Value);
+                        break;
 
-                case Engine.DatePart.Millisecond:
-                    value = date.Value.AddMilliseconds(number.Value);
-                    break;
+                    case Engine.DatePart.Millisecond:
+                        value = date.Value.AddMilliseconds(number.Value);
 
-                case Engine.DatePart.Microsecond:
-                    value = date.Value.AddTicks(number.Value * 10);
-                    break;
+                        // https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver16#return-values-for-a-smalldatetime-date-and-a-second-or-fractional-seconds-datepart
+                        if (dateType.IsSameAs(DataTypeHelpers.SmallDateTime))
+                            value = value.AddMilliseconds(1);
+                        break;
 
-                case Engine.DatePart.Nanosecond:
-                    // TODO: Check data type & precision
-                    // https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver16#fractional-seconds-precision
-                    value = date.Value.AddTicks(number.Value / 100);
-                    break;
+                    case Engine.DatePart.Microsecond:
+                        // Check data type & precision
+                        // https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver16#fractional-seconds-precision
+                        if (dateType.IsSameAs(DataTypeHelpers.SmallDateTime) || dateType.IsSameAs(DataTypeHelpers.DateTime) || dateType.IsSameAs(DataTypeHelpers.Date))
+                            throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "dateadd", dateType));
 
-                default:
-                    throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+                        value = date.Value.AddTicks(number.Value * 10);
+                        break;
+
+                    case Engine.DatePart.Nanosecond:
+                        // Check data type & precision
+                        // https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver16#fractional-seconds-precision
+                        if (dateType.IsSameAs(DataTypeHelpers.SmallDateTime) || dateType.IsSameAs(DataTypeHelpers.DateTime) || dateType.IsSameAs(DataTypeHelpers.Date))
+                            throw new QueryExecutionException(Sql4CdsError.InvalidDatePart(null, datepart.Value, "dateadd", dateType));
+
+                        var ticks = (int)Math.Round(number.Value / 100M, MidpointRounding.AwayFromZero);
+                        value = date.Value.AddTicks(ticks);
+                        break;
+
+                    default:
+                        throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));
+                }
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.AdditionOverflow(null, dateType));
             }
 
-            // DateAdd loses the Kind property for some interval types - add it back in again
-            if (value.Kind == DateTimeKind.Unspecified)
-                value = DateTime.SpecifyKind(value, date.Value.Kind);
+            if (dateType.IsSameAs(DataTypeHelpers.SmallDateTime) && (value.DateTime < SqlSmallDateTime.MinValue.Value || value.DateTime > SqlSmallDateTime.MaxValue.Value))
+                throw new QueryExecutionException(Sql4CdsError.AdditionOverflow(null, dateType));
+
+            if (dateType.IsSameAs(DataTypeHelpers.DateTime) && (value.DateTime < SqlDateTime.MinValue.Value || value.DateTime > SqlDateTime.MaxValue.Value))
+                throw new QueryExecutionException(Sql4CdsError.AdditionOverflow(null, dateType));
 
             return value;
         }
