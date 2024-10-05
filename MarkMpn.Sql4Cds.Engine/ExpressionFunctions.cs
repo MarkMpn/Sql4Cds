@@ -306,48 +306,61 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!TryParseDatePart(datepart.Value, out var interval))
                 throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datediff"));
 
-            startdate = DateTrunc(datepart, startdate, startdateType);
-            enddate = DateTrunc(datepart, enddate, enddateType);
+            if (interval == Engine.DatePart.Nanosecond)
+                return 0;
+            else if (interval == Engine.DatePart.TZOffset)
+                throw new QueryExecutionException(Sql4CdsError.UnsupportedDatePart(null, datepart.Value, "datediff"));
+
+            if (interval == Engine.DatePart.WeekDay)
+            {
+                startdate = DateTrunc("day", startdate, startdateType);
+                enddate = DateTrunc("day", enddate, enddateType);
+            }
+            else
+            {
+                startdate = DateTrunc(datepart, startdate, startdateType);
+                enddate = DateTrunc(datepart, enddate, enddateType);
+            }
 
             switch (interval)
             {
                 case Engine.DatePart.Year:
-                    return enddate.Value.Year - startdate.Value.Year;
+                    return enddate.Value.UtcDateTime.Year - startdate.Value.UtcDateTime.Year;
 
                 case Engine.DatePart.Quarter:
-                    var endQuarter = enddate.Value.Year * 4 + (enddate.Value.Month - 1) / 3 + 1;
-                    var startQuarter = startdate.Value.Year * 4 + (startdate.Value.Month - 1) / 3 + 1;
+                    var endQuarter = enddate.Value.UtcDateTime.Year * 4 + (enddate.Value.UtcDateTime.Month - 1) / 3 + 1;
+                    var startQuarter = startdate.Value.UtcDateTime.Year * 4 + (startdate.Value.UtcDateTime.Month - 1) / 3 + 1;
                     return endQuarter - startQuarter;
 
                 case Engine.DatePart.Month:
-                    return (enddate.Value.Year - startdate.Value.Year) * 12 + enddate.Value.Month - startdate.Value.Month;
+                    return (enddate.Value.UtcDateTime.Year - startdate.Value.UtcDateTime.Year) * 12 + enddate.Value.UtcDateTime.Month - startdate.Value.UtcDateTime.Month;
 
                 case Engine.DatePart.DayOfYear:
                 case Engine.DatePart.Day:
                 case Engine.DatePart.WeekDay:
-                    return (enddate.Value - startdate.Value).Days;
+                    return (enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).Days;
 
                 case Engine.DatePart.Week:
                 case Engine.DatePart.ISOWeek:
-                    return (enddate.Value - startdate.Value).Days / 7;
+                    return (enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).Days / 7;
 
                 case Engine.DatePart.Hour:
-                    return (int)(enddate.Value - startdate.Value).TotalHours;
+                    return (int)(enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).TotalHours;
 
                 case Engine.DatePart.Minute:
-                    return (int)(enddate.Value - startdate.Value).TotalMinutes;
+                    return (int)(enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).TotalMinutes;
 
                 case Engine.DatePart.Second:
-                    return (int)(enddate.Value - startdate.Value).TotalSeconds;
+                    return (int)(enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).TotalSeconds;
 
                 case Engine.DatePart.Millisecond:
-                    return (int)(enddate.Value - startdate.Value).TotalMilliseconds;
+                    return (int)(enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).TotalMilliseconds;
 
                 case Engine.DatePart.Microsecond:
-                    return (int)((enddate.Value - startdate.Value).Ticks / 10);
+                    return (int)((enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).Ticks / 10);
 
                 case Engine.DatePart.Nanosecond:
-                    return (int)((enddate.Value - startdate.Value).Ticks * 100);
+                    return (int)((enddate.Value.UtcDateTime - startdate.Value.UtcDateTime).Ticks * 100);
 
                 default:
                     throw new QueryExecutionException(Sql4CdsError.InvalidOptionValue(new StringLiteral { Value = datepart.Value }, "datepart"));

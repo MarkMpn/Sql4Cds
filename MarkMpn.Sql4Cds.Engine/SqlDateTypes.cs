@@ -594,7 +594,7 @@ namespace MarkMpn.Sql4Cds.Engine
     public struct SqlDateTimeOffset : INullable, IComparable
     {
         private readonly DateTimeOffset? _dt;
-        private static readonly DateTime _defaultDate = new DateTime(1900, 1, 1);
+        private static readonly DateTime _defaultDate = new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         public SqlDateTimeOffset(DateTimeOffset? dt)
         {
@@ -700,7 +700,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return Null;
 
-            return new SqlDateTimeOffset(dt.Value);
+            return new SqlDateTimeOffset(DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc));
         }
 
         public static implicit operator SqlDateTimeOffset(SqlDate dt)
@@ -708,7 +708,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return Null;
 
-            return new SqlDateTimeOffset(dt.Value);
+            return new SqlDateTimeOffset(DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc));
         }
 
         public static implicit operator SqlDateTimeOffset(SqlTime dt)
@@ -724,7 +724,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return Null;
 
-            return new SqlDateTimeOffset(dt.Value);
+            return new SqlDateTimeOffset(DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc));
         }
 
         public static implicit operator SqlDateTimeOffset(SqlString str)

@@ -795,6 +795,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(517, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type)));
         }
 
+        internal static Sql4CdsError UnsupportedDatePart(TSqlFragment fragment, string part, string function)
+        {
+            return Create(9806, fragment, (SqlInt32)part.Length, Collation.USEnglish.ToSqlString(part), (SqlInt32)function.Length, Collation.USEnglish.ToSqlString(function));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

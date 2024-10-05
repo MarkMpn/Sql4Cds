@@ -327,5 +327,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var actual = ExpressionFunctions.DateTrunc(datepart, new SqlDateTime2(new DateTime(2021, 12, 8, 11, 30, 15).AddTicks(1234567)), DataTypeHelpers.DateTime2(7));
             Assert.AreEqual(expected, actual.Value.ToString("yyyy-MM-dd HH:mm:ss.fffffff"));
         }
+
+        [DataTestMethod]
+        [DataRow("year", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("quarter", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("month", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("dayofyear", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("day", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("week", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("weekday", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("hour", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("minute", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("second", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("millisecond", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        [DataRow("microsecond", "2005-12-31 23:59:59.9999999", "2006-01-01 00:00:00.0000000")]
+        public void DateDiff_1Boundary(string datepart, string startdate, string enddate)
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver16#datepart-boundaries
+            SqlDateParsing.TryParse(startdate, DateFormat.mdy, out SqlDateTimeOffset start);
+            SqlDateParsing.TryParse(enddate, DateFormat.mdy, out SqlDateTimeOffset end);
+            var actual = ExpressionFunctions.DateDiff(datepart, start, end, DataTypeHelpers.DateTimeOffset, DataTypeHelpers.DateTimeOffset);
+            Assert.AreEqual(1, actual);
+        }
+
+        [TestMethod]
+        public void DateDiff_TimeZone()
+        {
+            var dateTime = new DateTime(2024, 10, 5, 12, 0, 0);
+            var offset = new DateTimeOffset(dateTime, TimeSpan.FromHours(1));
+            var actual = ExpressionFunctions.DateDiff("hour", new SqlDateTime(dateTime), new SqlDateTimeOffset(offset), DataTypeHelpers.DateTime, DataTypeHelpers.DateTimeOffset);
+            Assert.AreEqual(-1, actual);
+        }
     }
 }
