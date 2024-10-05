@@ -51,7 +51,10 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime2, Parameters = { new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
         }
 
-        public static SqlDataTypeReference DateTimeOffset { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTimeOffset };
+        public static SqlDataTypeReference DateTimeOffset(short scale)
+        {
+            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTimeOffset, Parameters = { new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
+        }
 
         public static SqlDataTypeReference Decimal(short precision, short scale)
         {

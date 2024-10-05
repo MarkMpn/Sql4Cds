@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DatePart_TZOffset()
         {
             // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#tzoffset
-            var actual = ExpressionFunctions.DatePart("tzoffset", (SqlDateTimeOffset)new DateTimeOffset(2007, 5, 10, 0, 0, 1, TimeSpan.FromMinutes(5 * 60 + 10)), DataTypeHelpers.DateTimeOffset);
+            var actual = ExpressionFunctions.DatePart("tzoffset", (SqlDateTimeOffset)new DateTimeOffset(2007, 5, 10, 0, 0, 1, TimeSpan.FromMinutes(5 * 60 + 10)), DataTypeHelpers.DateTimeOffset(7));
             Assert.AreEqual(310, actual);
         }
 
@@ -346,7 +346,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             // https://learn.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver16#datepart-boundaries
             SqlDateParsing.TryParse(startdate, DateFormat.mdy, out SqlDateTimeOffset start);
             SqlDateParsing.TryParse(enddate, DateFormat.mdy, out SqlDateTimeOffset end);
-            var actual = ExpressionFunctions.DateDiff(datepart, start, end, DataTypeHelpers.DateTimeOffset, DataTypeHelpers.DateTimeOffset);
+            var actual = ExpressionFunctions.DateDiff(datepart, start, end, DataTypeHelpers.DateTimeOffset(7), DataTypeHelpers.DateTimeOffset(7));
             Assert.AreEqual(1, actual);
         }
 
@@ -355,7 +355,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var dateTime = new DateTime(2024, 10, 5, 12, 0, 0);
             var offset = new DateTimeOffset(dateTime, TimeSpan.FromHours(1));
-            var actual = ExpressionFunctions.DateDiff("hour", new SqlDateTime(dateTime), new SqlDateTimeOffset(offset), DataTypeHelpers.DateTime, DataTypeHelpers.DateTimeOffset);
+            var actual = ExpressionFunctions.DateDiff("hour", new SqlDateTime(dateTime), new SqlDateTimeOffset(offset), DataTypeHelpers.DateTime, DataTypeHelpers.DateTimeOffset(7));
             Assert.AreEqual(-1, actual);
         }
     }

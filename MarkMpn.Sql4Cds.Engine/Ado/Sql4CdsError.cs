@@ -138,6 +138,12 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(1001, type, (SqlInt32)type.StartLine, (SqlInt32)precision);
         }
 
+        internal static Sql4CdsError InvalidScale(SqlDataTypeReference type, int scaleParamIndex)
+        {
+            var precision = Int32.Parse(type.Parameters[scaleParamIndex].Value);
+            return Create(1002, type, (SqlInt32)type.StartLine, (SqlInt32)precision);
+        }
+
         internal static Sql4CdsError ArithmeticOverflow(DataTypeReference sourceType, DataTypeReference targetType, TSqlFragment fragment)
         {
             return Create(8115, fragment, GetTypeName(sourceType), GetTypeName(targetType));

@@ -2177,7 +2177,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [typeof(SqlGuid)] = DataTypeHelpers.UniqueIdentifier,
             [typeof(SqlEntityReference)] = DataTypeHelpers.EntityReference,
             [typeof(SqlDateTime2)] = DataTypeHelpers.DateTime2(7),
-            [typeof(SqlDateTimeOffset)] = DataTypeHelpers.DateTimeOffset,
+            [typeof(SqlDateTimeOffset)] = DataTypeHelpers.DateTimeOffset(7),
             [typeof(SqlDate)] = DataTypeHelpers.Date,
             [typeof(SqlTime)] = DataTypeHelpers.Time(7),
             [typeof(SqlXml)] = DataTypeHelpers.Xml,

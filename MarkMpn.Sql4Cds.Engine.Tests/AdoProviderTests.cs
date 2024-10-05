@@ -2780,5 +2780,21 @@ SELECT @result";
                 Assert.AreEqual("118 years, 11 months, 11 days, 7 hours, 8 minutes and 1.123 seconds", actual);
             }
         }
+
+        [DataTestMethod]
+        [DataRow("datetimeoffset", ".1234567")]
+        [DataRow("datetimeoffset(4)", ".1235")]
+        [DataRow("datetimeoffset(0)", "")]
+        public void DateTimeOffsetToString(string type, string suffix)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT CAST(CAST('2024-10-04 12:01:02.1234567 +05:10' AS {type}) AS VARCHAR(100))";
+
+                var actual = (string)cmd.ExecuteScalar();
+                Assert.AreEqual($"2024-10-04 12:01:02{suffix} +05:10", actual);
+            }
+        }
     }
 }

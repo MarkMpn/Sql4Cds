@@ -357,7 +357,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         case "smalldatetime": colSqlType = DataTypeHelpers.SmallDateTime; break;
                         case "date": colSqlType = DataTypeHelpers.Date; break;
                         case "time": colSqlType = DataTypeHelpers.Time(scale); break;
-                        case "datetimeoffset": colSqlType = DataTypeHelpers.DateTimeOffset; break;
+                        case "datetimeoffset": colSqlType = DataTypeHelpers.DateTimeOffset(scale); break;
                         case "datetime2": colSqlType = DataTypeHelpers.DateTime2(scale); break;
                         case "decimal": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;
                         case "numeric": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;

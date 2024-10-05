@@ -687,7 +687,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var targetCollation = (to as SqlDataTypeReferenceWithCollation)?.Collation;
 
             if (fromSqlType != null && (fromSqlType.SqlDataTypeOption.IsDateTimeType() || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Date || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Time) && targetType == typeof(SqlString))
-                expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<bool>(), Expr.Arg<bool>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), Convert(expr, context, typeof(SqlDateTime)), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Time), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Date), Expression.Constant(from.GetScale()), Expression.Constant(from), Expression.Constant(to), style, Expression.Constant(targetCollation));
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTimeOffset>(), Expr.Arg<bool>(), Expr.Arg<bool>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), Convert(expr, context, typeof(SqlDateTimeOffset)), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Time), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Date), Expression.Constant(from.GetScale()), Expression.Constant(from), Expression.Constant(to), style, Expression.Constant(targetCollation));
             else if ((expr.Type == typeof(SqlDouble) || expr.Type == typeof(SqlSingle)) && targetType == typeof(SqlString))
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
             else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
@@ -800,7 +800,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (toSqlType.Parameters.Count > 0)
                 {
-                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out precision))
+                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out precision) || precision < 0)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
 
                     if (precision < 1)
@@ -808,8 +808,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (toSqlType.Parameters.Count > 1)
                     {
-                        if (!Int32.TryParse(toSqlType.Parameters[1].Value, out scale))
+                        if (!Int32.TryParse(toSqlType.Parameters[1].Value, out scale) || scale < 0)
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
+
+                        if (scale > precision)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidScale(toSqlType, 0)) { Suggestion = "Scale cannot be greater than precision" };
                     }
 
                     if (toSqlType.Parameters.Count > 2)
@@ -823,6 +826,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Expression.Constant(from),
                     Expression.Constant(to),
                     Expression.Constant(convert, typeof(TSqlFragment)));
+            }
+            else if (expr.Type == typeof(SqlDateTime2) || expr.Type == typeof(SqlDateTimeOffset))
+            {
+                // Default scale is 7
+                var scale = 7;
+
+                if (toSqlType.Parameters.Count > 0)
+                {
+                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out scale) || scale < 0)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
+
+                    if (scale > 7)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidScale(toSqlType, 1)) { Suggestion = "Scale cannot be greater than 7" };
+                }
+
+                if (expr.Type == typeof(SqlDateTime2))
+                    expr = Expr.Call(() => ApplyScale(Expr.Arg<SqlDateTime2>(), Expr.Arg<int>()), expr, Expression.Constant(scale));
+                else
+                    expr = Expr.Call(() => ApplyScale(Expr.Arg<SqlDateTimeOffset>(), Expr.Arg<int>()), expr, Expression.Constant(scale));
             }
 
             return expr;
@@ -838,6 +860,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, to, fragment));
             }
+        }
+
+        private static SqlDateTime2 ApplyScale(SqlDateTime2 value, int scale)
+        {
+            if (value.IsNull)
+                return value;
+
+            var ticks = value.Value.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value.AddTicks(-ticks);
+
+            if (scale == 0)
+                return integerSeconds;
+
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return integerSeconds.AddTicks((int)(rounded * TimeSpan.TicksPerSecond));
+        }
+
+        private static SqlDateTimeOffset ApplyScale(SqlDateTimeOffset value, int scale)
+        {
+            if (value.IsNull)
+                return value;
+
+            var ticks = value.Value.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value.AddTicks(-ticks);
+
+            if (scale == 0)
+                return integerSeconds;
+
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return integerSeconds.AddTicks((int)(rounded * TimeSpan.TicksPerSecond));
         }
 
         /// <summary>
@@ -959,7 +1013,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="style">The style to apply</param>
         /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        private static SqlString Convert(SqlDateTime value, bool date, bool time, int timeScale, DataTypeReference fromType, DataTypeReference toType, SqlInt32 style, Collation collation)
+        private static SqlString Convert(SqlDateTimeOffset value, bool date, bool time, int timeScale, DataTypeReference fromType, DataTypeReference toType, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -1042,7 +1096,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 9:
                 case 109:
                     dateFormatString = "MMM dd yyyy";
-                    timeFormatString = "hh:mm:ss:" + new string('f', timeScale) + "tt";
+                    timeFormatString = "hh:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
+
+                    timeFormatString += "tt";
                     break;
 
                 case 10:
@@ -1072,12 +1131,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 13:
                 case 113:
                     dateFormatString = "dd MMM yyyy";
-                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
                     break;
 
                 case 14:
                 case 114:
-                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
                     break;
 
                 case 20:
@@ -1090,7 +1155,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 25:
                 case 121:
                     dateFormatString = "yyyy-MM-dd";
-                    timeFormatString = "HH:mm:ss." + new string('f', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += "." + new string('f', timeScale);
                     break;
 
                 case 22:
@@ -1105,24 +1173,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 126:
                     dateFormatString = "yyyy-MM-dd";
                     dateTimeSeparator = "T";
-                    timeFormatString = "HH:mm:ss." + new string('F', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += "." + new string('F', timeScale);
                     break;
 
                 case 127:
                     dateFormatString = "yyyy-MM-dd";
                     dateTimeSeparator = "T";
-                    timeFormatString = "HH:mm:ss." + new string('F', timeScale) + "\\Z";
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += "." + new string('F', timeScale);
+
+                    timeFormatString += "\\Z";
                     break;
 
                 case 130:
                     dateFormatString = "dd MMMM yyyy";
-                    timeFormatString = "hh:mm:ss:" + new string('f', timeScale) + "tt";
+                    timeFormatString = "hh:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
+
+                    timeFormatString += "tt";
+
                     cultureInfo = _hijriCulture;
                     break;
 
                 case 131:
                     dateFormatString = "dd/MM/yyyy";
-                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale) + "tt";
+                    timeFormatString = "hh:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
+
+                    timeFormatString += "tt";
+
                     cultureInfo = _hijriCulture;
                     break;
 
@@ -1144,7 +1232,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (time && !String.IsNullOrEmpty(timeFormatString))
+            {
                 formatString += timeFormatString;
+
+                if (fromType is SqlDataTypeReference sqlFromType && sqlFromType.SqlDataTypeOption == SqlDataTypeOption.DateTimeOffset)
+                    formatString += " zzz";
+            }
 
             var formatted = value.Value.ToString(formatString, cultureInfo);
             return collation.ToSqlString(formatted);
