@@ -181,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (DataSource == null)
                 return 1;
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Unknown datasource");
 
             return ParallelismHelper.GetMaxDOP(dataSource, context, queryHints);
@@ -241,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             // Work out the fields that we should use as the primary key for these records.
-            var dataSource = context.DataSources[DataSource];
+            var dataSource = context.Session.DataSources[DataSource];
             var targetMetadata = dataSource.Metadata[logicalName];
             var keyAttributes = new[] { targetMetadata.PrimaryIdAttribute };
 
@@ -329,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
                 var columnTypes = new ColumnList();
-                var targetDataSource = DataSource == null ? context.PrimaryDataSource : context.DataSources[DataSource];
+                var targetDataSource = DataSource == null ? context.PrimaryDataSource : context.Session.DataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {

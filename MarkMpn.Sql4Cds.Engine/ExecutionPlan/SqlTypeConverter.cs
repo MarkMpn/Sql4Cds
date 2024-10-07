@@ -583,7 +583,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static SqlTime ParseTime(SqlString value, ExpressionExecutionContext context)
         {
-            if (!SqlDateParsing.TryParse(value.Value, context.DateFormat, out SqlTime time))
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlTime time))
                 throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
 
             return time;
@@ -591,7 +591,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static SqlDate ParseDate(SqlString value, ExpressionExecutionContext context)
         {
-            if (!SqlDateParsing.TryParse(value.Value, context.DateFormat, out SqlDate date))
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDate date))
                 throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
 
             return date;
@@ -599,7 +599,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static SqlDateTime ParseDateTime(SqlString value, ExpressionExecutionContext context)
         {
-            if (!SqlDateParsing.TryParse(value.Value, context.DateFormat, out SqlDateTime dateTime))
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDateTime dateTime))
                 throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
 
             return dateTime;
@@ -607,7 +607,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static SqlDateTime2 ParseDateTime2(SqlString value, ExpressionExecutionContext context)
         {
-            if (!SqlDateParsing.TryParse(value.Value, context.DateFormat, out SqlDateTime2 dateTime2))
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDateTime2 dateTime2))
                 throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
 
             return dateTime2;
@@ -615,7 +615,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static SqlDateTimeOffset ParseDateTimeOffset(SqlString value, ExpressionExecutionContext context)
         {
-            if (!SqlDateParsing.TryParse(value.Value, context.DateFormat, out SqlDateTimeOffset dateTimeOffset))
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDateTimeOffset dateTimeOffset))
                 throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
 
             return dateTimeOffset;

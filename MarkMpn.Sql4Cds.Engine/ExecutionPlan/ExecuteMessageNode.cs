@@ -283,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             PagesRetrieved = 0;
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             context.Options.Progress(0, $"Executing {MessageName}...");

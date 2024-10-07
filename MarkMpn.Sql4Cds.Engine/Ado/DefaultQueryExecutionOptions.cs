@@ -16,85 +16,126 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     class DefaultQueryExecutionOptions : IQueryExecutionOptions
     {
-        public DefaultQueryExecutionOptions(DataSource dataSource, CancellationToken cancellationToken)
+        private readonly Sql4CdsConnection _connection;
+        private string _primaryDataSource;
+        private Guid? _userId;
+
+        public DefaultQueryExecutionOptions(Sql4CdsConnection connection, DataSource dataSource, CancellationToken cancellationToken)
         {
-            PrimaryDataSource = dataSource.Name;
+            _connection = connection;
+            _primaryDataSource = dataSource.Name;
             CancellationToken = cancellationToken;
 
-#if NETCOREAPP
-            if (dataSource.Connection is ServiceClient svc)
-            {
-                UserId = svc.GetMyUserId();
-            }
-#else
-            if (dataSource.Connection is CrmServiceClient svc)
-            {
-                UserId = svc.GetMyCrmUserId();
-            }
-#endif
-            else
-            {
-                var whoami = (WhoAmIResponse)dataSource.Connection.Execute(new WhoAmIRequest());
-                UserId = whoami.UserId;
-            }
-
+            PrimaryDataSourceChanged += (_, __) => _userId = null;
         }
 
         public CancellationToken CancellationToken { get; }
 
-        public bool BlockUpdateWithoutWhere => false;
+        public bool BlockUpdateWithoutWhere { get; set; }
 
-        public bool BlockDeleteWithoutWhere => false;
+        public bool BlockDeleteWithoutWhere { get; set; }
 
-        public bool UseBulkDelete => false;
+        public bool UseBulkDelete { get; set; }
 
-        public int BatchSize => 100;
+        public int BatchSize { get; set; } = 100;
 
-        public bool UseTDSEndpoint => true;
+        public bool UseTDSEndpoint { get; set; } = true;
 
-        public int MaxDegreeOfParallelism => 10;
+        public int MaxDegreeOfParallelism { get; set; } = 10;
 
         public bool ColumnComparisonAvailable { get; }
 
         public bool OrderByEntityNameAvailable { get; }
 
-        public bool UseLocalTimeZone => false;
+        public bool UseLocalTimeZone { get; set; }
 
         public List<JoinOperator> JoinOperatorsAvailable { get; }
 
-        public bool BypassCustomPlugins => false;
+        public bool BypassCustomPlugins { get; set; }
 
-        public string PrimaryDataSource { get; }
+        public string PrimaryDataSource
+        {
+            get => _primaryDataSource;
+            set
+            {
+                if (_primaryDataSource != value)
+                {
+                    _primaryDataSource = value;
+                    OnPrimaryDataSourceChanged();
+                }
+            }
+        }
 
-        public Guid UserId { get; }
+        public Guid UserId
+        {
+            get
+            {
+                if (_userId == null)
+                {
+#if NETCOREAPP
+                    if (_connection.Session.DataSources[PrimaryDataSource].Connection is ServiceClient svc)
+                    {
+                        _userId = svc.GetMyUserId();
+                    }
+#else
+                    if (_connection.Session.DataSources[PrimaryDataSource].Connection is CrmServiceClient svc)
+                    {
+                        _userId = svc.GetMyCrmUserId();
+                    }
+#endif
+                    else
+                    {
+                        var whoami = (WhoAmIResponse)_connection.Session.DataSources[PrimaryDataSource].Connection.Execute(new WhoAmIRequest());
+                        _userId = whoami.UserId;
+                    }
+                }
 
-        public bool QuotedIdentifiers => true;
+                return _userId.Value;
+            }
+        }
 
-        public ColumnOrdering ColumnOrdering => ColumnOrdering.Strict;
+        public bool QuotedIdentifiers { get; set; } = true;
+
+        public ColumnOrdering ColumnOrdering { get; set; }
+
+        public event EventHandler PrimaryDataSourceChanged;
 
         public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
+            if (!e.Cancel)
+                _connection.OnPreDelete(e);
         }
 
         public void ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
+            if (!e.Cancel)
+                _connection.OnPreInsert(e);
         }
 
         public void ConfirmUpdate(ConfirmDmlStatementEventArgs e)
         {
+            if (!e.Cancel)
+                _connection.OnPreUpdate(e);
         }
 
         public bool ContinueRetrieve(int count)
         {
-            return true;
+            var args = new ConfirmRetrieveEventArgs(count);
+            _connection.OnPreRetrieve(args);
+
+            var cancelled = args.Cancel;
+
+            return !cancelled;
         }
 
         public void Progress(double? progress, string message)
         {
+            _connection.OnProgress(new ProgressEventArgs(progress, message));
         }
 
-        public void RetrievingNextPage()
+        protected virtual void OnPrimaryDataSourceChanged()
         {
+            PrimaryDataSourceChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 }

@@ -71,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 try
                 {
-                    if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                    if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                         throw new QueryExecutionException("Missing datasource " + DataSource);
 
                     if (context.Options.UseLocalTimeZone)
@@ -95,7 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, context.Options);
+                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, context);
 
                     foreach (var paramValue in context.ParameterValues)
                     {
@@ -151,13 +151,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        internal static string ApplyCommandBehavior(string sql, CommandBehavior behavior, IQueryExecutionOptions options)
+        internal static string ApplyCommandBehavior(string sql, CommandBehavior behavior, NodeExecutionContext context)
         {
+            if (context.Session.DateFormat != DateFormat.mdy)
+            {
+                // mdy is the default format for the TDS Endpoint, so we need to switch it as necessary
+                sql = "SET DATEFORMAT " + context.Session.DateFormat.ToString() + ";\r\n" + sql;
+            }
+
             if (behavior == CommandBehavior.Default)
                 return sql;
 
             // TDS Endpoint doesn't support command behavior flags, so fake them by modifying the SQL query
-            var dom = new TSql160Parser(options.QuotedIdentifiers);
+            var dom = new TSql160Parser(context.Options.QuotedIdentifiers);
             var script = (TSqlScript) dom.Parse(new StringReader(sql), out _);
 
             if (behavior.HasFlag(CommandBehavior.SchemaOnly))
@@ -251,7 +257,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (filterVisitor.BinaryType == null)
                 return this;
 
-            var dataSource = context.DataSources[DataSource];
+            var dataSource = context.Session.DataSources[DataSource];
             var metadata = dataSource.Metadata[logicalName];
             var conditions = filterVisitor.Conditions.ToList();
             var ecc = new ExpressionCompilationContext(context, null, null);

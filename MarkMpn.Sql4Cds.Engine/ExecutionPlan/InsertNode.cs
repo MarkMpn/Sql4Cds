@@ -85,7 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!ignoreDupKey && LogicalName == "listmember")
             {
                 ignoreDupKey = true;
-                context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.DataSources[DataSource].Name, 0, "Duplicate entries will be silently ignored for listmember inserts"));
+                context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.Session.DataSources[DataSource].Name, 0, "Duplicate entries will be silently ignored for listmember inserts"));
             }
 
             return ignoreDupKey;
@@ -110,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
@@ -290,7 +290,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             logMessage += $". The duplicate values were ({create.Target.Id})";
                     }
 
-                    context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.DataSources[DataSource].Name, 0, logMessage));
+                    context.Log(new Sql4CdsError(10, LineNumber, 0, null, context.Session.DataSources[DataSource].Name, 0, logMessage));
                     return false;
                 }
             }

@@ -266,10 +266,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var canFold = fetchXml != null;
             DataSource dataSource = null;
 
-            if (canFold && fetchXml.RequiresCustomPaging(context.DataSources))
+            if (canFold && fetchXml.RequiresCustomPaging(context.Session.DataSources))
                 canFold = false;
 
-            if (canFold && !context.DataSources.TryGetValue(fetchXml.DataSource, out dataSource))
+            if (canFold && !context.Session.DataSources.TryGetValue(fetchXml.DataSource, out dataSource))
                 throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
 
             var isAuditOrElastic = fetchXml != null && (fetchXml.Entity.name == "audit" || dataSource != null && dataSource.Metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider);

@@ -219,7 +219,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return this;
             }
 
-            var metadata = context.DataSources[anchorFetchXml.DataSource].Metadata[anchorFetchXml.Entity.name];
+            var metadata = context.Session.DataSources[anchorFetchXml.DataSource].Metadata[anchorFetchXml.Entity.name];
             var hierarchicalRelationship = metadata.OneToManyRelationships.SingleOrDefault(r => r.IsHierarchical == true);
 
             if (hierarchicalRelationship == null ||

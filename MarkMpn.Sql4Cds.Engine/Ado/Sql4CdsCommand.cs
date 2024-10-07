@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine
             CommandTimeout = 30;
             DbParameterCollection = new Sql4CdsParameterCollection();
 
-            _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
+            _planBuilder = new ExecutionPlanBuilder(_connection.Session, _connection.Options);
             _planBuilder.Log = msg => _connection.OnInfoMessage(null, msg);
         }
 
@@ -123,7 +123,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new ArgumentOutOfRangeException(nameof(value), "Connection must be a Sql4CdsConnection");
 
                 _connection = con;
-                _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
+                _planBuilder = new ExecutionPlanBuilder(_connection.Session, _connection.Options);
                 _planBuilder.Log = msg => _connection.OnInfoMessage(null, msg);
                 Plan = null;
                 UseTDSEndpointDirectly = false;
@@ -261,10 +261,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (UseTDSEndpointDirectly)
                 {
 #if NETCOREAPP
-                    var svc = (ServiceClient)_connection.DataSources[_connection.Database].Connection;
+                    var svc = (ServiceClient)_connection.Session.DataSources[_connection.Database].Connection;
                     var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
 #else
-                    var svc = (CrmServiceClient)_connection.DataSources[_connection.Database].Connection;
+                    var svc = (CrmServiceClient)_connection.Session.DataSources[_connection.Database].Connection;
                     var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
 #endif
                     con.AccessToken = svc.CurrentAccessToken;
@@ -272,11 +272,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                    cmd.CommandText = SqlNode.ApplyCommandBehavior(CommandText, behavior, _connection.Options);
+                    cmd.CommandText = SqlNode.ApplyCommandBehavior(CommandText, behavior, new NodeExecutionContext(null, _connection.Options, null, null, null));
                     var node = new SqlNode { Sql = cmd.CommandText, DataSource = _connection.Database };
                     cmd.StatementCompleted += (_, e) =>
                     {
-                        _connection.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
+                        _connection.Session.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
                         OnStatementCompleted(node, e.RecordCount, $"({e.RecordCount} {(e.RecordCount == 1 ? "row" : "rows")} affected)");
                     };
 

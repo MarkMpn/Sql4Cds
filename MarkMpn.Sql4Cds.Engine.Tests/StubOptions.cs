@@ -31,6 +31,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         ColumnOrdering IQueryExecutionOptions.ColumnOrdering => ColumnOrdering.Alphabetical;
 
+        public event EventHandler PrimaryDataSourceChanged;
+
         void IQueryExecutionOptions.ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
         }

@@ -65,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
-            var expressionCompilationContext = new ExpressionCompilationContext(context.DataSources, context.Options, null, null, null);
+            var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
             
             if (!Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral) ||
                 !Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral))

@@ -46,6 +46,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             public string PrimaryDataSource => throw new NotImplementedException();
 
+            public event EventHandler PrimaryDataSourceChanged;
+
             public Guid UserId => throw new NotImplementedException();
 
             public bool QuotedIdentifiers => throw new NotImplementedException();

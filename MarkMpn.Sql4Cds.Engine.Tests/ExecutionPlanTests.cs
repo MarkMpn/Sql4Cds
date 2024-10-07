@@ -46,6 +46,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
+        public event EventHandler PrimaryDataSourceChanged;
+
         void IQueryExecutionOptions.ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
         }
@@ -78,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSelect()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT accountid, name FROM account";
 
@@ -100,7 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSelectStar()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account";
 
@@ -136,7 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Join()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -160,7 +162,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void JoinWithExtraCondition()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -193,7 +195,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NonUniqueJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = contact.fullname";
 
@@ -221,7 +223,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NonUniqueJoinExpression()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = (contact.firstname + ' ' + contact.lastname)";
 
@@ -258,7 +260,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleWhere()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -290,7 +292,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void WhereColumnComparison()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -322,7 +324,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void WhereColumnComparisonCrossTable()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -359,7 +361,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSort()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -389,7 +391,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSortIndex()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -419,7 +421,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleDistinct()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT DISTINCT
@@ -445,7 +447,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleTop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT TOP 10
@@ -472,7 +474,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleOffset()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -502,7 +504,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleGroupAggregate()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -568,7 +570,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AliasedAggregate()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -618,7 +620,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AliasedGroupingAggregate()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -668,7 +670,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT accountid, name AS test FROM account";
 
@@ -690,7 +692,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleHaving()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -756,7 +758,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GroupByDatePart()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -814,7 +816,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GroupByDatePartUsingYearMonthDayFunctions()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -893,7 +895,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void PartialOrdering()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -932,7 +934,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             using (_localDataSource.SetOrderByEntityName(true))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
                 SELECT TOP 1000
@@ -970,7 +972,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void PartialOrderingAvoidingLegacyPagingWithTop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT TOP 100
@@ -1007,7 +1009,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void PartialWhere()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -1043,7 +1045,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ComputeScalarSelect()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE firstname = 'Mark'";
@@ -1072,7 +1074,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ComputeScalarFilter()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT contactid FROM contact WHERE firstname + ' ' + lastname = 'Mark Carrington'";
@@ -1098,7 +1100,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithMergeJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1131,7 +1133,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1181,7 +1183,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithChildRecordUsesNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name, (SELECT TOP 1 fullname FROM contact WHERE parentcustomerid = account.accountid) FROM account WHERE name = 'Data8'";
@@ -1224,7 +1226,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithSmallNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT TOP 10 firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1269,7 +1271,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithNonCorrelatedNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT TOP 1 name FROM account) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1311,7 +1313,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithCorrelatedSpooledNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1362,7 +1364,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithPartiallyCorrelatedSpooledNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon AND employees > 10) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1415,7 +1417,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryUsingOuterReferenceInSelectClause()
         {
             var tableSize = new StubTableSizeCache();
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT firstname + ' ' + name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1464,7 +1466,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryUsingOuterReferenceInOrderByClause()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname FROM contact ORDER BY (SELECT TOP 1 name FROM account WHERE accountid = parentcustomerid ORDER BY firstname)";
@@ -1504,7 +1506,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void WhereSubquery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE (SELECT name FROM account WHERE accountid = parentcustomerid) = 'Data8'";
@@ -1535,7 +1537,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ComputeScalarDistinct()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT DISTINCT TOP 10
@@ -1565,7 +1567,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Union()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name FROM account
@@ -1608,7 +1610,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionMultiple()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name FROM account
@@ -1662,7 +1664,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionSort()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name FROM account
@@ -1708,7 +1710,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionSortOnAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name AS n FROM account
@@ -1754,7 +1756,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionSortOnAliasedColumnsOriginalName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name AS n FROM account
@@ -1800,7 +1802,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionAll()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name FROM account
@@ -1839,7 +1841,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleInFilter()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -1874,7 +1876,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryInFilterUncorrelated()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -1915,7 +1917,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void SubqueryInFilterMultipleColumnsError()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -1932,7 +1934,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryInFilterUncorrelatedPrimaryKey()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -1967,7 +1969,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryInFilterCorrelated()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2015,7 +2017,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryNotInFilterCorrelated()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2063,7 +2065,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ExistsFilterUncorrelated()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2101,7 +2103,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ExistsFilterCorrelatedPrimaryKey()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2133,7 +2135,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ExistsFilterCorrelatedPrimaryKeyOr()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2170,7 +2172,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ExistsFilterCorrelated()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2216,7 +2218,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
                     SELECT
@@ -2255,7 +2257,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
                     SELECT
@@ -2302,7 +2304,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.NotAny))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
                     SELECT
@@ -2342,7 +2344,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NotExistsFilterCorrelated()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2377,7 +2379,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryDerivedTableSimple()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT TOP 10
@@ -2408,7 +2410,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryDerivedTableAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT TOP 10
@@ -2439,7 +2441,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryDerivedTableValues()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT TOP 10
@@ -2458,7 +2460,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var filter = AssertNode<FilterNode>(top.Source);
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
-            var schema = constant.GetSchema(new NodeCompilationContext(_dataSources, this, null, null));
+            var schema = constant.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, this), this, null, null));
             Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"].Type.ToNetType(out _));
             Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"].Type.ToNetType(out _));
         }
@@ -2466,7 +2468,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NoLockTableHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT TOP 10
@@ -2496,7 +2498,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2535,7 +2537,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossApply()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2572,7 +2574,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossApplyAllColumns()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2619,7 +2621,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossApplyRestrictedColumns()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2656,7 +2658,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossApplyRestrictedColumnsWithAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2696,7 +2698,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossApplyJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2743,7 +2745,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void OuterApply()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2780,7 +2782,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void OuterApplyNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2838,7 +2840,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FetchXmlNativeWhere()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -2870,7 +2872,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleMetadataSelect()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT logicalname
@@ -2891,7 +2893,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleMetadataWhere()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT logicalname
@@ -2917,7 +2919,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CaseSensitiveMetadataWhere()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT logicalname
@@ -2948,7 +2950,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleUpdate()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "UPDATE account SET name = 'foo' WHERE name = 'bar'";
 
@@ -2977,7 +2979,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UpdateFromJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "UPDATE a SET name = 'foo' FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid WHERE name = 'bar'";
 
@@ -3009,7 +3011,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryHints()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT accountid, name FROM account OPTION (OPTIMIZE FOR UNKNOWN, FORCE ORDER, RECOMPILE, USE HINT('DISABLE_OPTIMIZER_ROWGOAL'), USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'), LOOP JOIN, MERGE JOIN, HASH JOIN, NO_PERFORMANCE_SPOOL, MAXRECURSION 2)";
 
@@ -3031,7 +3033,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AggregateSort()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name, count(*) from account group by name order by 2 desc";
 
@@ -3083,7 +3085,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterWithNonFoldedJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name from account INNER JOIN contact ON left(name, 4) = left(firstname, 4) where name like 'Data8%' and firstname like 'Mark%'";
 
@@ -3124,7 +3126,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterWithInClause()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name from account where name like 'Data8%' and primarycontactid in (select contactid from contact where firstname = 'Mark')";
 
@@ -3153,7 +3155,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterWithInClauseOr()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name from account where name like 'Data8%' or primarycontactid in (select contactid from contact where firstname = 'Mark')";
 
@@ -3185,7 +3187,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = "SELECT name from account where name like 'Data8%' and createdon in (select createdon from contact where firstname = 'Mark')";
 
@@ -3215,7 +3217,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldNotInToLeftOuterJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = "SELECT name from account where name like 'Data8%' and createdon not in (select createdon from contact where firstname = 'Mark')";
 
@@ -3248,7 +3250,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = "SELECT name from account inner join contact on account.accountid = contact.parentcustomerid where name like 'Data8%' and contact.createdon in (select createdon from contact where firstname = 'Mark')";
 
@@ -3282,7 +3284,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.Exists))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = "SELECT name from account where name like 'Data8%' and exists (select * from contact where firstname = 'Mark' and createdon = account.createdon)";
 
@@ -3313,7 +3315,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DistinctNotRequiredWithPrimaryKey()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT DISTINCT accountid, name from account";
 
@@ -3335,7 +3337,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DistinctRequiredWithoutPrimaryKey()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT DISTINCT accountid, name from account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -3361,7 +3363,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleDelete()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "DELETE FROM account WHERE name = 'bar'";
 
@@ -3387,7 +3389,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleInsertSelect()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "INSERT INTO account (name) SELECT fullname FROM contact WHERE firstname = 'Mark'";
 
@@ -3413,7 +3415,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectDuplicateColumnNames()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
 
@@ -3446,7 +3448,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void SubQueryDuplicateColumnNamesError()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM (SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark') a";
 
@@ -3456,7 +3458,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionDuplicateColumnNames()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
                           UNION
@@ -3487,7 +3489,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void SubQueryUnionDuplicateColumnNamesError()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
             var query = @"SELECT * FROM (
                             SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
                             UNION
@@ -3523,7 +3525,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectStarInSubquery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT * FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
@@ -3563,7 +3565,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void CannotSelectColumnsFromSemiJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT contact.* FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
@@ -3573,7 +3575,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MinAggregateNotFoldedToFetchXmlForOptionset()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity GROUP BY new_name";
 
@@ -3598,7 +3600,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void HelpfulErrorMessageOnMissingGroupBy()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity";
 
@@ -3616,7 +3618,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AggregateInSubquery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT firstname
                           FROM   contact
@@ -3712,7 +3714,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
             
-            var result = select.Execute(new NodeExecutionContext(_localDataSources, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, INullable>(), null), CommandBehavior.Default);
+            var result = select.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, INullable>(), null), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(result);
 
@@ -3724,7 +3726,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectVirtualNameAttributeFromLinkEntity()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT parentcustomeridname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -3747,7 +3749,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DuplicatedDistinctColumns()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT DISTINCT name AS n1, name AS n2 FROM account";
 
@@ -3769,7 +3771,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GroupByDatetimeWithoutDatePart()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT createdon, COUNT(*) FROM account GROUP BY createdon";
 
@@ -3792,7 +3794,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MetadataExpressions()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT collectionschemaname + '.' + entitysetname FROM metadata.entity WHERE description LIKE '%test%'";
 
@@ -3817,7 +3819,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AliasedAttribute()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name AS n1 FROM account WHERE name = 'test'";
 
@@ -3844,7 +3846,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MultipleAliases()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name AS n1, name AS n2 FROM account WHERE name = 'test'";
 
@@ -3898,10 +3900,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 new DataSource
                 {
                     Name = "local", // Hack so that ((IQueryExecutionOptions)this).PrimaryDataSource = "local" doesn't cause test to fail
+                    Connection = _context2.GetOrganizationService(),
+                    Metadata = metadata2,
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache(),
                     DefaultCollation = Collation.USEnglish
                 }
             };
-            var planBuilder = new ExecutionPlanBuilder(datasources, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(datasources.ToDictionary(d => d.Name), this), this);
 
             var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.accountid = prod.accountid WHERE uat.name <> prod.name AND uat.name LIKE '%test%'";
 
@@ -3947,7 +3953,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FilterOnGroupByExpression()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
             SELECT
@@ -3991,7 +3997,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SystemFunctions()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT CURRENT_TIMESTAMP, CURRENT_USER, GETDATE(), USER_NAME()";
 
@@ -4007,7 +4013,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldEqualsCurrentUser()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name FROM account WHERE ownerid = CURRENT_USER";
 
@@ -4031,7 +4037,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DoNotFoldEqualsCurrentUserOnStringField()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT systemuserid FROM systemuser WHERE domainname = CURRENT_USER";
 
@@ -4061,7 +4067,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UseNestedLoopToInjectDynamicFilterValue_GlobalVariable()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account WHERE turnover = CAST(CURRENT_TIMESTAMP AS int)";
 
@@ -4091,7 +4097,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UseNestedLoopToInjectDynamicFilterValue_NonDeterministicFunction()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account WHERE turnover = CAST(GETDATE() AS int)";
 
@@ -4121,7 +4127,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DoNotUseNestedLoopToInjectDynamicFilterValue_DeterministicFunction()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account WHERE turnover = CAST(LEFT('1test', 1) AS int) + 1";
 
@@ -4145,7 +4151,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void EntityReferenceInQuery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name FROM account WHERE accountid IN ('0000000000000000-0000-0000-000000000000', '0000000000000000-0000-0000-000000000001')";
 
@@ -4172,7 +4178,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void OrderBySelectExpression()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name + 'foo' FROM account ORDER BY 1";
 
@@ -4198,7 +4204,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void OrderByAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name AS companyname FROM account ORDER BY companyname";
 
@@ -4223,7 +4229,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void OrderByAliasCantUseExpression()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name AS companyname FROM account ORDER BY companyname + ''";
 
@@ -4233,7 +4239,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DistinctOrderByUsesScalarAggregate()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT DISTINCT account.accountid FROM metadata.entity INNER JOIN account ON entity.metadataid = account.accountid";
 
@@ -4263,7 +4269,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void WindowFunctionsNotSupported()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT COUNT(accountid) OVER(PARTITION BY accountid) AS test FROM account";
 
@@ -4273,7 +4279,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DeclareVariableSetLiteralSelect()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test int
@@ -4310,7 +4316,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4320,7 +4326,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _, out _);
+                    dmlQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4328,7 +4334,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SetVariableInDeclaration()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test int = 1
@@ -4364,7 +4370,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4374,7 +4380,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues, null), out _, out _);
+                    dmlQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4383,7 +4389,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void UnknownVariable()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SET @test = 1";
 
@@ -4394,7 +4400,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void DuplicateVariable()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test INT
@@ -4406,7 +4412,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void VariableTypeConversionIntToString()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test varchar(3)
@@ -4422,7 +4428,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4432,7 +4438,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), out _, out _);
+                    dmlQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4440,7 +4446,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void VariableTypeConversionStringTruncation()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test varchar(3)
@@ -4456,7 +4462,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4466,7 +4472,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), out _, out _);
+                    dmlQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4475,7 +4481,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void CannotCombineSetVariableAndDataRetrievalInSelect()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             // A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations
             var query = @"
@@ -4488,7 +4494,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SetVariableWithSelectUsesFinalValue()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test varchar(3)
@@ -4548,7 +4554,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4558,7 +4564,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), out _, out _);
+                    dmlQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4566,7 +4572,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void VarCharLengthDefaultsTo1()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test varchar
@@ -4582,7 +4588,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -4592,7 +4598,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_localDataSources, this, parameterTypes, parameterValues, null), out _, out _);
+                    dmlQuery.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, this), this, parameterTypes, parameterValues, null), out _, out _);
                 }
             }
         }
@@ -4601,7 +4607,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void CursorVariableNotSupported()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test CURSOR";
@@ -4613,7 +4619,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void TableVariableNotSupported()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 DECLARE @test TABLE (ID INT)";
@@ -4624,7 +4630,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void IfStatement()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this) { EstimatedPlanOnly = true };
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this) { EstimatedPlanOnly = true };
 
             var query = @"
                 IF @param1 = 1
@@ -4658,7 +4664,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void WhileStatement()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this) { EstimatedPlanOnly = true };
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this) { EstimatedPlanOnly = true };
 
             var query = @"
                 WHILE @param1 < 10
@@ -4687,7 +4693,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void IfNotExists()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this) { EstimatedPlanOnly = true };
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this) { EstimatedPlanOnly = true };
 
             var query = @"
                 IF NOT EXISTS(SELECT * FROM account WHERE name = @param1)
@@ -4712,7 +4718,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DuplicatedAliases()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name, createdon AS name FROM account";
 
@@ -4734,7 +4740,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MetadataLeftJoinData()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT entity.logicalname, account.name, contact.firstname 
@@ -4773,7 +4779,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NotEqualExcludesNull()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name FROM account WHERE name <> 'Data8'";
@@ -4799,7 +4805,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DistinctFromAllowsNull()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT name FROM account WHERE name IS DISTINCT FROM 'Data8'";
@@ -4824,7 +4830,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DoNotFoldFilterOnNameVirtualAttributeWithTooManyJoins()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 select top 10 a.name
@@ -4917,7 +4923,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FilterOnVirtualTypeAttributeEquals()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype = 'contact'";
 
@@ -4941,7 +4947,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FilterOnVirtualTypeAttributeEqualsImpossible()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype = 'non-existent-entity'";
 
@@ -4965,7 +4971,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FilterOnVirtualTypeAttributeNotEquals()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype <> 'contact'";
 
@@ -4990,7 +4996,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FilterOnVirtualTypeAttributeNotInImpossible()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype NOT IN ('account', 'contact')";
 
@@ -5017,7 +5023,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FilterOnVirtualTypeAttributeNull()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype IS NULL";
 
@@ -5041,7 +5047,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FilterOnVirtualTypeAttributeNotNull()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype IS NOT NULL";
 
@@ -5065,7 +5071,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueriesInValueList()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT a FROM (VALUES ('a'), ((SELECT TOP 1 firstname FROM contact)), ('b'), (1)) AS MyTable (a)";
 
@@ -5094,7 +5100,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterOnIdentity()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT name FROM account WHERE accountid = @@IDENTITY";
 
@@ -5119,7 +5125,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldPrimaryIdInQuery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT name FROM account WHERE accountid IN (SELECT accountid FROM account INNER JOIN contact ON account.primarycontactid = contact.contactid WHERE name = 'Data8')";
 
@@ -5145,7 +5151,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldPrimaryIdInQueryWithTop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"DELETE FROM account WHERE accountid IN (SELECT TOP 10 accountid FROM account ORDER BY createdon DESC)";
 
@@ -5168,7 +5174,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void InsertParameters()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"DECLARE @name varchar(100) = 'test'; INSERT INTO account (name) VALUES (@name)";
 
@@ -5186,7 +5192,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NotExistsParameters()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"DECLARE @firstname AS VARCHAR (100) = 'Mark', @lastname AS VARCHAR (100) = 'Carrington';
 
@@ -5227,7 +5233,7 @@ END";
         [TestMethod]
         public void UpdateParameters()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"declare @name varchar(100) = 'Data8', @employees int = 10
 UPDATE account SET employees = @employees WHERE name = @name";
@@ -5258,7 +5264,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void CountUsesAggregateByDefault()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT count(*) FROM account";
 
@@ -5282,7 +5288,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void CountUsesRetrieveTotalRecordCountWithHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT count(*) FROM account OPTION (USE HINT ('RETRIEVE_TOTAL_RECORD_COUNT'))";
 
@@ -5301,7 +5307,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void MaxDOPUsesDefault()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"UPDATE account SET name = 'test'";
 
@@ -5316,7 +5322,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void MaxDOPUsesHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"UPDATE account SET name = 'test' OPTION (MAXDOP 7)";
 
@@ -5331,7 +5337,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void MaxDOPUsesHintInsideIfBlock()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"IF (1 = 1) BEGIN UPDATE account SET name = 'test' OPTION (MAXDOP 7) END";
 
@@ -5347,7 +5353,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void SubqueryUsesSpoolByDefault()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT accountid, (SELECT TOP 1 fullname FROM contact) FROM account";
 
@@ -5365,7 +5371,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void SubqueryDoesntUseSpoolWithHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT accountid, (SELECT TOP 1 fullname FROM contact) FROM account OPTION (NO_PERFORMANCE_SPOOL)";
 
@@ -5382,7 +5388,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void BypassPluginExecutionUsesDefault()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"UPDATE account SET name = 'test'";
 
@@ -5397,7 +5403,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void BypassPluginExecutionUsesHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"UPDATE account SET name = 'test' OPTION (USE HINT ('BYPASS_CUSTOM_PLUGIN_EXECUTION'))";
 
@@ -5412,7 +5418,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void PageSizeUsesHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT name FROM account OPTION (USE HINT ('FETCHXML_PAGE_SIZE_100'))";
 
@@ -5434,7 +5440,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void DistinctOrderByOptionSet()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT DISTINCT new_optionsetvalue FROM new_customentity ORDER BY new_optionsetvalue";
 
@@ -5457,7 +5463,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void DistinctVirtualAttribute()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT DISTINCT new_optionsetvaluename FROM new_customentity";
 
@@ -5482,7 +5488,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void TopAliasStar()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT TOP 10 A.* FROM account A";
 
@@ -5503,7 +5509,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void OrderByStar()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account ORDER BY primarycontactid";
 
@@ -5525,7 +5531,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void UpdateColumnInWhereClause()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "UPDATE account SET name = '1' WHERE name <> '1'";
 
@@ -5555,7 +5561,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void NestedOrFilters()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account WHERE name = '1' OR name = '2' OR name = '3' OR name = '4'";
 
@@ -5583,7 +5589,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void UnknownHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account OPTION(USE HINT('invalid'))";
 
@@ -5593,7 +5599,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void MultipleTablesJoinFromWhereClause()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT firstname FROM account, contact WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8'";
 
@@ -5622,7 +5628,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void MultipleTablesJoinFromWhereClauseReversed()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT firstname FROM account, contact WHERE lastname = 'Carrington' AND name = 'Data8' AND parentcustomerid = accountid";
 
@@ -5651,7 +5657,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void MultipleTablesJoinFromWhereClause3()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT firstname FROM account, contact, systemuser WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8' AND account.ownerid = systemuserid";
 
@@ -5681,7 +5687,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void NestedInSubqueries()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT firstname FROM contact WHERE parentcustomerid IN (SELECT accountid FROM account WHERE primarycontactid IN (SELECT contactid FROM contact WHERE lastname = 'Carrington'))";
 
@@ -5709,7 +5715,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void SpoolNestedLoop()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT account.name, contact.fullname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid OR account.createdon < contact.createdon";
 
@@ -5744,7 +5750,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void SelectFromTVF()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM SampleMessage('test')";
 
@@ -5763,7 +5769,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void OuterApplyCorrelatedTVF()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT account.name, msg.OutputParam1 FROM account OUTER APPLY (SELECT * FROM SampleMessage(account.name)) AS msg WHERE account.name = 'Data8'";
 
@@ -5790,7 +5796,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void OuterApplyUncorrelatedTVF()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT account.name, msg.OutputParam1 FROM account OUTER APPLY (SELECT * FROM SampleMessage('test')) AS msg WHERE account.name = 'Data8'";
 
@@ -5817,7 +5823,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void TVFScalarSubqueryParameter()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM SampleMessage((SELECT TOP 1 name FROM account))";
 
@@ -5858,7 +5864,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void ExecuteSproc()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "EXEC SampleMessage 'test'";
 
@@ -5875,7 +5881,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void ExecuteSprocNamedParameters()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"DECLARE @i int
                 EXEC SampleMessage @StringParam = 'test', @OutputParam2 = @i OUTPUT
@@ -5895,7 +5901,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         {
             using (_localDataSource.SetColumnComparison(false))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"SELECT a.name, c.fullname FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid AND a.name = c.fullname WHERE a.name = 'Data8'";
 
@@ -5926,7 +5932,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void CollationConflict()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM prod.dbo.account p, french.dbo.account f WHERE p.name = f.name";
             planBuilder.Build(query, null, out _);
         }
@@ -5934,7 +5940,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void CollationConflictJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM prod.dbo.account p INNER JOIN french.dbo.account f ON p.name = f.name";
 
             try
@@ -5951,7 +5957,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void TypeConflictJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM account p INNER JOIN account f ON p.accountid = f.turnover";
 
             try
@@ -5968,7 +5974,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void TypeConflictCrossInstanceJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM prod.dbo.account p INNER JOIN french.dbo.account f ON p.accountid = f.turnover";
 
             try
@@ -5985,7 +5991,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void ExplicitCollation()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM prod.dbo.account p, french.dbo.account f WHERE p.name = f.name COLLATE French_CI_AS";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6022,7 +6028,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void NoCollationSelectListError()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT (CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END) FROM prod.dbo.account p, french.dbo.account f";
             planBuilder.Build(query, null, out _);
         }
@@ -6030,7 +6036,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void NoCollationExprWithExplicitCollationSelectList()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT (CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END) COLLATE Latin1_General_CI_AS FROM prod.dbo.account p, french.dbo.account f";
             planBuilder.Build(query, null, out _);
         }
@@ -6039,7 +6045,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void NoCollationCollationSensitiveFunctionError()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT PATINDEX((CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END), 'a') FROM prod.dbo.account p, french.dbo.account f";
             planBuilder.Build(query, null, out _);
         }
@@ -6047,7 +6053,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void NoCollationExprWithExplicitCollationCollationSensitiveFunctionError()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT PATINDEX((CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END) COLLATE Latin1_General_CI_AS, 'a') FROM prod.dbo.account p, french.dbo.account f";
             planBuilder.Build(query, null, out _);
         }
@@ -6055,7 +6061,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void CollationFunctions()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT *, COLLATIONPROPERTY(name, 'lcid') FROM sys.fn_helpcollations()";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6071,7 +6077,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void DuplicatedTableName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM account, account";
             planBuilder.Build(query, null, out _);
         }
@@ -6080,7 +6086,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void DuplicatedTableNameJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM account INNER JOIN contact ON contact.parentcustomerid = account.accountid INNER JOIN contact ON contact.parentcustomerid = account.accountid";
             planBuilder.Build(query, null, out _);
         }
@@ -6089,7 +6095,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void DuplicatedAliasName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM account x INNER JOIN contact x ON x.parentcustomerid = x.accountid";
             planBuilder.Build(query, null, out _);
         }
@@ -6098,7 +6104,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void TableNameMatchesAliasName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM account INNER JOIN contact AS account ON account.parentcustomerid = account.accountid";
             planBuilder.Build(query, null, out _);
         }
@@ -6108,7 +6114,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         {
             // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/auditing/retrieve-audit-data?tabs=webapi#audit-table-relationships
             // Audit table can only be joined to systemuser on callinguserid or userid. Both joins together, or any other joins, are not valid.
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM audit INNER JOIN systemuser cu ON audit.callinguserid = cu.systemuserid INNER JOIN systemuser u ON audit.userid = u.systemuserid";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6146,7 +6152,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         {
             // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/auditing/retrieve-audit-data?tabs=webapi#audit-table-relationships
             // Audit table can only be joined to systemuser on callinguserid or userid. Both joins together, or any other joins, are not valid.
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM audit INNER JOIN account ON audit.objectid = account.accountid";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6180,7 +6186,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void SelectAuditObjectId()
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/296
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT auditid, objectidtype AS o FROM audit";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6207,7 +6213,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             // https://github.com/MarkMpn/Sql4Cds/issues/519
             // We need to add the objecttypecode attribute to the FetchXML for the first issue, but combining this
             // with DISTINCT doesn't work because of the second issue.
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = $"SELECT DISTINCT {column} AS o FROM audit";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6227,7 +6233,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void FilterAuditOnLeftJoinColumn()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM audit LEFT OUTER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname IS NULL";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6249,7 +6255,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void FilterAuditOnUserId()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM audit WHERE userid = 'B52C0694-E16F-40CD-9F27-800023C47A98'";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6272,7 +6278,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         {
             // Can do aggregates on audit table when any filtering is done only on the table itself,
             // not on any joins
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT COUNT(*) FROM audit WHERE userid = 'B52C0694-E16F-40CD-9F27-800023C47A98'";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6305,7 +6311,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void FilterAuditOnInnerJoinColumn()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM audit INNER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname <> 'SYSTEM'";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6332,7 +6338,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         {
             // Can't do aggregates on audit table when filtering is done on a join
             // https://github.com/MarkMpn/Sql4Cds/issues/488
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT COUNT(*) FROM audit INNER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname <> 'SYSTEM'";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6357,7 +6363,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void SortAuditOnJoinColumn()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM audit LEFT OUTER JOIN systemuser ON audit.userid = systemuser.systemuserid ORDER BY systemuser.domainname";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6379,7 +6385,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void NestedSubqueries()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = @"
                 SELECT name,
                     (select STUFF((SELECT ', ' + fullname
@@ -6403,7 +6409,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void CalculatedColumnUsesEmptyName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = @"SELECT (select STUFF('abcdef', 2, 3, 'ijklmn'))";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6415,7 +6421,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         [TestMethod]
         public void OuterJoinWithFiltersConvertedToInnerJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var outerJoinQuery = "SELECT * FROM account LEFT OUTER JOIN contact ON contact.parentcustomerid = account.accountid WHERE contact.firstname = 'Mark'";
             var outerJoinPlans = planBuilder.Build(outerJoinQuery, null, out _);
 
@@ -6437,7 +6443,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void CorrelatedSubqueryWithMultipleConditions()
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/316
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = @"
 SELECT r.accountid,
        r.employees,
@@ -6530,10 +6536,14 @@ FROM   account AS r;";
                 new DataSource
                 {
                     Name = "local", // Hack so that ((IQueryExecutionOptions)this).PrimaryDataSource = "local" doesn't cause test to fail
+                    Connection = _context2.GetOrganizationService(),
+                    Metadata = metadata2,
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache(),
                     DefaultCollation = Collation.USEnglish
                 }
             };
-            var planBuilder = new ExecutionPlanBuilder(datasources, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(datasources.ToDictionary(d => d.Name), this), this);
 
             var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.name = prod.name";
 
@@ -6575,7 +6585,7 @@ FROM   account AS r;";
         [TestMethod]
         public void LiftOrFilterToLinkEntityWithInnerJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR account.name = 'Data 8'";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6600,7 +6610,7 @@ FROM   account AS r;";
         [TestMethod]
         public void DoNotLiftOrFilterToLinkEntityWithOuterJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM contact LEFT OUTER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR account.name = 'Data 8'";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6625,7 +6635,7 @@ FROM   account AS r;";
         [TestMethod]
         public void DoNotLiftOrFilterToLinkEntityWithDifferentEntities()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT * FROM contact LEFT OUTER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR contact.fullname = 'Mark Carrington'";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6650,7 +6660,7 @@ FROM   account AS r;";
         [TestMethod]
         public void FoldSortOrderToInnerJoinLeftInput()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "prod" }), new OptionsWrapper(this) { PrimaryDataSource = "prod" });
             var query = "SELECT TOP 10 audit.* FROM contact CROSS APPLY SampleMessage(firstname) AS audit WHERE firstname = 'Mark' ORDER BY contact.createdon;";
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6675,7 +6685,7 @@ FROM   account AS r;";
         [TestMethod]
         public void UpdateFromSubquery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "UPDATE account SET name = 'foo' FROM account INNER JOIN (SELECT name, MIN(createdon) FROM account GROUP BY name HAVING COUNT(*) > 1) AS dupes ON account.name = dupes.name";
 
@@ -6699,7 +6709,7 @@ FROM   account AS r;";
         [TestMethod]
         public void MinPrimaryKey()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT MIN(accountid) FROM account";
 
@@ -6721,7 +6731,7 @@ FROM   account AS r;";
         [TestMethod]
         public void MinPicklist()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT MIN(new_optionsetvalue) FROM new_customentity";
 
@@ -6744,7 +6754,7 @@ FROM   account AS r;";
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void AvgGuidIsNotSupported()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
             var query = "SELECT AVG(accountid) FROM account";
             planBuilder.Build(query, null, out _);
         }
@@ -6752,7 +6762,7 @@ FROM   account AS r;";
         [TestMethod]
         public void StringAggWithOrderAndNoGroups()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account";
 
@@ -6775,7 +6785,7 @@ FROM   account AS r;";
         [TestMethod]
         public void StringAggWithOrderAndScalarGroups()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account GROUP BY employees";
 
@@ -6800,7 +6810,7 @@ FROM   account AS r;";
         [TestMethod]
         public void StringAggWithOrderAndNonScalarGroups()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account GROUP BY name + 'x'";
 
@@ -6824,7 +6834,7 @@ FROM   account AS r;";
         [TestMethod]
         public void NestedExistsAndIn()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "IF NOT EXISTS(SELECT * FROM account WHERE primarycontactid IN (SELECT contactid FROM contact WHERE firstname = 'Mark')) SELECT 1";
 
@@ -6835,7 +6845,7 @@ FROM   account AS r;";
         [TestMethod]
         public void HashJoinUsedForDifferentDataTypes()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account WHERE EXISTS(SELECT * FROM contact WHERE account.name = contact.createdon)";
 
@@ -6866,7 +6876,7 @@ FROM   account AS r;";
         {
             // Subquery on right side of nested loop will use an index spool to reduce number of FetchXML requests. Do not use this logic if the
             // filter variable is an external parameter or the FetchXML is on the left side of the loop
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT * FROM account WHERE name = @name and primarycontactid = (SELECT contactid FROM contact WHERE firstname = 'Mark')";
 
@@ -6917,7 +6927,7 @@ FROM   account AS r;";
         [TestMethod]
         public void DoNotFoldJoinsOnReusedAliases()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT s.systemuserid,
@@ -6988,7 +6998,7 @@ FROM   account AS r;";
         [TestMethod]
         public void ComplexFetchXmlAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = "SELECT name FROM account AS [acc. table]";
 
@@ -7004,7 +7014,7 @@ FROM   account AS r;";
         [TestMethod]
         public void ComplexMetadataAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = "SELECT logicalname FROM metadata.entity AS [m.d. table] WHERE [m.d. table].logicalname = 'account'";
 
@@ -7023,7 +7033,7 @@ FROM   account AS r;";
         [TestMethod]
         public void ComplexInlineTableAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = "SELECT [full name] FROM (VALUES ('Mark Carrington')) AS [inline table] ([full name])";
 
@@ -7041,7 +7051,7 @@ FROM   account AS r;";
         [TestMethod]
         public void FoldFiltersToUnionAllAndJoins()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = @"
 SELECT   [union. all].eln,
@@ -7117,7 +7127,7 @@ ORDER BY [union. all].eln";
         [TestMethod]
         public void PreserveAdditionalFiltersInMetadataJoinConditions()
         {
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = @"
 SELECT e.logicalname,
@@ -7153,7 +7163,7 @@ WHERE  e.logicalname IN ('systemuser');";
             // Filter is applied to a join with a LHS of FetchXmlScan, which the filter can be entirely folded to
             // Exception is thrown when trying to fold the remaining null filter to the RHS of the join
 
-            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
             var query = @"
 SELECT app.*
@@ -7176,7 +7186,7 @@ WHERE  app.name = 'Data8'";
 
             using (_dataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "uat" });
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_dataSources, new OptionsWrapper(this) { PrimaryDataSource = "uat" }), new OptionsWrapper(this) { PrimaryDataSource = "uat" });
 
                 var query = @"
 SELECT contactid
@@ -7215,7 +7225,7 @@ AND    contactid NOT IN (SELECT DISTINCT primarycontactid FROM account WHERE emp
             // The same table alias can be used in the main query and in a query-derived table. Ensure filters are
             // folded to the correct one.
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 SELECT *
@@ -7259,7 +7269,7 @@ WHERE c.firstname = 'Mark'";
         [TestMethod]
         public void IgnoreDupKeyHint()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"INSERT INTO account (accountid, name) VALUES ('{CD503427-E785-40D8-AD0E-FBDF4918D298}', 'Data8') OPTION (USE HINT ('IGNORE_DUP_KEY'))";
 
@@ -7274,7 +7284,7 @@ WHERE c.firstname = 'Mark'";
         [TestMethod]
         public void GroupByWithoutAggregateUsesDistinct()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
                 SELECT
@@ -7301,7 +7311,7 @@ WHERE c.firstname = 'Mark'";
         [TestMethod]
         public void FilterOnCrossApply()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 select name, n from account
@@ -7337,7 +7347,7 @@ where n = 'a'";
         [TestMethod]
         public void GotoCantMoveIntoTryBlock()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 GOTO label1
@@ -7364,7 +7374,7 @@ END CATCH";
         [DataRow(3)]
         public void UpdateTop(int top)
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = $@"
 UPDATE account
@@ -7399,7 +7409,7 @@ WHERE  accountid IN (SELECT   TOP {top} accountid
         [TestMethod]
         public void RethrowMustBeWithinCatchBlock()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "THROW;";
 
@@ -7417,7 +7427,7 @@ WHERE  accountid IN (SELECT   TOP {top} accountid
         [TestMethod]
         public void MistypedJoinCriteriaGeneratesWarning()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 SELECT a.name, c.fullname
@@ -7457,7 +7467,7 @@ FROM account a INNER JOIN contact c ON c.contactid = c.parentcustomerid";
         [TestMethod]
         public void AliasSameAsVirtualAttribute()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 select a.name, c.fullname as primarycontactidname from account a
@@ -7483,7 +7493,7 @@ inner join contact c on a.primarycontactid = c.contactid";
         [TestMethod]
         public void OrderByOptionSetName()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvaluename";
 
@@ -7507,7 +7517,7 @@ inner join contact c on a.primarycontactid = c.contactid";
         {
             using (_localDataSource.SetUseRawOrderByReliable(true))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue";
 
@@ -7530,7 +7540,7 @@ inner join contact c on a.primarycontactid = c.contactid";
         [TestMethod]
         public void OrderByOptionSetValueWithoutUseRawOrderBy()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue";
 
@@ -7556,7 +7566,7 @@ inner join contact c on a.primarycontactid = c.contactid";
         {
             using (_localDataSource.SetUseRawOrderByReliable(true))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"SELECT new_customentityid FROM new_customentity ORDER BY new_optionsetvalue, new_optionsetvaluename";
 
@@ -7587,7 +7597,7 @@ inner join contact c on a.primarycontactid = c.contactid";
             using (_localDataSource.EnableJoinOperator(JoinOperator.Any))
             using (_localDataSource.SetOrderByEntityName(true))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 SELECT TOP 100
@@ -7646,7 +7656,7 @@ ORDER BY
         {
             using (_localDataSource.SetColumnComparison(false))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 SELECT TOP 100
@@ -7723,7 +7733,7 @@ ORDER BY
         [TestMethod]
         public void DistinctUsesCustomPaging()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 select distinct
@@ -7755,7 +7765,7 @@ left outer join contact ON account.accountid = contact.parentcustomerid";
         [TestMethod]
         public void NotExistWithJoin()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 select top 10 a2.name
@@ -7824,7 +7834,7 @@ where not exists (
         [TestMethod]
         public void ScalarSubquery()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 select top 10 * from (
@@ -7854,7 +7864,7 @@ select fullname, (select name from account where accountid = parentcustomerid) f
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 select
@@ -7887,7 +7897,7 @@ inner join contact ON account.accountid = contact.parentcustomerid AND contact.f
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 select
@@ -7920,7 +7930,7 @@ inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SE
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 select
@@ -7953,7 +7963,7 @@ inner join contact ON account.accountid = contact.parentcustomerid AND account.n
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 select
@@ -7986,7 +7996,7 @@ inner join contact ON account.accountid = contact.parentcustomerid AND EXISTS(SE
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 select
@@ -8040,7 +8050,7 @@ inner join contact ON account.accountid = contact.parentcustomerid AND contact.f
         {
             using (_localDataSource.EnableJoinOperator(JoinOperator.In))
             {
-                var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+                var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
                 var query = @"
 select
@@ -8102,7 +8112,7 @@ left outer join contact ON account.accountid = contact.parentcustomerid AND cont
         [TestMethod]
         public void VirtualAttributeAliases()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 select statecodename [state], parentcustomerid x, parentcustomeridname from contact";
@@ -8138,7 +8148,7 @@ inner join contact AS c on c.contactid = a.primarycontactid
 LEFT JOIN account AS ca ON c.contactid = ca.primarycontactid
 WHERE c.parentcustomerid IN (SELECT contactid FROM contact WHERE createdon = today())";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -8188,7 +8198,7 @@ inner join contact AS c on c.contactid = a.primarycontactid
 LEFT JOIN account AS ca ON c.contactid = ca.primarycontactid
 WHERE c.contactid IN (SELECT contactid FROM contact WHERE createdon = today())";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -8236,7 +8246,7 @@ FROM   metadata.attribute AS a
        ON a.targets = p.logicalname
 WHERE  a.entitylogicalname IN ('team')";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -8260,7 +8270,7 @@ FROM account
 WHERE createdon >= CAST(GETDATE() AS DATE)
 AND createdon < DATEADD(day, 1, CAST(GETDATE() AS DATE))";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -8293,7 +8303,7 @@ FROM new_customentity
 WHERE new_name IN ('test')) AS a
 ORDER BY a.new_customentityid";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -8330,7 +8340,7 @@ FROM new_customentity
 WHERE new_name IN ('test')) AS a
 ORDER BY a.new_customentityid";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -8364,7 +8374,7 @@ FROM   (SELECT a.accountid, a.name AS test FROM account a) AS a1
        (SELECT a.parentaccountid, a.name AS test FROM account a) AS a2
        ON a2.parentaccountid = a1.accountid";
 
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -8408,7 +8418,7 @@ FROM   (SELECT a.accountid, a.name AS test FROM account a) AS a1
         public void EntityKeyIndexStatusFilter()
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/534
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 SELECT ak.entitylogicalname,
@@ -8438,7 +8448,7 @@ WHERE  ak.entitykeyindexstatus = 'Failed';";
         public void OuterApplyOuterReference()
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/547
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 SELECT *
@@ -8478,7 +8488,7 @@ WHERE q3.flag = 0";
         public void FilterOnOuterApply()
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/548
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 SELECT *
@@ -8511,7 +8521,7 @@ WHERE q2.flag1 = 1 OR q2.flag2 = 1";
         [TestMethod]
         public void ScalarSubqueryWithoutAlias()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = @"
 SELECT a.accountid,
@@ -8538,7 +8548,7 @@ FROM account a";
         [TestMethod]
         public void DeleteByIdUsesConstantScan()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "DELETE FROM account WHERE accountid = '1D3AACA6-DEA4-490F-973E-E4181D4BE11C'";
 
@@ -8553,7 +8563,7 @@ FROM account a";
         [TestMethod]
         public void DeleteByIdWithGlobalVariableUsesConstantScan()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "DELETE FROM account WHERE accountid = @@IDENTITY";
 
@@ -8568,7 +8578,7 @@ FROM account a";
         [TestMethod]
         public void DeleteByIdWithVariableUsesConstantScan()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "DELETE FROM account WHERE accountid = @Id";
             var parameterTypes = new Dictionary<string, DataTypeReference>
@@ -8586,7 +8596,7 @@ FROM account a";
         [TestMethod]
         public void DeleteByNameDoesNotUseConstantScan()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "DELETE FROM account WHERE name = 'Data8'";
 
@@ -8601,7 +8611,7 @@ FROM account a";
         [TestMethod]
         public void UpdateByIdUsesConstantScan()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "UPDATE account SET name = 'test' WHERE accountid = '1D3AACA6-DEA4-490F-973E-E4181D4BE11C'";
 
@@ -8617,7 +8627,7 @@ FROM account a";
         [TestMethod]
         public void UpdateByIdCopyingFieldUsesConstantScan()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "UPDATE account SET name = owneridname WHERE accountid = '1D3AACA6-DEA4-490F-973E-E4181D4BE11C'";
 
@@ -8632,7 +8642,7 @@ FROM account a";
         [TestMethod]
         public void InVariables()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSources.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
             var query = "SELECT name FROM account WHERE accountid IN (@Id1, @Id2)";
             var parameterTypes = new Dictionary<string, DataTypeReference>

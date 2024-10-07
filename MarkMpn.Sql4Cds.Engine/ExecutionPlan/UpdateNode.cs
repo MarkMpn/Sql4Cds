@@ -107,7 +107,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // the record to update
             if (ColumnMappings.Values.All(m => m.OldValueColumn == null))
             {
-                var dataSource = context.DataSources[DataSource];
+                var dataSource = context.Session.DataSources[DataSource];
                 var meta = dataSource.Metadata[LogicalName];
 
                 var requiredColumns = ColumnMappings
@@ -140,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;

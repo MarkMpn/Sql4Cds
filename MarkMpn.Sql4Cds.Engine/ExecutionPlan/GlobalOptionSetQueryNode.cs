@@ -157,7 +157,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var resp = (RetrieveAllOptionSetsResponse)dataSource.Connection.Execute(new RetrieveAllOptionSetsRequest());

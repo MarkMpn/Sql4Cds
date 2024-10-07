@@ -10,14 +10,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
-    public class SqlVariantTests
+    public class SqlVariantTests : FakeXrmEasyTestsBase
     {
-        private readonly ExpressionExecutionContext _context;
+        private readonly ExpressionExecutionContext _eec;
 
         public SqlVariantTests()
         {
-            _context = new ExpressionExecutionContext(
-                dataSources: new Dictionary<string, DataSource>(),
+            _eec = new ExpressionExecutionContext(
+                session: new SessionContext(_localDataSources, new StubOptions()),
                 options: new StubOptions(),
                 parameterTypes: new Dictionary<string, DataTypeReference>(),
                 parameterValues: new Dictionary<string, INullable>(),
@@ -29,8 +29,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void NullSortsBeforeAllOtherValues()
         {
             Assert.IsTrue(SqlVariant.Null.CompareTo(SqlVariant.Null) == 0);
-            Assert.IsTrue(SqlVariant.Null.CompareTo(new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _context)) < 0);
-            Assert.IsTrue(new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _context).CompareTo(SqlVariant.Null) > 0);
+            Assert.IsTrue(SqlVariant.Null.CompareTo(new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _eec)) < 0);
+            Assert.IsTrue(new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _eec).CompareTo(SqlVariant.Null) > 0);
         }
 
         [TestMethod]
@@ -42,26 +42,26 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ValuesFromDifferentFamiliesAreNotEqual()
         {
-            Assert.AreEqual(new SqlVariant(DataTypeHelpers.VarChar(1, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString("1"), _context) == new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _context), (SqlBoolean)false);
+            Assert.AreEqual(new SqlVariant(DataTypeHelpers.VarChar(1, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString("1"), _eec) == new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _eec), (SqlBoolean)false);
         }
 
         [TestMethod]
         public void ValuesFromDifferentTypesInSameFamilyAreEqual()
         {
-            Assert.AreEqual(new SqlVariant(DataTypeHelpers.BigInt, new SqlInt64(1), _context) == new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _context), (SqlBoolean)true);
+            Assert.AreEqual(new SqlVariant(DataTypeHelpers.BigInt, new SqlInt64(1), _eec) == new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _eec), (SqlBoolean)true);
         }
 
         [TestMethod]
         public void SortsAccordingToDataTypeFamilies()
         {
             var variant = SqlVariant.Null;
-            var dt = new SqlVariant(DataTypeHelpers.DateTime, new SqlDateTime(2000, 1, 1), _context);
-            var approx = new SqlVariant(DataTypeHelpers.Float, new SqlSingle(1), _context);
-            var exact = new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _context);
-            var ch = new SqlVariant(DataTypeHelpers.VarChar(10, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString("1"), _context);
-            var nch = new SqlVariant(DataTypeHelpers.NVarChar(10, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString("1"), _context);
-            var bin = new SqlVariant(DataTypeHelpers.VarBinary(10), new SqlBinary(new byte[] { 1 }), _context);
-            var guid = new SqlVariant(DataTypeHelpers.UniqueIdentifier, new SqlGuid(Guid.NewGuid()), _context);
+            var dt = new SqlVariant(DataTypeHelpers.DateTime, new SqlDateTime(2000, 1, 1), _eec);
+            var approx = new SqlVariant(DataTypeHelpers.Float, new SqlSingle(1), _eec);
+            var exact = new SqlVariant(DataTypeHelpers.Int, new SqlInt32(1), _eec);
+            var ch = new SqlVariant(DataTypeHelpers.VarChar(10, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString("1"), _eec);
+            var nch = new SqlVariant(DataTypeHelpers.NVarChar(10, Collation.USEnglish, CollationLabel.CoercibleDefault), Collation.USEnglish.ToSqlString("1"), _eec);
+            var bin = new SqlVariant(DataTypeHelpers.VarBinary(10), new SqlBinary(new byte[] { 1 }), _eec);
+            var guid = new SqlVariant(DataTypeHelpers.UniqueIdentifier, new SqlGuid(Guid.NewGuid()), _eec);
 
             var list = new List<SqlVariant> { variant, dt, approx, exact, ch, nch, bin, guid };
             var rnd = new Random();

@@ -74,7 +74,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (result.Length != 1 || result[0] != this)
                 return result;
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             // Use bulk delete if requested & possible
@@ -117,7 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;

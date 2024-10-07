@@ -2796,5 +2796,64 @@ SELECT @result";
                 Assert.AreEqual($"2024-10-04 12:01:02{suffix} +05:10", actual);
             }
         }
+
+        [DataTestMethod]
+        [DataRow("mdy", "2003-01-02")]
+        [DataRow("dmy", "2003-02-01")]
+        [DataRow("ymd", "2001-02-03")]
+        [DataRow("ydm", "2001-03-02")]
+        [DataRow("myd", "2002-01-03")]
+        [DataRow("dym", "2002-03-01")]
+        public void SetDataFormat(string format, string expected)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SET DATEFORMAT {format};
+SELECT CAST('01/02/03' AS DATETIME)";
+
+                var actual = (DateTime)cmd.ExecuteScalar();
+                Assert.AreEqual(DateTime.ParseExact(expected, "yyyy-MM-dd", CultureInfo.InvariantCulture), actual);
+            }
+        }
+
+        [TestMethod]
+        public void ErrorNumberPersistedBetweenExecutions()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                using (var cmd = con.CreateCommand())
+                {
+                    try
+                    {
+                        cmd.CommandText = "SELECT 1/0";
+                        cmd.ExecuteScalar();
+                        Assert.Fail();
+                    }
+                    catch (Sql4CdsException ex)
+                    {
+                        if (ex.Number != 8134)
+                            Assert.Fail();
+                    }
+                }
+
+                using (var cmd = con.CreateCommand())
+                {
+                    // Error should be persisted in the connection session from the previous command
+                    cmd.CommandText = "SELECT @@ERROR";
+                    var error = (int)cmd.ExecuteScalar();
+                    Assert.AreEqual(8134, error);
+                }
+
+                using (var cmd = con.CreateCommand())
+                {
+                    // Error should be reset by the previous execution
+                    cmd.CommandText = "SELECT @@ERROR";
+                    var error = (int)cmd.ExecuteScalar();
+                    Assert.AreEqual(0, error);
+                }
+            }
+        }
     }
 }

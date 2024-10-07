@@ -806,6 +806,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(9806, fragment, (SqlInt32)part.Length, Collation.USEnglish.ToSqlString(part), (SqlInt32)function.Length, Collation.USEnglish.ToSqlString(function));
         }
 
+        internal static Sql4CdsError InvalidDateFormat(TSqlFragment fragment, string format)
+        {
+            return Create(2741, fragment, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

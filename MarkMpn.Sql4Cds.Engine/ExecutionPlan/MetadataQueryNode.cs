@@ -1001,7 +1001,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     query.Properties.PropertyNames.Add(nameof(EntityMetadata.Keys));
             }
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var resp = (RetrieveMetadataChangesResponse)dataSource.Connection.Execute(new RetrieveMetadataChangesRequest { Query = query });

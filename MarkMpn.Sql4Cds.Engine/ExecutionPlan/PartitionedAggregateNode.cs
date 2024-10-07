@@ -68,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fetchXmlNode.DataSource == null)
                 return 1;
 
-            if (!context.DataSources.TryGetValue(fetchXmlNode.DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(fetchXmlNode.DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Unknown datasource");
 
             return ParallelismHelper.GetMaxDOP(dataSource, context, queryHints);
@@ -96,7 +96,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var fetchXmlNode = (FetchXmlScan)Source.Clone();
 
             var name = fetchXmlNode.Entity.name;
-            var meta = context.DataSources[fetchXmlNode.DataSource].Metadata[name];
+            var meta = context.Session.DataSources[fetchXmlNode.DataSource].Metadata[name];
             context.Options.Progress(0, $"Partitioning {GetDisplayName(0, meta)}...");
 
             // Get the minimum and maximum primary keys from the source
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             SplitPartition(fullRange);
 
             // Multi-thread where possible
-            var org = context.DataSources[fetchXmlNode.DataSource].Connection;
+            var org = context.Session.DataSources[fetchXmlNode.DataSource].Connection;
             _lock = new object();
 
 #if NETCOREAPP
@@ -172,10 +172,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             [fetchXmlNode.DataSource] = new DataSource
                             {
                                 Connection = svc?.Clone() ?? org,
-                                Metadata = context.DataSources[fetchXmlNode.DataSource].Metadata,
+                                Metadata = context.Session.DataSources[fetchXmlNode.DataSource].Metadata,
                                 Name = fetchXmlNode.DataSource,
-                                TableSizeCache = context.DataSources[fetchXmlNode.DataSource].TableSizeCache,
-                                MessageCache = context.DataSources[fetchXmlNode.DataSource].MessageCache
+                                TableSizeCache = context.Session.DataSources[fetchXmlNode.DataSource].TableSizeCache,
+                                MessageCache = context.Session.DataSources[fetchXmlNode.DataSource].MessageCache
                             }
                         };
 

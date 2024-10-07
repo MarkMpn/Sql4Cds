@@ -334,17 +334,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expression.Convert(expr, returnType);
         }
 
-        private static Expression ToExpression(IdentifierLiteral guid, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
+        private static Expression ToExpression(IdentifierLiteral id, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            sqlType = DataTypeHelpers.UniqueIdentifier;
-            cacheKey = "<GuidLiteral>";
+            sqlType = DataTypeHelpers.VarChar(id.Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+
+            cacheKey = $"<IdentifierLiteral({GetTypeKey(sqlType, false)})>";
 
             if (!createExpression)
                 return null;
 
-            return Expr.Call(
-                () => SqlGuid.Parse(Expr.Arg<string>()),
-                Expression.Property(Expression.Convert(exprParam, typeof(IdentifierLiteral)), nameof(IdentifierLiteral.Value)));
+            var value = Expression.Property(Expression.Convert(exprParam, typeof(IdentifierLiteral)), nameof(IdentifierLiteral.Value));
+
+            var expr = (Expression)Expression.Property(contextParam, nameof(ExpressionExecutionContext.PrimaryDataSource));
+            expr = Expression.Property(expr, nameof(DataSource.DefaultCollation));
+            expr = Expression.Call(expr, nameof(Collation.ToSqlString), Array.Empty<Type>(), value);
+            return expr;
         }
 
         private static Expression ToExpression(IntegerLiteral i, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)

@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 GroupBy.Count == 0 &&
                 Aggregates.Count == 1 &&
                 Aggregates.Single().Value.AggregateType == AggregateType.CountStar &&
-                context.DataSources[fetch.DataSource].Metadata[fetch.Entity.name].DataProviderId == null && // RetrieveTotalRecordCountRequest is not valid for virtual entities
+                context.Session.DataSources[fetch.DataSource].Metadata[fetch.Entity.name].DataProviderId == null && // RetrieveTotalRecordCountRequest is not valid for virtual entities
                 fetch.FetchXml.DataSource == null) // RetrieveTotalRecordCountRequest is not valid for archive data
             {
                 var count = new RetrieveTotalRecordCountNode { DataSource = fetch.DataSource, EntityName = fetch.Entity.name };
@@ -269,7 +269,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                var metadata = context.DataSources[fetchXml.DataSource].Metadata;
+                var metadata = context.Session.DataSources[fetchXml.DataSource].Metadata;
 
                 // Aggregates are not supported on archive data
                 if (fetchXml.FetchXml.DataSource == "retained")

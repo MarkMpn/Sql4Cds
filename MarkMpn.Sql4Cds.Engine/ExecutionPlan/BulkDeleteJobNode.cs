@@ -53,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 Microsoft.Xrm.Sdk.Query.QueryExpression query;

@@ -280,7 +280,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             PagesRetrieved = 0;
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var schema = GetSchema(context);
@@ -1020,7 +1020,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var fetchXmlString = FetchXmlString;
@@ -1475,7 +1475,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Move partitionid filter to partitionId parameter
             // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#query-rows-of-an-elastic-table
-            var meta = context.DataSources[DataSource].Metadata[Entity.name];
+            var meta = context.Session.DataSources[DataSource].Metadata[Entity.name];
 
             if (meta.DataProviderId == DataProviders.ElasticDataProvider && Entity.Items != null)
             {
@@ -1701,7 +1701,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // If we've got a semi join link entity that matches to the parent entity by primary key,
             // remove the link entity and move the conditions to the parent entity
-            var dataSource = context.DataSources[DataSource];
+            var dataSource = context.Session.DataSources[DataSource];
             Entity.Items = RemoveIdentitySemiJoinLinkEntities(Entity.name, dataSource.Metadata, Entity.Items);
         }
 
@@ -1982,7 +1982,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var schema = GetSchema(context);
@@ -2061,7 +2061,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Entity.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
             }
 
-            if (RequiresCustomPaging(context.DataSources))
+            if (RequiresCustomPaging(context.Session.DataSources))
             {
                 _pagingFields = new List<KeyValuePair<string, string>>();
                 _lastPageValues = new List<INullable>();
@@ -2086,7 +2086,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            NormalizeAttributes(context.DataSources);
+            NormalizeAttributes(context.Session.DataSources);
             SetDefaultPageSize(context);
         }
 
@@ -2354,10 +2354,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!hasGroups)
                     return RowCountEstimateDefiniteRange.ExactlyOne;
 
-                return EstimateRowsOut(Entity.name, Entity.Items, context.DataSources, 0.4);
+                return EstimateRowsOut(Entity.name, Entity.Items, context.Session.DataSources, 0.4);
             }
 
-            return EstimateRowsOut(Entity.name, Entity.Items, context.DataSources, 1.0);
+            return EstimateRowsOut(Entity.name, Entity.Items, context.Session.DataSources, 1.0);
         }
 
         private bool HasGroups(object[] items)
@@ -2577,7 +2577,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (filters[0].Items.Cast<condition>().Any(c => c.ValueOf != null))
                 return this;
 
-            var dataSource = context.DataSources[DataSource];
+            var dataSource = context.Session.DataSources[DataSource];
             var metadata = dataSource.Metadata[logicalName];
             var conditions = filters[0].Items.Cast<condition>().ToList();
             var ecc = new ExpressionCompilationContext(context, null, null);

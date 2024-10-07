@@ -458,5 +458,18 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             _ctes[node.ExpressionName.Value] = node;
         }
+
+        public override void Visit(GeneralSetCommand node)
+        {
+            if (node.CommandType == GeneralSetCommandType.DateFormat)
+            {
+                // SET DATEFORMAT does work, but isn't persisted correctly across the session
+                // Mark it as not compatible so we can track the selected format internally
+                // and pass it to the TDS Endpoint on each call as required.
+                IsCompatible = false;
+            }
+            
+            base.Visit(node);
+        }
     }
 }

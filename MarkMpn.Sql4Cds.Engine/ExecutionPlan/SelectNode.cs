@@ -111,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (source is FetchXmlScan fetchXml)
             {
-                if (!context.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                if (!context.Session.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                     throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                 // Check if there are any aliases we can apply to the source FetchXml

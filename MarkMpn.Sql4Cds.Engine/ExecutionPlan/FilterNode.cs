@@ -1081,7 +1081,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
 
                 // Only supported on regular database tables
-                var leftMeta = context.DataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name];
+                var leftMeta = context.Session.DataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name];
                 if (leftMeta.DataProviderId != null)
                     break;
 
@@ -1135,8 +1135,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (nullFilterRemovable &&
                         nullFilter.IsNot &&
                         leftFetch.Entity.name == rightFetch.Entity.name &&
-                        merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + context.DataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
-                        merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + context.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
+                        merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + context.Session.DataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
+                        merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + context.Session.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
                         !leftFetch.Entity.GetLinkEntities().Select(l => l.alias).Intersect(rightFetch.Entity.GetLinkEntities().Select(l => l.alias), StringComparer.OrdinalIgnoreCase).Any() &&
                         (leftFetch.FetchXml.top == null || rightFetch.FetchXml.top == null))
                     {
@@ -1210,7 +1210,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // We need to use an "in" join type - check that's supported
                     else if (nullFilterRemovable &&
                         nullFilter.IsNot &&
-                        context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.In) &&
+                        context.Session.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.In) &&
                         rightFetch.FetchXml.top == null)
                     {
                         // Remove the filter and replace with an "in" link-entity
@@ -1232,7 +1232,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // We can use an "any" join type - check that's supported
                     else if (!nullFilterRemovable &&
                         nullFilter.IsNot &&
-                        context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) &&
+                        context.Session.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) &&
                         rightFetch.FetchXml.top == null)
                     {
                         if (subqueryConditions.ContainsKey(nullFilter))
@@ -1270,7 +1270,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             break;
 
                         // Replace the filter on the defined value name with a filter on the primary key column
-                        nullFilter.Expression = (rightFetch.Alias + "." + context.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute).ToColumnReference();
+                        nullFilter.Expression = (rightFetch.Alias + "." + context.Session.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute).ToColumnReference();
 
                         rightFetch.RemoveSorts();
 
@@ -1346,7 +1346,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     
                     leftAlias = outerReferenceParts[0];
 
-                    if (context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Exists) &&
+                    if (context.Session.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Exists) &&
                         notNullFilter.IsNot &&
                         notNullFilterRemovable)
                     {
@@ -1364,8 +1364,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         };
                         semiJoin = true;
                     }
-                    else if (context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) && notNullFilter.IsNot ||
-                        context.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.NotAny) && !notNullFilter.IsNot)
+                    else if (context.Session.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) && notNullFilter.IsNot ||
+                        context.Session.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.NotAny) && !notNullFilter.IsNot)
                     {
                         if (subqueryConditions.ContainsKey(notNullFilter))
                             break; // We've already processed this subquery
@@ -1515,7 +1515,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
                 {
-                    if (!foldableContext.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                    if (!foldableContext.Session.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
