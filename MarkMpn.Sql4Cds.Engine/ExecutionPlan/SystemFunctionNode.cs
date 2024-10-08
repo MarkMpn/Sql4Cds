@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var dataSource = context.DataSources[DataSource];
+            var dataSource = context.Session.DataSources[DataSource];
 
             switch (SystemFunction)
             {
@@ -97,7 +97,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var dataSource = context.DataSources[DataSource];
+            var dataSource = context.Session.DataSources[DataSource];
 
             switch (SystemFunction)
             {

@@ -18,8 +18,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     class IndexSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode, ISpoolProducerNode
     {
         private IDictionary<INullable, List<Entity>> _hashTable;
-        private Func<INullable, INullable> _keySelector;
-        private Func<INullable, INullable> _seekSelector;
+        private Func<INullable, ExpressionExecutionContext, INullable> _keySelector;
+        private Func<INullable, ExpressionExecutionContext, INullable> _seekSelector;
         private Stack<Entity> _stack;
 
         [Browsable(false)]
@@ -219,7 +219,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return this;
             }
 
-            var metadata = context.DataSources[anchorFetchXml.DataSource].Metadata[anchorFetchXml.Entity.name];
+            var metadata = context.Session.DataSources[anchorFetchXml.DataSource].Metadata[anchorFetchXml.Entity.name];
             var hierarchicalRelationship = metadata.OneToManyRelationships.SingleOrDefault(r => r.IsHierarchical == true);
 
             if (hierarchicalRelationship == null ||
@@ -411,15 +411,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (WithStack)
                 return ExecuteInternalWithStack(context);
 
+            var eec = new ExpressionExecutionContext(context);
+
             // Build an internal hash table of the source indexed by the key column
             if (_hashTable == null)
             {
                 _hashTable = Source.Execute(context)
-                    .GroupBy(e => _keySelector((INullable)e[KeyColumn]))
+                    .GroupBy(e =>
+                    {
+                        eec.Entity = e;
+                        return _keySelector((INullable)e[KeyColumn], eec);
+                    })
                     .ToDictionary(g => g.Key, g => g.ToList());
             }
 
-            var keyValue = _seekSelector((INullable)context.ParameterValues[SeekValue]);
+            eec.Entity = null;
+            var keyValue = _seekSelector((INullable)context.ParameterValues[SeekValue], eec);
 
             if (!_hashTable.TryGetValue(keyValue, out var matches))
                 return Array.Empty<Entity>();

@@ -94,6 +94,11 @@ namespace MarkMpn.Sql4Cds.Engine
         string PrimaryDataSource { get; }
 
         /// <summary>
+        /// An event that is fired when the <see cref="PrimaryDataSource"/> changes
+        /// </summary>
+        event EventHandler PrimaryDataSourceChanged;
+
+        /// <summary>
         /// Returns the unique identifier of the current user
         /// </summary>
         Guid UserId { get; }

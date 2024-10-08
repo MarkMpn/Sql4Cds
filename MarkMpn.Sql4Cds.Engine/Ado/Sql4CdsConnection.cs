@@ -26,11 +26,9 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public class Sql4CdsConnection : DbConnection
     {
-        private readonly IDictionary<string, DataSource> _dataSources;
-        private readonly ChangeDatabaseOptionsWrapper _options;
-        private readonly Dictionary<string, DataTypeReference> _globalVariableTypes;
-        private readonly Dictionary<string, INullable> _globalVariableValues;
+        private readonly DefaultQueryExecutionOptions _options;
         private readonly TelemetryClient _ai;
+        private readonly SessionContext _session;
 
         /// <summary>
         /// Creates a new <see cref="Sql4CdsConnection"/> using the specified XRM connection string
@@ -61,27 +59,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dataSources.Count == 0)
                 throw new ArgumentOutOfRangeException("At least one data source must be supplied");
 
-            var options = new DefaultQueryExecutionOptions(dataSources.First().Value, CancellationToken.None);
-
-            _dataSources = dataSources;
-            _options = new ChangeDatabaseOptionsWrapper(this, options);
-
-            _globalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["@@IDENTITY"] = DataTypeHelpers.EntityReference,
-                ["@@ROWCOUNT"] = DataTypeHelpers.Int,
-                ["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
-                ["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, _dataSources[_options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault),
-                ["@@ERROR"] = DataTypeHelpers.Int,
-            };
-            _globalVariableValues = new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["@@IDENTITY"] = SqlEntityReference.Null,
-                ["@@ROWCOUNT"] = (SqlInt32)0,
-                ["@@SERVERNAME"] = GetServerName(_dataSources[_options.PrimaryDataSource]),
-                ["@@VERSION"] = GetVersion(_dataSources[_options.PrimaryDataSource]),
-                ["@@ERROR"] = (SqlInt32)0,
-            };
+            _options = new DefaultQueryExecutionOptions(this, dataSources.First().Value, CancellationToken.None);
+            _session = new SessionContext(dataSources, _options);
 
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
 
@@ -91,51 +70,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 ApplicationName = System.IO.Path.GetFileNameWithoutExtension(app.Location);
             else
                 ApplicationName = "SQL 4 CDS ADO.NET Provider";
-        }
-
-        private SqlString GetVersion(DataSource dataSource)
-        {
-            string orgVersion = null;
-
-#if NETCOREAPP
-            if (dataSource.Connection is ServiceClient svc)
-                orgVersion = svc.ConnectedOrgVersion.ToString();
-#else
-            if (dataSource.Connection is CrmServiceClient svc)
-                orgVersion = svc.ConnectedOrgVersion.ToString();
-#endif
-
-            if (orgVersion == null)
-                orgVersion = ((RetrieveVersionResponse)dataSource.Execute(new RetrieveVersionRequest())).Version;
-
-            var assembly = typeof(Sql4CdsConnection).Assembly;
-            var assemblyVersion = assembly.GetName().Version;
-            var assemblyCopyright = assembly
-                .GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false)
-                .OfType<AssemblyCopyrightAttribute>()
-                .FirstOrDefault()?
-                .Copyright;
-            var assemblyFilename = assembly.Location;
-            var assemblyDate = System.IO.File.GetLastWriteTime(assemblyFilename);
-
-            return $"Microsoft Dataverse - {orgVersion}\r\n\tSQL 4 CDS - {assemblyVersion}\r\n\t{assemblyDate:MMM dd yyyy HH:mm:ss}\r\n\t{assemblyCopyright}";
-        }
-
-        private SqlString GetServerName(DataSource dataSource)
-        {
-#if NETCOREAPP
-            var svc = dataSource.Connection as ServiceClient;
-
-            if (svc != null)
-                return svc.ConnectedOrgUriActual.Host;
-#else
-            var svc = dataSource.Connection as CrmServiceClient;
-
-            if (svc != null)
-                return svc.CrmConnectOrgUriActual.Host;
-#endif
-
-            return dataSource.Name;
         }
 
         private static IOrganizationService Connect(string connectionString)
@@ -185,7 +119,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        internal IDictionary<string, DataSource> DataSources => _dataSources;
+        internal SessionContext Session => _session;
 
         internal IQueryExecutionOptions Options => _options;
 
@@ -289,10 +223,6 @@ namespace MarkMpn.Sql4Cds.Engine
             set => _options.ColumnOrdering = value;
         }
 
-        internal Dictionary<string, DataTypeReference> GlobalVariableTypes => _globalVariableTypes;
-
-        internal Dictionary<string, INullable> GlobalVariableValues => _globalVariableValues;
-
         internal TelemetryClient TelemetryClient => _ai;
 
         /// <summary>
@@ -371,7 +301,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             get
             {
-                var dataSource = _dataSources[Database];
+                var dataSource = Session.DataSources[Database];
 
 #if NETCOREAPP
                 if (dataSource.Connection is ServiceClient svc)
@@ -389,7 +319,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             get
             {
-                var dataSource = _dataSources[Database];
+                var dataSource = Session.DataSources[Database];
 
 #if NETCOREAPP
                 if (dataSource.Connection is ServiceClient svc)
@@ -408,7 +338,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void ChangeDatabase(string databaseName)
         {
-            if (!_dataSources.ContainsKey(databaseName))
+            if (!Session.DataSources.ContainsKey(databaseName))
                 throw new Sql4CdsException(new Sql4CdsError(11, 0, 0, null, databaseName, 0, "Database is not in the list of connected databases", null));
 
             _options.PrimaryDataSource = databaseName;

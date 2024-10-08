@@ -9,8 +9,12 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
+using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -53,6 +57,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public HashSet<string> Parameters { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        internal SelectStatement SelectStatement { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
@@ -65,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 try
                 {
-                    if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                    if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                         throw new QueryExecutionException("Missing datasource " + DataSource);
 
                     if (context.Options.UseLocalTimeZone)
@@ -89,7 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, context.Options);
+                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, context);
 
                     foreach (var paramValue in context.ParameterValues)
                     {
@@ -145,13 +151,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        internal static string ApplyCommandBehavior(string sql, CommandBehavior behavior, IQueryExecutionOptions options)
+        internal static string ApplyCommandBehavior(string sql, CommandBehavior behavior, NodeExecutionContext context)
         {
+            if (context.Session.DateFormat != DateFormat.mdy)
+            {
+                // mdy is the default format for the TDS Endpoint, so we need to switch it as necessary
+                sql = "SET DATEFORMAT " + context.Session.DateFormat.ToString() + ";\r\n" + sql;
+            }
+
             if (behavior == CommandBehavior.Default)
                 return sql;
 
             // TDS Endpoint doesn't support command behavior flags, so fake them by modifying the SQL query
-            var dom = new TSql160Parser(options.QuotedIdentifiers);
+            var dom = new TSql160Parser(context.Options.QuotedIdentifiers);
             var script = (TSqlScript) dom.Parse(new StringReader(sql), out _);
 
             if (behavior.HasFlag(CommandBehavior.SchemaOnly))
@@ -225,6 +237,144 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
+        internal IExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns, string[] keyAttributes)
+        {
+            if (!(SelectStatement?.QueryExpression is QuerySpecification querySpec))
+                return this;
+
+            if (querySpec.FromClause == null || querySpec.FromClause.TableReferences.Count != 1 || !(querySpec.FromClause.TableReferences[0] is NamedTableReference table))
+                return this;
+
+            if (table.SchemaObject.BaseIdentifier.Value != logicalName)
+                return this;
+
+            if (querySpec.WhereClause == null || querySpec.WhereClause.SearchCondition == null)
+                return this;
+
+            var filterVisitor = new SimpleFilterVisitor();
+            querySpec.WhereClause.SearchCondition.Accept(filterVisitor);
+
+            if (filterVisitor.BinaryType == null)
+                return this;
+
+            var dataSource = context.Session.DataSources[DataSource];
+            var metadata = dataSource.Metadata[logicalName];
+            var conditions = filterVisitor.Conditions.ToList();
+            var ecc = new ExpressionCompilationContext(context, null, null);
+
+            if (!TryGetDmlSchema(dataSource, metadata, querySpec, new ExpressionCompilationContext(context, null, null), out var schema, out var literalValues))
+                return this;
+
+            // Every column must either be a literal or a key attribute
+            if (requiredColumns.Except(literalValues.Keys).Except(keyAttributes).Any())
+                return this;
+
+            var constantScan = new ConstantScanNode();
+
+            foreach (var col in requiredColumns)
+                constantScan.Schema[col.SplitMultiPartIdentifier().Last()] = new ColumnDefinition(schema[col], true, false);
+
+            // We can handle compound keys, but only if they are all ANDed together
+            if (keyAttributes.Length > 1 && filterVisitor.BinaryType == BooleanBinaryExpressionType.And)
+            {
+                var values = new Dictionary<string, ScalarExpression>();
+
+                foreach (var col in requiredColumns)
+                {
+                    if (literalValues.ContainsKey(col))
+                        continue;
+
+                    var condition = conditions.FirstOrDefault(c => c.attribute == col.SplitMultiPartIdentifier().Last());
+                    if (condition == null)
+                        return this;
+
+                    if (condition.@operator != @operator.eq)
+                        return this;
+
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+                    values[condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource);
+                }
+
+                constantScan.Values.Add(values);
+
+                AddLiteralValues(constantScan, literalValues);
+                return constantScan;
+            }
+
+            // We can also handle multiple values for a single key being ORed together
+            else if (keyAttributes.Length == 1 &&
+                conditions.All(c => c.attribute == metadata.PrimaryIdAttribute) &&
+                conditions.All(c => c.@operator == @operator.eq || c.@operator == @operator.@in) &&
+                (conditions.Count == 1 || filterVisitor.BinaryType == BooleanBinaryExpressionType.Or))
+            {
+                foreach (var condition in conditions)
+                {
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+
+                    if (condition.@operator == @operator.eq)
+                    {
+                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource) });
+                    }
+                    else if (condition.@operator == @operator.@in)
+                    {
+                        foreach (var value in condition.Items)
+                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(value.Value, value.IsVariable, ecc, dataSource) });
+                    }
+                }
+
+                AddLiteralValues(constantScan, literalValues);
+                return constantScan;
+            }
+
+            return this;
+        }
+
+        private void AddLiteralValues(ConstantScanNode constantScan, Dictionary<string, ScalarExpression> literalValues)
+        {
+            foreach (var row in constantScan.Values)
+            {
+                foreach (var value in literalValues)
+                {
+                    row[value.Key] = value.Value;
+                }
+            }
+        }
+
+        private bool TryGetDmlSchema(DataSource dataSource, EntityMetadata metadata, QuerySpecification querySpec, ExpressionCompilationContext context, out Dictionary<string, DataTypeReference> schema, out Dictionary<string, ScalarExpression> literalValues)
+        {
+            schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            literalValues = new Dictionary<string, ScalarExpression>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var select in querySpec.SelectElements)
+            {
+                if (!(select is SelectScalarExpression scalar))
+                    return false;
+
+                if (!scalar.Expression.GetColumns().Any() && scalar.ColumnName?.Value != null)
+                {
+                    scalar.Expression.GetType(context, out var literalType);
+                    schema[scalar.ColumnName.Value] = literalType;
+                    literalValues[scalar.ColumnName.Value] = scalar.Expression;
+                    continue;
+                }
+
+                if (!(scalar.Expression is ColumnReferenceExpression col))
+                    return false;
+
+                var attribute = metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(col.MultiPartIdentifier.Identifiers.Last().Value, StringComparison.OrdinalIgnoreCase));
+
+                if (attribute == null)
+                    return false;
+
+                var type = attribute.GetAttributeSqlType(dataSource, false);
+                var name = scalar.ColumnName?.Value ?? attribute.LogicalName;
+
+                schema[name] = type;
+            }
+
+            return true;
+        }
+
         public override string ToString()
         {
             return "TDS Endpoint";
@@ -239,7 +389,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Index = Index,
                 Length = Length,
                 LineNumber = LineNumber,
-                Parameters = Parameters
+                Parameters = Parameters,
+                SelectStatement = SelectStatement
             };
         }
     }

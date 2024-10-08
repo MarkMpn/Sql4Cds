@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 Alias = "test"
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).ToArray();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).ToArray();
             
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["test.firstname"]).Value);
@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).ToArray();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).ToArray();
 
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["test.firstname"]).Value);
@@ -161,7 +161,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.Inner
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).ToArray();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).ToArray();
 
             Assert.AreEqual(2, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -241,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.LeftOuter
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).ToArray();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -323,7 +323,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.RightOuter
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).ToArray();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -362,7 +362,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ErrorMessage = "Only Mark is allowed"
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).GetEnumerator();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).GetEnumerator();
 
             Assert.IsTrue(results.MoveNext());
             Assert.AreEqual("Mark", results.Current.GetAttributeValue<SqlString>("test.name").Value);
@@ -420,7 +420,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("mul").Value)
                 .ToArray();
 
@@ -462,7 +462,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
@@ -504,7 +504,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlString>("test.value1").Value)
                 .ToArray();
 
@@ -562,7 +562,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.expectedorder").Value)
                 .ToArray();
 
@@ -627,7 +627,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.expectedorder").Value)
                 .ToArray();
 
@@ -659,11 +659,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var spool = new TableSpoolNode { Source = source };
 
-            var results1 = spool.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results1 = spool.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
-            var results2 = spool.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results2 = spool.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
@@ -708,7 +708,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = spool.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null))
+            var results = spool.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => new { Name = e.GetAttributeValue<SqlString>("src.value1").Value, Count = e.GetAttributeValue<SqlInt32>("count").Value })
                 .ToArray();
 
@@ -719,7 +719,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SqlTransformSchemaOnly()
         {
             var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
-            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SchemaOnly, new StubOptions());
+            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SchemaOnly, new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null));
             transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
 
             Assert.AreEqual("SELECT name FROM account WHERE 0 = 1; DECLARE @id AS UNIQUEIDENTIFIER; SELECT name FROM account WHERE accountid = @id AND 0 = 1;", transformed);
@@ -729,7 +729,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SqlTransformSingleRow()
         {
             var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
-            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleRow, new StubOptions());
+            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleRow, new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null));
             transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
 
             Assert.AreEqual("SELECT TOP 1 name FROM account; DECLARE @id AS UNIQUEIDENTIFIER;", transformed);
@@ -739,7 +739,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SqlTransformSingleResult()
         {
             var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
-            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleResult, new StubOptions());
+            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleResult, new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null));
             transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
 
             Assert.AreEqual("SELECT name FROM account; DECLARE @id AS UNIQUEIDENTIFIER;", transformed);
@@ -749,7 +749,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateInitialTest()
         {
             var aggregate = CreateAggregateTest();
-            var result = aggregate.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).Single();
 
             Assert.AreEqual(SqlInt32.Null, result["min"]);
             Assert.AreEqual(SqlInt32.Null, result["max"]);
@@ -767,7 +767,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateSingleValueTest()
         {
             var aggregate = CreateAggregateTest(1);
-            var result = aggregate.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).Single();
 
             Assert.AreEqual((SqlInt32)1, result["min"]);
             Assert.AreEqual((SqlInt32)1, result["max"]);
@@ -785,7 +785,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateTwoEqualValuesTest()
         {
             var aggregate = CreateAggregateTest(1, 1);
-            var result = aggregate.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).Single();
 
             Assert.AreEqual((SqlInt32)1, result["min"]);
             Assert.AreEqual((SqlInt32)1, result["max"]);
@@ -803,7 +803,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateMultipleValuesTest()
         {
             var aggregate = CreateAggregateTest(1, 3, 1, 1);
-            var result = aggregate.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).Single();
 
             Assert.AreEqual((SqlInt32)1, result["min"]);
             Assert.AreEqual((SqlInt32)3, result["max"]);
@@ -962,7 +962,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).ToArray();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).ToArray();
 
             Assert.AreEqual(2, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -1034,7 +1034,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(new NodeExecutionContext(_localDataSources, new StubOptions(), null, null, null)).ToArray();
+            var results = node.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null)).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -1068,7 +1068,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
             };
-            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            var schema = fetch.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null));
             Assert.AreEqual("account.accountid", schema.PrimaryKey);
         }
 
@@ -1108,7 +1108,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
             };
-            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            var schema = fetch.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null));
             Assert.AreEqual("contact.contactid", schema.PrimaryKey);
         }
 
@@ -1148,7 +1148,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
             };
-            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            var schema = fetch.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null));
             Assert.IsNull(schema.PrimaryKey);
         }
 
@@ -1188,7 +1188,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
             };
-            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            var schema = fetch.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null));
             Assert.AreEqual("account.accountid", schema.PrimaryKey);
         }
 
@@ -1228,7 +1228,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
             };
-            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            var schema = fetch.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null));
             Assert.AreEqual("account.accountid", schema.PrimaryKey);
         }
 
@@ -1268,7 +1268,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
             };
-            var schema = fetch.GetSchema(new NodeCompilationContext(_localDataSources, new StubOptions(), null, null));
+            var schema = fetch.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null));
             Assert.IsNull(schema.PrimaryKey);
         }
     }

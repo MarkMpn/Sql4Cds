@@ -111,8 +111,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this TSqlFragment expr, ExpressionCompilationContext context, bool createExpression, out ParameterExpression[] parameters, out DataTypeReference sqlType, out string cacheKey)
         {
-            var contextParam = createExpression ? Expression.Parameter(typeof(ExpressionExecutionContext)) : null;
-            var exprParam = createExpression ? Expression.Parameter(typeof(TSqlFragment)) : null;
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
+            var exprParam = Expression.Parameter(typeof(TSqlFragment));
 
             Expression expression;
 
@@ -334,17 +334,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expression.Convert(expr, returnType);
         }
 
-        private static Expression ToExpression(IdentifierLiteral guid, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
+        private static Expression ToExpression(IdentifierLiteral id, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            sqlType = DataTypeHelpers.UniqueIdentifier;
-            cacheKey = "<GuidLiteral>";
+            sqlType = DataTypeHelpers.VarChar(id.Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+
+            cacheKey = $"<IdentifierLiteral({GetTypeKey(sqlType, false)})>";
 
             if (!createExpression)
                 return null;
 
-            return Expr.Call(
-                () => SqlGuid.Parse(Expr.Arg<string>()),
-                Expression.Property(Expression.Convert(exprParam, typeof(IdentifierLiteral)), nameof(IdentifierLiteral.Value)));
+            var value = Expression.Property(Expression.Convert(exprParam, typeof(IdentifierLiteral)), nameof(IdentifierLiteral.Value));
+
+            var expr = (Expression)Expression.Property(contextParam, nameof(ExpressionExecutionContext.PrimaryDataSource));
+            expr = Expression.Property(expr, nameof(DataSource.DefaultCollation));
+            expr = Expression.Call(expr, nameof(Collation.ToSqlString), Array.Empty<Type>(), value);
+            return expr;
         }
 
         private static Expression ToExpression(IntegerLiteral i, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
@@ -545,7 +549,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (!lhsType.IsSameAs(type))
-                lhs = createExpression ? SqlTypeConverter.Convert(lhs, lhsType, type) : null;
+                lhs = createExpression ? SqlTypeConverter.Convert(lhs, contextParam, lhsType, type) : null;
 
             if (!rhsType.IsSameAs(type))
             {
@@ -565,7 +569,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     };
                 }
 
-                rhs = createExpression ? SqlTypeConverter.Convert(rhs, rhsType, type) : null;
+                rhs = createExpression ? SqlTypeConverter.Convert(rhs, contextParam, rhsType, type) : null;
             }
 
             AssertCollationSensitive(type);
@@ -629,7 +633,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (!lhsType.IsSameAs(type))
-                lhs = createExpression ? SqlTypeConverter.Convert(lhs, lhsType, type) : null;
+                lhs = createExpression ? SqlTypeConverter.Convert(lhs, contextParam, lhsType, type) : null;
 
             if (!rhsType.IsSameAs(type))
             {
@@ -649,7 +653,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     };
                 }
 
-                rhs = createExpression ? SqlTypeConverter.Convert(rhs, rhsType, type) : null;
+                rhs = createExpression ? SqlTypeConverter.Convert(rhs, contextParam, rhsType, type) : null;
             }
 
             AssertCollationSensitive(type);
@@ -804,17 +808,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 type = DataTypeHelpers.Decimal(p, s);
 
                 if (lhs.Type != typeof(SqlDecimal))
-                    lhs = SqlTypeConverter.Convert(lhs, lhsSqlType, DataTypeHelpers.Decimal(lhsSqlType.GetPrecision(), lhsSqlType.GetScale()));
+                    lhs = SqlTypeConverter.Convert(lhs, contextParam, lhsSqlType, DataTypeHelpers.Decimal(lhsSqlType.GetPrecision(), lhsSqlType.GetScale()));
                 if (rhs.Type != typeof(SqlDecimal))
-                    rhs = SqlTypeConverter.Convert(rhs, rhsSqlType, DataTypeHelpers.Decimal(rhsSqlType.GetPrecision(), rhsSqlType.GetScale()));
+                    rhs = SqlTypeConverter.Convert(rhs, contextParam, rhsSqlType, DataTypeHelpers.Decimal(rhsSqlType.GetPrecision(), rhsSqlType.GetScale()));
             }
             else
             {
                 if (!lhsSqlType.IsSameAs(type))
-                    lhs = SqlTypeConverter.Convert(lhs, lhsSqlType, type);
+                    lhs = SqlTypeConverter.Convert(lhs, contextParam, lhsSqlType, type);
 
                 if (!rhsSqlType.IsSameAs(type))
-                    rhs = SqlTypeConverter.Convert(rhs, rhsSqlType, type);
+                    rhs = SqlTypeConverter.Convert(rhs, contextParam, rhsSqlType, type);
             }
 
             sqlType = null;
@@ -954,12 +958,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var paramExpressionsWithType = func.Parameters
                 .Select((param, index) =>
                 {
-                    // Special case for DATEPART / DATEDIFF / DATEADD - first parameter looks like a field but is actually an identifier
+                    // Special case for DATEPART / DATEDIFF / DATEADD / DATETRUNC - first parameter looks like a field but is actually an identifier
                     if (index == 0 &&
                         (
                             func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
                             func.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
-                            func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase)
+                            func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase) ||
+                            func.FunctionName.Value.Equals("DATETRUNC", StringComparison.OrdinalIgnoreCase)
                         ))
                     {
                         // Check parameter is an expected datepart value
@@ -969,16 +974,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             ex = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameter(param, 1, "datepart"));
                             col = null;
                         }
-                        else
+                        else if (!ExpressionFunctions.TryParseDatePart(col.MultiPartIdentifier.Identifiers.Single().Value, out _))
                         {
-                            try
-                            {
-                                ExpressionFunctions.DatePartToInterval(col.MultiPartIdentifier.Identifiers.Single().Value);
-                            }
-                            catch
-                            {
-                                ex = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "datepart"));
-                            }
+                            ex = new NotSupportedQueryFragmentException(Sql4CdsError.InvalidOptionValue(param, "datepart"));
                         }
 
                         if (ex != null)
@@ -1010,6 +1008,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     
                     var paramExpr = func.InvokeSubExpression(x => x.Parameters[index], (x, i) => x.Parameters[i], index, context, contextParam, exprParam, createExpression, out var paramType, out var paramCacheKey, out var paramException);
+
+                    // Special case for DATEPART - second parameter can accept any datetime family type. Function is implemented
+                    // to accept datetimeoffset for highest precision, but also needs to accept numeric types which can't be converted
+                    // to datetimeoffset. Convert them to datetime first
+                    if (index == 1 &&
+                        func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
+                        paramType is SqlDataTypeReference datePartParamSqlType &&
+                        datePartParamSqlType.SqlDataTypeOption.IsNumeric())
+                    {
+                        var dateTimeType = (DataTypeReference) DataTypeHelpers.DateTime;
+                        paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
+                        paramType = dateTimeType;
+                    }
+
+                    // Special case for DATETRUNC - second parameter can accept any datetime family type. String values should be
+                    // implicitly converted to datetime2. Numeric values are not supported for DATETRUNC
+                    if (index == 1 &&
+                        func.FunctionName.Value.Equals("DATETRUNC", StringComparison.OrdinalIgnoreCase) &&
+                        paramType is SqlDataTypeReference dateTruncParamSqlType &&
+                        dateTruncParamSqlType.SqlDataTypeOption.IsStringType())
+                    {
+                        var dateTimeType = (DataTypeReference)DataTypeHelpers.DateTime2(7);
+                        paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
+                        paramType = dateTimeType;
+                    }
+
+                    // Special case for DATEADD - third parameter can accept any datetime family type. Function is implemented
+                    // to accept datetimeoffset for highest precision, but also needs to accept numeric types which can't be converted
+                    // to datetimeoffset. Convert them to datetime first. Can also accept string values which should be converted
+                    // to datetime
+                    if (index == 2 &&
+                        func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase) &&
+                        paramType is SqlDataTypeReference dateAddParamSqlType &&
+                        (dateAddParamSqlType.SqlDataTypeOption.IsNumeric() || dateAddParamSqlType.SqlDataTypeOption.IsStringType()))
+                    {
+                        var dateTimeType = (DataTypeReference) DataTypeHelpers.DateTime;
+                        paramExpr = Convert(context, contextParam, paramExpr, paramType, paramCacheKey, ref dateTimeType, null, null, null, func.Parameters[index], "IMPLICIT", out paramCacheKey);
+                        paramType = dateTimeType;
+                    }
+
                     return new { Expression = paramExpr, Type = paramType, CacheKey = paramCacheKey, Exception = paramException };
                 })
                 .ToList();
@@ -1081,7 +1119,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var method = correctParameterCount[0].Method;
             var parameters = correctParameterCount[0].Parameters;
-            DataTypeReference sourceType = null;
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
             cacheKey = method.Name;
 
             if (correctParameterCount[0].Method.IsGenericMethodDefinition)
@@ -1095,10 +1133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     for (var i = 0; i < genericArguments.Length; i++)
                     {
                         if (param.ParameterType == genericArguments[i] && genericArgumentValues[i] == null)
-                        {
                             genericArgumentValues[i] = paramTypes[i].ToNetType(out _);
-                            sourceType = paramTypes[i];
-                        }
                     }
                 }
 
@@ -1193,17 +1228,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (paramType == typeof(DataTypeReference))
                 {
-                    if (parameters[i].GetCustomAttribute<SourceTypeAttribute>() != null)
+                    var sourceType = parameters[i].GetCustomAttribute<SourceTypeAttribute>();
+                    if (sourceType != null)
                     {
-                        cacheKey += $"(TYPE:{sourceType.ToSql()})";
+                        cacheKey += $"(TYPE:{parameterTypes[sourceType.SourceParameter].ToSql()})";
                         if (createExpression)
                         {
                             var paramsWithType = new Expression[paramExpressions.Length + 1];
                             paramExpressions.CopyTo(paramsWithType, 0);
-                            paramsWithType[i] = Expression.Constant(sourceType);
+                            paramsWithType[i] = Expression.Constant(parameterTypes[sourceType.SourceParameter]);
                             paramExpressions = paramsWithType;
                         }
                         hiddenParams++;
+
+                        if (parameters[i].GetCustomAttribute<TargetTypeAttribute>() != null)
+                            sqlType = parameterTypes[sourceType.SourceParameter];
                     }
                     else
                     {
@@ -1242,6 +1281,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (paramType != typeof(INullable) && !SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i - hiddenParams], paramType.ToSqlType(primaryDataSource)))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(i < paramOffset ? func : func.Parameters[i - paramOffset], paramTypes[i], paramType.ToSqlType(primaryDataSource)));
+
+                parameterTypes[parameters[i].Name] = paramTypes[i - hiddenParams];
             }
 
             for (var i = parameters.Length; i < paramTypes.Length; i++)
@@ -1262,7 +1303,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (arrayType == typeof(INullable))
                         arrayMembers.Add(Expression.Convert(paramExpressions[i], typeof(INullable)));
                     else
-                        arrayMembers.Add(SqlTypeConverter.Convert(paramExpressions[i], arrayType));
+                        arrayMembers.Add(SqlTypeConverter.Convert(paramExpressions[i], contextParam, arrayType));
                 }
 
                 var arrayParam = Expression.NewArrayInit(arrayType, arrayMembers);
@@ -1392,12 +1433,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             for (var i = 0; i < parameters.Length; i++)
             {
                 if (paramValues[i].Type != parameters[i].ParameterType)
-                    paramValues[i] = SqlTypeConverter.Convert(paramValues[i], parameters[i].ParameterType);
+                    paramValues[i] = SqlTypeConverter.Convert(paramValues[i], contextParam, parameters[i].ParameterType);
             }
 
             var expr = (Expression) Expression.Call(method, paramValues);
 
-            if (expr.Type == typeof(object) && parameters.Any(p => p.GetCustomAttribute<TargetTypeAttribute>() != null))
+            if (parameters.Any(p => p.GetCustomAttribute<TargetTypeAttribute>() != null))
                 expr = Expression.Convert(expr, sqlType.ToNetType(out _));
 
             return expr;
@@ -1481,10 +1522,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var convertedExprValue = exprValue;
 
                     if (!exprType.IsSameAs(type))
-                        convertedExprValue = SqlTypeConverter.Convert(convertedExprValue, exprType, type);
+                        convertedExprValue = SqlTypeConverter.Convert(convertedExprValue, contextParam, exprType, type);
 
                     if (!comparisonType.IsSameAs(type))
-                        comparisonValue = SqlTypeConverter.Convert(comparisonValue, comparisonType, type);
+                        comparisonValue = SqlTypeConverter.Convert(comparisonValue, contextParam, comparisonType, type);
 
                     var comparison = inPred.NotDefined ? Expression.NotEqual(convertedExprValue, comparisonValue) : Expression.Equal(convertedExprValue, comparisonValue);
 
@@ -1561,7 +1602,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 cacheKey += " IS NULL";
             }
 
-            value = createExpression ? SqlTypeConverter.Convert(value, typeof(SqlBoolean)) : null;
+            value = createExpression ? SqlTypeConverter.Convert(value, contextParam, typeof(SqlBoolean)) : null;
             sqlType = DataTypeHelpers.Bit;
             return value;
         }
@@ -1587,7 +1628,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, stringType))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(like.FirstExpression, valueType, stringType));
 
-                value = createExpression ? SqlTypeConverter.Convert(value, valueType, stringType) : null;
+                value = createExpression ? SqlTypeConverter.Convert(value, contextParam, valueType, stringType) : null;
                 valueType = stringType;
             }
 
@@ -1596,7 +1637,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!SqlTypeConverter.CanChangeTypeImplicit(patternType, stringType))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(like.FirstExpression, patternType, stringType));
 
-                pattern = createExpression ? SqlTypeConverter.Convert(pattern, patternType, stringType) : null;
+                pattern = createExpression ? SqlTypeConverter.Convert(pattern, contextParam, patternType, stringType) : null;
                 patternType = stringType;
             }
 
@@ -1605,7 +1646,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!SqlTypeConverter.CanChangeTypeImplicit(escapeType, stringType))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(like.FirstExpression, escapeType, stringType));
 
-                escape = createExpression ? SqlTypeConverter.Convert(escape, escapeType, stringType) : null;
+                escape = createExpression ? SqlTypeConverter.Convert(escape, contextParam, escapeType, stringType) : null;
                 escapeType = stringType;
             }
 
@@ -1894,7 +1935,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (elseValue != null)
                 {
                     if (!elseType.IsSameAs(type))
-                        elseValue = SqlTypeConverter.Convert(elseValue, elseType, type);
+                        elseValue = SqlTypeConverter.Convert(elseValue, contextParam, elseType, type);
 
                     result = elseValue;
                 }
@@ -1911,17 +1952,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var caseType = caseTypes[i];
 
                     if (!valueType.IsSameAs(caseType))
-                        valueCopy = SqlTypeConverter.Convert(valueCopy, valueType, caseType);
+                        valueCopy = SqlTypeConverter.Convert(valueCopy, contextParam, valueType, caseType);
 
                     if (!whenType.IsSameAs(caseType))
-                        whenValue = SqlTypeConverter.Convert(whenValue, whenType, caseType);
+                        whenValue = SqlTypeConverter.Convert(whenValue, contextParam, whenType, caseType);
 
                     var comparison = Expression.Equal(valueCopy, whenValue);
                     var returnValue = thenClauses[i].Expression;
                     var returnType = thenClauses[i].Type;
 
                     if (!returnType.IsSameAs(type))
-                        returnValue = SqlTypeConverter.Convert(returnValue, returnType, type);
+                        returnValue = SqlTypeConverter.Convert(returnValue, contextParam, returnType, type);
 
                     result = Expression.Condition(Expression.IsTrue(comparison), returnValue, result);
                 }
@@ -1996,7 +2037,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (elseValue != null)
                 {
                     if (!elseType.IsSameAs(type))
-                        elseValue = SqlTypeConverter.Convert(elseValue, elseType, type);
+                        elseValue = SqlTypeConverter.Convert(elseValue, contextParam, elseType, type);
 
                     result = elseValue;
                 }
@@ -2014,10 +2055,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var returnValue = thenClauses[i].Expression;
                     var returnType = thenClauses[i].Type;
 
-                    whenValue = SqlTypeConverter.Convert(whenValue, whenType, bitType);
+                    whenValue = SqlTypeConverter.Convert(whenValue, contextParam, whenType, bitType);
                     whenValue = Expression.IsTrue(whenValue);
 
-                    returnValue = SqlTypeConverter.Convert(returnValue, returnType, type);
+                    returnValue = SqlTypeConverter.Convert(returnValue, contextParam, returnType, type);
 
                     result = Expression.Condition(whenValue, returnValue, result);
                 }
@@ -2065,7 +2106,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [SqlDataTypeOption.Numeric] = typeof(SqlDecimal),
             [SqlDataTypeOption.NVarChar] = typeof(SqlString),
             [SqlDataTypeOption.Real] = typeof(SqlSingle),
-            [SqlDataTypeOption.SmallDateTime] = typeof(SqlDateTime),
+            [SqlDataTypeOption.SmallDateTime] = typeof(SqlSmallDateTime),
             [SqlDataTypeOption.SmallInt] = typeof(SqlInt16),
             [SqlDataTypeOption.SmallMoney] = typeof(SqlMoney),
             [SqlDataTypeOption.Text] = typeof(SqlString),
@@ -2140,7 +2181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [typeof(SqlGuid)] = DataTypeHelpers.UniqueIdentifier,
             [typeof(SqlEntityReference)] = DataTypeHelpers.EntityReference,
             [typeof(SqlDateTime2)] = DataTypeHelpers.DateTime2(7),
-            [typeof(SqlDateTimeOffset)] = DataTypeHelpers.DateTimeOffset,
+            [typeof(SqlDateTimeOffset)] = DataTypeHelpers.DateTimeOffset(7),
             [typeof(SqlDate)] = DataTypeHelpers.Date,
             [typeof(SqlTime)] = DataTypeHelpers.Time(7),
             [typeof(SqlXml)] = DataTypeHelpers.Xml,
@@ -2173,10 +2214,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = convert.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, ref sqlType, style, styleType, styleCacheKey, convert, "CONVERT", out cacheKey);
+            return Convert(context, contextParam, value, valueType, valueCacheKey, ref sqlType, style, styleType, styleCacheKey, convert, "CONVERT", out cacheKey);
         }
 
-        private static Expression Convert(ExpressionCompilationContext context, Expression value, DataTypeReference valueType, string valueCacheKey, ref DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
+        private static Expression Convert(ExpressionCompilationContext context, ParameterExpression contextParam, Expression value, DataTypeReference valueType, string valueCacheKey, ref DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
         {
             if (sqlType is SqlDataTypeReference sqlTargetType &&
                 sqlTargetType.SqlDataTypeOption.IsStringType())
@@ -2205,7 +2246,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 cacheKey += ", " + styleCacheKey;
             cacheKey += ")";
 
-            return value == null ? null : SqlTypeConverter.Convert(value, valueType, sqlType, style, styleType, expr);
+            return value == null ? null : SqlTypeConverter.Convert(value, contextParam, valueType, sqlType, style, styleType, expr);
         }
 
         private static Expression ToExpression(this CastCall cast, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
@@ -2217,7 +2258,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = cast.DataType;
 
-            return Convert(context, value, valueType, valueCacheKey, ref sqlType, null, null, null, cast, "CAST", out cacheKey);
+            return Convert(context, contextParam, value, valueType, valueCacheKey, ref sqlType, null, null, null, cast, "CAST", out cacheKey);
         }
 
         private static readonly Regex _containsParser = new Regex("^\\S+( OR \\S+)*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -2251,7 +2292,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!SqlTypeConverter.CanChangeTypeImplicit(colType, stringType))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnForFullTextSearch(fullText.Columns[0]));
 
-            col = createExpression ? SqlTypeConverter.Convert(col, colType, stringType) : null;
+            col = createExpression ? SqlTypeConverter.Convert(col, contextParam, colType, stringType) : null;
             sqlType = DataTypeHelpers.Bit;
 
             if (fullText.Value is StringLiteral lit)
@@ -2268,7 +2309,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, stringType))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(fullText.Value, valueType, stringType));
 
-            value = createExpression ? SqlTypeConverter.Convert(value, valueType, stringType) : null;
+            value = createExpression ? SqlTypeConverter.Convert(value, contextParam, valueType, stringType) : null;
 
             cacheKey = $"{colCacheKey} CONTAINS {valueCacheKey}";
             return createExpression ? Expr.Call(() => Contains(Expr.Arg<SqlString>(), Expr.Arg<SqlString>()), col, value) : null;
@@ -2708,6 +2749,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 default:
                     throw new ArgumentOutOfRangeException(nameof(cmp));
             }
+        }
+
+        /// <summary>
+        /// Returns the equivalent Fetch XML condition operator for this comparison
+        /// </summary>
+        /// <param name="cmp">The comparison type to convert to Fetch XML</param>
+        /// <returns>The equivalent Fetch XML condition operator for this comparison</returns>
+        public static bool TryConvertToFetchXml(this BooleanComparisonType cmp, out @operator op)
+        {
+            switch (cmp)
+            {
+                case BooleanComparisonType.Equals:
+                case BooleanComparisonType.IsNotDistinctFrom:
+                    op = @operator.eq;
+                    break;
+
+                case BooleanComparisonType.GreaterThan:
+                    op = @operator.gt;
+                    break;
+
+                case BooleanComparisonType.GreaterThanOrEqualTo:
+                    op = @operator.ge;
+                    break;
+
+                case BooleanComparisonType.LessThan:
+                    op = @operator.lt;
+                    break;
+
+                case BooleanComparisonType.LessThanOrEqualTo:
+                    op = @operator.le;
+                    break;
+
+                case BooleanComparisonType.NotEqualToBrackets:
+                case BooleanComparisonType.NotEqualToExclamation:
+                case BooleanComparisonType.IsDistinctFrom:
+                    op = @operator.ne;
+                    break;
+
+                default:
+                    op = @operator.eq;
+                    return false;
+            }
+
+            return true;
         }
 
         private static string GetTypeKey(DataTypeReference type, bool includeStringLength)

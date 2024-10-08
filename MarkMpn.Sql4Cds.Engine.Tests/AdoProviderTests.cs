@@ -2466,5 +2466,394 @@ FROM (SELECT a.accountid
                 }
             }
         }
+
+        [TestMethod]
+        public void DateTimeStringLiterals()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                // https://learn.microsoft.com/en-us/sql/t-sql/data-types/date-transact-sql?view=sql-server-ver16#examples
+                cmd.CommandText = @"
+SELECT
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS TIME(7)) AS 'time',
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS DATE) AS 'date',
+    CAST('2022-05-08 12:35:29.123' AS SMALLDATETIME) AS 'smalldatetime',
+    CAST('2022-05-08 12:35:29.123' AS DATETIME) AS 'datetime',
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS DATETIME2(7)) AS 'datetime2',
+    CAST('2022-05-08 12:35:29.1234567 +12:15' AS DATETIMEOFFSET(7)) AS 'datetimeoffset';";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(new TimeSpan(12, 35, 29) + TimeSpan.FromTicks(1234567), reader.GetValue(0));
+                    Assert.AreEqual(new DateTime(2022, 5, 8), reader.GetValue(1));
+                    Assert.AreEqual(new DateTime(2022, 5, 8, 12, 35, 0), reader.GetValue(2));
+                    Assert.AreEqual(new DateTime(2022, 5, 8, 12, 35, 29, 123), reader.GetValue(3));
+                    Assert.AreEqual(new DateTime(2022, 5, 8, 12, 35, 29) + TimeSpan.FromTicks(1234567), reader.GetValue(4));
+                    Assert.AreEqual(new DateTimeOffset(new DateTime(2022, 5, 8, 12, 35, 29) + TimeSpan.FromTicks(1234567), new TimeSpan(12, 15, 0)), reader.GetValue(5));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("datetime")]
+        [DataRow("smalldatetime")]
+        public void DateTimeToNumeric(string type)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+declare @dt {type} = '2024-10-04 12:01:00'
+select cast(@dt as float), cast(@dt as int)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(45567.500694444439, reader.GetDouble(0));
+                    Assert.AreEqual(45568, reader.GetInt32(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("year", 2007)]
+        [DataRow("yyyy", 2007)]
+        [DataRow("yy", 2007)]
+        [DataRow("quarter", 4)]
+        [DataRow("qq", 4)]
+        [DataRow("q", 4)]
+        [DataRow("month", 10)]
+        [DataRow("mm", 10)]
+        [DataRow("m", 10)]
+        [DataRow("dayofyear", 303)]
+        [DataRow("dy", 303)]
+        [DataRow("y", 303)]
+        [DataRow("day", 30)]
+        [DataRow("dd", 30)]
+        [DataRow("d", 30)]
+        [DataRow("week", 44)]
+        [DataRow("wk", 44)]
+        [DataRow("ww", 44)]
+        [DataRow("weekday", 3)]
+        [DataRow("dw", 3)]
+        [DataRow("hour", 12)]
+        [DataRow("hh", 12)]
+        [DataRow("minute", 15)]
+        [DataRow("n", 15)]
+        [DataRow("second", 32)]
+        [DataRow("ss", 32)]
+        [DataRow("s", 32)]
+        [DataRow("millisecond", 123)]
+        [DataRow("ms", 123)]
+        [DataRow("microsecond", 123456)]
+        [DataRow("mcs", 123456)]
+        [DataRow("nanosecond", 123456700)]
+        [DataRow("ns", 123456700)]
+        [DataRow("tzoffset", 310)]
+        [DataRow("tz", 310)]
+        [DataRow("iso_week", 44)]
+        [DataRow("isowk", 44)]
+        [DataRow("isoww", 44)]
+        public void DatePartExamples1(string datepart, int expected)
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#return-value
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT DATEPART({datepart}, '2007-10-30 12:15:32.1234567 +05:10')";
+                Assert.AreEqual(expected, cmd.ExecuteScalar());
+            }
+        }
+
+        [DataTestMethod]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#week-and-weekday-datepart-arguments
+        // Using default SET DATEFIRST 7
+        [DataRow("week", "'2007-04-21 '", 16)]
+        [DataRow("weekday", "'2007-04-21 '", 7)]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#default-returned-for-a-datepart-that-isnt-in-a-date-argument
+        [DataRow("year", "'12:10:30.123'", 1900)]
+        [DataRow("month", "'12:10:30.123'", 1)]
+        [DataRow("day", "'12:10:30.123'", 1)]
+        [DataRow("dayofyear", "'12:10:30.123'", 1)]
+        [DataRow("weekday", "'12:10:30.123'", 2)]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#fractional-seconds
+        [DataRow("millisecond", "'00:00:01.1234567'", 123)]
+        [DataRow("microsecond", "'00:00:01.1234567'", 123456)]
+        [DataRow("nanosecond", "'00:00:01.1234567'", 123456700)]
+        // https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16#examples
+        [DataRow("year", "0", 1900)]
+        [DataRow("month", "0", 1)]
+        [DataRow("day", "0", 1)]
+        public void DatePartExamples2(string datepart, string date, int expected)
+        {
+            // Assorted examples from https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql?view=sql-server-ver16
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT DATEPART({datepart}, {date})";
+                Assert.AreEqual(expected, cmd.ExecuteScalar());
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("date", "day")]
+        [DataRow("smalldatetime", "hour")]
+        [DataRow("datetime", "hour")]
+        [DataRow("datetime2", "hour")]
+        [DataRow("datetimeoffset", "hour")]
+        [DataRow("time", "hour")]
+        [DataRow("varchar(100)", "hour")]
+        public void DateAddReturnsOriginalDataType(string type, string datePart)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+DECLARE @dt {type} = '2024-10-04 12:01:02';
+SELECT DATEADD({datePart}, 1, @dt);" ;
+
+                if (type == "varchar(100)")
+                    type = "datetime";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+
+                    Assert.AreEqual(type, schema.Rows[0]["DataTypeName"]);
+
+                    Assert.IsTrue(reader.Read());
+                    
+                    switch (type)
+                    {
+                        case "date":
+                            Assert.AreEqual(new DateTime(2024, 10, 5), reader.GetValue(0));
+                            break;
+
+                        case "smalldatetime":
+                            Assert.AreEqual(new DateTime(2024, 10, 4, 13, 1, 0), reader.GetValue(0));
+                            break;
+
+                        case "datetime":
+                        case "datetime2":
+                            Assert.AreEqual(new DateTime(2024, 10, 4, 13, 1, 2), reader.GetValue(0));
+                            break;
+
+                        case "datetimeoffset":
+                            Assert.AreEqual(new DateTimeOffset(2024, 10, 4, 13, 1, 2, TimeSpan.Zero), reader.GetValue(0));
+                            break;
+
+                        case "time":
+                            Assert.AreEqual(new TimeSpan(13, 1, 2), reader.GetValue(0));
+                            break;
+                    }
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("date", "month")]
+        [DataRow("smalldatetime", "hour")]
+        [DataRow("datetime", "hour")]
+        [DataRow("datetime2", "hour")]
+        [DataRow("datetimeoffset", "hour")]
+        [DataRow("time", "hour")]
+        [DataRow("varchar(100)", "hour")]
+        public void DateTruncReturnsOriginalDataType(string type, string datePart)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+DECLARE @dt {type} = '2024-10-04 12:01:02';
+SELECT DATETRUNC({datePart}, @dt);";
+
+                if (type == "varchar(100)")
+                    type = "datetime2";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+
+                    Assert.AreEqual(type, schema.Rows[0]["DataTypeName"]);
+
+                    Assert.IsTrue(reader.Read());
+
+                    switch (type)
+                    {
+                        case "date":
+                            Assert.AreEqual(new DateTime(2024, 10, 1), reader.GetValue(0));
+                            break;
+
+                        case "smalldatetime":
+                            Assert.AreEqual(new DateTime(2024, 10, 4, 12, 0, 0), reader.GetValue(0));
+                            break;
+
+                        case "datetime":
+                        case "datetime2":
+                            Assert.AreEqual(new DateTime(2024, 10, 4, 12, 0, 0), reader.GetValue(0));
+                            break;
+
+                        case "datetimeoffset":
+                            Assert.AreEqual(new DateTimeOffset(2024, 10, 4, 12, 0, 0, TimeSpan.Zero), reader.GetValue(0));
+                            break;
+
+                        case "time":
+                            Assert.AreEqual(new TimeSpan(12, 0, 0), reader.GetValue(0));
+                            break;
+                    }
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void DateDiffString()
+        {
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver16#i-finding-difference-between-startdate-and-enddate-as-date-parts-strings
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+-- DOES NOT ACCOUNT FOR LEAP YEARS
+DECLARE @date1 DATETIME, @date2 DATETIME, @result VARCHAR(100);
+DECLARE @years INT, @months INT, @days INT,
+    @hours INT, @minutes INT, @seconds INT, @milliseconds INT;
+
+SET @date1 = '1900-01-01 00:00:00.000'
+SET @date2 = '2018-12-12 07:08:01.123'
+
+SELECT @years = DATEDIFF(yy, @date1, @date2)
+IF DATEADD(yy, -@years, @date2) < @date1 
+SELECT @years = @years-1
+SET @date2 = DATEADD(yy, -@years, @date2)
+
+SELECT @months = DATEDIFF(mm, @date1, @date2)
+IF DATEADD(mm, -@months, @date2) < @date1 
+SELECT @months=@months-1
+SET @date2= DATEADD(mm, -@months, @date2)
+
+SELECT @days=DATEDIFF(dd, @date1, @date2)
+IF DATEADD(dd, -@days, @date2) < @date1 
+SELECT @days=@days-1
+SET @date2= DATEADD(dd, -@days, @date2)
+
+SELECT @hours=DATEDIFF(hh, @date1, @date2)
+IF DATEADD(hh, -@hours, @date2) < @date1 
+SELECT @hours=@hours-1
+SET @date2= DATEADD(hh, -@hours, @date2)
+
+SELECT @minutes=DATEDIFF(mi, @date1, @date2)
+IF DATEADD(mi, -@minutes, @date2) < @date1 
+SELECT @minutes=@minutes-1
+SET @date2= DATEADD(mi, -@minutes, @date2)
+
+SELECT @seconds=DATEDIFF(s, @date1, @date2)
+IF DATEADD(s, -@seconds, @date2) < @date1 
+SELECT @seconds=@seconds-1
+SET @date2= DATEADD(s, -@seconds, @date2)
+
+SELECT @milliseconds=DATEDIFF(ms, @date1, @date2)
+
+SELECT @result= ISNULL(CAST(NULLIF(@years,0) AS VARCHAR(10)) + ' years,','')
+     + ISNULL(' ' + CAST(NULLIF(@months,0) AS VARCHAR(10)) + ' months,','')    
+     + ISNULL(' ' + CAST(NULLIF(@days,0) AS VARCHAR(10)) + ' days,','')
+     + ISNULL(' ' + CAST(NULLIF(@hours,0) AS VARCHAR(10)) + ' hours,','')
+     + ISNULL(' ' + CAST(@minutes AS VARCHAR(10)) + ' minutes and','')
+     + ISNULL(' ' + CAST(@seconds AS VARCHAR(10)) 
+     + CASE
+            WHEN @milliseconds > 0
+                THEN '.' + CAST(@milliseconds AS VARCHAR(10)) 
+            ELSE ''
+       END 
+     + ' seconds','')
+
+SELECT @result";
+
+                var actual = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("118 years, 11 months, 11 days, 7 hours, 8 minutes and 1.123 seconds", actual);
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("datetimeoffset", ".1234567")]
+        [DataRow("datetimeoffset(4)", ".1235")]
+        [DataRow("datetimeoffset(0)", "")]
+        public void DateTimeOffsetToString(string type, string suffix)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT CAST(CAST('2024-10-04 12:01:02.1234567 +05:10' AS {type}) AS VARCHAR(100))";
+
+                var actual = (string)cmd.ExecuteScalar();
+                Assert.AreEqual($"2024-10-04 12:01:02{suffix} +05:10", actual);
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("mdy", "2003-01-02")]
+        [DataRow("dmy", "2003-02-01")]
+        [DataRow("ymd", "2001-02-03")]
+        [DataRow("ydm", "2001-03-02")]
+        [DataRow("myd", "2002-01-03")]
+        [DataRow("dym", "2002-03-01")]
+        public void SetDataFormat(string format, string expected)
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SET DATEFORMAT {format};
+SELECT CAST('01/02/03' AS DATETIME)";
+
+                var actual = (DateTime)cmd.ExecuteScalar();
+                Assert.AreEqual(DateTime.ParseExact(expected, "yyyy-MM-dd", CultureInfo.InvariantCulture), actual);
+            }
+        }
+
+        [TestMethod]
+        public void ErrorNumberPersistedBetweenExecutions()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            {
+                using (var cmd = con.CreateCommand())
+                {
+                    try
+                    {
+                        cmd.CommandText = "SELECT 1/0";
+                        cmd.ExecuteScalar();
+                        Assert.Fail();
+                    }
+                    catch (Sql4CdsException ex)
+                    {
+                        if (ex.Number != 8134)
+                            Assert.Fail();
+                    }
+                }
+
+                using (var cmd = con.CreateCommand())
+                {
+                    // Error should be persisted in the connection session from the previous command
+                    cmd.CommandText = "SELECT @@ERROR";
+                    var error = (int)cmd.ExecuteScalar();
+                    Assert.AreEqual(8134, error);
+                }
+
+                using (var cmd = con.CreateCommand())
+                {
+                    // Error should be reset by the previous execution
+                    cmd.CommandText = "SELECT @@ERROR";
+                    var error = (int)cmd.ExecuteScalar();
+                    Assert.AreEqual(0, error);
+                }
+            }
+        }
     }
 }

@@ -1,17 +1,12 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Text;
-using System.Xml;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -21,8 +16,9 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly Sql4CdsCommand _command;
         private readonly IQueryExecutionOptions _options;
         private readonly CommandBehavior _behavior;
-        private readonly Dictionary<string, DataTypeReference> _parameterTypes;
-        private readonly Dictionary<string, INullable> _parameterValues;
+        private readonly LayeredDictionary<string, DataTypeReference> _parameterTypes;
+        private readonly LayeredDictionary<string, INullable> _parameterValues;
+        private readonly Stack<Sql4CdsError> _errorDetails;
         private Dictionary<string, int> _labelIndexes;
         private int _recordsAffected;
         private int _instructionPointer;
@@ -32,7 +28,6 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _rows;
         private int _resultSetsReturned;
         private bool _closed;
-        private Stack<Sql4CdsError> _errorDetails;
         
         public Sql4CdsDataReader(Sql4CdsCommand command, IQueryExecutionOptions options, CommandBehavior behavior)
         {
@@ -42,14 +37,15 @@ namespace MarkMpn.Sql4Cds.Engine
             _behavior = behavior;
             _recordsAffected = -1;
 
-            _parameterTypes = ((Sql4CdsParameterCollection)command.Parameters).GetParameterTypes();
-            _parameterValues = ((Sql4CdsParameterCollection)command.Parameters).GetParameterValues();
+            _parameterTypes = new LayeredDictionary<string, DataTypeReference>(
+                _connection.Session.GlobalVariableTypes,
+                ((Sql4CdsParameterCollection)command.Parameters).GetParameterTypes(),
+                new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase));
 
-            foreach (var paramType in _connection.GlobalVariableTypes)
-                _parameterTypes[paramType.Key] = paramType.Value;
-
-            foreach (var paramValue in _connection.GlobalVariableValues)
-                _parameterValues[paramValue.Key] = paramValue.Value;
+            _parameterValues = new LayeredDictionary<string, INullable>(
+                _connection.Session.GlobalVariableValues,
+                ((Sql4CdsParameterCollection)command.Parameters).GetParameterValues(),
+                new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase));
 
             _errorDetails = new Stack<Sql4CdsError>();
 
@@ -57,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Close();
         }
 
-        internal Dictionary<string, INullable> ParameterValues => _parameterValues;
+        internal IDictionary<string, INullable> ParameterValues => _parameterValues;
 
         private Dictionary<string, int> LabelIndexes
         {
@@ -75,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private bool ExecuteWithExceptionHandling(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, INullable> parameterValues)
+        private bool ExecuteWithExceptionHandling(LayeredDictionary<string, DataTypeReference> parameterTypes, LayeredDictionary<string, INullable> parameterValues)
         {
             while (true)
             {
@@ -109,10 +105,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, INullable> parameterValues)
+        private bool Execute(LayeredDictionary<string, DataTypeReference> parameterTypes, LayeredDictionary<string, INullable> parameterValues)
         {
             IRootExecutionPlanNode logNode = null;
-            var context = new NodeExecutionContext(_connection.DataSources, _options, parameterTypes, parameterValues, msg => _connection.OnInfoMessage(logNode, msg));
+            var context = new NodeExecutionContext(_connection.Session, _options, parameterTypes, parameterValues, msg => _connection.OnInfoMessage(logNode, msg));
             context.Error = _errorDetails.FirstOrDefault();
 
             try
@@ -296,11 +292,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     SetErrorLineNumbers(sqlErr, _command.Plan[_instructionPointer]);
                     throw sqlErr;
                 }
-            }
-            finally
-            {
-                foreach (var paramName in _connection.GlobalVariableValues.Keys.ToArray())
-                    _connection.GlobalVariableValues[paramName] = parameterValues[paramName];
             }
 
             if (_options.CancellationToken.IsCancellationRequested)

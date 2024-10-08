@@ -45,6 +45,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public ColumnOrdering ColumnOrdering => _options.ColumnOrdering;
 
+        public event EventHandler PrimaryDataSourceChanged
+        {
+            add
+            {
+                _options.PrimaryDataSourceChanged += value;
+            }
+
+            remove
+            {
+                _options.PrimaryDataSourceChanged -= value;
+            }
+        }
+
         public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
             _options.ConfirmDelete(e);

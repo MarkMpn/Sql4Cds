@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 using (_timer.Run())
                 {
-                    if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                    if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                         throw new QueryExecutionException("Missing datasource " + DataSource);
 
 #if NETCOREAPP

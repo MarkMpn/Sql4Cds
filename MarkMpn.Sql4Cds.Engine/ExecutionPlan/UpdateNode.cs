@@ -98,7 +98,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             UseLegacyUpdateMessages = GetUseLegacyUpdateMessages(context, hints);
 
-            return base.FoldQuery(context, hints);
+            var result = base.FoldQuery(context, hints);
+
+            if (result.Length != 1 || result[0] != this)
+                return result;
+
+            // If we don't need to use any of the original values and we're filtering by ID we can bypass reading
+            // the record to update
+            if (ColumnMappings.Values.All(m => m.OldValueColumn == null))
+            {
+                var dataSource = context.Session.DataSources[DataSource];
+                var meta = dataSource.Metadata[LogicalName];
+
+                var requiredColumns = ColumnMappings
+                    .Select(kvp => kvp.Value.NewValueColumn)
+                    .Union(new[] { PrimaryIdSource })
+                    .ToArray();
+
+                FoldIdsToConstantScan(context, hints, LogicalName, requiredColumns);
+            }
+
+            return new[] { this };
         }
 
         private bool GetUseLegacyUpdateMessages(NodeCompilationContext context, IList<OptimizerHint> queryHints)
@@ -120,15 +140,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
                 EntityMetadata meta;
                 Dictionary<string, AttributeMetadata> attributes;
-                Dictionary<string, Func<Entity, object>> newAttributeAccessors;
-                Dictionary<string, Func<Entity, object>> oldAttributeAccessors;
-                Func<Entity, object> primaryIdAccessor;
+                Dictionary<string, Func<ExpressionExecutionContext, object>> newAttributeAccessors;
+                Dictionary<string, Func<ExpressionExecutionContext, object>> oldAttributeAccessors;
+                Func<ExpressionExecutionContext, object> primaryIdAccessor;
+                var eec = new ExpressionExecutionContext(context);
 
                 using (_timer.Run())
                 {
@@ -213,8 +234,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         meta,
                         entity =>
                         {
-                            var preImage = ExtractEntity(entity, meta, attributes, oldAttributeAccessors, primaryIdAccessor);
-                            var update = ExtractEntity(entity, meta, attributes, newAttributeAccessors, primaryIdAccessor);
+                            eec.Entity = entity;
+                            var preImage = ExtractEntity(eec, meta, attributes, oldAttributeAccessors, primaryIdAccessor);
+                            var update = ExtractEntity(eec, meta, attributes, newAttributeAccessors, primaryIdAccessor);
 
                             var requests = new OrganizationRequestCollection();
 
@@ -568,9 +590,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new OptionSetValue((int)((StateOptionMetadata)stateCode).DefaultStatus);
         }
 
-        private Entity ExtractEntity(Entity entity, EntityMetadata meta, Dictionary<string, AttributeMetadata> attributes, Dictionary<string, Func<Entity, object>> newAttributeAccessors, Func<Entity, object> primaryIdAccessor)
+        private Entity ExtractEntity(ExpressionExecutionContext context, EntityMetadata meta, Dictionary<string, AttributeMetadata> attributes, Dictionary<string, Func<ExpressionExecutionContext, object>> newAttributeAccessors, Func<ExpressionExecutionContext, object> primaryIdAccessor)
         {
-            var update = new Entity(LogicalName, (Guid)primaryIdAccessor(entity));
+            var update = new Entity(LogicalName, (Guid)primaryIdAccessor(context));
             
             foreach (var attributeAccessor in newAttributeAccessors)
             {
@@ -582,14 +604,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
                     continue;
 
-                var value = attributeAccessor.Value(entity);
+                var value = attributeAccessor.Value(context);
 
                 update[attr.LogicalName] = value;
             }
 
             // Special case for activitypointer - need to set the specific activity type code
             if (LogicalName == "activitypointer")
-                update.LogicalName = entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"].OldValueColumn).Value;
+                update.LogicalName = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"].OldValueColumn).Value;
 
             return update;
         }

@@ -21,21 +21,21 @@ namespace MarkMpn.Sql4Cds.Engine
         private NodeCompilationContext _nodeContext;
         private Dictionary<string, AliasNode> _cteSubplans;
 
-        public ExecutionPlanBuilder(IEnumerable<DataSource> dataSources, IQueryExecutionOptions options)
+        public ExecutionPlanBuilder(SessionContext session, IQueryExecutionOptions options)
         {
-            DataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
+            Session = session;
             Options = options;
 
-            if (!DataSources.ContainsKey(Options.PrimaryDataSource))
+            if (!Session.DataSources.ContainsKey(Options.PrimaryDataSource))
                 throw new ArgumentOutOfRangeException(nameof(options), "Primary data source " + options.PrimaryDataSource + " not found");
 
             EstimatedPlanOnly = true;
         }
 
         /// <summary>
-        /// The connections that will be used by this conversion
+        /// The session that the query will be executed in
         /// </summary>
-        public IDictionary<string, DataSource> DataSources { get; }
+        public SessionContext Session { get; }
 
         /// <summary>
         /// Indicates how the query will be executed
@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public Action<Sql4CdsError> Log { get; set; }
 
-        private DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
+        private DataSource PrimaryDataSource => Session.DataSources[Options.PrimaryDataSource];
 
         /// <summary>
         /// Builds the execution plans for a SQL command
@@ -65,22 +65,19 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             // Take a copy of the defined parameters so we can add more while we're building the query without
             // affecting the original collection until the query is actually run
-            var parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
-            _staticContext = new ExpressionCompilationContext(DataSources, Options, parameterTypes, null, null);
-            _nodeContext = new NodeCompilationContext(DataSources, Options, parameterTypes, Log);
+            var localParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
 
             if (parameters != null)
             {
                 foreach (var param in parameters)
-                    parameterTypes[param.Key] = param.Value;
+                    localParameterTypes[param.Key] = param.Value;
             }
 
             // Add in standard global variables
-            parameterTypes["@@IDENTITY"] = DataTypeHelpers.EntityReference;
-            parameterTypes["@@ROWCOUNT"] = DataTypeHelpers.Int;
-            parameterTypes["@@SERVERNAME"] = DataTypeHelpers.NVarChar(100, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
-            parameterTypes["@@VERSION"] = DataTypeHelpers.NVarChar(Int32.MaxValue, DataSources[Options.PrimaryDataSource].DefaultCollation, CollationLabel.CoercibleDefault);
-            parameterTypes["@@ERROR"] = DataTypeHelpers.Int;
+            var parameterTypes = new LayeredDictionary<string, DataTypeReference>(Session.GlobalVariableTypes, localParameterTypes);
+
+            _staticContext = new ExpressionCompilationContext(Session, Options, parameterTypes, null, null);
+            _nodeContext = new NodeCompilationContext(Session, Options, parameterTypes, Log);
 
             var queries = new List<IRootExecutionPlanNodeInternal>();
 
@@ -96,11 +93,11 @@ namespace MarkMpn.Sql4Cds.Engine
             var hintValidator = new OptimizerHintValidatingVisitor(false);
             fragment.Accept(hintValidator);
 
-            if (hintValidator.TdsCompatible && TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
+            if (hintValidator.TdsCompatible && TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource.Connection))
             {
-                using (var con = DataSources[Options.PrimaryDataSource].Connection == null ? null : TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
+                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource.Connection))
                 {
-                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata);
+                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata);
                     fragment.Accept(tdsEndpointCompatibilityVisitor);
 
                     if (tdsEndpointCompatibilityVisitor.IsCompatible && !tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
@@ -130,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
             script.Accept(new ExplicitCollationVisitor());
-            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, parameterTypes, !EstimatedPlanOnly, _nodeContext.Log);
+            var optimizer = new ExecutionPlanOptimizer(Session, Options, parameterTypes, !EstimatedPlanOnly, _nodeContext.Log);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -557,6 +554,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = ConvertThrowStatement(@throw);
             else if (statement is RaiseErrorStatement raiserror)
                 plans = ConvertRaiseErrorStatement(raiserror);
+            else if (statement is SetCommandStatement setCommand)
+                plans = ConvertSetCommandStatement(setCommand);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(statement, statement.GetType().Name.Replace("Statement", "").ToUpperInvariant()));
 
@@ -581,6 +580,27 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return output.ToArray();
+        }
+
+        private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)
+        {
+            return setCommand.Commands
+                .Select(c => ConvertSetCommand(c))
+                .ToArray();
+        }
+
+        private IDmlQueryExecutionPlanNode ConvertSetCommand(SetCommand setCommand)
+        {
+            if (setCommand is GeneralSetCommand cmd)
+            {
+                switch (cmd.CommandType)
+                {
+                    case GeneralSetCommandType.DateFormat:
+                        return new SetDateFormatNode(cmd.Parameter);
+                }
+            }
+
+            throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(setCommand, setCommand.ToNormalizedSql()));
         }
 
         private SelectNode ConvertRecursiveCTEQuery(QueryExpression queryExpression, INodeSchema anchorSchema, CteValidatorVisitor cteValidator, Dictionary<string, string> outerReferences)
@@ -1376,8 +1396,8 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var databaseName = schemaObject.DatabaseIdentifier?.Value ?? Options.PrimaryDataSource;
             
-            if (!DataSources.TryGetValue(databaseName, out var dataSource))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(schemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n* ", DataSources.Keys.OrderBy(k => k))}" };
+            if (!Session.DataSources.TryGetValue(databaseName, out var dataSource))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(schemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n* ", Session.DataSources.Keys.OrderBy(k => k))}" };
 
             return dataSource;
         }
@@ -1717,8 +1737,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (deleteTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
-            if (!DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+            if (!Session.DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
 
             ValidateDMLSchema(deleteTarget.Target, true);
 
@@ -2061,8 +2081,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (updateTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
-            if (!DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+            if (!Session.DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
 
             ValidateDMLSchema(updateTarget.Target, false);
 
@@ -2607,11 +2627,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNodeInternal ConvertSelectStatement(SelectStatement select)
         {
-            if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
+            if (TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource.Connection))
             {
-                using (var con = DataSources[Options.PrimaryDataSource].Connection == null ? null : TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
+                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource.Connection))
                 {
-                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata, false);
+                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata, false);
                     select.Accept(tdsEndpointCompatibilityVisitor);
 
                     // Remove any custom optimizer hints
@@ -2627,7 +2647,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         var sql = new SqlNode
                         {
                             DataSource = Options.PrimaryDataSource,
-                            Sql = select.ToSql()
+                            Sql = select.ToSql(),
+                            SelectStatement = select
                         };
 
                         var variables = new VariableCollectingVisitor();
@@ -3259,7 +3280,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // We need the inner list to be distinct to avoid creating duplicates during the join
-                    var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
+                    var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(Session, Options, parameters, Log));
                     if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                     {
                         innerQuery.Source = new DistinctNode
@@ -3374,7 +3395,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var innerContext = new NodeCompilationContext(context, parameters);
             var references = new Dictionary<string, string>();
             var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-            var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(DataSources, Options, parameters, Log));
+            var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(Session, Options, parameters, Log));
             var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
 
             // Create the join
@@ -4494,8 +4515,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (outerKey == null)
                 return false;
 
-            var outerSchema = node.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
-            var innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
+            var outerSchema = node.GetSchema(new NodeCompilationContext(Session, Options, null, Log));
+            var innerSchema = subNode.GetSchema(new NodeCompilationContext(Session, Options, null, Log));
 
             if (!outerSchema.ContainsColumn(outerKey, out outerKey) ||
                 !innerSchema.ContainsColumn(innerKey, out innerKey))
@@ -4568,7 +4589,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (semiJoin)
             {
                 // Regenerate the schema after changing the alias
-                innerSchema = subNode.GetSchema(new NodeCompilationContext(DataSources, Options, null, Log));
+                innerSchema = subNode.GetSchema(new NodeCompilationContext(Session, Options, null, Log));
 
                 if (innerSchema.PrimaryKey != rightAttribute.GetColumnName() && !(merge.RightSource is DistinctNode))
                 {

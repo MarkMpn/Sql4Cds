@@ -138,6 +138,12 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(1001, type, (SqlInt32)type.StartLine, (SqlInt32)precision);
         }
 
+        internal static Sql4CdsError InvalidScale(SqlDataTypeReference type, int scaleParamIndex)
+        {
+            var precision = Int32.Parse(type.Parameters[scaleParamIndex].Value);
+            return Create(1002, type, (SqlInt32)type.StartLine, (SqlInt32)precision);
+        }
+
         internal static Sql4CdsError ArithmeticOverflow(DataTypeReference sourceType, DataTypeReference targetType, TSqlFragment fragment)
         {
             return Create(8115, fragment, GetTypeName(sourceType), GetTypeName(targetType));
@@ -226,6 +232,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError ConversionFailed(DataTypeReference sourceType, Literal sourceValue, DataTypeReference targetType)
         {
             return Create(245, sourceValue, Collation.USEnglish.ToSqlString(GetTypeName(sourceType)), (SqlInt32)sourceValue.Value.Length, Collation.USEnglish.ToSqlString(sourceValue.Value), Collation.USEnglish.ToSqlString(GetTypeName(targetType)));
+        }
+
+        internal static Sql4CdsError ConversionOutOfRange(DataTypeReference sourceType, DataTypeReference targetType)
+        {
+            return Create(242, sourceType, Collation.USEnglish.ToSqlString(GetTypeName(sourceType)), Collation.USEnglish.ToSqlString(GetTypeName(targetType)));
         }
 
         internal static Sql4CdsError CollationConflict(TSqlFragment fragment, Collation source, Collation target, string operationName)
@@ -778,6 +789,26 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError InvalidProcedureParameterType(TSqlFragment fragment, string parameter, string type)
         {
             return Create(214, fragment, parameter, type);
+        }
+
+        internal static Sql4CdsError InvalidDatePart(TSqlFragment fragment, string part, string function, DataTypeReference dataType)
+        {
+            return Create(9810, fragment, (SqlInt32)part.Length, Collation.USEnglish.ToSqlString(part), (SqlInt32)function.Length, Collation.USEnglish.ToSqlString(function), Collation.USEnglish.ToSqlString(GetTypeName(dataType)));
+        }
+
+        internal static Sql4CdsError AdditionOverflow(TSqlFragment fragment, DataTypeReference type)
+        {
+            return Create(517, fragment, Collation.USEnglish.ToSqlString(GetTypeName(type)));
+        }
+
+        internal static Sql4CdsError UnsupportedDatePart(TSqlFragment fragment, string part, string function)
+        {
+            return Create(9806, fragment, (SqlInt32)part.Length, Collation.USEnglish.ToSqlString(part), (SqlInt32)function.Length, Collation.USEnglish.ToSqlString(function));
+        }
+
+        internal static Sql4CdsError InvalidDateFormat(TSqlFragment fragment, string format)
+        {
+            return Create(2741, fragment, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
         }
 
         private static string GetTypeName(DataTypeReference type)

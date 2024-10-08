@@ -24,12 +24,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="parameterTypes">The names and types of the parameters that are available to the query</param>
         /// <param name="log">A callback function to log messages</param>
         public NodeCompilationContext(
-            IDictionary<string, DataSource> dataSources,
+            SessionContext session,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
             Action<Sql4CdsError> log)
         {
-            DataSources = dataSources;
+            Session = session;
             Options = options;
             ParameterTypes = parameterTypes;
             GlobalCalculations = new NestedLoopNode
@@ -58,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine
             NodeCompilationContext parentContext,
             IDictionary<string, DataTypeReference> parameterTypes)
         {
-            DataSources = parentContext.DataSources;
+            Session = parentContext.Session;
             Options = parentContext.Options;
             ParameterTypes = parameterTypes;
             GlobalCalculations = parentContext.GlobalCalculations;
@@ -67,9 +67,9 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Returns the data sources that are available to the query
+        /// Returns the connection session the query will be executed in
         /// </summary>
-        public IDictionary<string, DataSource> DataSources { get; }
+        public SessionContext Session { get; }
 
         /// <summary>
         /// Returns the options that the query will be executed with
@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the details of the primary data source
         /// </summary>
-        public DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
+        public DataSource PrimaryDataSource => Session.DataSources[Options.PrimaryDataSource];
 
         /// <summary>
         /// Returns a <see cref="NestedLoopNode"/> which can be used to calculate global values to be injected into other nodes
@@ -142,12 +142,40 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="parameterValues">The current value of each parameter</param>
         /// <param name="log">A callback function to log messages</param>
         public NodeExecutionContext(
-            IDictionary<string, DataSource> dataSources,
+            SessionContext session,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
             IDictionary<string, INullable> parameterValues,
             Action<Sql4CdsError> log)
-            : base(dataSources, options, parameterTypes, log)
+            : base(session, options, parameterTypes, log)
+        {
+            ParameterValues = parameterValues;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NodeExecutionContext"/> based on a <see cref="NodeCompilationContext"/>
+        /// </summary>
+        /// <param name="parentContext">The <see cref="NodeCompilationContext"/> to inherit settings from</param>
+        /// <param name="parameterValues">The values to use for any parameters</param>
+        public NodeExecutionContext(
+            NodeCompilationContext parentContext,
+            IDictionary<string, INullable> parameterValues)
+            : base(parentContext, parentContext.ParameterTypes)
+        {
+            ParameterValues = parameterValues;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NodeExecutionContext"/> based on another context but with additional parameters for a subquery
+        /// </summary>
+        /// <param name="parentContext">The <see cref="NodeExecutionContext"/> to inherit settings from</param>
+        /// <param name="parameterTypes">The names and types of the parameters that are available to the subquery</param>
+        /// <param name="parameterValues">The current value of each parameter</param>
+        public NodeExecutionContext(
+            NodeExecutionContext parentContext,
+            IDictionary<string, DataTypeReference> parameterTypes,
+            IDictionary<string, INullable> parameterValues)
+            : base(parentContext, parameterTypes)
         {
             ParameterValues = parameterValues;
         }
@@ -157,6 +185,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public IDictionary<string, INullable> ParameterValues { get; }
 
+        /// <summary>
+        /// Returns or sets the current error
+        /// </summary>
         public Sql4CdsError Error { get; set; }
     }
 
@@ -174,12 +205,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="schema">The schema of data which is available to the expression</param>
         /// <param name="nonAggregateSchema">The schema of data prior to aggregation</param>
         public ExpressionCompilationContext(
-            IDictionary<string, DataSource> dataSources,
+            SessionContext session,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
             INodeSchema schema,
             INodeSchema nonAggregateSchema)
-            : base(dataSources, options, parameterTypes, null)
+            : base(session, options, parameterTypes, null)
         {
             Schema = schema;
             NonAggregateSchema = nonAggregateSchema;
@@ -195,7 +226,7 @@ namespace MarkMpn.Sql4Cds.Engine
             NodeCompilationContext nodeContext,
             INodeSchema schema,
             INodeSchema nonAggregateSchema)
-            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.Log)
+            : base(nodeContext.Session, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.Log)
         {
             Schema = schema;
             NonAggregateSchema = nonAggregateSchema;
@@ -228,13 +259,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="entity">The values for the current row the expression is being evaluated for</param>
         /// <param name="parameterValues">The current value of each parameter</param>
         public ExpressionExecutionContext(
-            IDictionary<string, DataSource> dataSources,
+            SessionContext session,
             IQueryExecutionOptions options,
             IDictionary<string, DataTypeReference> parameterTypes,
             IDictionary<string, INullable> parameterValues,
             Action<Sql4CdsError> log,
             Entity entity)
-            : base(dataSources, options, parameterTypes, parameterValues, log)
+            : base(session, options, parameterTypes, parameterValues, log)
         {
             Entity = entity;
         }
@@ -249,7 +280,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// representing each row as it is processed.
         /// </remarks>
         public ExpressionExecutionContext(NodeExecutionContext nodeContext)
-            : base(nodeContext.DataSources, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.ParameterValues, nodeContext.Log)
+            : base(nodeContext, nodeContext.ParameterValues)
         {
             Entity = null;
             Error = nodeContext.Error;
@@ -268,7 +299,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// representing each row as it is processed.
         /// </remarks>
         public ExpressionExecutionContext(ExpressionCompilationContext compilationContext)
-            : base(compilationContext.DataSources, compilationContext.Options, compilationContext.ParameterTypes, null, null)
+            : base(compilationContext, null)
         {
             Entity = null;
         }

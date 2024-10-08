@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         class OptionSetProperty
         {
             public string Name { get; set; }
-            public IDictionary<Type, Func<object, object>> Accessors { get; set; }
+            public IDictionary<Type, Func<object, ExpressionExecutionContext, object>> Accessors { get; set; }
             public DataTypeReference SqlType { get; set; }
             public Type NetType { get; set; }
             public IComparable[] DataMemberOrder { get; set; }
@@ -157,10 +157,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var resp = (RetrieveAllOptionSetsResponse)dataSource.Connection.Execute(new RetrieveAllOptionSetsRequest());
+            var eec = new ExpressionExecutionContext(context);
 
             foreach (var optionset in resp.OptionSetMetadata)
             {
@@ -174,7 +175,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    converted[col.Key] = optionsetProp(optionset);
+                    converted[col.Key] = optionsetProp(optionset, eec);
                 }
 
                 yield return converted;

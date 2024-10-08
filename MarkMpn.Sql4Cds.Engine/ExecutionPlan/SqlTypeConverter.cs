@@ -52,8 +52,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static readonly IDictionary<Type, INullable> _nullValues;
         private static readonly CultureInfo _hijriCulture;
-        private static ConcurrentDictionary<string, Func<object, object>> _conversions;
-        private static ConcurrentDictionary<string, Func<INullable, INullable>> _sqlConversions;
+        private static ConcurrentDictionary<string, Func<object, ExpressionExecutionContext, object>> _conversions;
+        private static ConcurrentDictionary<string, Func<INullable, ExpressionExecutionContext, INullable>> _sqlConversions;
         private static Dictionary<Type, Type> _netToSqlTypeConversions;
         private static Dictionary<Type, Func<DataSource, object, DataTypeReference, INullable>> _netToSqlTypeConversionFuncs;
         private static Dictionary<Type, Type> _sqlToNetTypeConversions;
@@ -80,6 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlDate)] = SqlDate.Null,
                 [typeof(SqlDateTime2)] = SqlDateTime2.Null,
                 [typeof(SqlDateTimeOffset)] = SqlDateTimeOffset.Null,
+                [typeof(SqlSmallDateTime)] = SqlSmallDateTime.Null,
                 [typeof(SqlTime)] = SqlTime.Null,
                 [typeof(SqlXml)] = SqlXml.Null,
                 [typeof(SqlVariant)] = SqlVariant.Null
@@ -88,8 +89,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _hijriCulture = (CultureInfo)CultureInfo.GetCultureInfo("ar-JO").Clone();
             _hijriCulture.DateTimeFormat.Calendar = new HijriCalendar();
 
-            _conversions = new ConcurrentDictionary<string, Func<object, object>>();
-            _sqlConversions = new ConcurrentDictionary<string, Func<INullable, INullable>>();
+            _conversions = new ConcurrentDictionary<string, Func<object, ExpressionExecutionContext, object>>();
+            _sqlConversions = new ConcurrentDictionary<string, Func<INullable, ExpressionExecutionContext, INullable>>();
 
             _netToSqlTypeConversions = new Dictionary<Type, Type>();
             _netToSqlTypeConversionFuncs = new Dictionary<Type, Func<DataSource, object, DataTypeReference, INullable>>();
@@ -110,9 +111,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             AddTypeConversion<SqlSingle, float>((ds, v, dt) => v, v => v.Value);
             AddNullableTypeConversion<SqlString, string>((ds, v, dt) => ((SqlDataTypeReferenceWithCollation)dt).Collation.ToSqlString(v), v => v.Value);
             AddTypeConversion<SqlMoney, decimal>((ds, v, dt) => v, v => v.Value);
-            AddTypeConversion<SqlDate, DateTime>((ds, v, dt) => (SqlDateTime)v, v => v.Value);
-            AddTypeConversion<SqlDateTime2, DateTime>((ds, v, dt) => (SqlDateTime)v, v => v.Value);
+            AddTypeConversion<SqlDate, DateTime>((ds, v, dt) => new SqlDate(v), v => v.Value);
+            AddTypeConversion<SqlDateTime2, DateTime>((ds, v, dt) => new SqlDateTime2(v), v => v.Value);
             AddTypeConversion<SqlDateTimeOffset, DateTimeOffset>((ds, v, dt) => new SqlDateTimeOffset(v), v => v.Value);
+            AddTypeConversion<SqlSmallDateTime, DateTime>((ds, v, dt) => new SqlSmallDateTime(v), v => v.Value);
             AddTypeConversion<SqlTime, TimeSpan>((ds, v, dt) => new SqlTime(v), v => v.Value);
             AddNullableTypeConversion<SqlXml, string>((ds, v, dt) => new SqlXml(new MemoryStream(Encoding.GetEncoding("utf-16").GetBytes(v))), v => v.Value);
 
@@ -461,30 +463,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Produces the required expression to convert values to a specific type
         /// </summary>
         /// <param name="expr">The expression that generates the values to convert</param>
+        /// <param name="context">The expression which contains the <see cref="ExpressionExecutionContext"/> the expression will be evaluated in</param>
         /// <param name="to">The type to convert to</param>
-        /// <param name="contextParam">The expression which contains the <see cref="ExpressionExecutionContext"/> the expression will be evaluated in</param>
         /// <returns>An expression to generate values of the required type</returns>
-        public static Expression Convert(Expression expr, Type to)
+        public static Expression Convert(Expression expr, Expression context, Type to)
         {
-            if (expr.Type == typeof(SqlDateTime) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
+            if ((expr.Type == typeof(SqlDateTime) || expr.Type == typeof(SqlSmallDateTime)) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
             {
+                // Conversion from datetime types to numeric types uses the number of days since 1900-01-01
+                Expression converted;
+
+                if (expr.Type == typeof(SqlDateTime))
+                    converted = Expression.Convert(expr, typeof(DateTime));
+                else
+                    converted = Expression.PropertyOrField(expr, nameof(SqlSmallDateTime.Value));
+
+                converted = Expression.PropertyOrField(
+                    Expression.Subtract(
+                        converted,
+                        Expression.Constant(new DateTime(1900, 1, 1))
+                    ),
+                    nameof(TimeSpan.TotalDays)
+                );
+
+                // Round the value when converting from datetime to an integer type, rather than
+                // using the standard double -> int truncation
+                if (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64))
+                {
+                    converted = Expr.Call(() => Math.Round(Expr.Arg<double>()), converted);
+                }
+
+                // Convert the result to a SqlDouble and handle null values
                 expr = Expression.Condition(
                     Expression.PropertyOrField(expr, nameof(SqlDateTime.IsNull)),
                     Expression.Constant(SqlDouble.Null),
-                    Expression.Convert(
-                        Expression.PropertyOrField(
-                            Expression.Subtract(
-                                Expression.Convert(expr, typeof(DateTime)),
-                                Expression.Constant(new DateTime(1900, 1, 1))
-                            ),
-                            nameof(TimeSpan.TotalDays)
-                        ),
-                        typeof(SqlDouble)
+                    Expression.Convert(converted, typeof(SqlDouble)
                     )
                 );
             }
 
-            if ((expr.Type == typeof(SqlBoolean) || expr.Type == typeof(SqlByte) || expr.Type == typeof(SqlInt16) || expr.Type == typeof(SqlInt32) || expr.Type == typeof(SqlInt64) || expr.Type == typeof(SqlDecimal) || expr.Type == typeof(SqlSingle) || expr.Type == typeof(SqlDouble)) && to == typeof(SqlDateTime))
+            if ((expr.Type == typeof(SqlBoolean) || expr.Type == typeof(SqlByte) || expr.Type == typeof(SqlInt16) || expr.Type == typeof(SqlInt32) || expr.Type == typeof(SqlInt64) || expr.Type == typeof(SqlDecimal) || expr.Type == typeof(SqlSingle) || expr.Type == typeof(SqlDouble)) && (to == typeof(SqlDateTime) || to == typeof(SqlSmallDateTime)))
             {
                 expr = Expression.Condition(
                     NullCheck(expr),
@@ -520,6 +538,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (expr.Type == typeof(SqlString) && to == typeof(SqlXml))
                 expr = Expr.Call(() => ParseXml(Expr.Arg<SqlString>()), expr);
 
+            if (expr.Type == typeof(SqlString) && to == typeof(SqlTime))
+                expr = Expr.Call(() => ParseTime(Expr.Arg<SqlString>(), Expr.Arg<ExpressionExecutionContext>()), expr, context);
+
+            if (expr.Type == typeof(SqlString) && to == typeof(SqlDate))
+                expr = Expr.Call(() => ParseDate(Expr.Arg<SqlString>(), Expr.Arg<ExpressionExecutionContext>()), expr, context);
+
+            if (expr.Type == typeof(SqlString) && (to == typeof(SqlDateTime) || to == typeof(SqlSmallDateTime)))
+                expr = Expr.Call(() => ParseDateTime(Expr.Arg<SqlString>(), Expr.Arg<ExpressionExecutionContext>()), expr, context);
+
+            if (expr.Type == typeof(SqlString) && to == typeof(SqlDateTime2))
+                expr = Expr.Call(() => ParseDateTime2(Expr.Arg<SqlString>(), Expr.Arg<ExpressionExecutionContext>()), expr, context);
+
+            if (expr.Type == typeof(SqlString) && to == typeof(SqlDateTimeOffset))
+                expr = Expr.Call(() => ParseDateTimeOffset(Expr.Arg<SqlString>(), Expr.Arg<ExpressionExecutionContext>()), expr, context);
+
             if (expr.Type == typeof(SqlDecimal) && (to == typeof(SqlInt64) || to == typeof(SqlInt32) || to == typeof(SqlInt16) || to == typeof(SqlByte)))
             {
                 // Built-in conversion uses rounding, should use truncation
@@ -548,9 +581,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return expr;
         }
 
-        private static SqlString ApplyCollation(ExpressionExecutionContext context, SqlString sqlString)
+        private static SqlTime ParseTime(SqlString value, ExpressionExecutionContext context)
         {
-            return ApplyCollation(context.PrimaryDataSource.DefaultCollation, sqlString);
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlTime time))
+                throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
+
+            return time;
+        }
+
+        private static SqlDate ParseDate(SqlString value, ExpressionExecutionContext context)
+        {
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDate date))
+                throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
+
+            return date;
+        }
+
+        private static SqlDateTime ParseDateTime(SqlString value, ExpressionExecutionContext context)
+        {
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDateTime dateTime))
+                throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
+
+            return dateTime;
+        }
+
+        private static SqlDateTime2 ParseDateTime2(SqlString value, ExpressionExecutionContext context)
+        {
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDateTime2 dateTime2))
+                throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
+
+            return dateTime2;
+        }
+
+        private static SqlDateTimeOffset ParseDateTimeOffset(SqlString value, ExpressionExecutionContext context)
+        {
+            if (!SqlDateParsing.TryParse(value.Value, context.Session.DateFormat, out SqlDateTimeOffset dateTimeOffset))
+                throw new QueryExecutionException(Sql4CdsError.DateTimeParseError(null));
+
+            return dateTimeOffset;
         }
 
         private static SqlString ApplyCollation(Collation collation, SqlString sqlString)
@@ -565,13 +633,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Produces the required expression to convert values to a specific type
         /// </summary>
         /// <param name="expr">The expression that generates the values to convert</param>
+        /// <param name="context">The expression that provides the current <see cref="ExpressionExecutionContext"/> when the expression is evaluated</param>
         /// <param name="from">The type to convert from</param>
         /// <param name="to">The type to convert to</param>
         /// <param name="style">An optional parameter defining the style of the conversion</param>
         /// <param name="styleType">An optional parameter defining the type of the <paramref name="style"/> expression</param>
         /// <param name="convert">An optional parameter containing the SQL CONVERT() function call to report any errors against</param>
         /// <returns>An expression to generate values of the required type</returns>
-        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, TSqlFragment convert = null, bool throwOnTruncate = false, string table = null, string column = null)
+        public static Expression Convert(Expression expr, Expression context, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, TSqlFragment convert = null, bool throwOnTruncate = false, string table = null, string column = null)
         {
             if (from.IsSameAs(to))
                 return expr;
@@ -605,20 +674,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Special case for conversion to sql_variant
             if (to.IsSameAs(DataTypeHelpers.Variant))
             {
-                var ctor = typeof(SqlVariant).GetConstructor(new[] { typeof(DataTypeReference), typeof(INullable) });
-                return Expression.New(ctor, Expression.Constant(from), Expression.Convert(expr, typeof(INullable)));
+                var ctor = typeof(SqlVariant).GetConstructor(new[] { typeof(DataTypeReference), typeof(INullable), typeof(ExpressionExecutionContext) });
+                return Expression.New(ctor, Expression.Constant(from), Expression.Convert(expr, typeof(INullable)), context);
             }
 
             // Special case for conversion from sql_variant
             if (from.IsSameAs(DataTypeHelpers.Variant))
             {
-                return Expression.Convert(Expr.Call(() => Convert(Expr.Arg<SqlVariant>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), expr, Expression.Constant(to), style), targetType);
+                return Expression.Convert(Expr.Call(() => Convert(Expr.Arg<SqlVariant>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>(), Expr.Arg<ExpressionExecutionContext>()), expr, Expression.Constant(to), style, context), targetType);
             }
 
             var targetCollation = (to as SqlDataTypeReferenceWithCollation)?.Collation;
 
             if (fromSqlType != null && (fromSqlType.SqlDataTypeOption.IsDateTimeType() || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Date || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Time) && targetType == typeof(SqlString))
-                expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<bool>(), Expr.Arg<bool>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), Convert(expr, typeof(SqlDateTime)), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Time), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Date), Expression.Constant(from.GetScale()), Expression.Constant(from), Expression.Constant(to), style, Expression.Constant(targetCollation));
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTimeOffset>(), Expr.Arg<bool>(), Expr.Arg<bool>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), Convert(expr, context, typeof(SqlDateTimeOffset)), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Time), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Date), Expression.Constant(from.GetScale()), Expression.Constant(from), Expression.Constant(to), style, Expression.Constant(targetCollation));
             else if ((expr.Type == typeof(SqlDouble) || expr.Type == typeof(SqlSingle)) && targetType == typeof(SqlString))
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
             else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
@@ -628,7 +697,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (expr.Type != targetType)
             {
-                expr = Convert(expr, targetType);
+                expr = Convert(expr, context, targetType);
 
                 // Handle errors during type conversion
                 var conversionError = Expr.Call(() => Sql4CdsError.ConversionError(Expr.Arg<TSqlFragment>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>()), Expression.Constant(convert, typeof(TSqlFragment)), Expression.Constant(from), Expression.Constant(to));
@@ -731,7 +800,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (toSqlType.Parameters.Count > 0)
                 {
-                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out precision))
+                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out precision) || precision < 0)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
 
                     if (precision < 1)
@@ -739,8 +808,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (toSqlType.Parameters.Count > 1)
                     {
-                        if (!Int32.TryParse(toSqlType.Parameters[1].Value, out scale))
+                        if (!Int32.TryParse(toSqlType.Parameters[1].Value, out scale) || scale < 0)
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
+
+                        if (scale > precision)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidScale(toSqlType, 0)) { Suggestion = "Scale cannot be greater than precision" };
                     }
 
                     if (toSqlType.Parameters.Count > 2)
@@ -754,6 +826,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Expression.Constant(from),
                     Expression.Constant(to),
                     Expression.Constant(convert, typeof(TSqlFragment)));
+            }
+            else if (expr.Type == typeof(SqlDateTime2) || expr.Type == typeof(SqlDateTimeOffset))
+            {
+                // Default scale is 7
+                var scale = 7;
+
+                if (toSqlType.Parameters.Count > 0)
+                {
+                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out scale) || scale < 0)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
+
+                    if (scale > 7)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidScale(toSqlType, 1)) { Suggestion = "Scale cannot be greater than 7" };
+                }
+
+                if (expr.Type == typeof(SqlDateTime2))
+                    expr = Expr.Call(() => ApplyScale(Expr.Arg<SqlDateTime2>(), Expr.Arg<int>()), expr, Expression.Constant(scale));
+                else
+                    expr = Expr.Call(() => ApplyScale(Expr.Arg<SqlDateTimeOffset>(), Expr.Arg<int>()), expr, Expression.Constant(scale));
             }
 
             return expr;
@@ -769,6 +860,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow(from, to, fragment));
             }
+        }
+
+        private static SqlDateTime2 ApplyScale(SqlDateTime2 value, int scale)
+        {
+            if (value.IsNull)
+                return value;
+
+            var ticks = value.Value.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value.AddTicks(-ticks);
+
+            if (scale == 0)
+                return integerSeconds;
+
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return integerSeconds.AddTicks((int)(rounded * TimeSpan.TicksPerSecond));
+        }
+
+        private static SqlDateTimeOffset ApplyScale(SqlDateTimeOffset value, int scale)
+        {
+            if (value.IsNull)
+                return value;
+
+            var ticks = value.Value.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value.AddTicks(-ticks);
+
+            if (scale == 0)
+                return integerSeconds;
+
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return integerSeconds.AddTicks((int)(rounded * TimeSpan.TicksPerSecond));
         }
 
         /// <summary>
@@ -890,7 +1013,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="style">The style to apply</param>
         /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        private static SqlString Convert(SqlDateTime value, bool date, bool time, int timeScale, DataTypeReference fromType, DataTypeReference toType, SqlInt32 style, Collation collation)
+        private static SqlString Convert(SqlDateTimeOffset value, bool date, bool time, int timeScale, DataTypeReference fromType, DataTypeReference toType, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -973,7 +1096,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 9:
                 case 109:
                     dateFormatString = "MMM dd yyyy";
-                    timeFormatString = "hh:mm:ss:" + new string('f', timeScale) + "tt";
+                    timeFormatString = "hh:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
+
+                    timeFormatString += "tt";
                     break;
 
                 case 10:
@@ -1003,12 +1131,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 13:
                 case 113:
                     dateFormatString = "dd MMM yyyy";
-                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
                     break;
 
                 case 14:
                 case 114:
-                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
                     break;
 
                 case 20:
@@ -1021,7 +1155,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 25:
                 case 121:
                     dateFormatString = "yyyy-MM-dd";
-                    timeFormatString = "HH:mm:ss." + new string('f', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += "." + new string('f', timeScale);
                     break;
 
                 case 22:
@@ -1036,24 +1173,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 case 126:
                     dateFormatString = "yyyy-MM-dd";
                     dateTimeSeparator = "T";
-                    timeFormatString = "HH:mm:ss." + new string('F', timeScale);
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += "." + new string('F', timeScale);
                     break;
 
                 case 127:
                     dateFormatString = "yyyy-MM-dd";
                     dateTimeSeparator = "T";
-                    timeFormatString = "HH:mm:ss." + new string('F', timeScale) + "\\Z";
+                    timeFormatString = "HH:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += "." + new string('F', timeScale);
+
+                    timeFormatString += "\\Z";
                     break;
 
                 case 130:
                     dateFormatString = "dd MMMM yyyy";
-                    timeFormatString = "hh:mm:ss:" + new string('f', timeScale) + "tt";
+                    timeFormatString = "hh:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
+
+                    timeFormatString += "tt";
+
                     cultureInfo = _hijriCulture;
                     break;
 
                 case 131:
                     dateFormatString = "dd/MM/yyyy";
-                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale) + "tt";
+                    timeFormatString = "hh:mm:ss";
+
+                    if (timeScale > 0)
+                        timeFormatString += ":" + new string('f', timeScale);
+
+                    timeFormatString += "tt";
+
                     cultureInfo = _hijriCulture;
                     break;
 
@@ -1075,7 +1232,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (time && !String.IsNullOrEmpty(timeFormatString))
+            {
                 formatString += timeFormatString;
+
+                if (fromType is SqlDataTypeReference sqlFromType && sqlFromType.SqlDataTypeOption == SqlDataTypeOption.DateTimeOffset)
+                    formatString += " zzz";
+            }
 
             var formatted = value.Value.ToString(formatString, cultureInfo);
             return collation.ToSqlString(formatted);
@@ -1174,7 +1336,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="targetType">The type to convert to</param>
         /// <param name="style">The style of the conversion</param>
         /// <returns>The underlying value of the variant converted to the target type</returns>
-        private static INullable Convert(SqlVariant variant, DataTypeReference targetType, SqlInt32 style)
+        private static INullable Convert(SqlVariant variant, DataTypeReference targetType, SqlInt32 style, ExpressionExecutionContext context)
         {
             if (variant.BaseType == null)
                 return GetNullValue(targetType.ToNetType(out _));
@@ -1186,7 +1348,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException(Sql4CdsError.ExplicitConversionNotAllowed(null, variant.BaseType, targetType));
 
             var conversion = GetConversion(variant.BaseType, targetType, style.IsNull ? (int?)null : style.Value);
-            return conversion(variant.Value);
+            return conversion(variant.Value, context);
         }
 
         /// <summary>
@@ -1311,9 +1473,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <typeparam name="T">The type to convert the value to</typeparam>
         /// <param name="value">The value to convert</param>
         /// <returns>The value converted to the requested type</returns>
-        public static T ChangeType<T>(object value)
+        public static T ChangeType<T>(object value, ExpressionExecutionContext context)
         {
-            return (T)ChangeType(value, typeof(T));
+            return (T)ChangeType(value, typeof(T), context);
         }
 
         /// <summary>
@@ -1323,13 +1485,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="value">The value to convert</param>
         /// <param name="type">The type to convert the value to</param>
         /// <returns>The value converted to the requested type</returns>
-        public static object ChangeType(object value, Type type)
+        public static object ChangeType(object value, Type type, ExpressionExecutionContext context)
         {
             if (value != null && value.GetType() == type)
                 return value;
 
             var conversion = GetConversion(value.GetType(), type);
-            return conversion(value);
+            return conversion(value, context);
         }
 
         /// <summary>
@@ -1338,18 +1500,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="sourceType">The type to convert from</param>
         /// <param name="destType">The type to convert to</param>
         /// <returns>A function that converts between the requested types</returns>
-        public static Func<object, object> GetConversion(Type sourceType, Type destType)
+        public static Func<object, ExpressionExecutionContext, object> GetConversion(Type sourceType, Type destType)
         {
             var key = sourceType.FullName + " -> " + destType.FullName;
             return _conversions.GetOrAdd(key, _ => CompileConversion(sourceType, destType));
         }
 
-        private static Func<object, object> CompileConversion(Type sourceType, Type destType)
+        private static Func<object, ExpressionExecutionContext, object> CompileConversion(Type sourceType, Type destType)
         {
             if (sourceType == destType)
-                return (object value) => value;
+                return (object value, ExpressionExecutionContext _) => value;
 
             var param = Expression.Parameter(typeof(object));
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
             var expression = (Expression) Expression.Convert(param, sourceType);
 
             // Special case for converting from string to enum for metadata filters
@@ -1408,14 +1571,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else
             {
-                expression = Convert(expression, destType);
+                expression = Convert(expression, contextParam, destType);
             }
 
             //if (destType == typeof(SqlString))
             //    expression = Expr.Call(() => ApplyCollation(Expr.Arg<ExpressionExecutionContext>(), Expr.Arg<SqlString>()), contextParam, expression);
 
             expression = Expression.Convert(expression, typeof(object));
-            return Expression.Lambda<Func<object,object>>(expression, param).Compile();
+            return Expression.Lambda<Func<object,ExpressionExecutionContext,object>>(expression, param, contextParam).Compile();
         }
 
         /// <summary>
@@ -1425,7 +1588,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="destType">The type to convert to</param>
         /// <param name="style">The style of the converesion</param>
         /// <returns>A function that converts between the requested types</returns>
-        public static Func<INullable, INullable> GetConversion(DataTypeReference sourceType, DataTypeReference destType, int? style = null)
+        public static Func<INullable, ExpressionExecutionContext, INullable> GetConversion(DataTypeReference sourceType, DataTypeReference destType, int? style = null)
         {
             var key = sourceType.ToSql() + " -> " + destType.ToSql();
 
@@ -1443,15 +1606,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return _sqlConversions.GetOrAdd(key, _ => CompileConversion(sourceType, destType, style));
         }
 
-        private static Func<INullable, INullable> CompileConversion(DataTypeReference sourceType, DataTypeReference destType, int? style = null)
+        private static Func<INullable, ExpressionExecutionContext, INullable> CompileConversion(DataTypeReference sourceType, DataTypeReference destType, int? style = null)
         {
             if (sourceType.IsSameAs(destType))
-                return (INullable value) => value;
+                return (INullable value, ExpressionExecutionContext _) => value;
 
             var sourceNetType = sourceType.ToNetType(out _);
             var destNetType = destType.ToNetType(out _);
 
             var param = Expression.Parameter(typeof(INullable));
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
             var expression = (Expression)Expression.Convert(param, sourceNetType);
             var styleExpr = (Expression)null;
             var styleType = (DataTypeReference)null;
@@ -1462,9 +1626,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 styleType = DataTypeHelpers.Int;
             }
 
-            expression = Convert(expression, sourceType, destType, styleExpr, styleType);
+            expression = Convert(expression, contextParam, sourceType, destType, styleExpr, styleType);
             expression = Expression.Convert(expression, typeof(INullable));
-            return Expression.Lambda<Func<INullable, INullable>>(expression, param).Compile();
+            return Expression.Lambda<Func<INullable, ExpressionExecutionContext, INullable>>(expression, param, contextParam).Compile();
         }
 
         /// <summary>

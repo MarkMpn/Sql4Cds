@@ -187,7 +187,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.DateTimeOffset:
-                        _dataType = DataTypeHelpers.DateTimeOffset;
+                        _dataType = DataTypeHelpers.DateTimeOffset(7);
                         break;
 
                     case DbType.Decimal:

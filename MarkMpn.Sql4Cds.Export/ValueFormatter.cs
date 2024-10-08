@@ -48,6 +48,10 @@ namespace MarkMpn.Sql4Cds.Export
                     text = dt.ToString("yyyy-MM-dd HH:mm:ss" + (numericScale == 0 ? "" : ("." + new string('f', numericScale.Value))));
                 }
             }
+            else if (value is DateTimeOffset dto && !localFormatDates)
+            {
+                text = dto.ToString("yyyy-MM-dd HH:mm:ss" + (numericScale == 0 ? "" : ("." + new string('f', numericScale.Value))) + " zzz");
+            }
             else if (value is TimeSpan ts && !localFormatDates)
             {
                 text = ts.ToString("hh\\:mm\\:ss" + (numericScale == 0 ? "" : ("\\." + new string('f', numericScale.Value))));

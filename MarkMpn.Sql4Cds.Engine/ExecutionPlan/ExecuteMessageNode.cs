@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var expr = value.Value.Compile(expressionContext);
                     var sqlConversion = SqlTypeConverter.GetConversion(sourceSqlType, destSqlType);
                     var netConversion = SqlTypeConverter.GetConversion(destSqlType, destNetType);
-                    var conversion = (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => netConversion(sqlConversion(expr(ctx))));
+                    var conversion = (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => netConversion(sqlConversion(expr(ctx), ctx), ctx));
                     if (ValueTypes[value.Key] == typeof(Entity))
                     {
                         var conversionToString = conversion;
@@ -283,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             PagesRetrieved = 0;
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             context.Options.Progress(0, $"Executing {MessageName}...");

@@ -181,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (DataSource == null)
                 return 1;
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Unknown datasource");
 
             return ParallelismHelper.GetMaxDOP(dataSource, context, queryHints);
@@ -235,6 +235,66 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return continueOnError;
         }
 
+        protected void FoldIdsToConstantScan(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns)
+        {
+            if (hints != null && hints.OfType<UseHintList>().Any(hint => hint.Hints.Any(s => s.Value.Equals("NO_DIRECT_DML", StringComparison.OrdinalIgnoreCase))))
+                return;
+
+            // Work out the fields that we should use as the primary key for these records.
+            var dataSource = context.Session.DataSources[DataSource];
+            var targetMetadata = dataSource.Metadata[logicalName];
+            var keyAttributes = new[] { targetMetadata.PrimaryIdAttribute };
+
+            if (targetMetadata.LogicalName == "listmember")
+            {
+                keyAttributes = new[] { "listid", "entityid" };
+            }
+            else if (targetMetadata.IsIntersect == true)
+            {
+                var relationship = targetMetadata.ManyToManyRelationships.Single();
+                keyAttributes = new[] { relationship.Entity1IntersectAttribute, relationship.Entity2IntersectAttribute };
+            }
+            else if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // Elastic tables need the partitionid as part of the primary key
+                keyAttributes = new[] { targetMetadata.PrimaryIdAttribute, "partitionid" };
+            }
+            else if (targetMetadata.LogicalName == "activitypointer")
+            {
+                // Can't do DML operations on base activitypointer table, need to read the record to
+                // find the concrete activity type.
+                return;
+            }
+
+            // Skip any ComputeScalar node that is being used to generate additional values,
+            // unless they reference additional values in the data source
+            var compute = Source as ComputeScalarNode;
+
+            if (compute != null)
+            {
+                if (compute.Columns.Any(c => c.Value.GetColumns().Except(keyAttributes).Any()))
+                    return;
+
+                // Ignore any columns being created by the ComputeScalar node
+                foreach (var col in compute.Columns)
+                    requiredColumns = requiredColumns.Except(new[] { col.Key }).ToArray();
+            }
+
+            if ((compute?.Source ?? Source) is FetchXmlScan fetch)
+            {
+                var folded = fetch.FoldDmlSource(context, hints, logicalName, requiredColumns, keyAttributes);
+
+                if (compute != null)
+                    compute.Source = folded;
+                else
+                    Source = folded;
+            }
+            else if (Source is SqlNode sql)
+            {
+                Source = sql.FoldDmlSource(context, hints, logicalName, requiredColumns, keyAttributes);
+            }
+        }
+
         /// <summary>
         /// Changes the name of source columns
         /// </summary>
@@ -269,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
                 var columnTypes = new ColumnList();
-                var targetDataSource = DataSource == null ? context.PrimaryDataSource : context.DataSources[DataSource];
+                var targetDataSource = DataSource == null ? context.PrimaryDataSource : context.Session.DataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {
@@ -297,7 +357,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         case "smalldatetime": colSqlType = DataTypeHelpers.SmallDateTime; break;
                         case "date": colSqlType = DataTypeHelpers.Date; break;
                         case "time": colSqlType = DataTypeHelpers.Time(scale); break;
-                        case "datetimeoffset": colSqlType = DataTypeHelpers.DateTimeOffset; break;
+                        case "datetimeoffset": colSqlType = DataTypeHelpers.DateTimeOffset(scale); break;
                         case "datetime2": colSqlType = DataTypeHelpers.DateTime2(scale); break;
                         case "decimal": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;
                         case "numeric": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;
@@ -384,13 +444,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <param name="entities">The records that are being mapped</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(DataSource dataSource, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
+        protected Dictionary<string, Func<ExpressionExecutionContext, object>> CompileColumnMappings(DataSource dataSource, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
         {
             var metadata = dataSource.Metadata[logicalName];
             var attributes = metadata.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
 
-            var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
-            var entityParam = Expression.Parameter(typeof(Entity));
+            var attributeAccessors = new Dictionary<string, Func<ExpressionExecutionContext, object>>();
+            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
+            var entityParam = Expression.Property(contextParam, nameof(ExpressionExecutionContext.Entity));
 
             foreach (var mapping in mappings)
             {
@@ -438,7 +499,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             convertedExpr = expr;
                             expr = originalExpr;
-                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(EntityReference));
+                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, contextParam, typeof(EntityReference));
                         }
                         else if (sourceSqlType == DataTypeHelpers.ImplicitIntForNullLiteral)
                         {
@@ -472,13 +533,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     // Normally we want to specify the target type as a logical name
                                     var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, contextParam, sourceTargetType, stringType);
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, contextParam, typeof(string));
                                 }
                             }
 
-                            convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, DataTypeHelpers.UniqueIdentifier);
-                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(Guid));
+                            convertedExpr = SqlTypeConverter.Convert(expr, contextParam, sourceSqlType, DataTypeHelpers.UniqueIdentifier);
+                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, contextParam, typeof(Guid));
                             convertedExpr = Expression.New(
                                 typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
                                 targetExpr,
@@ -490,8 +551,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var partitionIdExpr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(partitionIdColumn));
                             partitionIdExpr = Expression.Convert(partitionIdExpr, schema.Schema[partitionIdColumn].Type.ToNetType(out _));
-                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, schema.Schema[partitionIdColumn].Type, DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit));
-                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, typeof(string));
+                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, contextParam, schema.Schema[partitionIdColumn].Type, DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit));
+                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, contextParam, typeof(string));
                             convertedExpr = Expr.Call(() => CreateElasticEntityReference(Expr.Arg<EntityReference>(), Expr.Arg<string>(), Expr.Arg<IAttributeMetadataCache>()), convertedExpr, partitionIdExpr, Expression.Constant(dataSource.Metadata));
                         }
 
@@ -505,11 +566,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             // Convert to destination SQL type - don't do this if we're converting from an EntityReference to a PartyList so
                             // we don't lose the entity name during the conversion via a string
-                            expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType, throwOnTruncate: true, table: logicalName, column: destAttributeName);
+                            expr = SqlTypeConverter.Convert(expr, contextParam, sourceSqlType, destSqlType, throwOnTruncate: true, table: logicalName, column: destAttributeName);
                         }
 
                         // Convert to final .NET SDK type
-                        convertedExpr = SqlTypeConverter.Convert(expr, destType);
+                        convertedExpr = SqlTypeConverter.Convert(expr, contextParam, destType);
                         
                         if (attr is EnumAttributeMetadata && !(attr is MultiSelectPicklistAttributeMetadata))
                         {
@@ -546,10 +607,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         convertedExpr);
 
                     if (expr.Type.IsValueType)
-                        expr = SqlTypeConverter.Convert(expr, typeof(object));
+                        expr = SqlTypeConverter.Convert(expr, contextParam, typeof(object));
                 }
 
-                attributeAccessors[destAttributeName] = Expression.Lambda<Func<Entity, object>>(expr, entityParam).Compile();
+                attributeAccessors[destAttributeName] = Expression.Lambda<Func<ExpressionExecutionContext, object>>(expr, contextParam).Compile();
             }
 
             return attributeAccessors;

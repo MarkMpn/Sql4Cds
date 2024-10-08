@@ -433,7 +433,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // If the entities are from different virtual entity data providers it's probably not going to work
-            if (!context.DataSources.TryGetValue(leftFetch.DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(leftFetch.DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + leftFetch.DataSource);
 
             if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId != dataSource.Metadata[rightFetch.Entity.name].DataProviderId)
@@ -534,7 +534,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 folded = new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(context, hints);
 
             // We might have previously folded a sort to the FetchXML that is no longer valid as we require custom paging
-            if (leftFetch.RequiresCustomPaging(context.DataSources))
+            if (leftFetch.RequiresCustomPaging(context.Session.DataSources))
                 leftFetch.RemoveSorts();
 
             // We might have previously folded a not-null condition that is no longer required as it is implicit in the join

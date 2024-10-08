@@ -280,16 +280,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             PagesRetrieved = 0;
 
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var schema = GetSchema(context);
+            var eec = new ExpressionExecutionContext(context);
 
             ApplyParameterValues(context);
 
             FindEntityNameGroupings(dataSource.Metadata);
 
-            VerifyFilterValueTypes(Entity.name, Entity.Items, dataSource);
+            VerifyFilterValueTypes(Entity.name, Entity.Items, dataSource, eec);
 
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
@@ -454,14 +455,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void VerifyFilterValueTypes(string entityName, object[] items, DataSource dataSource)
+        private void VerifyFilterValueTypes(string entityName, object[] items, DataSource dataSource, ExpressionExecutionContext context)
         {
             if (items == null)
                 return;
 
             // Check the value(s) supplied for filter values can be converted to the expected types
             foreach (var filter in items.OfType<filter>())
-                VerifyFilterValueTypes(entityName, filter.Items, dataSource);
+                VerifyFilterValueTypes(entityName, filter.Items, dataSource, context);
             
             foreach (var condition in items.OfType<condition>())
             {
@@ -517,17 +518,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var conversion = SqlTypeConverter.GetConversion(DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), attrType);
 
                 if (condition.value != null)
-                    conversion(dataSource.DefaultCollation.ToSqlString(condition.value));
+                    conversion(dataSource.DefaultCollation.ToSqlString(condition.value), context);
 
                 if (condition.Items != null)
                 {
                     foreach (var value in condition.Items)
-                        conversion(dataSource.DefaultCollation.ToSqlString(value.Value));
+                        conversion(dataSource.DefaultCollation.ToSqlString(value.Value), context);
                 }
             }
 
             foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-                VerifyFilterValueTypes(linkEntity.name, linkEntity.Items, dataSource);
+                VerifyFilterValueTypes(linkEntity.name, linkEntity.Items, dataSource, context);
         }
 
         private void AddPagingFilters(filter filter, IQueryExecutionOptions options)
@@ -1019,7 +1020,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var fetchXmlString = FetchXmlString;
@@ -1474,7 +1475,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Move partitionid filter to partitionId parameter
             // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#query-rows-of-an-elastic-table
-            var meta = context.DataSources[DataSource].Metadata[Entity.name];
+            var meta = context.Session.DataSources[DataSource].Metadata[Entity.name];
 
             if (meta.DataProviderId == DataProviders.ElasticDataProvider && Entity.Items != null)
             {
@@ -1700,7 +1701,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // If we've got a semi join link entity that matches to the parent entity by primary key,
             // remove the link entity and move the conditions to the parent entity
-            var dataSource = context.DataSources[DataSource];
+            var dataSource = context.Session.DataSources[DataSource];
             Entity.Items = RemoveIdentitySemiJoinLinkEntities(Entity.name, dataSource.Metadata, Entity.Items);
         }
 
@@ -1981,7 +1982,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var schema = GetSchema(context);
@@ -2060,7 +2061,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Entity.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
             }
 
-            if (RequiresCustomPaging(context.DataSources))
+            if (RequiresCustomPaging(context.Session.DataSources))
             {
                 _pagingFields = new List<KeyValuePair<string, string>>();
                 _lastPageValues = new List<INullable>();
@@ -2085,7 +2086,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            NormalizeAttributes(context.DataSources);
+            NormalizeAttributes(context.Session.DataSources);
             SetDefaultPageSize(context);
         }
 
@@ -2353,10 +2354,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!hasGroups)
                     return RowCountEstimateDefiniteRange.ExactlyOne;
 
-                return EstimateRowsOut(Entity.name, Entity.Items, context.DataSources, 0.4);
+                return EstimateRowsOut(Entity.name, Entity.Items, context.Session.DataSources, 0.4);
             }
 
-            return EstimateRowsOut(Entity.name, Entity.Items, context.DataSources, 1.0);
+            return EstimateRowsOut(Entity.name, Entity.Items, context.Session.DataSources, 1.0);
         }
 
         private bool HasGroups(object[] items)
@@ -2547,6 +2548,95 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override IEnumerable<string> GetVariablesInternal()
         {
             return FindParameterizedConditions().Keys;
+        }
+
+        internal IDataExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns, string[] keyAttributes)
+        {
+            if (Entity.name != logicalName || Entity.Items == null)
+                return this;
+
+            // Can't produce any values except the primary key
+            var requiredAttributes = requiredColumns
+                .Select(col => col.SplitMultiPartIdentifier().Last())
+                .ToArray();
+
+            if (requiredAttributes.Except(keyAttributes).Any())
+                return this;
+
+            if (Entity.GetLinkEntities().Any())
+                return this;
+
+            var filters = Entity.Items.OfType<filter>().ToList();
+
+            if (filters.Count != 1)
+                return this;
+
+            if (!filters[0].Items.All(x => x is condition))
+                return this;
+
+            if (filters[0].Items.Cast<condition>().Any(c => c.ValueOf != null))
+                return this;
+
+            var dataSource = context.Session.DataSources[DataSource];
+            var metadata = dataSource.Metadata[logicalName];
+            var conditions = filters[0].Items.Cast<condition>().ToList();
+            var ecc = new ExpressionCompilationContext(context, null, null);
+            var schema = GetSchema(context);
+            var constantScan = new ConstantScanNode
+            {
+                Alias = Alias
+            };
+
+            for (var i = 0; i < requiredColumns.Length; i++)
+                constantScan.Schema[requiredAttributes[i]] = schema.Schema[requiredColumns[i]];
+
+            // We can handle compound keys, but only if they are all ANDed together
+            if (keyAttributes.Length > 1 && filters[0].type == filterType.and)
+            {
+                var values = new Dictionary<string, ScalarExpression>();
+
+                foreach (var keyAttribute in keyAttributes)
+                {
+                    var condition = conditions.FirstOrDefault(c => c.attribute == keyAttribute);
+                    if (condition == null)
+                        return this;
+
+                    if (condition.@operator != @operator.eq)
+                        return this;
+
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+                    values[condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource);
+                }
+
+                constantScan.Values.Add(values);
+                return constantScan;
+            }
+
+            // We can also handle multiple values for a single key being ORed together
+            else if (keyAttributes.Length == 1 &&
+                conditions.All(c => c.attribute == metadata.PrimaryIdAttribute) &&
+                conditions.All(c => c.@operator == @operator.eq || c.@operator == @operator.@in) &&
+                (conditions.Count == 1 || filters[0].type == filterType.or))
+            {
+                foreach (var condition in conditions)
+                {
+                    var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+
+                    if (condition.@operator == @operator.eq)
+                    {
+                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource) });
+                    }
+                    else if (condition.@operator == @operator.@in)
+                    {
+                        foreach (var value in condition.Items)
+                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(value.Value, value.IsVariable, ecc, dataSource) });
+                    }
+                }
+
+                return constantScan;
+            }
+
+            return this;
         }
 
         public override string ToString()
