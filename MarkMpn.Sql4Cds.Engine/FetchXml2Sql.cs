@@ -435,6 +435,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     || link.linktype == "any" || link.linktype == "not any" || link.linktype == "not all" || link.linktype == "all")
                 {
                     // Build a whole new query for the EXISTS subquery
+                    if (!String.IsNullOrEmpty(link.alias))
+                        aliasToLogicalName[link.alias] = link.name;
+
                     var subqueryFilter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                     var subquery = new QuerySpecification();

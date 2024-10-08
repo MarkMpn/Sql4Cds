@@ -97,6 +97,26 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         }
 
         [TestMethod]
+        public void JoinAlias()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='a'>
+                            <attribute name='name' />
+                        </link-entity>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, a.name FROM contact INNER JOIN account AS a ON contact.parentcustomerid = a.accountid", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
         public void Order()
         {
             var metadata = new AttributeMetadataCache(_service);
@@ -767,6 +787,39 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             Assert.AreEqual(NormalizeWhitespace(@"
                 SELECT fullname FROM contact WHERE (EXISTS( SELECT account.primarycontactid FROM account WHERE account.name = 'Contoso' AND contact.contactid = account.primarycontactid ) OR statecode = '1')"), NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void FilterLinkEntityAnyAlias()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                   <entity name='contact'>
+                      <attribute name='fullname' />
+                      <filter type='or'>
+                         <link-entity name='account'
+                            from='primarycontactid'
+                            to='contactid'
+                            link-type='any'
+                            alias='a'>
+                            <filter type='and'>
+                               <condition attribute='name'
+                                  operator='eq'
+                                  value='Contoso' />
+                            </filter>
+                         </link-entity>
+                         <condition attribute='statecode'
+                            operator='eq'
+                            value='1' />
+                      </filter>
+                   </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual(NormalizeWhitespace(@"
+                SELECT fullname FROM contact WHERE (EXISTS( SELECT a.primarycontactid FROM account AS a WHERE a.name = 'Contoso' AND contact.contactid = a.primarycontactid ) OR statecode = '1')"), NormalizeWhitespace(converted));
         }
 
         [TestMethod]
