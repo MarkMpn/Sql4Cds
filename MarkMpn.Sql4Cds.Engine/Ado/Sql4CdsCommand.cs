@@ -272,7 +272,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                    cmd.CommandText = SqlNode.ApplyCommandBehavior(CommandText, behavior, new NodeExecutionContext(null, _connection.Options, null, null, null));
+                    cmd.CommandText = SqlNode.ApplyCommandBehavior(CommandText, behavior, new NodeExecutionContext(_connection.Session, _connection.Options, null, null, null));
                     var node = new SqlNode { Sql = cmd.CommandText, DataSource = _connection.Database };
                     cmd.StatementCompleted += (_, e) =>
                     {
