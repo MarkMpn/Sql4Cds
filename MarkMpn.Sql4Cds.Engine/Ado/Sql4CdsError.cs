@@ -393,6 +393,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(8169, fragment);
         }
 
+        internal static Sql4CdsError GuidTruncationError(TSqlFragment fragment)
+        {
+            return Create(8170, fragment);
+        }
+
         internal static Sql4CdsError AsJsonRequiresNVarCharMax(DataTypeReference fragment)
         {
             return Create(13618, fragment);

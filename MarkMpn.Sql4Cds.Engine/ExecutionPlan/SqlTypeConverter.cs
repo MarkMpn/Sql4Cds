@@ -764,6 +764,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 errorOnTruncate = _ => Sql4CdsError.ArithmeticOverflow(from, toSqlType, convert);
                             }
+                            else if (sourceType == typeof(SqlGuid) || sourceType == typeof(SqlEntityReference))
+                            {
+                                errorOnTruncate = _ => Sql4CdsError.GuidTruncationError(convert);
+                            }
                             else if (throwOnTruncate)
                             {
                                 errorOnTruncate = truncated => Sql4CdsError.StringTruncation(convert, table, column, truncated);

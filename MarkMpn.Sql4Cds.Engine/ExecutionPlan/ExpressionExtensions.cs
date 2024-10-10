@@ -749,12 +749,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // For decimal types, need to work out the precision and scale of the result depending on the type of operation
             if (type is SqlDataTypeReference sqlTargetType &&
-                (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
-                lhsSqlType is SqlDataTypeReference sqlLhsType &&
-                (sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
-                rhsSqlType is SqlDataTypeReference sqlRhsType &&
-                (sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
+                (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
             {
+                var lhsIsNumeric = lhsSqlType is SqlDataTypeReference sqlLhsType && sqlLhsType.SqlDataTypeOption.IsNumeric();
+                var rhsIsNumeric = rhsSqlType is SqlDataTypeReference sqlRhsType && sqlRhsType.SqlDataTypeOption.IsNumeric();
+
+                if (!lhsIsNumeric && rhsIsNumeric)
+                {
+                    lhs = SqlTypeConverter.Convert(lhs, contextParam, lhsSqlType, rhsSqlType);
+                    lhsSqlType = rhsSqlType;
+                }
+                else if (lhsIsNumeric && !rhsIsNumeric)
+                {
+                    rhs = SqlTypeConverter.Convert(rhs, contextParam, rhsSqlType, lhsSqlType);
+                    rhsSqlType = lhsSqlType;
+                }
+
                 var p1 = lhsSqlType.GetPrecision();
                 var s1 = lhsSqlType.GetScale();
                 var p2 = rhsSqlType.GetPrecision();
