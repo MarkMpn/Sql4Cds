@@ -72,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var aliasToLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             // Link entities can also affect the WHERE clause
-            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
+            BooleanExpression filter = null;
 
             if (entity != null)
             {
@@ -117,6 +117,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // WHERE
+            filter = CombineExpressions(filter, BooleanBinaryExpressionType.And, GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday));
+
             if (filter != null)
             {
                 query.WhereClause = new WhereClause
@@ -639,12 +641,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private static BooleanExpression CombineExpressions(BooleanExpression expr1, BooleanBinaryExpressionType type, BooleanExpression expr2)
         {
+            if (expr1 == null || expr2 == null)
+                return expr1 ?? expr2;
+
             if (expr2 is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
                 expr2 = new BooleanParenthesisExpression { Expression = expr2 };
 
-            if (expr1 == null)
-                return expr2;
-            
             if (expr1 is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != type)
                 expr2 = new BooleanParenthesisExpression { Expression = expr1 };
 

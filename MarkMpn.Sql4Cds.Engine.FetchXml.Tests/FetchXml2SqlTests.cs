@@ -117,6 +117,29 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         }
 
         [TestMethod]
+        public void JoinAliasFilter()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='a'>
+                            <attribute name='name' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='eq' value='data8' entityname='a' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, a.name FROM contact INNER JOIN account AS a ON contact.parentcustomerid = a.accountid WHERE a.name = 'data8'", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
         public void Order()
         {
             var metadata = new AttributeMetadataCache(_service);
