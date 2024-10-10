@@ -2168,6 +2168,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var useStateTransitions = !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
             var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
             var manyToManyRelationship = targetMetadata.IsIntersect == true && targetMetadata.LogicalName != "listmember" ? targetMetadata.ManyToManyRelationships.Single() : null;
+            var minimalUpdates = hints != null && hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("MINIMAL_UPDATES", StringComparison.OrdinalIgnoreCase)));
 
             foreach (var set in update.SetClauses)
             {
@@ -2280,6 +2281,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     existingAttributes.Add("statecode");
                     existingAttributes.Add("statuscode");
                 }
+
+                // If selected, include the existing value of all attributes to avoid excessive updates
+                if (minimalUpdates)
+                    existingAttributes.Add(targetAttrName);
             }
 
             // quote/salesorder/invoice have custom logic for updating closed records, so load in the existing statecode & statuscode fields too
@@ -2428,6 +2433,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add UPDATE
             var updateNode = ConvertSetClause(update.SetClauses, existingAttributes, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, virtualPidAttributes, hints);
             updateNode.StateTransitions = stateTransitions;
+            updateNode.MinimalUpdates = minimalUpdates;
 
             return updateNode;
         }

@@ -75,6 +75,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("Use the legacy update messages for specialized attributes")]
         public bool UseLegacyUpdateMessages { get; set; }
 
+        [Category("Update")]
+        [DisplayName("Minimal Updates")]
+        [Description("Only update attributes that have changed from their current values")]
+        public bool MinimalUpdates { get; set; }
+
         protected override bool IgnoresSomeErrors => true;
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
@@ -393,6 +398,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     update.Attributes.Remove("statecode");
                                     update.Attributes.Remove("statuscode");
+                                }
+
+                                if (MinimalUpdates)
+                                {
+                                    // Remove any attributes from the update target that have the same value in the pre image
+                                    foreach (var attr in update.Attributes.Keys.ToList())
+                                    {
+                                        if (preImage.Contains(attr) && Equals(preImage[attr], update[attr]))
+                                            update.Attributes.Remove(attr);
+                                    }
                                 }
 
                                 if (update.Attributes.Any())
@@ -760,6 +775,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PrimaryIdSource = PrimaryIdSource,
                 StateTransitions = StateTransitions,
                 UseLegacyUpdateMessages = UseLegacyUpdateMessages,
+                MinimalUpdates = MinimalUpdates,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
