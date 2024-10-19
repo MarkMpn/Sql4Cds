@@ -816,6 +816,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(2741, fragment, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
         }
 
+        internal static Sql4CdsError InvalidEntityReferenceType(TSqlFragment fragment, string actual, string required)
+        {
+            return new Sql4CdsError(16, 50001, $"Cannot convert entity reference from {actual} to {required}", fragment);
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

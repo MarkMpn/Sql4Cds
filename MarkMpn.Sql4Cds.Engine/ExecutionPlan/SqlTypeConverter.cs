@@ -223,6 +223,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Check user-defined types are identical
             if (lhsUser != null && rhsUser != null)
             {
+                // We can convert a typed entity reference to an untyped one
+                if (lhsUser.Name.BaseIdentifier.Value.Equals(nameof(DataTypeHelpers.EntityReference), StringComparison.OrdinalIgnoreCase) && rhsUser.Name.BaseIdentifier.Value.Equals(nameof(DataTypeHelpers.EntityReference), StringComparison.OrdinalIgnoreCase))
+                {
+                    if (lhsUser.Parameters.Count == 0)
+                    {
+                        consistent = lhs;
+                        return true;
+                    }
+
+                    if (rhsUser.Parameters.Count == 0)
+                    {
+                        consistent = rhs;
+                        return true;
+                    }
+
+                    if (lhsUser.Parameters.Count == 1 && rhsUser.Parameters.Count == 1 && lhsUser.Parameters[0].Value.Equals(rhsUser.Parameters[0].Value, StringComparison.OrdinalIgnoreCase))
+                    {
+                        consistent = lhs;
+                        return true;
+                    }
+
+                    // We can also make two different typed entity references consistent by down-casting them
+                    // to untyped entity references
+                    consistent = DataTypeHelpers.EntityReference;
+                    return true;
+                }
+
                 if (String.Join(".", lhsUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", rhsUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase))
                 {
                     consistent = lhs;
@@ -234,13 +261,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
-            if (lhsUser != null && !lhsUser.IsSameAs(DataTypeHelpers.EntityReference))
+            if (lhsUser != null && !lhsUser.IsEntityReference())
             {
                 consistent = null;
                 return false;
             }
 
-            if (rhsUser != null && !rhsUser.IsSameAs(DataTypeHelpers.EntityReference))
+            if (rhsUser != null && !rhsUser.IsEntityReference())
             {
                 consistent = null;
                 return false;
@@ -361,13 +388,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Check user-defined types are identical
             if (fromUser != null && toUser != null)
+            {
+                // We can convert a typed entity reference to an untyped one and vice versa,
+                // but not between different types.
+                if (fromUser.Name.BaseIdentifier.Value.Equals(nameof(DataTypeHelpers.EntityReference), StringComparison.OrdinalIgnoreCase) && toUser.Name.BaseIdentifier.Value.Equals(nameof(DataTypeHelpers.EntityReference), StringComparison.OrdinalIgnoreCase))
+                {
+                    if (fromUser.Parameters.Count == 0 || toUser.Parameters.Count == 0)
+                        return true;
+
+                    if (fromUser.Parameters.Count == 1 && toUser.Parameters.Count == 1)
+                        return fromUser.Parameters[0].Value.Equals(toUser.Parameters[0].Value, StringComparison.OrdinalIgnoreCase);
+
+                    return false;
+                }
+
                 return String.Join(".", fromUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", toUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
+            }
 
             // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
-            if (fromUser != null && !fromUser.IsSameAs(DataTypeHelpers.EntityReference))
+            if (fromUser != null && !fromUser.IsEntityReference())
                 return false;
 
-            // Nothing can be converted to SqlEntityReference
+            // Guids and strings can be converted to typed entity references
+            if (toUser != null && toUser.IsEntityReference() && toUser.Parameters.Count == 1)
+                return fromSql?.SqlDataTypeOption == SqlDataTypeOption.UniqueIdentifier || fromSql?.SqlDataTypeOption.IsStringType() == true;
+
+            // Nothing else can be converted to SqlEntityReference
             if (toUser != null)
                 return false;
 
@@ -645,6 +691,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (from.IsSameAs(to))
                 return expr;
 
+            if (from.IsEntityReference(out var fromEr) && to.IsEntityReference(out var toEr))
+            {
+                // If we're converting from untyped to typed entity reference, we need to check the type
+                if (fromEr == null && toEr != null)
+                    expr = Expr.Call(() => CheckEntityReferenceType(Expr.Arg<SqlEntityReference>(), Expr.Arg<string>()), expr, Expression.Constant(toEr));
+
+                return expr;
+            }
+
             from.ToNetType(out var fromSqlType);
             var targetType = to.ToNetType(out var toSqlType);
 
@@ -694,6 +749,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
             else if (expr.Type == typeof(SqlBinary) && targetType == typeof(SqlString))
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlBinary>(), Expr.Arg<Collation>(), Expr.Arg<bool>()), expr, Expression.Constant(targetCollation), Expression.Constant(toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar));
+            else if (expr.Type == typeof(SqlGuid) && to.IsEntityReference(out toEr) && toEr != null)
+                expr = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<SqlString>(), Expr.Arg<SqlGuid>()), Expression.Constant((SqlString)toEr), expr);
+            else if (expr.Type == typeof(SqlString) && to.IsEntityReference(out toEr) && toEr != null)
+            {
+                expr = Convert(expr, context, from, DataTypeHelpers.UniqueIdentifier, style, styleType, convert, throwOnTruncate, table, column);
+                expr = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<SqlString>(), Expr.Arg<SqlGuid>()), Expression.Constant((SqlString)toEr), expr);
+            }
 
             if (expr.Type != targetType)
             {
@@ -704,7 +766,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 
                 if (fromSqlType?.SqlDataTypeOption.IsStringType() == true)
                 {
-                    if (to.IsSameAs(DataTypeHelpers.UniqueIdentifier) || to.IsSameAs(DataTypeHelpers.EntityReference))
+                    if (to.IsSameAs(DataTypeHelpers.UniqueIdentifier) || to.IsEntityReference())
                         conversionError = Expr.Call(() => Sql4CdsError.GuidParseError(Expr.Arg<TSqlFragment>()), Expression.Constant(convert, typeof(TSqlFragment)));
                     else if (toSqlType?.SqlDataTypeOption.IsDateTimeType() == true)
                         conversionError = Expr.Call(() => Sql4CdsError.DateTimeParseError(Expr.Arg<TSqlFragment>()), Expression.Constant(convert, typeof(TSqlFragment)));
@@ -852,6 +914,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        private static SqlEntityReference CheckEntityReferenceType(SqlEntityReference er, string requiredType)
+        {
+            if (er.IsNull)
+                return er;
+
+            if (er.LogicalName.Equals(requiredType, StringComparison.OrdinalIgnoreCase))
+                return er;
+
+            throw new QueryExecutionException(Sql4CdsError.InvalidEntityReferenceType(null, er.LogicalName, requiredType));
         }
 
         private static SqlDecimal ApplyPrecisionScale(SqlDecimal value, int precision, int scale, DataTypeReference from, DataTypeReference to, TSqlFragment fragment)

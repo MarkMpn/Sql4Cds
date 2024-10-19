@@ -1567,7 +1567,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         // If we're inserting into a lookup field, the field type will be a SqlEntityReference. Change this to
                         // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
-                        // values will not be available
+                        // values will not be available. The user can specify either an EntityReference value for this field,
+                        // or a giud value combined with a string value in the associated __type field.
                         if (targetType.IsSameAs(DataTypeHelpers.EntityReference))
                             targetType = DataTypeHelpers.UniqueIdentifier;
                     }
@@ -1611,30 +1612,51 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (targetLookupAttribute == null)
                             continue;
 
-                        if (targetLookupAttribute.Targets.Length > 1 &&
-                            !virtualTypeAttributes.Contains(targetAttrName + "type") &&
-                            targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                        bool isNull;
+
+                        // Check if the source value is a null literal or not
+                        var colIndex = targetColumns.IndexOf(col);
+                        if (insertStatement.InsertSpecification.InsertSource is ValuesInsertSource values)
                         {
-                            // Special case: not required for listmember.entityid
-                            if (metadata.LogicalName != "listmember" || targetLookupAttribute.LogicalName != "entityid")
+                            isNull = values.RowValues.All(row => row.ColumnValues[colIndex] is NullLiteral);
+                        }
+                        else if (insertStatement.InsertSpecification.InsertSource is SelectInsertSource selectSource && selectSource.Select is QuerySpecification querySpec && querySpec.SelectElements.Count > colIndex)
+                        {
+                            var expressions = querySpec.SelectElements.OfType<SelectScalarExpression>().Take(colIndex + 1).ToArray();
+                            isNull = expressions.All(expr => expr != null) && expressions[colIndex].Expression is NullLiteral;
+                        }
+                        else
+                        {
+                            isNull = false;
+                        }
+
+                        if (!isNull)
+                        {
+                            if (targetLookupAttribute.Targets.Length > 1 &&
+                                !virtualTypeAttributes.Contains(targetAttrName + "type") &&
+                                targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
+                                (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                            {
+                                // Special case: not required for listmember.entityid
+                                if (metadata.LogicalName != "listmember" || targetLookupAttribute.LogicalName != "entityid")
+                                {
+                                    throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
+                                    {
+                                        Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                                    };
+                                }
+                            }
+
+                            // If the lookup references an elastic table we also need the pid column
+                            if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
+                                !virtualPidAttributes.Contains(targetAttrName + "pid") &&
+                                (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var elasticLookupType) != null && elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                             {
                                 throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
                                 {
-                                    Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                                    Suggestion = $"Inserting values into an elastic lookup field requires setting the associated pid column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}pid column"
                                 };
                             }
-                        }
-
-                        // If the lookup references an elastic table we also need the pid column
-                        if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
-                            !virtualPidAttributes.Contains(targetAttrName + "pid") &&
-                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var elasticLookupType) != null && elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
-                        {
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
-                            {
-                                Suggestion = $"Inserting values into an elastic lookup field requires setting the associated pid column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}pid column"
-                            };
                         }
                     }
                 }
@@ -2506,7 +2528,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         // If we're updating a lookup field, the field type will be a SqlEntityReference. Change this to
                         // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
-                        // values will not be available
+                        // values will not be available. The user can specify either an EntityReference value for this field,
+                        // or a giud value combined with a string value in the associated __type field.
                         if (targetType.IsSameAs(DataTypeHelpers.EntityReference))
                             targetType = DataTypeHelpers.UniqueIdentifier;
                     }
@@ -2551,6 +2574,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
                     update.ColumnMappings[targetAttrName] = new UpdateMapping { NewValueColumn = "new_" + targetAttrName };
+
+                    // Store the data type for simple null values to avoid errors when we are setting polymorphic lookup
+                    // fields to null without also setting the corresponding type field. Do not get the type information
+                    // for other fields - we could work this out with another round trip to the TDS Endpoint, but assume
+                    // the user has got this right for now.
+                    if (assignment.NewValue is NullLiteral)
+                        sourceTypes[targetAttrName] = DataTypeHelpers.ImplicitIntForNullLiteral;
                 }
 
                 foreach (var existingAttribute in existingAttributes)
@@ -2580,11 +2610,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || (!sourceType.IsSameAs(DataTypeHelpers.EntityReference) && sourceType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || (!sourceType.IsEntityReference() && sourceType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                     {
-                        throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
                         {
-                            Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                            Suggestion = $"Updating values in a polymorphic lookup field requires setting the associated type column as well\r\nAdd a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
                         };
                     }
 
@@ -2593,9 +2623,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         !virtualPidAttributes.Contains(targetAttrName + "pid") &&
                         (!sourceTypes.TryGetValue(targetAttrName, out var elasticLookupType) || elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral))
                     {
-                        throw new NotSupportedQueryFragmentException("Updating an elastic lookup field requires setting the associated pid column as well", assignment.Column)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
                         {
-                            Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}pid column"
+                            Suggestion = $"Updating values in an elastic lookup field requires setting the associated pid column as well\r\nAdd a SET clause for the {targetLookupAttribute.LogicalName}pid column"
                         };
                     }
                 }
@@ -2608,9 +2638,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (!attributeNames.Contains(idAttrName))
                     {
-                        throw new NotSupportedQueryFragmentException("Updating a polymorphic type field requires setting the associated ID column as well", assignment.Column)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
                         {
-                            Suggestion = $"Add a SET clause for the {idAttrName} column"
+                            Suggestion = $"Updating values in a polymorphic type field requires setting the associated ID column as well\r\nAdd a SET clause for the {idAttrName} column"
                         };
                     }
                 }
@@ -2620,9 +2650,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (!attributeNames.Contains(idAttrName))
                     {
-                        throw new NotSupportedQueryFragmentException("Updating an elastic lookup field requires setting the associated ID column as well", assignment.Column)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
                         {
-                            Suggestion = $"Add a SET clause for the {idAttrName} column"
+                            Suggestion = $"Updating values in an elastic lookup field requires setting the associated ID column as well\r\nAdd a SET clause for the {idAttrName} column"
                         };
                     }
                 }
@@ -2637,7 +2667,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource.Connection))
                 {
-                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata, false);
+                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata, false, parameterTypes: _nodeContext.ParameterTypes);
                     select.Accept(tdsEndpointCompatibilityVisitor);
 
                     // Remove any custom optimizer hints

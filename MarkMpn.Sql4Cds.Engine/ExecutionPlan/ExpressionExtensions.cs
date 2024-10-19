@@ -2138,7 +2138,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (!(type is SqlDataTypeReference dataType))
             {
-                if (type.IsSameAs(DataTypeHelpers.EntityReference))
+                if (type.IsEntityReference())
                 {
                     sqlDataType = null;
                     return typeof(SqlEntityReference);
@@ -2368,7 +2368,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return createExpression ? Expr.Call(() => GetCurrentTimestamp(Expr.Arg<ExpressionExecutionContext>()), contextParam) : null;
 
                 default:
-                    sqlType = DataTypeHelpers.EntityReference;
+                    sqlType = DataTypeHelpers.TypedEntityReference("systemuser");
                     cacheKey = "CURRENT_USER";
                     return createExpression ? Expr.Call(() => GetCurrentUser(Expr.Arg<ExpressionExecutionContext>()), contextParam) : null;
             }

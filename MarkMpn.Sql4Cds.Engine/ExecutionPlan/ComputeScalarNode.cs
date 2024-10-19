@@ -138,6 +138,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Columns.Remove(col);
             }
 
+            // Remove any columns that re-define an existing column
+            var toRemove = new List<string>();
+
+            foreach (var calc in Columns)
+            {
+                if (calc.Value is ColumnReferenceExpression col &&
+                    col.MultiPartIdentifier.Identifiers.Count == 1 &&
+                    col.MultiPartIdentifier.Identifiers[0].Value.Equals(calc.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    toRemove.Add(calc.Key);
+                }
+            }
+
+            foreach (var col in toRemove)
+                Columns.Remove(col);
+
             // If we don't have any calculations, this node is not needed
             if (Columns.Count == 0)
                 return Source;

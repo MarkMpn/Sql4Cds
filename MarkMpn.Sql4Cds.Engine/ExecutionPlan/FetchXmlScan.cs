@@ -480,7 +480,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var meta = dataSource.Metadata[conditionEntity];
                 var attr = meta.Attributes.Single(a => a.LogicalName == condition.attribute);
                 var attrType = attr.GetAttributeSqlType(dataSource, false);
-                if (attrType.IsSameAs(DataTypeHelpers.EntityReference))
+                if (attrType.IsEntityReference())
                     attrType = DataTypeHelpers.UniqueIdentifier;
 
                 // For some operators the value type may be different from the attribute type

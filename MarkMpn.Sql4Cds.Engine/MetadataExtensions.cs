@@ -196,7 +196,18 @@ namespace MarkMpn.Sql4Cds.Engine
             if (typeCode == AttributeTypeCode.PartyList)
                 return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit);
 
-            if (attrMetadata is LookupAttributeMetadata || attrMetadata.IsPrimaryId == true || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
+            if (attrMetadata is LookupAttributeMetadata lookup)
+            {
+                if (lookup.Targets?.Length == 1)
+                    return DataTypeHelpers.TypedEntityReference(lookup.Targets[0]);
+
+                return DataTypeHelpers.EntityReference;
+            }
+
+            if (attrMetadata.IsPrimaryId == true)
+                return DataTypeHelpers.TypedEntityReference(attrMetadata.EntityLogicalName);
+
+            if (typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
                 return DataTypeHelpers.EntityReference;
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)

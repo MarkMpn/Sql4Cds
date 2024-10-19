@@ -495,7 +495,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (lookupAttr != null && lookupAttr.AttributeType != AttributeTypeCode.PartyList && metadata.IsIntersect != true)
                     {
-                        if (sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference))
+                        if (sourceSqlType.IsEntityReference())
                         {
                             convertedExpr = expr;
                             expr = originalExpr;
@@ -560,7 +560,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        if (!sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference) ||
+                        if (!sourceSqlType.IsEntityReference() ||
                             !(attr is LookupAttributeMetadata partyListAttr) ||
                             partyListAttr.AttributeType != AttributeTypeCode.PartyList)
                         {
