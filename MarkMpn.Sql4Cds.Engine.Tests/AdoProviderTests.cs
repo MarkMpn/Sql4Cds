@@ -856,6 +856,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void FilteredTVFWithSubqueryParameters()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = "SELECT * FROM SampleMessage((select '1')) WHERE OutputParam1 = '2'";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
         public void CorrelatedNotExistsTypeConversion()
         {
             using (var con = new Sql4CdsConnection(_localDataSources))

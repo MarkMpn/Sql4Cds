@@ -615,7 +615,7 @@ namespace MarkMpn.Sql4Cds.Engine
             queryExpression.Accept(cteReplacer);
 
             // Convert the modified query.
-            var childContext = new NodeCompilationContext(_nodeContext, outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[cteValidator.Name.EscapeIdentifier() + "." + kvp.Key.EscapeIdentifier()].Type, StringComparer.OrdinalIgnoreCase));
+            var childContext = _nodeContext.CreateChildContext(outerReferences.ToDictionary(kvp => kvp.Value, kvp => anchorSchema.Schema[cteValidator.Name.EscapeIdentifier() + "." + kvp.Key.EscapeIdentifier()].Type, StringComparer.OrdinalIgnoreCase));
             var converted = ConvertSelectStatement(queryExpression, null, null, null, childContext);
             converted.ExpandWildcardColumns(childContext);
             return converted;
@@ -3261,8 +3261,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     lhsCol = lhsColNormalized.ToColumnReference();
             }
 
-            var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-            var innerContext = new NodeCompilationContext(context, parameters);
+            var innerContext = context.CreateChildContext(null);
             var references = new Dictionary<string, string>();
             var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
 
@@ -3286,7 +3285,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // We need the inner list to be distinct to avoid creating duplicates during the join
-                    var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(Session, Options, parameters, Log));
+                    var innerSchema = innerQuery.Source.GetSchema(innerContext);
                     if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                     {
                         innerQuery.Source = new DistinctNode
@@ -3397,11 +3396,10 @@ namespace MarkMpn.Sql4Cds.Engine
             var schema = source.GetSchema(context);
 
             // Each query of the format "EXISTS (SELECT * FROM source)" becomes a outer semi join
-            var parameters = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-            var innerContext = new NodeCompilationContext(context, parameters);
+            var innerContext = context.CreateChildContext(null);
             var references = new Dictionary<string, string>();
             var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, innerContext);
-            var innerSchema = innerQuery.Source.GetSchema(new NodeCompilationContext(Session, Options, parameters, Log));
+            var innerSchema = innerQuery.Source.GetSchema(innerContext);
             var innerSchemaPrimaryKey = innerSchema.PrimaryKey;
 
             // Create the join
@@ -4341,8 +4339,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var outerSchema = node.GetSchema(context);
                 var outerReferences = new Dictionary<string, string>();
-                var innerParameterTypes = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-                var innerContext = new NodeCompilationContext(context, innerParameterTypes);
+                var innerContext = context.CreateChildContext(null);
                 var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression, hints, outerSchema, outerReferences, innerContext);
 
                 // Scalar subquery must return exactly one column and one row
@@ -5243,8 +5240,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // CROSS APPLY / OUTER APPLY - treat the second table as a correlated subquery
                     var lhsSchema = lhs.GetSchema(context);
                     lhsReferences = new Dictionary<string, string>();
-                    var innerParameterTypes = context.ParameterTypes == null ? new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-                    var innerContext = new NodeCompilationContext(context, innerParameterTypes);
+                    var innerContext = context.CreateChildContext(null);
                     var subqueryPlan = ConvertTableReference(unqualifiedJoin.SecondTableReference, hints, query, lhsSchema, lhsReferences, innerContext);
                     rhs = subqueryPlan;
 
