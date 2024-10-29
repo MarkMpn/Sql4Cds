@@ -483,7 +483,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (parameterless != null &&
                     parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp &&
                     (op == @operator.eq || op == @operator.ne) &&
-                    meta.Attributes.SingleOrDefault(a => a.LogicalName == RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items)) is LookupAttributeMetadata)
+                    (
+                        meta.Attributes.SingleOrDefault(a => a.LogicalName == RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items)) is LookupAttributeMetadata ||
+                        meta.Attributes.SingleOrDefault(a => a.LogicalName == RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items))?.IsPrimaryId == true
+                    ))
                 {
                     if (op == @operator.eq)
                     {
