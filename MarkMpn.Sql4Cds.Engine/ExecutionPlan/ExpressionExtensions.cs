@@ -13,6 +13,11 @@ using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Wmhelp.XPath2;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -2384,7 +2389,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static SqlEntityReference GetCurrentUser(ExpressionExecutionContext context)
         {
-            return new SqlEntityReference(context.Options.PrimaryDataSource, "systemuser", context.Options.UserId);
+            var callerId = Guid.Empty;
+
+#if NETCOREAPP
+            if (context.PrimaryDataSource.Connection is ServiceClient svc)
+                callerId = svc.CallerId;
+#else
+            if (context.PrimaryDataSource.Connection is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                callerId = svcProxy.CallerId;
+            else if (context.PrimaryDataSource.Connection is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                callerId = webProxy.CallerId;
+            else if (context.PrimaryDataSource.Connection is CrmServiceClient svc)
+                callerId = svc.CallerId;
+#endif
+
+            if (callerId == Guid.Empty)
+                callerId = context.Options.UserId;
+
+            return new SqlEntityReference(context.Options.PrimaryDataSource, "systemuser", callerId);
         }
 
         /// <summary>
