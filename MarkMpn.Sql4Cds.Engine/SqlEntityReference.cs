@@ -1,27 +1,39 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
     public struct SqlEntityReference : INullable, IComparable
     {
         private readonly SqlGuid _guid;
+        private readonly string _primaryIdAttribute;
 
         public SqlEntityReference(string dataSource, string logicalName, SqlGuid id)
         {
             DataSource = dataSource;
             LogicalName = logicalName;
             _guid = id;
+            _primaryIdAttribute = null;
+            PartitionId = null;
+        }
+
+        public SqlEntityReference(string dataSource, EntityMetadata metadata, SqlGuid id, string partitionId)
+        {
+            DataSource = dataSource;
+            LogicalName = metadata.LogicalName;
+            _guid = id;
+            _primaryIdAttribute = metadata.PrimaryIdAttribute;
+            PartitionId = partitionId;
         }
 
         public SqlEntityReference(string dataSource, EntityReference entityReference)
         {
             DataSource = dataSource;
+            _primaryIdAttribute = null;
+            PartitionId = null;
 
             if (entityReference == null)
             {
@@ -30,8 +42,16 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                _guid = new SqlGuid(entityReference.Id);
+                _guid = entityReference.Id;
                 LogicalName = entityReference.LogicalName;
+
+                if (entityReference.KeyAttributes.TryGetValue("partitionid", out var value))
+                {
+                    var primaryId = entityReference.KeyAttributes.Single(a => a.Value is Guid);
+                    _guid = (Guid)primaryId.Value;
+                    _primaryIdAttribute = primaryId.Key;
+                    PartitionId = value as string;
+                }
             }
         }
 
@@ -42,6 +62,8 @@ namespace MarkMpn.Sql4Cds.Engine
         public string LogicalName { get; }
 
         public Guid Id => _guid.Value;
+
+        public string PartitionId { get; set; }
 
         public bool IsNull => ((INullable)_guid).IsNull;
 
@@ -121,6 +143,17 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (er.IsNull)
                 return null;
+
+            if (er.PartitionId != null)
+            {
+                var keyAttributes = new KeyAttributeCollection
+                {
+                    { er._primaryIdAttribute, er.Id },
+                    { "partitionid", er.PartitionId }
+                };
+
+                return new EntityReference(er.LogicalName, keyAttributes);
+            }
 
             return new EntityReference(er.LogicalName, er._guid.Value);
         }

@@ -502,5 +502,17 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             base.Visit(node);
         }
+
+        public override void Visit(ExecuteAsStatement node)
+        {
+            // EXECUTE AS is not supported
+            IsCompatible = false;
+        }
+
+        public override void Visit(RevertStatement node)
+        {
+            // REVERT is not supported
+            IsCompatible = false;
+        }
     }
 }

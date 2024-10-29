@@ -3,12 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Data.SqlTypes;
-using System.Globalization;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection;
 using System.ServiceModel;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -143,6 +139,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         protected virtual bool IgnoresSomeErrors => false;
 
+        protected void AddRequiredColumns(IList<string> requiredColumns, List<AttributeAccessor> accessors)
+        {
+            foreach (var accessor in accessors)
+            {
+                foreach (var col in accessor.SourceAttributes)
+                {
+                    if (!requiredColumns.Contains(col))
+                        requiredColumns.Add(col);
+                }
+            }
+        }
+
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
         /// </summary>
@@ -157,13 +165,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = dataNode.FoldQuery(context, hints);
             else if (Source is IDataReaderExecutionPlanNode dataSetNode)
                 Source = dataSetNode.FoldQuery(context, hints).Single();
-
-            if (Source is AliasNode alias)
-            {
-                Source = alias.Source;
-                Source.Parent = this;
-                RenameSourceColumns(alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase));
-            }
 
             MaxDOP = GetMaxDOP(context, hints);
             BatchSize = GetBatchSize(context, hints);
@@ -235,36 +236,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return continueOnError;
         }
 
-        protected void FoldIdsToConstantScan(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns)
+        protected void FoldIdsToConstantScan(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, List<AttributeAccessor> accessors)
         {
             if (hints != null && hints.OfType<UseHintList>().Any(hint => hint.Hints.Any(s => s.Value.Equals("NO_DIRECT_DML", StringComparison.OrdinalIgnoreCase))))
+                return;
+
+            // Can't do DML operations on base activitypointer table, need to read the record to
+            // find the concrete activity type.
+            if (logicalName == "activitypointer")
                 return;
 
             // Work out the fields that we should use as the primary key for these records.
             var dataSource = context.Session.DataSources[DataSource];
             var targetMetadata = dataSource.Metadata[logicalName];
-            var keyAttributes = new[] { targetMetadata.PrimaryIdAttribute };
+            var keyAttributes = EntityReader.GetPrimaryKeyFields(targetMetadata, out _);
 
-            if (targetMetadata.LogicalName == "listmember")
-            {
-                keyAttributes = new[] { "listid", "entityid" };
-            }
-            else if (targetMetadata.IsIntersect == true)
-            {
-                var relationship = targetMetadata.ManyToManyRelationships.Single();
-                keyAttributes = new[] { relationship.Entity1IntersectAttribute, relationship.Entity2IntersectAttribute };
-            }
-            else if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
-            {
-                // Elastic tables need the partitionid as part of the primary key
-                keyAttributes = new[] { targetMetadata.PrimaryIdAttribute, "partitionid" };
-            }
-            else if (targetMetadata.LogicalName == "activitypointer")
-            {
-                // Can't do DML operations on base activitypointer table, need to read the record to
-                // find the concrete activity type.
-                return;
-            }
+            var requiredColumns = accessors.SelectMany(a => a.SourceAttributes).Distinct().ToArray();
 
             // Skip any ComputeScalar node that is being used to generate additional values,
             // unless they reference additional values in the data source
@@ -295,12 +282,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        /// <summary>
-        /// Changes the name of source columns
-        /// </summary>
-        /// <param name="columnRenamings">A dictionary of old source column names to the corresponding new column names</param>
-        protected abstract void RenameSourceColumns(IDictionary<string, string> columnRenamings);
-
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return Source;
@@ -325,106 +306,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var dataReader = dataSetSource.Execute(context, CommandBehavior.Default);
 
-                // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
-                var dataTable = new DataTable();
-                var schemaTable = dataReader.GetSchemaTable();
-                var columnTypes = new ColumnList();
-                var targetDataSource = DataSource == null ? context.PrimaryDataSource : context.Session.DataSources[DataSource];
-
-                for (var i = 0; i < schemaTable.Rows.Count; i++)
+                if (Source is SqlNode sql)
                 {
-                    var colSchema = schemaTable.Rows[i];
-                    var colName = (string)colSchema["ColumnName"];
-                    var colType = (Type)colSchema["ProviderSpecificDataType"];
-                    var colTypeName = (string)colSchema["DataTypeName"];
-                    var colSize = (int)colSchema["ColumnSize"];
-                    var precision = (short)colSchema["NumericPrecision"];
-                    var scale = (short)colSchema["NumericScale"];
-
-                    dataTable.Columns.Add(colName, colType);
-
-                    DataTypeReference colSqlType;
-
-                    switch (colTypeName)
-                    {
-                        case "binary": colSqlType = DataTypeHelpers.Binary(colSize); break;
-                        case "varbinary": colSqlType = DataTypeHelpers.VarBinary(colSize); break;
-                        case "char": colSqlType = DataTypeHelpers.Char(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
-                        case "varchar": colSqlType = DataTypeHelpers.VarChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
-                        case "nchar": colSqlType = DataTypeHelpers.NChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
-                        case "nvarchar": colSqlType = DataTypeHelpers.NVarChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
-                        case "datetime": colSqlType = DataTypeHelpers.DateTime; break;
-                        case "smalldatetime": colSqlType = DataTypeHelpers.SmallDateTime; break;
-                        case "date": colSqlType = DataTypeHelpers.Date; break;
-                        case "time": colSqlType = DataTypeHelpers.Time(scale); break;
-                        case "datetimeoffset": colSqlType = DataTypeHelpers.DateTimeOffset(scale); break;
-                        case "datetime2": colSqlType = DataTypeHelpers.DateTime2(scale); break;
-                        case "decimal": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;
-                        case "numeric": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;
-                        case "float": colSqlType = DataTypeHelpers.Float; break;
-                        case "real": colSqlType = DataTypeHelpers.Real; break;
-                        case "bigint": colSqlType = DataTypeHelpers.BigInt; break;
-                        case "int": colSqlType = DataTypeHelpers.Int; break;
-                        case "smallint": colSqlType = DataTypeHelpers.SmallInt; break;
-                        case "tinyint": colSqlType = DataTypeHelpers.TinyInt; break;
-                        case "money": colSqlType = DataTypeHelpers.Money; break;
-                        case "smallmoney": colSqlType = DataTypeHelpers.SmallMoney; break;
-                        case "bit": colSqlType = DataTypeHelpers.Bit; break;
-                        case "uniqueidentifier": colSqlType = DataTypeHelpers.UniqueIdentifier; break;
-                        default: throw new NotSupportedException("Unhandled column type " + colTypeName);
-                    }
-
-                    columnTypes[colName] = new ColumnDefinition(colSqlType, true, false);
-                    columnTypes[i.ToString()] = new ColumnDefinition(colSqlType, true, false);
-                    dataTable.Columns[i].ExtendedProperties["SqlType"] = colSqlType;
+                    schema = sql.GetSchema(context);
                 }
-                
-                dataTable.Load(dataReader);
-                schema = new NodeSchema(
-                    primaryKey: null,
-                    schema: columnTypes,
-                    aliases: null,
-                    sortOrder: null);
+                else
+                {
+                    var schemaTable = dataReader.GetSchemaTable();
+                    schema = SchemaConverter.ConvertSchema(schemaTable, context.PrimaryDataSource);
+                }
 
-                entities = dataTable.Rows
-                    .Cast<DataRow>()
-                    .Select(row =>
+                entities = new List<Entity>();
+
+                while (dataReader.Read())
+                {
+                    var entity = new Entity();
+                    var colIndex = 0;
+
+                    foreach (var col in schema.Schema)
                     {
-                        var entity = new Entity();
+                        var value = dataReader.GetProviderSpecificValue(colIndex++);
 
-                        for (var i = 0; i < dataTable.Columns.Count; i++)
+                        if (value is DateTime dt)
                         {
-                            var value = row[i];
-
-                            if (value is DateTime dt)
-                            {
-                                var sqlType = (DataTypeReference) dataTable.Columns[i].ExtendedProperties["SqlType"];
-                                if (sqlType.IsSameAs(DataTypeHelpers.Date))
-                                    value = new SqlDate(dt);
-                                else
-                                    value = new SqlDateTime2(dt);
-                            }
-                            else if (value is DateTimeOffset dto)
-                            {
-                                value = new SqlDateTimeOffset(dto);
-                            }
-                            else if (value is TimeSpan ts)
-                            {
-                                value = new SqlTime(ts);
-                            }
-                            else if (value is DBNull)
-                            {
-                                var sqlType = (DataTypeReference)dataTable.Columns[i].ExtendedProperties["SqlType"];
-                                value = SqlTypeConverter.GetNullValue(sqlType.ToNetType(out _));
-                            }
-
-                            entity[dataTable.Columns[i].ColumnName] = value;
-                            entity[i.ToString()] = value;
+                            if (col.Value.Type.IsSameAs(DataTypeHelpers.Date))
+                                value = new SqlDate(dt);
+                            else
+                                value = new SqlDateTime2(dt);
+                        }
+                        else if (value is DateTimeOffset dto)
+                        {
+                            value = new SqlDateTimeOffset(dto);
+                        }
+                        else if (value is TimeSpan ts)
+                        {
+                            value = new SqlTime(ts);
+                        }
+                        else if (value is DBNull)
+                        {
+                            value = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
                         }
 
-                        return entity;
-                    })
-                    .ToList();
+                        entity[col.Key] = value;
+                    }
+
+                    entities.Add(entity);
+                }
             }
             else
             {
@@ -432,214 +359,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return entities;
-        }
-
-        /// <summary>
-        /// Compiles methods to access the data required for the DML operation
-        /// </summary>
-        /// <param name="cache">The metadata cache</param>
-        /// <param name="logicalName">The logical name of the entity that will be affected</param>
-        /// <param name="mappings">The mappings of attribute name to source column</param>
-        /// <param name="schema">The schema of data source</param>
-        /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
-        /// <param name="entities">The records that are being mapped</param>
-        /// <returns></returns>
-        protected Dictionary<string, Func<ExpressionExecutionContext, object>> CompileColumnMappings(DataSource dataSource, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
-        {
-            var metadata = dataSource.Metadata[logicalName];
-            var attributes = metadata.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
-
-            var attributeAccessors = new Dictionary<string, Func<ExpressionExecutionContext, object>>();
-            var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
-            var entityParam = Expression.Property(contextParam, nameof(ExpressionExecutionContext.Entity));
-
-            foreach (var mapping in mappings)
-            {
-                var sourceColumnName = mapping.Value;
-                var destAttributeName = mapping.Key;
-
-                if (!schema.ContainsColumn(sourceColumnName, out sourceColumnName))
-                    throw new QueryExecutionException($"Missing source column {mapping.Value}") { Node = this };
-
-                // We might be using a virtual ___type attribute that has a different name in the metadata. We can safely
-                // ignore these attributes - the attribute names have already been validated in the ExecutionPlanBuilder
-                if (!attributes.TryGetValue(destAttributeName, out var attr) || attr.AttributeOf != null)
-                    continue;
-
-                var sourceSqlType = schema.Schema[sourceColumnName].Type;
-                var destType = attr.GetAttributeType();
-                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(dataSource, true);
-
-                if (attr is LookupAttributeMetadata && metadata.IsIntersect == true)
-                {
-                    destType = typeof(Guid?);
-                    destSqlType = DataTypeHelpers.UniqueIdentifier;
-                }
-
-                var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
-                var originalExpr = expr;
-
-                if (sourceSqlType.IsSameAs(DataTypeHelpers.Int) && !SqlTypeConverter.CanChangeTypeExplicit(sourceSqlType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
-                {
-                    // null literal is typed as int
-                    expr = Expression.Constant(null, destType);
-                    expr = Expr.Box(expr);
-                }
-                else
-                {
-                    // Unbox value as source SQL type
-                    expr = Expression.Convert(expr, sourceSqlType.ToNetType(out _));
-
-                    Expression convertedExpr;
-                    var lookupAttr = attr as LookupAttributeMetadata;
-
-                    if (lookupAttr != null && lookupAttr.AttributeType != AttributeTypeCode.PartyList && metadata.IsIntersect != true)
-                    {
-                        if (sourceSqlType.IsEntityReference())
-                        {
-                            convertedExpr = expr;
-                            expr = originalExpr;
-                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, contextParam, typeof(EntityReference));
-                        }
-                        else if (sourceSqlType == DataTypeHelpers.ImplicitIntForNullLiteral)
-                        {
-                            expr = originalExpr;
-                            convertedExpr = Expression.Constant(null, typeof(EntityReference));
-                        }
-                        else
-                        {
-                            Expression targetExpr;
-
-                            if (lookupAttr != null && lookupAttr.Targets.Length == 1)
-                            {
-                                targetExpr = Expression.Constant(lookupAttr.Targets[0]);
-                            }
-                            else
-                            {
-                                var typeColName = destAttributeName + "type";
-
-                                var sourceTargetColumnName = mappings[typeColName];
-                                var sourceTargetType = schema.Schema[sourceTargetColumnName].Type;
-
-                                targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
-                                targetExpr = Expression.Convert(targetExpr, sourceTargetType.ToNetType(out _));
-
-                                if (targetExpr.Type == typeof(SqlInt32))
-                                {
-                                    // Using TDS Endpoint, ___type fields are returned as ObjectTypeCode values, not logical names
-                                    targetExpr = Expr.Call(() => ObjectTypeCodeToLogicalName(Expr.Arg<SqlInt32>(), Expr.Arg<IAttributeMetadataCache>()), targetExpr, Expression.Constant(dataSource.Metadata));
-                                }
-                                else
-                                {
-                                    // Normally we want to specify the target type as a logical name
-                                    var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, contextParam, sourceTargetType, stringType);
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, contextParam, typeof(string));
-                                }
-                            }
-
-                            convertedExpr = SqlTypeConverter.Convert(expr, contextParam, sourceSqlType, DataTypeHelpers.UniqueIdentifier);
-                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, contextParam, typeof(Guid));
-                            convertedExpr = Expression.New(
-                                typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
-                                targetExpr,
-                                convertedExpr
-                            );
-                        }
-
-                        if (lookupAttr != null && lookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) && mappings.TryGetValue(destAttributeName + "pid", out var partitionIdColumn))
-                        {
-                            var partitionIdExpr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(partitionIdColumn));
-                            partitionIdExpr = Expression.Convert(partitionIdExpr, schema.Schema[partitionIdColumn].Type.ToNetType(out _));
-                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, contextParam, schema.Schema[partitionIdColumn].Type, DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit));
-                            partitionIdExpr = SqlTypeConverter.Convert(partitionIdExpr, contextParam, typeof(string));
-                            convertedExpr = Expr.Call(() => CreateElasticEntityReference(Expr.Arg<EntityReference>(), Expr.Arg<string>(), Expr.Arg<IAttributeMetadataCache>()), convertedExpr, partitionIdExpr, Expression.Constant(dataSource.Metadata));
-                        }
-
-                        destType = typeof(EntityReference);
-                    }
-                    else
-                    {
-                        if (!sourceSqlType.IsEntityReference() ||
-                            !(attr is LookupAttributeMetadata partyListAttr) ||
-                            partyListAttr.AttributeType != AttributeTypeCode.PartyList)
-                        {
-                            // Convert to destination SQL type - don't do this if we're converting from an EntityReference to a PartyList so
-                            // we don't lose the entity name during the conversion via a string
-                            expr = SqlTypeConverter.Convert(expr, contextParam, sourceSqlType, destSqlType, throwOnTruncate: true, table: logicalName, column: destAttributeName);
-                        }
-
-                        // Convert to final .NET SDK type
-                        convertedExpr = SqlTypeConverter.Convert(expr, contextParam, destType);
-                        
-                        if (attr is EnumAttributeMetadata && !(attr is MultiSelectPicklistAttributeMetadata))
-                        {
-                            convertedExpr = Expression.New(
-                                typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }),
-                                Expression.Convert(convertedExpr, typeof(int))
-                            );
-                            destType = typeof(OptionSetValue);
-                        }
-                        else if (attr is MoneyAttributeMetadata)
-                        {
-                            convertedExpr = Expression.New(
-                                typeof(Money).GetConstructor(new[] { typeof(decimal) }),
-                                Expression.Convert(expr, typeof(decimal))
-                            );
-                            destType = typeof(Money);
-                        }
-                        else if (attr is DateTimeAttributeMetadata)
-                        {
-                            convertedExpr = Expression.Convert(
-                                Expr.Call(() => DateTime.SpecifyKind(Expr.Arg<DateTime>(), Expr.Arg<DateTimeKind>()),
-                                    expr,
-                                    Expression.Constant(dateTimeKind)
-                                ),
-                                typeof(DateTime?)
-                            );
-                        }
-                    }
-
-                    // Check for null on the value BEFORE converting from the SQL to BCL type to avoid e.g. SqlDateTime.Null being converted to 1900-01-01
-                    expr = Expression.Condition(
-                        SqlTypeConverter.NullCheck(expr),
-                        Expression.Constant(null, destType),
-                        convertedExpr);
-
-                    if (expr.Type.IsValueType)
-                        expr = SqlTypeConverter.Convert(expr, contextParam, typeof(object));
-                }
-
-                attributeAccessors[destAttributeName] = Expression.Lambda<Func<ExpressionExecutionContext, object>>(expr, contextParam).Compile();
-            }
-
-            return attributeAccessors;
-        }
-
-        private static string ObjectTypeCodeToLogicalName(SqlInt32 otc, IAttributeMetadataCache attributeMetadataCache)
-        {
-            if (otc.IsNull)
-                throw new QueryExecutionException("Cannot convert null ObjectTypeCode to EntityReference");
-
-            return attributeMetadataCache[otc.Value].LogicalName;
-        }
-
-        private static EntityReference CreateElasticEntityReference(EntityReference entityReference, string partitionId, IAttributeMetadataCache metadata)
-        {
-            if (entityReference == null)
-                return null;
-
-            if (partitionId == null)
-                return entityReference;
-
-            var meta = metadata[entityReference.LogicalName];
-            var keys = new KeyAttributeCollection
-            {
-                [meta.PrimaryIdAttribute] = entityReference.Id,
-                ["partitionid"] = partitionId
-            };
-
-            return new EntityReference(entityReference.LogicalName, keys);
         }
 
         /// <summary>

@@ -2297,65 +2297,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.IsNotInstanceOfType(((SelectNode)queries[0]).Source, typeof(FetchXmlScan));
         }
 
-        [TestMethod]
-        public void UpdateUsingTSql()
-        {
-            var query = @"
-                UPDATE c
-                SET parentcustomerid = account.accountid, parentcustomeridtype = 'account'
-                FROM contact AS c INNER JOIN account ON c.parentcustomerid = account.accountid INNER JOIN new_customentity ON c.parentcustomerid = new_customentity.new_parentid
-                WHERE c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')";
-
-            BuildTDSQuery(planBuilder =>
-            {
-                var queries = planBuilder.Build(query, null, out _);
-
-                var tds = (SqlNode)((UpdateNode)queries[0]).Source;
-
-                Assert.AreEqual(Regex.Replace(@"
-                SELECT DISTINCT
-                    c.contactid AS contactid,
-                    account.accountid AS new_parentcustomerid,
-                    'account' AS new_parentcustomeridtype
-                FROM
-                    contact AS c
-                    INNER JOIN account
-                        ON c.parentcustomerid = account.accountid
-                    INNER JOIN new_customentity
-                        ON c.parentcustomerid = new_customentity.new_parentid
-                WHERE
-                    c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')", @"\s+", " ").Trim(), Regex.Replace(tds.Sql, @"\s+", " ").Trim());
-            });
-        }
-
-        [TestMethod]
-        public void DeleteUsingTSql()
-        {
-            var query = @"
-                DELETE c
-                FROM contact AS c INNER JOIN account ON c.parentcustomerid = account.accountid INNER JOIN new_customentity ON c.parentcustomerid = new_customentity.new_parentid
-                WHERE c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')";
-
-            BuildTDSQuery(planBuilder =>
-            {
-                var queries = planBuilder.Build(query, null, out _);
-
-                var tds = (SqlNode)((DeleteNode)queries[0]).Source;
-
-                Assert.AreEqual(Regex.Replace(@"
-                SELECT DISTINCT
-                    c.contactid AS contactid
-                FROM
-                    contact AS c
-                    INNER JOIN account
-                        ON c.parentcustomerid = account.accountid
-                    INNER JOIN new_customentity
-                        ON c.parentcustomerid = new_customentity.new_parentid
-                WHERE
-                    c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')", @"\s+", " ").Trim(), Regex.Replace(tds.Sql, @"\s+", " ").Trim());
-            });
-        }
-
         private void BuildTDSQuery(Action<ExecutionPlanBuilder> action)
         {
             var ds = _localDataSources["local"];

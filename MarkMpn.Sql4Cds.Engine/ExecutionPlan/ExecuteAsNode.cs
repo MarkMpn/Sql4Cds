@@ -92,12 +92,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (count > 1)
                         throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), new ApplicationException("Ambiguous username"));
 
-                    // Precompile mappings with type conversions
-                    var eec = new ExpressionExecutionContext(context) { Entity = entities[0] };
-                    var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
-                    var userIdAccessor = attributeAccessors["systemuserid"];
+                    Guid userId;
+                    var rawUserId = entities[0][UserIdSource];
 
-                    var userId = (Guid)userIdAccessor(eec);
+                    if (rawUserId == null || ((INullable)rawUserId).IsNull)
+                        throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), new ApplicationException("Missing user id"));
+
+                    if (rawUserId is SqlGuid g)
+                        userId = g.Value;
+                    else if (rawUserId is SqlString s)
+                        userId = Guid.Parse(s.Value);
+                    else if (rawUserId is SqlEntityReference er)
+                        userId = er.Id;
+                    else
+                        throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), new ApplicationException("Unexpected user id type " + rawUserId.GetType()));
 
                     PropertyInfo callerIdProp;
 
@@ -168,12 +176,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 throw new QueryExecutionException(ex.Message, ex) { Node = this };
             }
-        }
-
-        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
-        {
-            if (columnRenamings.TryGetValue(UserIdSource, out var userIdSourceRenamed))
-                UserIdSource = userIdSourceRenamed;
         }
 
         public override string ToString()

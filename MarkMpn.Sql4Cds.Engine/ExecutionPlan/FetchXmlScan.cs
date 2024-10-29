@@ -830,7 +830,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName))
                 {
                     if (sqlValue is SqlGuid guid)
-                        sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
+                    {
+                        // For elastic tables, include the pid as well
+                        if (dataSource.Metadata[logicalName].DataProviderId == DataProviders.ElasticDataProvider)
+                        {
+                            var parts = col.Key.SplitMultiPartIdentifier();
+                            var items = parts[0].Equals(Alias, StringComparison.OrdinalIgnoreCase) ? Entity.Items : Entity.FindLinkEntity(parts[0]).Items;
+                            var partitionIdAttribute = items?.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == "partitionid");
+                            var alias = partitionIdAttribute?.alias ?? "partitionid";
+                            var colName = parts[0] + "." + alias;
+                            var partitionId = entity.GetAttributeValue<string>(colName);
+                            sqlValue = new SqlEntityReference(DataSource, dataSource.Metadata[logicalName], guid, partitionId);
+                        }
+                        else if (logicalName == "activitypointer")
+                        {
+                            var parts = col.Key.SplitMultiPartIdentifier();
+                            var items = parts[0].Equals(Alias, StringComparison.OrdinalIgnoreCase) ? Entity.Items : Entity.FindLinkEntity(parts[0]).Items;
+                            var activityTypeCodeAttribute = items?.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == "activitytypecode");
+                            var alias = activityTypeCodeAttribute?.alias ?? "activitytypecode";
+                            var colName = parts[0] + "." + alias;
+                            var activityTypeCode = entity.GetAttributeValue<string>(colName);
+                            sqlValue = new SqlEntityReference(DataSource, activityTypeCode ?? logicalName, guid);
+                        }
+                        else
+                        {
+                            sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
+                        }
+                    }
 
                     if (_isVirtualEntity && sqlValue is SqlEntityReference er && er.IsNull && !col.Value.IsNullable)
                     {
@@ -1198,6 +1224,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 linkEntity.AddItem(attr);
+            }
+
+            if (attrMetadata.IsPrimaryId == true)
+            {
+                if (attrMetadata.EntityLogicalName == "activitypointer")
+                    AddAttribute($"{entityName.EscapeIdentifier()}.activitytypecode", predicate, metadata, out _, out _, out _, out _);
+                else if (metadata[attrMetadata.EntityLogicalName].DataProviderId == DataProviders.ElasticDataProvider)
+                    AddAttribute($"{entityName.EscapeIdentifier()}.partitionid", predicate, metadata, out _, out _, out _, out _);
             }
 
             added = true;
@@ -2212,15 +2246,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (items == null || items.Length == 0)
             {
-                return new object[]
+                if (metadata.LogicalName == "activitypointer")
                 {
-                    new FetchAttributeType { name = metadata.PrimaryIdAttribute },
-                    new FetchOrderType { attribute = metadata.PrimaryIdAttribute }
-                };
+                    return new object[]
+                    {
+                        new FetchAttributeType { name = metadata.PrimaryIdAttribute },
+                        new FetchAttributeType { name = "activitytypecode" },
+                        new FetchOrderType { attribute = metadata.PrimaryIdAttribute }
+                    };
+                }
+                else if (metadata.DataProviderId == DataProviders.ElasticDataProvider)
+                {
+                    return new object[]
+                    {
+                        new FetchAttributeType { name = metadata.PrimaryIdAttribute },
+                        new FetchAttributeType { name = "partitionid" },
+                        new FetchOrderType { attribute = metadata.PrimaryIdAttribute }
+                    };
+                }
+                else
+                {
+                    return new object[]
+                    {
+                        new FetchAttributeType { name = metadata.PrimaryIdAttribute },
+                        new FetchOrderType { attribute = metadata.PrimaryIdAttribute }
+                    };
+                }
             }
 
             if (!items.OfType<allattributes>().Any() && !items.OfType<FetchAttributeType>().Any(a => a.name == metadata.PrimaryIdAttribute))
                 items = items.Concat(new object[] { new FetchAttributeType { name = metadata.PrimaryIdAttribute } }).ToArray();
+
+            if (metadata.LogicalName == "activitypointer" && !items.OfType<allattributes>().Any() && !items.OfType<FetchAttributeType>().Any(a => a.name == "activitytypecode"))
+                items = items.Concat(new object[] { new FetchAttributeType { name = "activitytypecode" } }).ToArray();
+
+            if (metadata.DataProviderId == DataProviders.ElasticDataProvider && !items.OfType<allattributes>().Any() && !items.OfType<FetchAttributeType>().Any(a => a.name == "partitionid"))
+                items = items.Concat(new object[] { new FetchAttributeType { name = "partitionid" } }).ToArray();
 
             if (!items.OfType<FetchOrderType>().Any(a => a.attribute == metadata.PrimaryIdAttribute))
                 items = items.Concat(new object[] { new FetchOrderType { attribute = metadata.PrimaryIdAttribute } }).ToArray();

@@ -7,12 +7,9 @@ using System.Data.SqlClient;
 using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 
 #if NETCOREAPP
@@ -30,6 +27,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private readonly Timer _timer = new Timer();
         private int _executionCount;
+        private INodeSchema _schema;
+
+        private readonly static Dictionary<Type, INullable> _sampleValues = new Dictionary<Type, INullable>
+        {
+            [typeof(SqlBinary)] = new SqlBinary(new byte[] { 0 }),
+            [typeof(SqlBoolean)] = SqlBoolean.False,
+            [typeof(SqlByte)] = SqlByte.Zero,
+            [typeof(SqlDateTime)] = SqlDateTime.MinValue,
+            [typeof(SqlDecimal)] = SqlDecimal.MinValue,
+            [typeof(SqlDouble)] = SqlDouble.Zero,
+            [typeof(SqlGuid)] = (SqlGuid)Guid.NewGuid(),
+            [typeof(SqlEntityReference)] = (SqlGuid)Guid.NewGuid(),
+            [typeof(SqlInt16)] = SqlInt16.Zero,
+            [typeof(SqlInt32)] = SqlInt32.Zero,
+            [typeof(SqlInt64)] = SqlInt64.Zero,
+            [typeof(SqlMoney)] = SqlDecimal.MinValue,
+            [typeof(SqlSingle)] = SqlSingle.Zero,
+            [typeof(SqlString)] = (SqlString)"test",
+            [typeof(SqlDate)] = SqlDateTime.MinValue,
+            [typeof(SqlDateTime2)] = SqlDateTime.MinValue,
+            [typeof(SqlDateTimeOffset)] = SqlDateTime.MinValue,
+            [typeof(SqlSmallDateTime)] = SqlDateTime.MinValue,
+            [typeof(SqlTime)] = (SqlTime)TimeSpan.Zero,
+            [typeof(SqlXml)] = new SqlXml(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("<x></x>"))),
+            [typeof(SqlVariant)] = (SqlString)"test"
+        };
 
         public SqlNode() { }
 
@@ -113,6 +136,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         else
                             param.Value = paramValue.Value;
 
+                        if (paramValue.Value.IsNull)
+                            param.Value = "";
+
                         cmd.Parameters.Add(param);
                     }
 
@@ -159,72 +185,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sql = "SET DATEFORMAT " + context.Session.DateFormat.ToString() + ";\r\n" + sql;
             }
 
-            if (behavior == CommandBehavior.Default)
-                return sql;
-
-            // TDS Endpoint doesn't support command behavior flags, so fake them by modifying the SQL query
-            var dom = new TSql160Parser(context.Options.QuotedIdentifiers);
-            var script = (TSqlScript) dom.Parse(new StringReader(sql), out _);
-
-            if (behavior.HasFlag(CommandBehavior.SchemaOnly))
-            {
-                // Add an impossible WHERE clause to prevent any data being returned
-                foreach (var batch in script.Batches)
-                {
-                    foreach (var select in batch.Statements.OfType<SelectStatement>())
-                    {
-                        if (select.QueryExpression is QuerySpecification querySpec)
-                        {
-                            var contradiction = new BooleanComparisonExpression
-                            {
-                                FirstExpression = new IntegerLiteral { Value = "0" },
-                                ComparisonType = BooleanComparisonType.Equals,
-                                SecondExpression = new IntegerLiteral { Value = "1" },
-                            };
-
-                            if (querySpec.WhereClause == null)
-                                querySpec.WhereClause = new WhereClause { SearchCondition = contradiction };
-                            else
-                                querySpec.WhereClause.SearchCondition = querySpec.WhereClause.SearchCondition.And(contradiction);
-                        }
-                    }
-                }
-            }
-
-            if (behavior.HasFlag(CommandBehavior.SingleRow) || behavior.HasFlag(CommandBehavior.SingleResult))
-            {
-                // Remove all SELECT statements after the first one
-                var foundFirstSelect = false;
-
-                foreach (var batch in script.Batches)
-                {
-                    foreach (var select in batch.Statements.OfType<SelectStatement>().ToArray())
-                    {
-                        if (!foundFirstSelect)
-                            foundFirstSelect = true;
-                        else
-                            batch.Statements.Remove(select);
-                    }
-                }
-            }
-
-            if (behavior.HasFlag(CommandBehavior.SingleRow))
-            {
-                // Add a TOP 1 clause to the first SELECT statement
-                foreach (var batch in script.Batches)
-                {
-                    foreach (var select in batch.Statements.OfType<SelectStatement>())
-                    {
-                        if (select.QueryExpression is QuerySpecification querySpec)
-                        {
-                            querySpec.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = "1" } };
-                        }
-                    }
-                }
-            }
-
-            script.ScriptTokenStream = null;
-            return script.ToSql();
+            return sql;
         }
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
@@ -262,17 +223,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var conditions = filterVisitor.Conditions.ToList();
             var ecc = new ExpressionCompilationContext(context, null, null);
 
-            if (!TryGetDmlSchema(dataSource, metadata, querySpec, new ExpressionCompilationContext(context, null, null), out var schema, out var literalValues))
+            if (!TryGetDmlSchema(dataSource, metadata, querySpec, new ExpressionCompilationContext(context, null, null), out var literalValues))
                 return this;
 
             // Every column must either be a literal or a key attribute
             if (requiredColumns.Except(literalValues.Keys).Except(keyAttributes).Any())
                 return this;
 
+            var schema = GetSchema(context);
             var constantScan = new ConstantScanNode();
 
             foreach (var col in requiredColumns)
-                constantScan.Schema[col.SplitMultiPartIdentifier().Last()] = new ColumnDefinition(schema[col], true, false);
+                constantScan.Schema[col.SplitMultiPartIdentifier().Last()] = schema.Schema[col];
 
             // We can handle compound keys, but only if they are all ANDed together
             if (keyAttributes.Length > 1 && filterVisitor.BinaryType == BooleanBinaryExpressionType.And)
@@ -292,12 +254,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return this;
 
                     var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
-                    values[condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource);
+                    values[condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, schema.Schema[col].Type);
                 }
 
                 constantScan.Values.Add(values);
 
-                AddLiteralValues(constantScan, literalValues);
+                AddLiteralValues(constantScan, literalValues, ecc, schema);
                 return constantScan;
             }
 
@@ -313,36 +275,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (condition.@operator == @operator.eq)
                     {
-                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, dataSource) });
+                        constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(condition.value, condition.IsVariable, ecc, schema.Schema[condition.attribute].Type) });
                     }
                     else if (condition.@operator == @operator.@in)
                     {
                         foreach (var value in condition.Items)
-                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(value.Value, value.IsVariable, ecc, dataSource) });
+                            constantScan.Values.Add(new Dictionary<string, ScalarExpression> { [condition.attribute] = attribute.GetDmlValue(value.Value, value.IsVariable, ecc, schema.Schema[condition.attribute].Type) });
                     }
                 }
 
-                AddLiteralValues(constantScan, literalValues);
+                AddLiteralValues(constantScan, literalValues, ecc, schema);
                 return constantScan;
             }
 
             return this;
         }
 
-        private void AddLiteralValues(ConstantScanNode constantScan, Dictionary<string, ScalarExpression> literalValues)
+        private void AddLiteralValues(ConstantScanNode constantScan, Dictionary<string, ScalarExpression> literalValues, ExpressionCompilationContext ecc, INodeSchema schema)
         {
             foreach (var row in constantScan.Values)
             {
                 foreach (var value in literalValues)
                 {
-                    row[value.Key] = value.Value;
+                    var expr = value.Value;
+                    expr.GetType(ecc, out var type);
+                    if (!type.IsSameAs(schema.Schema[value.Key].Type))
+                        expr = new CastCall { Parameter = expr, DataType = schema.Schema[value.Key].Type };
+
+                    row[value.Key] = expr;
                 }
             }
         }
 
-        private bool TryGetDmlSchema(DataSource dataSource, EntityMetadata metadata, QuerySpecification querySpec, ExpressionCompilationContext context, out Dictionary<string, DataTypeReference> schema, out Dictionary<string, ScalarExpression> literalValues)
+        private bool TryGetDmlSchema(DataSource dataSource, EntityMetadata metadata, QuerySpecification querySpec, ExpressionCompilationContext context, out Dictionary<string, ScalarExpression> literalValues)
         {
-            schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
             literalValues = new Dictionary<string, ScalarExpression>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var select in querySpec.SelectElements)
@@ -352,8 +318,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (!scalar.Expression.GetColumns().Any() && scalar.ColumnName?.Value != null)
                 {
-                    scalar.Expression.GetType(context, out var literalType);
-                    schema[scalar.ColumnName.Value] = literalType;
                     literalValues[scalar.ColumnName.Value] = scalar.Expression;
                     continue;
                 }
@@ -365,14 +329,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (attribute == null)
                     return false;
-
-                var type = attribute.GetAttributeSqlType(dataSource, false);
-                var name = scalar.ColumnName?.Value ?? attribute.LogicalName;
-
-                schema[name] = type;
             }
 
             return true;
+        }
+
+        public INodeSchema GetSchema(NodeCompilationContext context)
+        {
+            if (_schema != null)
+                return _schema;
+
+            // Parse the SQL that will be executed by the node so we can identify NULL literals
+            var parser = new TSql160Parser(context.Options.QuotedIdentifiers);
+            var script = (TSqlScript)parser.Parse(new StringReader(Sql), out _);
+
+            var querySpec = (script.Batches[0].Statements[0] as SelectStatement).QueryExpression as QuerySpecification;
+
+            // Get the ADO.NET schema from the data reader
+            // Parameter values need non-null value for compatibility with TDS Endpoint
+            var parameterValues = context.ParameterTypes.ToDictionary(p => p.Key, p => _sampleValues[p.Value.ToNetType(out _)]);
+            using (var reader = Execute(new NodeExecutionContext(context, parameterValues), CommandBehavior.SchemaOnly))
+            {
+                var schemaTable = reader.GetSchemaTable();
+                _schema = SchemaConverter.ConvertSchema(schemaTable, context.Session.DataSources[DataSource], querySpec);
+                return _schema;
+            }
         }
 
         public override string ToString()
@@ -390,7 +371,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Length = Length,
                 LineNumber = LineNumber,
                 Parameters = Parameters,
-                SelectStatement = SelectStatement
+                SelectStatement = SelectStatement,
+                _schema = _schema
             };
         }
     }

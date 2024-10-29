@@ -4,8 +4,6 @@ using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -41,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Insert")]
         [Description("The columns to insert and the associated column to take the new value from")]
         [DisplayName("Column Mappings")]
-        public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public List<AttributeAccessor> Accessors { get; set; }
 
         [Category("Insert")]
         public override int MaxDOP { get; set; }
@@ -62,11 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            foreach (var col in ColumnMappings.Values)
-            {
-                if (!requiredColumns.Contains(col))
-                    requiredColumns.Add(col);
-            }
+            AddRequiredColumns(requiredColumns, Accessors);
 
             Source.AddRequiredColumns(context, requiredColumns);
         }
@@ -123,12 +117,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     entities = GetDmlSourceEntities(context, out var schema);
-
-                    // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
                     attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                    attributeAccessors = CompileColumnMappings(dataSource, LogicalName, ColumnMappings, schema, dateTimeKind, entities);
+                    attributeAccessors = Accessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
                     attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
                 }
 
@@ -304,15 +296,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, LogicalName, create.id);
         }
 
-        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
-        {
-            foreach (var kvp in ColumnMappings.ToList())
-            {
-                if (columnRenamings.TryGetValue(kvp.Value, out var renamed))
-                    ColumnMappings[kvp.Key] = renamed;
-            }
-        }
-
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
             if (!req.Requests.All(r => r is CreateRequest))
@@ -431,12 +414,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 MaxDOP = MaxDOP,
                 IgnoreDuplicateKey = IgnoreDuplicateKey,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Accessors = Accessors,
                 Sql = Sql,
                 LineNumber = LineNumber,
             };
-
-            foreach (var kvp in ColumnMappings)
-                clone.ColumnMappings.Add(kvp);
 
             clone.Source.Parent = clone;
 

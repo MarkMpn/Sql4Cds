@@ -106,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return typeof(double?);
 
             if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
-                return typeof(int?);
+                return typeof(string);
 
             if (attrMetadata is ImageAttributeMetadata)
                 return typeof(byte[]);
@@ -121,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return typeof(EntityCollection);
 
             if (attrMetadata is LookupAttributeMetadata || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
-                return typeof(Guid?);
+                return typeof(EntityReference);
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
                 return typeof(string);
@@ -275,39 +275,36 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>An expression that returns the value in the appropriate type</returns>
         internal static ScalarExpression GetDmlValue(this AttributeMetadata attribute, string value, bool isVariable, ExpressionCompilationContext context, DataSource dataSource)
         {
+            var attrType = attribute.GetAttributeSqlType(dataSource, false);
+            return GetDmlValue(attribute, value, isVariable, context, attrType);
+        }
+
+        /// <summary>
+        /// Converts a constant string value to an expression that generates the value of the appropriate type for use in a DML operation
+        /// </summary>
+        /// <param name="attribute">The attribute to convert the value for</param>
+        /// <param name="value">The string representation of the value</param>
+        /// <param name="isVariable">Indicates if the value is a variable name</param>
+        /// <param name="context">The context that the expression is being compiled in</param>
+        /// <param name="type">The expected data type for the literal value</param>
+        /// <returns>An expression that returns the value in the appropriate type</returns>
+        internal static ScalarExpression GetDmlValue(this AttributeMetadata attribute, string value, bool isVariable, ExpressionCompilationContext context, DataTypeReference type)
+        {
             var expr = (ScalarExpression)new StringLiteral { Value = value };
 
             if (isVariable)
                 expr = new VariableReference { Name = value };
 
             expr.GetType(context, out var exprType);
-            var attrType = attribute.GetAttributeSqlType(dataSource, false);
 
-            if (DataTypeHelpers.IsSameAs(exprType, attrType))
+            if (exprType.IsSameAs(type))
                 return expr;
 
-            if (attribute.IsPrimaryId == true)
+            return new CastCall
             {
-                expr = new FunctionCall
-                {
-                    FunctionName = new Identifier { Value = nameof(ExpressionFunctions.CreateLookup) },
-                    Parameters =
-                    {
-                        new StringLiteral { Value = attribute.EntityLogicalName },
-                        expr
-                    }
-                };
-            }
-            else
-            {
-                expr = new CastCall
-                {
-                    Parameter = expr,
-                    DataType = attrType
-                };
-            }
-
-            return expr;
+                Parameter = expr,
+                DataType = type
+            };
         }
     }
 

@@ -750,11 +750,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (expr.Type == typeof(SqlBinary) && targetType == typeof(SqlString))
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlBinary>(), Expr.Arg<Collation>(), Expr.Arg<bool>()), expr, Expression.Constant(targetCollation), Expression.Constant(toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar));
             else if (expr.Type == typeof(SqlGuid) && to.IsEntityReference(out toEr) && toEr != null)
-                expr = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<SqlString>(), Expr.Arg<SqlGuid>()), Expression.Constant((SqlString)toEr), expr);
+                expr = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<SqlString>(), Expr.Arg<SqlGuid>(), Expr.Arg<ExpressionExecutionContext>()), Expression.Constant((SqlString)toEr), expr, context);
             else if (expr.Type == typeof(SqlString) && to.IsEntityReference(out toEr) && toEr != null)
             {
                 expr = Convert(expr, context, from, DataTypeHelpers.UniqueIdentifier, style, styleType, convert, throwOnTruncate, table, column);
-                expr = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<SqlString>(), Expr.Arg<SqlGuid>()), Expression.Constant((SqlString)toEr), expr);
+                expr = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<SqlString>(), Expr.Arg<SqlGuid>(), Expr.Arg<ExpressionExecutionContext>()), Expression.Constant((SqlString)toEr), expr, context);
             }
 
             if (expr.Type != targetType)

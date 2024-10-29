@@ -4,11 +4,7 @@ using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.Serialization.Formatters;
-using System.Text;
-using System.Web;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
-using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -270,6 +266,11 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var name = column.GetColumnName();
             return Create(271, column, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError ReadOnlyColumn(string name)
+        {
+            return Create(271, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
         internal static Sql4CdsError InvalidDataType(DataTypeReference type)

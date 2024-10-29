@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -35,12 +32,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string LogicalName { get; set; }
 
         /// <summary>
-        /// The columns that are used for the delete requests and their corresponding source columns
+        /// The columns to use to identify the records to update and the associated column to take the new value from
         /// </summary>
         [Category("Delete")]
-        [Description("The columns that are used for the delete requests and their corresponding source columns")]
-        [DisplayName("Column Mappings")]
-        public Dictionary<string, string> ColumnMappings { get; set; }
+        [Description("The columns to use to identify the records to delete and the associated column to take the value from")]
+        [DisplayName("PrimaryId Mappings")]
+        public List<AttributeAccessor> PrimaryIdAccessors { get; set; }
 
         [Category("Delete")]
         public override int MaxDOP { get; set; }
@@ -58,11 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            foreach (var col in ColumnMappings.Values)
-            {
-                if (!requiredColumns.Contains(col))
-                    requiredColumns.Add(col);
-            }
+            AddRequiredColumns(requiredColumns, PrimaryIdAccessors);
 
             Source.AddRequiredColumns(context, requiredColumns);
         }
@@ -81,34 +74,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if ((context.Options.UseBulkDelete || LogicalName == "audit") &&
                 Source is FetchXmlScan fetch &&
                 LogicalName == fetch.Entity.name &&
-                ColumnMappings.Count == 1)
+                PrimaryIdAccessors.Count == 1)
             {
                 var metadata = dataSource.Metadata[LogicalName];
 
-                if (ColumnMappings.TryGetValue(metadata.PrimaryIdAttribute, out var primaryIdSource) &&
-                    primaryIdSource == $"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}")
+                if (PrimaryIdAccessors[0].TargetAttribute == metadata.PrimaryIdAttribute &&
+                    PrimaryIdAccessors[0].SourceAttributes.Single() == $"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}")
                 {
                     return new[] { new BulkDeleteJobNode { DataSource = DataSource, Source = fetch } };
                 }
             }
 
             // Replace a source query with a list of known IDs if possible
-            FoldIdsToConstantScan(context, hints, LogicalName, ColumnMappings.Values.ToArray());
+            FoldIdsToConstantScan(context, hints, LogicalName, PrimaryIdAccessors);
 
             return new[] { this };
-        }
-
-        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
-        {
-            var renamedMappings = new Dictionary<string, string>();
-
-            foreach (var mapping in ColumnMappings)
-            {
-                if (columnRenamings.TryGetValue(mapping.Value, out var renamed))
-                    renamedMappings[mapping.Key] = renamed;
-                else
-                    renamedMappings[mapping.Key] = mapping.Value;
-            }
         }
 
         public override void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
@@ -122,34 +102,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 List<Entity> entities;
                 EntityMetadata meta;
-                Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors;
                 var eec = new ExpressionExecutionContext(context);
-                
+
                 using (_timer.Run())
                 {
                     entities = GetDmlSourceEntities(context, out var schema);
-
-                    // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-
-                    var mappingsToCompile = ColumnMappings;
-
-                    // Entity type codes will be presented as a string but the mapping compilation will try to convert
-                    // them to an int, so remove it and we can access the string directly
-                    if (LogicalName == "principalobjectaccess")
-                    {
-                        mappingsToCompile = new Dictionary<string, string>(ColumnMappings);
-                        mappingsToCompile.Remove("objecttypecode");
-                        mappingsToCompile.Remove("principaltypecode");
-                    }
-                    else if (LogicalName == "activitypointer")
-                    {
-                        mappingsToCompile = new Dictionary<string, string>(ColumnMappings);
-                        mappingsToCompile.Remove("activitytypecode");
-                    }
-
-                    attributeAccessors = CompileColumnMappings(dataSource, LogicalName, mappingsToCompile, schema, dateTimeKind, entities);
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
@@ -170,7 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         entity =>
                         {
                             eec.Entity = entity;
-                            return CreateDeleteRequest(meta, eec, attributeAccessors);
+                            return CreateDeleteRequest(meta, eec, PrimaryIdAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor));
                         },
                         new OperationNames
                         {
@@ -196,19 +154,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string,Func<ExpressionExecutionContext,object>> attributeAccessors)
+        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors)
         {
             if (meta.LogicalName == "principalobjectaccess")
             {
-                var objectId = (Guid)attributeAccessors["objectid"](context);
-                var objectTypeCode = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"]).Value;
-                var principalId = (Guid)attributeAccessors["principalid"](context);
-                var principalTypeCode = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"]).Value;
+                var objectId = (EntityReference)attributeAccessors["objectid"](context);
+                var principalId = (EntityReference)attributeAccessors["principalid"](context);
 
                 return new RevokeAccessRequest
                 {
-                    Target = new EntityReference(objectTypeCode, objectId),
-                    Revokee = new EntityReference(principalTypeCode, principalId)
+                    Target = objectId,
+                    Revokee = principalId
                 };
             }
 
@@ -257,7 +213,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Special case for activitypointer - need to set the specific activity type code
             if (LogicalName == "activitypointer")
-                req.Target.LogicalName = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"]).Value;
+                req.Target.LogicalName = (string)attributeAccessors["activitytypecode"](context);
 
             return req;
         }
@@ -389,7 +345,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
-                ColumnMappings = ColumnMappings,
+                PrimaryIdAccessors = PrimaryIdAccessors,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };

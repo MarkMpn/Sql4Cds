@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -35,20 +33,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string LogicalName { get; set; }
 
         /// <summary>
-        /// The column that contains the primary ID of the records to update
+        /// The columns to use to identify the records to update and the associated column to take the new value from
         /// </summary>
         [Category("Update")]
-        [DisplayName("PrimaryId Source")]
-        [Description("The column that contains the primary ID of the records to update")]
-        public string PrimaryIdSource { get; set; }
+        [Description("The columns to use to identify the records to update and the associated column to take the new value from")]
+        [DisplayName("PrimaryId Mappings")]
+        public List<AttributeAccessor> PrimaryIdAccessors { get; set; }
 
         /// <summary>
         /// The columns to update and the associated column to take the new value from
         /// </summary>
         [Category("Update")]
-        [DisplayName("Column Mappings")]
         [Description("The columns to update and the associated column to take the new value from")]
-        public IDictionary<string, UpdateMapping> ColumnMappings { get; } = new Dictionary<string, UpdateMapping>(StringComparer.OrdinalIgnoreCase);
+        [DisplayName("Column Mappings")]
+        public List<AttributeAccessor> NewValueAccessors { get; set; }
+
+        /// <summary>
+        /// The columns to update and the associated column to take the existing value from
+        /// </summary>
+        [Category("Update")]
+        [Description("The columns to update and the associated column to take the existing value from")]
+        [DisplayName("Column Mappings")]
+        public List<AttributeAccessor> ExistingValueAccessors { get; set; }
 
         [Category("Update")]
         public override int MaxDOP { get; set; }
@@ -84,17 +90,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            if (!requiredColumns.Contains(PrimaryIdSource))
-                requiredColumns.Add(PrimaryIdSource);
-
-            foreach (var col in ColumnMappings.Values)
-            {
-                if (col.OldValueColumn != null && !requiredColumns.Contains(col.OldValueColumn))
-                    requiredColumns.Add(col.OldValueColumn);
-
-                if (col.NewValueColumn != null && !requiredColumns.Contains(col.NewValueColumn))
-                    requiredColumns.Add(col.NewValueColumn);
-            }
+            AddRequiredColumns(requiredColumns, PrimaryIdAccessors);
+            AddRequiredColumns(requiredColumns, NewValueAccessors);
+            AddRequiredColumns(requiredColumns, ExistingValueAccessors);
 
             Source.AddRequiredColumns(context, requiredColumns);
         }
@@ -110,18 +108,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // If we don't need to use any of the original values and we're filtering by ID we can bypass reading
             // the record to update
-            if (ColumnMappings.Values.All(m => m.OldValueColumn == null))
-            {
-                var dataSource = context.Session.DataSources[DataSource];
-                var meta = dataSource.Metadata[LogicalName];
-
-                var requiredColumns = ColumnMappings
-                    .Select(kvp => kvp.Value.NewValueColumn)
-                    .Union(new[] { PrimaryIdSource })
-                    .ToArray();
-
-                FoldIdsToConstantScan(context, hints, LogicalName, requiredColumns);
-            }
+            if (ExistingValueAccessors.Count == 0)
+                FoldIdsToConstantScan(context, hints, LogicalName, PrimaryIdAccessors.Concat(NewValueAccessors).ToList());
 
             return new[] { this };
         }
@@ -153,7 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Dictionary<string, AttributeMetadata> attributes;
                 Dictionary<string, Func<ExpressionExecutionContext, object>> newAttributeAccessors;
                 Dictionary<string, Func<ExpressionExecutionContext, object>> oldAttributeAccessors;
-                Func<ExpressionExecutionContext, object> primaryIdAccessor;
+                Dictionary<string, Func<ExpressionExecutionContext, object>> primaryIdAccessors;
                 var eec = new ExpressionExecutionContext(context);
 
                 using (_timer.Run())
@@ -163,25 +151,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
                     attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
-                    var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                    var fullMappings = new Dictionary<string, UpdateMapping>(ColumnMappings);
-                    fullMappings[meta.PrimaryIdAttribute] = new UpdateMapping { OldValueColumn = PrimaryIdSource, NewValueColumn = PrimaryIdSource };
-
-                    // Entity type codes will be presented as a string but the mapping compilation will try to convert
-                    // them to an int, so remove it and we can access the string directly
-                    if (LogicalName == "principalobjectaccess")
-                    {
-                        fullMappings.Remove("objecttypecode");
-                        fullMappings.Remove("principaltypecode");
-                    }
-                    else if (LogicalName == "activitypointer")
-                    {
-                        fullMappings.Remove("activitytypecode");
-                    }
-
-                    newAttributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings.Where(kvp => kvp.Value.NewValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.NewValueColumn), schema, dateTimeKind, entities);
-                    oldAttributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings.Where(kvp => kvp.Value.OldValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.OldValueColumn), schema, dateTimeKind, entities);
-                    primaryIdAccessor = newAttributeAccessors[meta.PrimaryIdAttribute];
+                    newAttributeAccessors = NewValueAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
+                    oldAttributeAccessors = ExistingValueAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
+                    primaryIdAccessors = PrimaryIdAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
@@ -240,8 +212,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         entity =>
                         {
                             eec.Entity = entity;
-                            var preImage = ExtractEntity(eec, meta, attributes, oldAttributeAccessors, primaryIdAccessor);
-                            var update = ExtractEntity(eec, meta, attributes, newAttributeAccessors, primaryIdAccessor);
+                            var preImage = ExtractEntity(eec, meta, attributes, oldAttributeAccessors, primaryIdAccessors);
+                            var update = ExtractEntity(eec, meta, attributes, newAttributeAccessors, primaryIdAccessors);
 
                             var requests = new OrganizationRequestCollection();
 
@@ -311,15 +283,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                             else if (meta.LogicalName == "principalobjectaccess")
                             {
-                                var objectIdPrev = preImage.GetAttributeValue<Guid>("objectid");
-                                var objectTypeCodePrev = entity.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"].OldValueColumn).Value;
-                                var principalIdPrev = preImage.GetAttributeValue<Guid>("principalid");
-                                var principalTypeCodePrev = entity.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"].OldValueColumn).Value;
+                                var objectIdPrev = preImage.GetAttributeValue<EntityReference>("objectid");
+                                var principalIdPrev = preImage.GetAttributeValue<EntityReference>("principalid");
                                 var accessMaskPrev = (AccessRights)preImage.GetAttributeValue<int>("accessrightsmask");
-                                var objectIdNew = update.GetAttributeValue<Guid?>("objectid") ?? objectIdPrev;
-                                var objectTypeCodeNew = ColumnMappings["objecttypecode"].NewValueColumn != null ? update.GetAttributeValue<SqlString>(ColumnMappings["objecttypecode"].NewValueColumn).Value : objectTypeCodePrev;
-                                var principalIdNew = update.GetAttributeValue<Guid?>("principalid") ?? principalIdPrev;
-                                var principalTypeCodeNew = ColumnMappings["principaltypecode"].NewValueColumn != null ? update.GetAttributeValue<SqlString>(ColumnMappings["principaltypecode"].NewValueColumn).Value : principalTypeCodePrev;
+                                var objectIdNew = update.GetAttributeValue<EntityReference>("objectid") ?? objectIdPrev;
+                                var principalIdNew = update.GetAttributeValue<EntityReference>("principalid") ?? principalIdPrev;
                                 var accessMaskNew = (AccessRights?)update.GetAttributeValue<int>("accessrightsmask") ?? accessMaskPrev;
 
                                 // Check if we need to remove any previous share permissions
@@ -327,8 +295,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     requests.Add(new RevokeAccessRequest
                                     {
-                                        Target = new EntityReference(objectTypeCodePrev, objectIdPrev),
-                                        Revokee = new EntityReference(principalTypeCodePrev, principalIdPrev)
+                                        Target = objectIdPrev,
+                                        Revokee = principalIdPrev
                                     });
                                 }
 
@@ -337,10 +305,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     requests.Add(new GrantAccessRequest
                                     {
-                                        Target = new EntityReference(objectTypeCodeNew, objectIdNew),
+                                        Target = objectIdNew,
                                         PrincipalAccess = new PrincipalAccess
                                         {
-                                            Principal = new EntityReference(principalTypeCodeNew, principalIdNew),
+                                            Principal = principalIdNew,
                                             AccessMask = accessMaskNew
                                         }
                                     });
@@ -605,11 +573,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new OptionSetValue((int)((StateOptionMetadata)stateCode).DefaultStatus);
         }
 
-        private Entity ExtractEntity(ExpressionExecutionContext context, EntityMetadata meta, Dictionary<string, AttributeMetadata> attributes, Dictionary<string, Func<ExpressionExecutionContext, object>> newAttributeAccessors, Func<ExpressionExecutionContext, object> primaryIdAccessor)
+        private Entity ExtractEntity(ExpressionExecutionContext context, EntityMetadata meta, Dictionary<string, AttributeMetadata> attributes, Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors, Dictionary<string, Func<ExpressionExecutionContext, object>> primaryIdAccessors)
         {
-            var update = new Entity(LogicalName, (Guid)primaryIdAccessor(context));
-            
-            foreach (var attributeAccessor in newAttributeAccessors)
+            var update = new Entity(LogicalName);
+
+            if (primaryIdAccessors.TryGetValue(meta.PrimaryIdAttribute, out var primaryIdAccessor))
+                update.Id = (Guid)primaryIdAccessor(context);
+
+            foreach (var attributeAccessor in attributeAccessors)
             {
                 if (attributeAccessor.Key == meta.PrimaryIdAttribute)
                     continue;
@@ -626,24 +597,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Special case for activitypointer - need to set the specific activity type code
             if (LogicalName == "activitypointer")
-                update.LogicalName = context.Entity.GetAttributeValue<SqlString>(ColumnMappings["activitytypecode"].OldValueColumn).Value;
+            {
+                update.LogicalName = (string)primaryIdAccessors["activitytypecode"](context);
+
+                // When updating using TDS Endpoint as the data source, the type code is returned as an otc instead of logical name
+                if (Int32.TryParse(update.LogicalName, out var otc))
+                    update.LogicalName = context.Session.DataSources[DataSource].Metadata[otc].LogicalName;
+            }
 
             return update;
-        }
-
-        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
-        {
-            if (columnRenamings.TryGetValue(PrimaryIdSource, out var primaryIdSourceRenamed))
-                PrimaryIdSource = primaryIdSourceRenamed;
-
-            foreach (var kvp in ColumnMappings.ToList())
-            {
-                if (kvp.Value.OldValueColumn != null && columnRenamings.TryGetValue(kvp.Value.OldValueColumn, out var oldRenamed))
-                    ColumnMappings[kvp.Key].OldValueColumn = oldRenamed;
-
-                if (kvp.Value.NewValueColumn != null && columnRenamings.TryGetValue(kvp.Value.NewValueColumn, out var newRenamed))
-                    ColumnMappings[kvp.Key].NewValueColumn = newRenamed;
-            }
         }
 
         protected override bool FilterErrors(NodeExecutionContext context, OrganizationRequest request, OrganizationServiceFault fault)
@@ -772,16 +734,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
-                PrimaryIdSource = PrimaryIdSource,
+                PrimaryIdAccessors = PrimaryIdAccessors,
+                NewValueAccessors = NewValueAccessors,
+                ExistingValueAccessors = ExistingValueAccessors,
                 StateTransitions = StateTransitions,
                 UseLegacyUpdateMessages = UseLegacyUpdateMessages,
                 MinimalUpdates = MinimalUpdates,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
-
-            foreach (var kvp in ColumnMappings)
-                clone.ColumnMappings.Add(kvp);
 
             clone.Source.Parent = clone;
             return clone;

@@ -1256,16 +1256,6 @@ namespace MarkMpn.Sql4Cds.Engine
                             ComparisonType = BooleanComparisonType.Equals,
                             SecondExpression = impersonate.ExecuteContext.Principal
                         }
-                    },
-                    GroupByClause = new GroupByClause
-                    {
-                        GroupingSpecifications =
-                        {
-                            new ExpressionGroupingSpecification
-                            {
-                                Expression = impersonate.ExecuteContext.Principal
-                            }
-                        }
                     }
                 }
             };
@@ -1366,7 +1356,7 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var row in values.RowValues)
                 table.RowValues.Add(row);
 
-            columns = table.Columns.Select(col => col.Value).ToArray();
+            columns = table.Columns.Select(col => table.Alias.Value + "." + col.Value.EscapeIdentifier()).ToArray();
             return ConvertInlineDerivedTable(table, hints, outerSchema, outerReferences, context);
         }
 
@@ -1385,7 +1375,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (select is SqlNode sql)
             {
-                columns = null;
+                columns = sql.GetSchema(_nodeContext).Schema.Select(col => col.Key).ToArray();
                 return sql;
             }
 
@@ -1406,285 +1396,30 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var dataSource = SelectDataSource(target.SchemaObject);
 
-            var node = new InsertNode
-            {
-                DataSource = dataSource.Name,
-                LogicalName = target.SchemaObject.BaseIdentifier.Value,
-                Source = source
-            };
-
             ValidateDMLSchema(target, false);
 
             // Validate the entity name
+            var logicalName = target.SchemaObject.BaseIdentifier.Value;
             EntityMetadata metadata;
 
             try
             {
-                metadata = dataSource.Metadata[node.LogicalName];
+                metadata = dataSource.Metadata[logicalName];
             }
             catch (FaultException ex)
             {
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
             }
 
-            var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
-            var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var virtualPidAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var schema = sourceColumns == null ? null : ((IDataExecutionPlanNodeInternal)source).GetSchema(_nodeContext);
+            var reader = new EntityReader(metadata, _nodeContext, dataSource, insertStatement, target, source);
 
-            // Check all target columns are valid for create
-            foreach (var col in targetColumns)
+            var node = new InsertNode
             {
-                var colName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
-
-                // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
-                // entityid in listmember has an associated entitytypecode attribute
-                if (colName.EndsWith("type", StringComparison.OrdinalIgnoreCase) &&
-                    attributes.TryGetValue(colName.Substring(0, colName.Length - 4), out var attr) &&
-                    attr is LookupAttributeMetadata lookupAttr &&
-                    lookupAttr.Targets.Length > 1)
-                {
-                    if (!virtualTypeAttributes.Add(colName))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
-
-                    continue;
-                }
-
-                // Could be a virtual ___pid attribute
-                if (colName.EndsWith("pid", StringComparison.OrdinalIgnoreCase) &&
-                    attributes.TryGetValue(colName.Substring(0, colName.Length - 3), out attr) &&
-                    attr is LookupAttributeMetadata elasticLookupAttr &&
-                    elasticLookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider))
-                {
-                    if (!virtualPidAttributes.Add(colName))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
-
-                    continue;
-                }
-
-                if (!attributes.TryGetValue(colName, out attr))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnName(col));
-
-                if (!attributeNames.Add(colName))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
-
-                if (metadata.LogicalName == "listmember")
-                {
-                    if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = "Only the listid and entityid columns can be used when inserting values into the listmember table" };
-                }
-                else if (metadata.IsIntersect == true)
-                {
-                    var relationship = metadata.ManyToManyRelationships.Single();
-
-                    if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = $"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when inserting values into the {metadata.LogicalName} table" };
-                }
-                else if (metadata.LogicalName == "principalobjectaccess")
-                {
-                    if (attr.LogicalName == "objecttypecode" || attr.LogicalName == "principaltypecode")
-                    {
-                        if (!virtualTypeAttributes.Add(colName))
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(col));
-
-                        continue;
-                    }
-
-                    if (attr.LogicalName != "objectid" && attr.LogicalName != "principalid" && attr.LogicalName != "accessrightsmask")
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = "Only the objectid, principalid and accessrightsmask columns can be used when inserting values into the principalobjectaccess table" };
-                }
-                else
-                {
-                    if (attr.IsValidForCreate == false)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col)) { Suggestion = "Column is not valid for INSERT" };
-                }
-            }
-
-            // Special case: inserting into listmember requires listid and entityid
-            if (metadata.LogicalName == "listmember")
-            {
-                if (!attributeNames.Contains("listid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "listid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the listid column to be set" };
-                if (!attributeNames.Contains("entityid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "entityid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the entityid column to be set" };
-            }
-            else if (metadata.IsIntersect == true)
-            {
-                var relationship = metadata.ManyToManyRelationships.Single();
-                if (!attributeNames.Contains(relationship.Entity1IntersectAttribute))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity1IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity1IntersectAttribute} column to be set" };
-                if (!attributeNames.Contains(relationship.Entity2IntersectAttribute))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity2IntersectAttribute }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity2IntersectAttribute} column to be set" };
-            }
-            else if (metadata.LogicalName == "principalobjectaccess")
-            {
-                if (!attributeNames.Contains("objectid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "objectid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the objectid column to be set" };
-                if (!attributeNames.Contains("principalid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "principalid" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the principalid column to be set" };
-                if (!attributeNames.Contains("accessrightsmask"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "accessrightsmask" }, new Identifier { Value = metadata.LogicalName }, "Insert", target)) { Suggestion = $"Inserting values into the {metadata.LogicalName} table requires the accessrightsmask column to be set" };
-            }
-
-            if (sourceColumns == null)
-            {
-                // Source is TDS endpoint so can't validate the columns, assume they are correct
-                for (var i = 0; i < targetColumns.Count; i++)
-                    node.ColumnMappings[targetColumns[i].MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant()] = i.ToString();
-            }
-            else
-            {
-                if (targetColumns.Count != sourceColumns.Length)
-                {
-                    if (targetColumns.Count > sourceColumns.Length)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InsertTooManyColumns(insertStatement));
-                    else
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InsertTooFewColumns(insertStatement));
-                }
-
-                for (var i = 0; i < targetColumns.Count; i++)
-                {
-                    string targetName;
-                    DataTypeReference targetType;
-
-                    var colName = targetColumns[i].MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
-                    if (virtualTypeAttributes.Contains(colName))
-                    {
-                        targetName = colName;
-                        targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
-                    }
-                    else if (virtualPidAttributes.Contains(colName))
-                    {
-                        targetName = colName;
-                        targetType = DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
-                    }
-                    else
-                    {
-                        var attr = attributes[colName];
-                        targetName = attr.LogicalName;
-                        targetType = attr.GetAttributeSqlType(dataSource, true);
-
-                        // If we're inserting into a lookup field, the field type will be a SqlEntityReference. Change this to
-                        // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
-                        // values will not be available. The user can specify either an EntityReference value for this field,
-                        // or a giud value combined with a string value in the associated __type field.
-                        if (targetType.IsSameAs(DataTypeHelpers.EntityReference))
-                            targetType = DataTypeHelpers.UniqueIdentifier;
-                    }
-
-                    if (!schema.ContainsColumn(sourceColumns[i], out var sourceColumn))
-                        throw new NotSupportedQueryFragmentException("Invalid source column");
-
-                    var sourceType = schema.Schema[sourceColumn].Type;
-
-                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(targetColumns[i], sourceType, targetType));
-
-                    node.ColumnMappings[targetName] = sourceColumn;
-                }
-            }
-
-            // If any of the insert columns are a polymorphic lookup field, make sure we've got a value for the associated type field too
-            foreach (var col in targetColumns)
-            {
-                var targetAttrName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLowerInvariant();
-
-                if (attributeNames.Contains(targetAttrName))
-                {
-                    // Special case for principalobjectaccess table
-                    if (metadata.LogicalName == "principalobjectaccess")
-                    {
-                        if ((targetAttrName == "objectid" || targetAttrName == "principalid") &&
-                            !virtualTypeAttributes.Contains(targetAttrName.Replace("id", "typecode")) &&
-                            (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
-                        {
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
-                            {
-                                Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetAttrName.Replace("id", "typecode")} column"
-                            };
-                        }
-                    }
-                    else
-                    {
-                        var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
-
-                        if (targetLookupAttribute == null)
-                            continue;
-
-                        bool isNull;
-
-                        // Check if the source value is a null literal or not
-                        var colIndex = targetColumns.IndexOf(col);
-                        if (insertStatement.InsertSpecification.InsertSource is ValuesInsertSource values)
-                        {
-                            isNull = values.RowValues.All(row => row.ColumnValues[colIndex] is NullLiteral);
-                        }
-                        else if (insertStatement.InsertSpecification.InsertSource is SelectInsertSource selectSource && selectSource.Select is QuerySpecification querySpec && querySpec.SelectElements.Count > colIndex)
-                        {
-                            var expressions = querySpec.SelectElements.OfType<SelectScalarExpression>().Take(colIndex + 1).ToArray();
-                            isNull = expressions.All(expr => expr != null) && expressions[colIndex].Expression is NullLiteral;
-                        }
-                        else
-                        {
-                            isNull = false;
-                        }
-
-                        if (!isNull)
-                        {
-                            if (targetLookupAttribute.Targets.Length > 1 &&
-                                !virtualTypeAttributes.Contains(targetAttrName + "type") &&
-                                targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                                (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
-                            {
-                                // Special case: not required for listmember.entityid
-                                if (metadata.LogicalName != "listmember" || targetLookupAttribute.LogicalName != "entityid")
-                                {
-                                    throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
-                                    {
-                                        Suggestion = $"Inserting values into a polymorphic lookup field requires setting the associated type column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
-                                    };
-                                }
-                            }
-
-                            // If the lookup references an elastic table we also need the pid column
-                            if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
-                                !virtualPidAttributes.Contains(targetAttrName + "pid") &&
-                                (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(GetExpressionContext(schema, _nodeContext), out var elasticLookupType) != null && elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
-                            {
-                                throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
-                                {
-                                    Suggestion = $"Inserting values into an elastic lookup field requires setting the associated pid column as well\r\nAdd a value for the {targetLookupAttribute.LogicalName}pid column"
-                                };
-                            }
-                        }
-                    }
-                }
-                else if (virtualTypeAttributes.Contains(targetAttrName))
-                {
-                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
-
-                    if (!attributeNames.Contains(idAttrName))
-                    {
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
-                        {
-                            Suggestion = $"Inserting values into a polymorphic type field requires setting the associated ID column as well\r\nAdd a value for the {idAttrName} column"
-                        };
-                    }
-                }
-                else if (virtualPidAttributes.Contains(targetAttrName))
-                {
-                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 3);
-
-                    if (!attributeNames.Contains(idAttrName))
-                    {
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(col))
-                        {
-                            Suggestion = $"Inserting values into an elastic lookup field requires setting the associated ID column as well\r\nAdd a value for the {idAttrName} column"
-                        };
-                    }
-                }
-            }
+                DataSource = dataSource.Name,
+                LogicalName = logicalName,
+                Source = reader.Source,
+                Accessors = reader.ValidateInsertColumnMapping(targetColumns, sourceColumns)
+            };
 
             return node;
         }
@@ -1719,10 +1454,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (delete.WithCtesAndXmlNamespaces != null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.WithCtesAndXmlNamespaces, "WITH"));
 
-            return ConvertDeleteStatement(delete.DeleteSpecification, delete.OptimizerHints);
+            return ConvertDeleteStatement(delete.DeleteSpecification, delete.OptimizerHints, delete);
         }
 
-        private DeleteNode ConvertDeleteStatement(DeleteSpecification delete, IList<OptimizerHint> hints)
+        private DeleteNode ConvertDeleteStatement(DeleteSpecification delete, IList<OptimizerHint> hints, DeleteStatement statement)
         {
             if (delete.OutputClause != null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.OutputClause, "OUTPUT"));
@@ -1778,40 +1513,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
             }
 
-            var columnMappings = new Dictionary<string, string>();
+            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, out _);
+            var columnMappings = primaryKeyFields.ToDictionary(f => f);
 
-            if (targetMetadata.LogicalName == "listmember")
+            if (targetMetadata.LogicalName == "principalobjectaccess")
             {
-                columnMappings["listid"] = "listid";
-                columnMappings["entityid"] = "entityid";
-            }
-            else if (targetMetadata.IsIntersect == true)
-            {
-                var relationship = targetMetadata.ManyToManyRelationships.Single();
-                columnMappings[relationship.Entity1IntersectAttribute] = relationship.Entity1IntersectAttribute;
-                columnMappings[relationship.Entity2IntersectAttribute] = relationship.Entity2IntersectAttribute;
-            }
-            else if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
-            {
-                // Elastic tables need the partitionid as part of the primary key
-                columnMappings[targetMetadata.PrimaryIdAttribute] = targetMetadata.PrimaryIdAttribute;
-                columnMappings["partitionid"] = "partitionid";
-            }
-            else if (targetMetadata.LogicalName == "principalobjectaccess")
-            {
-                columnMappings["objectid"] = "objectid";
-                columnMappings["objecttypecode"] = "objecttypecode";
-                columnMappings["principalid"] = "principalid";
+                // principalid and objectid are polymorphic lookups, for compatibility with TDS Endpoint
+                // make sure we include the type values as well
                 columnMappings["principaltypecode"] = "principaltypecode";
-            }
-            else if (targetMetadata.LogicalName == "activitypointer")
-            {
-                columnMappings["activityid"] = "activityid";
-                columnMappings["activitytypecode"] = "activitytypecode";
-            }
-            else
-            {
-                columnMappings[targetMetadata.PrimaryIdAttribute] = targetMetadata.PrimaryIdAttribute;
+                columnMappings["objecttypecode"] = "objecttypecode";
             }
 
             if (deleteTarget.TargetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
@@ -1971,18 +1681,18 @@ namespace MarkMpn.Sql4Cds.Engine
                                     FromClause = new FromClause
                                     {
                                         TableReferences =
-                                    {
-                                        new NamedTableReference
                                         {
-                                            SchemaObject = new SchemaObjectName
+                                            new NamedTableReference
                                             {
-                                                Identifiers =
+                                                SchemaObject = new SchemaObjectName
                                                 {
-                                                    new Identifier { Value = "activitypointer" }
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = "activitypointer" }
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
                                     },
                                     WhereClause = new WhereClause
                                     {
@@ -2041,19 +1751,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 DataSource = dataSource.Name
             };
 
-            if (source is SelectNode select)
-            {
-                deleteNode.Source = select.Source;
-                deleteNode.ColumnMappings = new Dictionary<string, string>();
-
-                foreach (var columnMapping in columnMappings)
-                    deleteNode.ColumnMappings[columnMapping.Key] = select.ColumnSet.Single(c => c.OutputColumn == columnMapping.Key).SourceColumn;
-            }
-            else
-            {
-                deleteNode.Source = source;
-                deleteNode.ColumnMappings = columnMappings;
-            }
+            var reader = new EntityReader(targetMetadata, _nodeContext, dataSource, statement, target, source);
+            deleteNode.Source = reader.Source;
+            deleteNode.PrimaryIdAccessors = reader.ValidateDeleteColumnMapping(columnMappings);
 
             return deleteNode;
         }
@@ -2063,10 +1763,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (update.WithCtesAndXmlNamespaces != null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.WithCtesAndXmlNamespaces, "WITH"));
 
-            return ConvertUpdateStatement(update.UpdateSpecification, update.OptimizerHints);
+            return ConvertUpdateStatement(update.UpdateSpecification, update.OptimizerHints, update);
         }
 
-        private UpdateNode ConvertUpdateStatement(UpdateSpecification update, IList<OptimizerHint> hints)
+        private UpdateNode ConvertUpdateStatement(UpdateSpecification update, IList<OptimizerHint> hints, UpdateStatement updateStatement)
         {
             if (update.OutputClause != null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.OutputClause, "OUTPUT"));
@@ -2122,74 +1822,47 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject), ex);
             }
 
-            if (targetMetadata.IsIntersect != true)
+            var primaryKeyMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var newValueMappings = new Dictionary<ColumnReferenceExpression, string>();
+            var existingValueMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var existingAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, out var isIntersect);
+
+            if (!isIntersect)
             {
-                queryExpression.SelectElements.Add(new SelectScalarExpression
+                foreach (var primaryKey in primaryKeyFields)
                 {
-                    Expression = new ColumnReferenceExpression
+                    queryExpression.SelectElements.Add(new SelectScalarExpression
                     {
-                        MultiPartIdentifier = new MultiPartIdentifier
+                        Expression = new ColumnReferenceExpression
                         {
-                            Identifiers =
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
                             {
                                 new Identifier { Value = targetAlias },
-                                new Identifier { Value = targetMetadata.PrimaryIdAttribute }
+                                new Identifier { Value = primaryKey }
                             }
-                        }
-                    },
-                    ColumnName = new IdentifierOrValueExpression
-                    {
-                        Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
-                    }
-                });
-
-                if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
-                {
-                    // partitionid is required as part of the primary key for Elastic tables - included it as any
-                    // other column in the update statement. Check first that the column isn't already being updated -
-                    // the metadata shows it's valid for update but actually has no effect and is documented as not updateable
-                    // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#update-a-record-in-an-elastic-table
-                    var existingSet = update.SetClauses.OfType<AssignmentSetClause>().FirstOrDefault(set => set.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
-
-                    if (existingSet != null)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(existingSet.Column)) { Suggestion = "The column \"partitionid\" cannot be modified" };
-
-                    update.SetClauses.Add(new AssignmentSetClause
-                    {
-                        Column = new ColumnReferenceExpression
-                        {
-                            MultiPartIdentifier = new MultiPartIdentifier
-                            {
-                                Identifiers =
-                                {
-                                    new Identifier { Value = targetAlias },
-                                    new Identifier { Value = "partitionid" }
-                                }
                             }
                         },
-                        NewValue = new ColumnReferenceExpression
+                        ColumnName = new IdentifierOrValueExpression
                         {
-                            MultiPartIdentifier = new MultiPartIdentifier
-                            {
-                                Identifiers =
-                                {
-                                    new Identifier { Value = targetAlias },
-                                    new Identifier { Value = "partitionid" }
-                                }
-                            }
+                            Identifier = new Identifier { Value = primaryKey }
                         }
                     });
+
+                    primaryKeyMappings[primaryKey] = primaryKey;
                 }
             }
+            else
+            {
+                foreach (var primaryKey in primaryKeyFields)
+                    existingAttributes.Add(primaryKey);
+            }
 
-            var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
-            var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var virtualPidAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var existingAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var useStateTransitions = !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
             var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
-            var manyToManyRelationship = targetMetadata.IsIntersect == true && targetMetadata.LogicalName != "listmember" ? targetMetadata.ManyToManyRelationships.Single() : null;
             var minimalUpdates = hints != null && hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("MINIMAL_UPDATES", StringComparison.OrdinalIgnoreCase)));
 
             foreach (var set in update.SetClauses)
@@ -2238,63 +1911,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Validate the target attribute
                 var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
 
-                // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
-                // entityid in listmember has an associated entitytypecode attribute
-                if (targetAttrName.EndsWith("type", StringComparison.OrdinalIgnoreCase) &&
-                    attributes.TryGetValue(targetAttrName.Substring(0, targetAttrName.Length - 4), out var attr) &&
-                    attr is LookupAttributeMetadata lookupAttr &&
-                    lookupAttr.Targets.Length > 1)
-                {
-                    if (!virtualTypeAttributes.Add(targetAttrName))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
-                }
-                else if (targetMetadata.LogicalName == "principalobjectaccess" &&
-                    targetAttrName.EndsWith("typecode", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!virtualTypeAttributes.Add(targetAttrName))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
-                }
-                else if (targetAttrName.EndsWith("pid", StringComparison.OrdinalIgnoreCase) &&
-                    attributes.TryGetValue(targetAttrName.Substring(0, targetAttrName.Length - 3), out attr) &&
-                    attr is LookupAttributeMetadata elasticLookupAttr &&
-                    elasticLookupAttr.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider))
-                {
-                    if (!virtualPidAttributes.Add(targetAttrName))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
-                }
-                else
-                {
-                    if (!attributes.TryGetValue(targetAttrName, out attr))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnName(assignment.Column));
-
-                    if (!attributeNames.Add(attr.LogicalName))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
-
-                    if (manyToManyRelationship != null)
-                    {
-                        if (attr.LogicalName != manyToManyRelationship.Entity1IntersectAttribute & attr.LogicalName != manyToManyRelationship.Entity2IntersectAttribute)
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = $"Only the {manyToManyRelationship.Entity1IntersectAttribute} and {manyToManyRelationship.Entity2IntersectAttribute} columns can be used when updating values in the {targetMetadata.LogicalName} table" };
-                    }
-                    else if (targetMetadata.LogicalName == "listmember")
-                    {
-                        if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = "Only the listid and entityid columns can be used when updating values in the listmember table" };
-                    }
-                    else if (targetMetadata.LogicalName == "principalobjectaccess")
-                    {
-                        if (attr.LogicalName != "objectid" && attr.LogicalName != "principalid" && attr.LogicalName != "accessrightsmask")
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = "Only the objectid, principalid and accessrightsmask columns can be used when updating values in the principalobjectaccess table" };
-                    }
-                    else
-                    {
-                        if (attr.IsValidForUpdate == false)
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column)) { Suggestion = $"The column \"{targetAttrName}\" cannot be modified" };
-                    }
-
-                    targetAttrName = attr.LogicalName;
-                }
-
                 queryExpression.SelectElements.Add(new SelectScalarExpression { Expression = assignment.NewValue, ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "new_" + targetAttrName } } });
+                newValueMappings[assignment.Column] = "new_" + targetAttrName;
 
                 // If we're changing the status of a record where only specific state transitions are allowed, we need to include the
                 // current statecode and statuscode values
@@ -2304,6 +1922,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     existingAttributes.Add("statuscode");
                 }
 
+                // Changing principalobjectaccess.accesstypemask requires the existing value to determine which rights to remove
+                if (targetLogicalName == "principalobjectaccess" && targetAttrName == "accessrightsmask")
+                    existingAttributes.Add("accessrightsmask");
+    
                 // If selected, include the existing value of all attributes to avoid excessive updates
                 if (minimalUpdates)
                     existingAttributes.Add(targetAttrName);
@@ -2314,32 +1936,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 existingAttributes.Add("statecode");
                 existingAttributes.Add("statuscode");
-            }
-
-            // many-to-many intersect entities need both the existing IDs so we can remove the existing association and add the new one
-            if (manyToManyRelationship != null)
-            {
-                existingAttributes.Add(manyToManyRelationship.Entity1IntersectAttribute);
-                existingAttributes.Add(manyToManyRelationship.Entity2IntersectAttribute);
-            }
-            else if (targetLogicalName == "listmember")
-            {
-                existingAttributes.Add("listid");
-                existingAttributes.Add("entityid");
-            }
-            else if (targetLogicalName == "principalobjectaccess")
-            {
-                existingAttributes.Add("objectid");
-                existingAttributes.Add("objecttypecode");
-                existingAttributes.Add("principalid");
-                existingAttributes.Add("principaltypecode");
-                existingAttributes.Add("accessrightsmask");
-            }
-
-            // activitypointer is polymorphic so we need to include the activitytypecode
-            if (targetLogicalName == "activitypointer")
-            {
-                existingAttributes.Add("activitytypecode");
             }
 
             foreach (var existingAttribute in existingAttributes)
@@ -2387,18 +1983,18 @@ namespace MarkMpn.Sql4Cds.Engine
                                     FromClause = new FromClause
                                     {
                                         TableReferences =
-                                    {
-                                        new NamedTableReference
                                         {
-                                            SchemaObject = new SchemaObjectName
+                                            new NamedTableReference
                                             {
-                                                Identifiers =
+                                                SchemaObject = new SchemaObjectName
                                                 {
-                                                    new Identifier { Value = "activitypointer" }
+                                                    Identifiers =
+                                                    {
+                                                        new Identifier { Value = "activitypointer" }
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
                                     },
                                     WhereClause = new WhereClause
                                     {
@@ -2444,6 +2040,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         Identifier = new Identifier { Value = "existing_" + existingAttribute }
                     }
                 });
+
+                existingValueMappings[existingAttribute] = "existing_" + existingAttribute;
             }
 
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
@@ -2453,9 +2051,18 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, existingAttributes, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, virtualPidAttributes, hints);
-            updateNode.StateTransitions = stateTransitions;
-            updateNode.MinimalUpdates = minimalUpdates;
+            var reader = new EntityReader(targetMetadata, _nodeContext, dataSource, updateStatement, target, source);
+            var updateNode = new UpdateNode
+            {
+                LogicalName = targetMetadata.LogicalName,
+                DataSource = dataSource.Name,
+                PrimaryIdAccessors = reader.ValidateUpdatePrimaryKeyColumnMapping(primaryKeyMappings),
+                NewValueAccessors = reader.ValidateUpdateNewValueColumnMapping(newValueMappings),
+                ExistingValueAccessors = reader.ValidateUpdateExistingValueColumnMapping(existingValueMappings),
+                StateTransitions = stateTransitions,
+                MinimalUpdates = minimalUpdates,
+                Source = reader.Source
+            };
 
             return updateNode;
         }
@@ -2480,185 +2087,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     selectStatement.OptimizerHints.Add(hint);
                 }
             }
-        }
-
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, HashSet<string> existingAttributes, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, HashSet<string> virtualPidAttributes, IList<OptimizerHint> queryHints)
-        {
-            var targetMetadata = dataSource.Metadata[targetLogicalName];
-            var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
-            var sourceTypes = new Dictionary<string, DataTypeReference>();
-
-            var update = new UpdateNode
-            {
-                LogicalName = targetMetadata.LogicalName,
-                DataSource = dataSource.Name,
-            };
-
-            if (node is SelectNode select)
-            {
-                update.Source = select.Source;
-                update.PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}";
-
-                var schema = select.Source.GetSchema(_nodeContext);
-                var expressionContext = GetExpressionContext(schema, _nodeContext);
-
-                foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
-                {
-                    // Validate the type conversion
-                    var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                    DataTypeReference targetType;
-
-                    // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
-                    // entityid in listmember has an associated entitytypecode attribute
-                    if (virtualTypeAttributes.Contains(targetAttrName))
-                    {
-                        targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
-
-                        if (targetMetadata.LogicalName != "principalobjectaccess")
-                        {
-                            var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
-                            targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
-                        }
-                    }
-                    else
-                    {
-                        var targetAttribute = attributes[targetAttrName];
-                        targetType = targetAttribute.GetAttributeSqlType(dataSource, true);
-                        targetAttrName = targetAttribute.LogicalName;
-
-                        // If we're updating a lookup field, the field type will be a SqlEntityReference. Change this to
-                        // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
-                        // values will not be available. The user can specify either an EntityReference value for this field,
-                        // or a giud value combined with a string value in the associated __type field.
-                        if (targetType.IsSameAs(DataTypeHelpers.EntityReference))
-                            targetType = DataTypeHelpers.UniqueIdentifier;
-                    }
-
-                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == "new_" + targetAttrName.ToLower()).SourceColumn;
-                    var sourceCol = sourceColName.ToColumnReference();
-                    sourceCol.GetType(expressionContext, out var sourceType);
-
-                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(assignment, sourceType, targetType));
-
-                    if (update.ColumnMappings.ContainsKey(targetAttrName))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DuplicateInsertUpdateColumn(assignment.Column));
-
-                    sourceTypes[targetAttrName] = sourceType;
-
-                    // Normalize the column name
-                    schema.ContainsColumn(sourceColName, out sourceColName);
-                    update.ColumnMappings[targetAttrName] = new UpdateMapping { NewValueColumn = sourceColName };
-                }
-
-                foreach (var existingAttribute in existingAttributes)
-                {
-                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == "existing_" + existingAttribute).SourceColumn;
-                    schema.ContainsColumn(sourceColName, out sourceColName);
-
-                    if (!update.ColumnMappings.TryGetValue(existingAttribute, out var mapping))
-                    {
-                        mapping = new UpdateMapping();
-                        update.ColumnMappings[existingAttribute] = mapping;
-                    }
-
-                    mapping.OldValueColumn = sourceColName;
-                }
-            }
-            else
-            {
-                update.Source = node;
-                update.PrimaryIdSource = targetMetadata.PrimaryIdAttribute;
-
-                foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
-                {
-                    var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                    update.ColumnMappings[targetAttrName] = new UpdateMapping { NewValueColumn = "new_" + targetAttrName };
-
-                    // Store the data type for simple null values to avoid errors when we are setting polymorphic lookup
-                    // fields to null without also setting the corresponding type field. Do not get the type information
-                    // for other fields - we could work this out with another round trip to the TDS Endpoint, but assume
-                    // the user has got this right for now.
-                    if (assignment.NewValue is NullLiteral)
-                        sourceTypes[targetAttrName] = DataTypeHelpers.ImplicitIntForNullLiteral;
-                }
-
-                foreach (var existingAttribute in existingAttributes)
-                {
-                    if (!update.ColumnMappings.TryGetValue(existingAttribute, out var mapping))
-                    {
-                        mapping = new UpdateMapping();
-                        update.ColumnMappings[existingAttribute] = mapping;
-                    }
-
-                    mapping.OldValueColumn = "existing_" + existingAttribute;
-                }
-            }
-
-            // If any of the updates are for a polymorphic lookup field, make sure we've got an update for the associated type field too
-            foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
-            {
-                var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-
-                if (attributeNames.Contains(targetAttrName))
-                {
-                    var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
-
-                    if (targetLookupAttribute == null)
-                        continue;
-
-                    if (targetLookupAttribute.Targets.Length > 1 &&
-                        !virtualTypeAttributes.Contains(targetAttrName + "type") &&
-                        targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || (!sourceType.IsEntityReference() && sourceType != DataTypeHelpers.ImplicitIntForNullLiteral)))
-                    {
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
-                        {
-                            Suggestion = $"Updating values in a polymorphic lookup field requires setting the associated type column as well\r\nAdd a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
-                        };
-                    }
-
-                    // If the lookup references an elastic table we also need the pid column
-                    if (targetLookupAttribute.Targets.Any(t => dataSource.Metadata[t].DataProviderId == DataProviders.ElasticDataProvider) &&
-                        !virtualPidAttributes.Contains(targetAttrName + "pid") &&
-                        (!sourceTypes.TryGetValue(targetAttrName, out var elasticLookupType) || elasticLookupType != DataTypeHelpers.ImplicitIntForNullLiteral))
-                    {
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
-                        {
-                            Suggestion = $"Updating values in an elastic lookup field requires setting the associated pid column as well\r\nAdd a SET clause for the {targetLookupAttribute.LogicalName}pid column"
-                        };
-                    }
-                }
-                else if (virtualTypeAttributes.Contains(targetAttrName))
-                {
-                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
-
-                    if (targetMetadata.LogicalName == "principalobjectaccess")
-                        idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 8) + "id";
-
-                    if (!attributeNames.Contains(idAttrName))
-                    {
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
-                        {
-                            Suggestion = $"Updating values in a polymorphic type field requires setting the associated ID column as well\r\nAdd a SET clause for the {idAttrName} column"
-                        };
-                    }
-                }
-                else if (virtualPidAttributes.Contains(targetAttrName))
-                {
-                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 3);
-
-                    if (!attributeNames.Contains(idAttrName))
-                    {
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ReadOnlyColumn(assignment.Column))
-                        {
-                            Suggestion = $"Updating values in an elastic lookup field requires setting the associated ID column as well\r\nAdd a SET clause for the {idAttrName} column"
-                        };
-                    }
-                }
-            }
-
-            return update;
         }
 
         private IRootExecutionPlanNodeInternal ConvertSelectStatement(SelectStatement select)
