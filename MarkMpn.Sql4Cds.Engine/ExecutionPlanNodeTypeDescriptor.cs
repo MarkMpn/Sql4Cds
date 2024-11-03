@@ -111,15 +111,20 @@ namespace MarkMpn.Sql4Cds.Engine
                 value = connections((string)value);
 
             if (value != null)
-                return GetAttributes(value.GetType()).Concat(baseAttributes).ToArray();
+                return GetAttributes(value.GetType()).Where(a1 => !baseAttributes.Any(a2 => a1.GetType() == a2.GetType())).Concat(baseAttributes).ToArray();
 
-            return GetAttributes(prop.PropertyType).Concat(baseAttributes).ToArray();
+            return GetAttributes(prop.PropertyType).Where(a1 => !baseAttributes.Any(a2 => a1.GetType() == a2.GetType())).Concat(baseAttributes).ToArray();
         }
 
         public static string GetName(ITypeDescriptorContext context)
         {
             if (context.PropertyDescriptor is WrappedPropertyDescriptor pd && pd._prop == null)
+            {
+                if (pd._value is string[] strings)
+                    return String.Join(", ", strings);
+
                 return $"({context.PropertyDescriptor.PropertyType.Name})";
+            }
 
             return $"({context.PropertyDescriptor.Name})";
         }
@@ -151,7 +156,7 @@ namespace MarkMpn.Sql4Cds.Engine
             attrs.Add(new ReadOnlyAttribute(true));
             return attrs.ToArray();
         }
-
+        
         public override TypeConverter Converter
         {
             get
@@ -169,7 +174,23 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (typeof(MultiPartIdentifier).IsAssignableFrom(type))
                         return new MultiPartIdentifierConverter();
 
-                    return new SimpleNameExpandableObjectConverter(_originalValue != null ? _originalValue : _value is TSqlFragment sql ? sql.ToSql() : _prop == null || (_value != null && _prop != null && type != _prop.PropertyType) ? $"({type.Name})" : $"({Name})");
+                    string name;
+
+                    if (_originalValue != null)
+                        name = _originalValue;
+                    else if (_value is TSqlFragment sql)
+                        name = sql.ToSql();
+                    else if (_prop == null || (_value != null && _prop != null && type != _prop.PropertyType))
+                    {
+                        if (type == typeof(string[]))
+                            name = String.Join(", ", (string[])_value);
+                        else
+                            name = $"({type.Name})";
+                    }
+                    else
+                        name = $"({Name})";
+
+                    return new SimpleNameExpandableObjectConverter(name);
                 }
                 else if (type.IsEnum)
                 {
@@ -297,7 +318,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
     class DataCollectionItemPropertyDescriptor : WrappedPropertyDescriptor
     {
-        public DataCollectionItemPropertyDescriptor(System.Collections.IList list, object item, int index) : base(list, GetPropertyName(list, item, index), item)
+        public DataCollectionItemPropertyDescriptor(System.Collections.IList list, object item, int index) : base(list, GetPropertyName(list, item, index), GetPropertyValue(item))
         {
         }
 
@@ -311,6 +332,21 @@ namespace MarkMpn.Sql4Cds.Engine
                 return dictionaryKeyProperty.GetValue(item)?.ToString() ?? " ";
 
             return index.ToString().PadLeft((int)Math.Ceiling(Math.Log10(list.Count)), '0');
+        }
+
+        private static object GetPropertyValue(object item)
+        {
+            var dictionaryValueProperty = item.GetType()
+                .GetProperties()
+                .SingleOrDefault(p => p.GetCustomAttribute<DictionaryValueAttribute>() != null);
+
+            if (dictionaryValueProperty != null)
+                item = dictionaryValueProperty.GetValue(item);
+            
+            if (item.GetType().IsArray && ((Array)item).Length == 1)
+                item = ((Array)item).GetValue(0);
+
+            return item;
         }
     }
 
@@ -382,6 +418,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
     [AttributeUsage(AttributeTargets.Property)]
     class DictionaryKeyAttribute : Attribute
+    {
+    }
+
+    [AttributeUsage(AttributeTargets.Property)]
+    class DictionaryValueAttribute : Attribute
     {
     }
 }

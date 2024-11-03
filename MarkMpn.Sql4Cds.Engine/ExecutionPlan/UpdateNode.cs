@@ -45,7 +45,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Update")]
         [Description("The columns to update and the associated column to take the new value from")]
-        [DisplayName("Column Mappings")]
+        [DisplayName("New Column Mappings")]
         public List<AttributeAccessor> NewValueAccessors { get; set; }
 
         /// <summary>
@@ -53,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Update")]
         [Description("The columns to update and the associated column to take the existing value from")]
-        [DisplayName("Column Mappings")]
+        [DisplayName("Existing Column Mappings")]
         public List<AttributeAccessor> ExistingValueAccessors { get; set; }
 
         [Category("Update")]

@@ -765,6 +765,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The logical name of the attribute that is being populated
         /// </summary>
+        [DictionaryKey]
         public string TargetAttribute { get; set; }
 
         /// <summary>
@@ -774,6 +775,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The value in this property is used for display and debugging purposes only. The actual
         /// value is retrieved by the <see cref="Accessor"/> property
         /// </remarks>
+        [DictionaryValue]
         public string[] SourceAttributes { get; set; }
 
         /// <summary>
