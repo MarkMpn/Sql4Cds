@@ -63,6 +63,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // Custom hint to disable converting DML source queries to constant scans
             "NO_DIRECT_DML",
+
+            // Only update attributes that have changed from their current values
+            "MINIMAL_UPDATES",
         };
 
         private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

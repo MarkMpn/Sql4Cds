@@ -70,10 +70,10 @@ namespace MarkMpn.Sql4Cds.Engine
             var requestQry = new QueryExpression("sdkmessagerequest");
             requestQry.ColumnSet = new ColumnSet("name");
             var messagePairLink = requestQry.AddLink("sdkmessagepair", "sdkmessagepairid", "sdkmessagepairid");
-            messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "2011/Organization.svc");
+            messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "api/data");
             var fieldLink = requestQry.AddLink("sdkmessagerequestfield", "sdkmessagerequestid", "sdkmessagerequestid", JoinOperator.LeftOuter);
             fieldLink.EntityAlias = "sdkmessagerequestfield";
-            fieldLink.Columns = new ColumnSet("name", "clrparser", "position", "optional");
+            fieldLink.Columns = new ColumnSet("name", "clrparser", "position", "optional", "parameterbindinginformation");
 
             var messageRequestFields = new Dictionary<string, List<MessageParameter>>();
 
@@ -91,6 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var fieldType = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.clrparser");
                 var fieldPosition = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.position");
                 var fieldOptional = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.optional");
+                var fieldBindingInfo = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.parameterbindinginformation");
 
                 if (fieldName != null)
                 {
@@ -99,7 +100,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         Name = (string)fieldName.Value,
                         Type = fieldType == null ? null : GetType((string)fieldType.Value),
                         Position = (int)fieldPosition.Value,
-                        Optional = (bool)(fieldOptional?.Value ?? false)
+                        Optional = (bool)(fieldOptional?.Value ?? false),
+                        OTC = fieldBindingInfo == null ? null : ExtractOTC((string)fieldBindingInfo.Value)
                     });
                 }
             }
@@ -110,7 +112,7 @@ namespace MarkMpn.Sql4Cds.Engine
             requestLink.EntityAlias = "sdkmessagerequest";
             requestLink.Columns = new ColumnSet("name");
             messagePairLink = requestLink.AddLink("sdkmessagepair", "sdkmessagepairid", "sdkmessagepairid");
-            messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "2011/Organization.svc");
+            messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "api/data");
             fieldLink = responseQry.AddLink("sdkmessageresponsefield", "sdkmessageresponseid", "sdkmessageresponseid");
             fieldLink.EntityAlias = "sdkmessageresponsefield";
             fieldLink.Columns = new ColumnSet("name", "clrformatter", "position", "parameterbindinginformation");
@@ -461,6 +463,12 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (Type == typeof(Entity))
                 return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource?.DefaultCollation ?? Collation.USEnglish, CollationLabel.Implicit);
+
+            if (Type == typeof(EntityReference) && OTC != null)
+            {
+                var logicalName = dataSource.Metadata[OTC.Value].LogicalName;
+                return DataTypeHelpers.TypedEntityReference(logicalName);
+            }
 
             return SqlTypeConverter.NetToSqlType(Type).ToSqlType(dataSource);
         }

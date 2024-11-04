@@ -687,13 +687,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var f = expectedInputParameters[i];
                 var sourceExpression = tvf.Parameters[i];
-                sourceExpression.GetType(context, out var sourceType);
-                var expectedType = f.GetSqlDataType(context.PrimaryDataSource);
+                var sourceType = sourceExpression.GetType(context, out var sourceSqlType);
+                var expectedSqlType = f.GetSqlDataType(context.PrimaryDataSource);
 
-                if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(tvf.Parameters[f.Position], sourceType, expectedType));
+                if (!SqlTypeConverter.CanChangeTypeImplicit(sourceSqlType, expectedSqlType))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(tvf.Parameters[f.Position], sourceSqlType, expectedSqlType));
 
-                if (sourceType.IsSameAs(expectedType))
+                if (sourceSqlType.IsSameAs(expectedSqlType))
                 {
                     node.Values[f.Name] = sourceExpression;
                 }
@@ -702,7 +702,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     node.Values[f.Name] = new ConvertCall
                     {
                         Parameter = sourceExpression,
-                        DataType = expectedType
+                        DataType = expectedSqlType
                     };
                 }
 
@@ -789,17 +789,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameterName(sproc.Parameters[i], sproc.ProcedureReference.ProcedureReference.Name));
 
                 var sourceExpression = sproc.Parameters[i].ParameterValue;
-                sourceExpression.GetType(context, out var sourceType);
+                var sourceType = sourceExpression.GetType(context, out var sourceSqlType);
                 var expectedType = targetParam.GetSqlDataType(context.PrimaryDataSource);
 
-                if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
+                if (!SqlTypeConverter.CanChangeTypeImplicit(sourceSqlType, expectedType))
                 {
-                    var err = Sql4CdsError.TypeClash(sproc.Parameters[i].ParameterValue, sourceType, expectedType);
+                    var err = Sql4CdsError.TypeClash(sproc.Parameters[i].ParameterValue, sourceSqlType, expectedType);
                     err.Procedure = message.Name;
                     throw new NotSupportedQueryFragmentException(err);
                 }
 
-                if (sourceType.IsSameAs(expectedType))
+                if (sourceSqlType.IsSameAs(expectedType))
                 {
                     node.Values[targetParam.Name] = sproc.Parameters[i].ParameterValue;
                 }

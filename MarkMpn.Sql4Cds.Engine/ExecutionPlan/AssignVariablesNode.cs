@@ -5,8 +5,6 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -132,15 +130,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             Source.AddRequiredColumns(context, requiredColumns);
-        }
-
-        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
-        {
-            foreach (var variable in Variables)
-            {
-                if (columnRenamings.TryGetValue(variable.SourceColumn, out var renamed))
-                    variable.SourceColumn = renamed;
-            }
         }
 
         public override object Clone()

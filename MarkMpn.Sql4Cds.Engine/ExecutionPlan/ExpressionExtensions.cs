@@ -13,6 +13,11 @@ using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Wmhelp.XPath2;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -749,12 +754,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // For decimal types, need to work out the precision and scale of the result depending on the type of operation
             if (type is SqlDataTypeReference sqlTargetType &&
-                (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
-                lhsSqlType is SqlDataTypeReference sqlLhsType &&
-                (sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlLhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal) &&
-                rhsSqlType is SqlDataTypeReference sqlRhsType &&
-                (sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlRhsType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
+                (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
             {
+                var lhsIsNumeric = lhsSqlType is SqlDataTypeReference sqlLhsType && sqlLhsType.SqlDataTypeOption.IsNumeric();
+                var rhsIsNumeric = rhsSqlType is SqlDataTypeReference sqlRhsType && sqlRhsType.SqlDataTypeOption.IsNumeric();
+
+                if (!lhsIsNumeric && rhsIsNumeric)
+                {
+                    lhs = SqlTypeConverter.Convert(lhs, contextParam, lhsSqlType, rhsSqlType);
+                    lhsSqlType = rhsSqlType;
+                }
+                else if (lhsIsNumeric && !rhsIsNumeric)
+                {
+                    rhs = SqlTypeConverter.Convert(rhs, contextParam, rhsSqlType, lhsSqlType);
+                    rhsSqlType = lhsSqlType;
+                }
+
                 var p1 = lhsSqlType.GetPrecision();
                 var s1 = lhsSqlType.GetScale();
                 var p2 = rhsSqlType.GetPrecision();
@@ -2128,7 +2143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (!(type is SqlDataTypeReference dataType))
             {
-                if (type.IsSameAs(DataTypeHelpers.EntityReference))
+                if (type.IsEntityReference())
                 {
                     sqlDataType = null;
                     return typeof(SqlEntityReference);
@@ -2358,7 +2373,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return createExpression ? Expr.Call(() => GetCurrentTimestamp(Expr.Arg<ExpressionExecutionContext>()), contextParam) : null;
 
                 default:
-                    sqlType = DataTypeHelpers.EntityReference;
+                    sqlType = DataTypeHelpers.TypedEntityReference("systemuser");
                     cacheKey = "CURRENT_USER";
                     return createExpression ? Expr.Call(() => GetCurrentUser(Expr.Arg<ExpressionExecutionContext>()), contextParam) : null;
             }
@@ -2374,7 +2389,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static SqlEntityReference GetCurrentUser(ExpressionExecutionContext context)
         {
-            return new SqlEntityReference(context.Options.PrimaryDataSource, "systemuser", context.Options.UserId);
+            var callerId = Guid.Empty;
+
+#if NETCOREAPP
+            if (context.PrimaryDataSource.Connection is ServiceClient svc)
+                callerId = svc.CallerId;
+#else
+            if (context.PrimaryDataSource.Connection is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                callerId = svcProxy.CallerId;
+            else if (context.PrimaryDataSource.Connection is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                callerId = webProxy.CallerId;
+            else if (context.PrimaryDataSource.Connection is CrmServiceClient svc)
+                callerId = svc.CallerId;
+#endif
+
+            if (callerId == Guid.Empty)
+                callerId = context.Options.UserId;
+
+            return new SqlEntityReference(context.Options.PrimaryDataSource, "systemuser", callerId);
         }
 
         /// <summary>

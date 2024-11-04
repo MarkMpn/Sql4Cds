@@ -716,36 +716,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        public void SqlTransformSchemaOnly()
-        {
-            var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
-            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SchemaOnly, new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null));
-            transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
-
-            Assert.AreEqual("SELECT name FROM account WHERE 0 = 1; DECLARE @id AS UNIQUEIDENTIFIER; SELECT name FROM account WHERE accountid = @id AND 0 = 1;", transformed);
-        }
-
-        [TestMethod]
-        public void SqlTransformSingleRow()
-        {
-            var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
-            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleRow, new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null));
-            transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
-
-            Assert.AreEqual("SELECT TOP 1 name FROM account; DECLARE @id AS UNIQUEIDENTIFIER;", transformed);
-        }
-
-        [TestMethod]
-        public void SqlTransformSingleResult()
-        {
-            var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
-            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleResult, new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null));
-            transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
-
-            Assert.AreEqual("SELECT name FROM account; DECLARE @id AS UNIQUEIDENTIFIER;", transformed);
-        }
-
-        [TestMethod]
         public void AggregateInitialTest()
         {
             var aggregate = CreateAggregateTest();

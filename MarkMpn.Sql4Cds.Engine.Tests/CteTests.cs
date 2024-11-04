@@ -140,20 +140,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var concat = AssertNode<ConcatenateNode>(select.Source);
-            var account = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            var computeAccount = AssertNode<ComputeScalarNode>(concat.Sources[0]);
+            var account = AssertNode<FetchXmlScan>(computeAccount.Source);
             AssertFetchXml(account, @"
                 <fetch>
                     <entity name='account'>
-                        <attribute name='accountid' />
                         <attribute name='name' />
+                        <attribute name='accountid' />
                     </entity>
                 </fetch>");
-            var contact = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            var computeContact = AssertNode<ComputeScalarNode>(concat.Sources[1]);
+            var contact = AssertNode<FetchXmlScan>(computeContact.Source);
             AssertFetchXml(contact, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='fullname' />
+                        <attribute name='contactid' />
                     </entity>
                 </fetch>");
         }

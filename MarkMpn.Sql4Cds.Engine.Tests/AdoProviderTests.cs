@@ -856,6 +856,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void FilteredTVFWithSubqueryParameters()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = "SELECT * FROM SampleMessage((select '1')) WHERE OutputParam1 = '2'";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
         public void CorrelatedNotExistsTypeConversion()
         {
             using (var con = new Sql4CdsConnection(_localDataSources))
@@ -2852,6 +2868,86 @@ SELECT CAST('01/02/03' AS DATETIME)";
                     cmd.CommandText = "SELECT @@ERROR";
                     var error = (int)cmd.ExecuteScalar();
                     Assert.AreEqual(0, error);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ConvertNumericToStringRespectsScale()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @i int = 473
+SELECT CAST(@i / 1000.0 as VARCHAR(10))";
+
+                var actual = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("0.473000", actual);
+            }
+        }
+
+        [TestMethod]
+        public void ErrorOnTruncateNumeric()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @i int = 473
+SELECT CAST(@i / 1000.0 as VARCHAR(7))";
+
+                try
+                {
+                    _ = (string)cmd.ExecuteScalar();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ErrorOnTruncateGuid()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT CAST(NEWID() AS varchar)";
+
+                try
+                {
+                    _ = (string)cmd.ExecuteScalar();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8170, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ErrorOnTruncateEntityReferenc()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('Data8')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT CAST(accountid AS varchar) FROM account";
+
+                try
+                {
+                    _ = (string)cmd.ExecuteScalar();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8170, ex.Number);
                 }
             }
         }

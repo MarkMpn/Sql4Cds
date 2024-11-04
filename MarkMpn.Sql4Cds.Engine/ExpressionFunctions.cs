@@ -18,6 +18,8 @@ using Wmhelp.XPath2;
 using Wmhelp.XPath2.Value;
 using System.Text.Json;
 using Microsoft.SqlServer.Server;
+using Microsoft.Xrm.Sdk.Metadata;
+
 
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -39,12 +41,47 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="id">The unique identifier of the record</param>
         /// <returns>A <see cref="SqlEntityReference"/> value combining the <paramref name="logicalName"/> and <paramref name="id"/></returns>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlEntityReference CreateLookup(SqlString logicalName, SqlGuid id)
+        public static SqlEntityReference CreateLookup(SqlString logicalName, SqlGuid id, ExpressionExecutionContext context)
         {
             if (logicalName.IsNull || id.IsNull)
                 return SqlEntityReference.Null;
 
-            return new SqlEntityReference(null, logicalName.Value, id);
+            EntityMetadata entity;
+
+            if (Int32.TryParse(logicalName.Value, out var otc))
+                entity = context.PrimaryDataSource.Metadata[otc];
+            else
+                entity = context.PrimaryDataSource.Metadata[logicalName.Value];
+
+            if (entity.DataProviderId == DataProviders.ElasticDataProvider)
+                throw new QueryExecutionException($"Table '{entity.LogicalName}' is an elastic table. Use CREATEELASTICLOOKUP function instead.");
+
+            return new SqlEntityReference(context.PrimaryDataSource.Name, entity.LogicalName, id);
+        }
+
+        /// <summary>
+        /// Creates a SqlEntityReference value
+        /// </summary>
+        /// <param name="logicalName">The logical name of the entity type being referred to</param>
+        /// <param name="id">The unique identifier of the record</param>
+        /// <returns>A <see cref="SqlEntityReference"/> value combining the <paramref name="logicalName"/> and <paramref name="id"/></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlEntityReference CreateElasticLookup(SqlString logicalName, SqlGuid id, SqlString pid, ExpressionExecutionContext context)
+        {
+            if (logicalName.IsNull || id.IsNull)
+                return SqlEntityReference.Null;
+
+            EntityMetadata entity;
+
+            if (Int32.TryParse(logicalName.Value, out var otc))
+                entity = context.PrimaryDataSource.Metadata[otc];
+            else
+                entity = context.PrimaryDataSource.Metadata[logicalName.Value];
+
+            if (entity.DataProviderId != DataProviders.ElasticDataProvider)
+                throw new QueryExecutionException($"Table '{entity.LogicalName}' is not an elastic table. Use CREATELOOKUP function instead.");
+
+            return new SqlEntityReference(context.PrimaryDataSource.Name, entity, id, pid.IsNull ? null : pid.Value);
         }
 
         /// <summary>

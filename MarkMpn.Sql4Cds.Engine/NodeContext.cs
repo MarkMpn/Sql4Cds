@@ -54,13 +54,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="parentContext">The parent context that this context is being created from</param>
         /// <param name="parameterTypes">The names and types of the parameters that are available to this section of the query</param>
-        public NodeCompilationContext(
+        protected NodeCompilationContext(
             NodeCompilationContext parentContext,
             IDictionary<string, DataTypeReference> parameterTypes)
         {
+            if (parentContext == null)
+                throw new ArgumentNullException(nameof(parentContext));
+
             Session = parentContext.Session;
             Options = parentContext.Options;
-            ParameterTypes = parameterTypes;
+            ParameterTypes = new LayeredDictionary<string, DataTypeReference>(parentContext.ParameterTypes, parameterTypes);
             GlobalCalculations = parentContext.GlobalCalculations;
             Log = parentContext.Log;
             _parentContext = parentContext;
@@ -106,6 +109,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 return _parentContext.GetExpressionName();
 
             return $"Expr{++_expressionCounter}";
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NodeCompilationContext"/> as a child of this context
+        /// </summary>
+        /// <param name="additionalParameters">Any additional parameters to add to the context</param>
+        /// <returns></returns>
+        public NodeCompilationContext CreateChildContext(IDictionary<string, DataTypeReference> additionalParameters)
+        {
+            if (additionalParameters == null)
+                additionalParameters = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+
+            return new NodeCompilationContext(this, additionalParameters);
         }
 
         internal void ResetGlobalCalculations()

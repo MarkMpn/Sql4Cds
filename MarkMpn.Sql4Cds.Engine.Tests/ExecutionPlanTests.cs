@@ -2960,8 +2960,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var update = AssertNode<UpdateNode>(plans[0]);
             Assert.AreEqual("account", update.LogicalName);
-            Assert.AreEqual("account.accountid", update.PrimaryIdSource);
-            Assert.AreEqual("Expr1", update.ColumnMappings["name"].NewValueColumn);
+            Assert.AreEqual("account.accountid", update.PrimaryIdAccessors.Single().SourceAttributes.Single());
+            Assert.AreEqual("Expr1", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
             var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
@@ -2989,8 +2989,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var update = AssertNode<UpdateNode>(plans[0]);
             Assert.AreEqual("account", update.LogicalName);
-            Assert.AreEqual("a.accountid", update.PrimaryIdSource);
-            Assert.AreEqual("Expr1", update.ColumnMappings["name"].NewValueColumn);
+            Assert.AreEqual("a.accountid", update.PrimaryIdAccessors.Single().SourceAttributes.Single());
+            Assert.AreEqual("Expr1", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
             var distinct = AssertNode<DistinctNode>(update.Source);
             var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
@@ -3373,7 +3373,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var delete = AssertNode<DeleteNode>(plans[0]);
             Assert.AreEqual("account", delete.LogicalName);
-            Assert.AreEqual("account.accountid", delete.ColumnMappings["accountid"]);
+            Assert.AreEqual("accountid", delete.PrimaryIdAccessors.Single().TargetAttribute);
+            Assert.AreEqual("account.accountid", delete.PrimaryIdAccessors.Single().SourceAttributes.Single());
             var fetch = AssertNode<FetchXmlScan>(delete.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -3399,7 +3400,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var insert = AssertNode<InsertNode>(plans[0]);
             Assert.AreEqual("account", insert.LogicalName);
-            Assert.AreEqual("contact.fullname", insert.ColumnMappings["name"]);
+            Assert.AreEqual("name", insert.Accessors.Single().TargetAttribute);
+            Assert.AreEqual("contact.fullname", insert.Accessors.Single().SourceAttributes.Single());
             var fetch = AssertNode<FetchXmlScan>(insert.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -5247,7 +5249,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             AssertNode<AssignVariablesNode>(plans[2]);
             var update = AssertNode<UpdateNode>(plans[3]);
             var compute = AssertNode<ComputeScalarNode>(update.Source);
-            Assert.AreEqual(compute.Columns[update.ColumnMappings["employees"].NewValueColumn].ToSql(), "@employees");
+            Assert.AreEqual(compute.Columns[update.NewValueAccessors.Single(a => a.TargetAttribute == "employees").SourceAttributes.Single()].ToSql(), "@employees");
             var fetch = AssertNode<FetchXmlScan>(compute.Source);
 
             AssertFetchXml(fetch, @"
@@ -5539,7 +5541,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var update = AssertNode<UpdateNode>(plans[0]);
-            Assert.AreEqual("Expr1", update.ColumnMappings["name"].NewValueColumn);
+            Assert.AreEqual("Expr1", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
 
             var compute = AssertNode<ComputeScalarNode>(update.Source);
             Assert.AreEqual("'1'", compute.Columns["Expr1"].ToSql());
@@ -6695,8 +6697,8 @@ FROM   account AS r;";
 
             var update = AssertNode<UpdateNode>(plans[0]);
             Assert.AreEqual("account", update.LogicalName);
-            Assert.AreEqual("account.accountid", update.PrimaryIdSource);
-            Assert.AreEqual("Expr2", update.ColumnMappings["name"].NewValueColumn);
+            Assert.AreEqual("account.accountid", update.PrimaryIdAccessors.Single().SourceAttributes.Single());
+            Assert.AreEqual("Expr2", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
             var distinct = AssertNode<DistinctNode>(update.Source);
             var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr2"].ToSql());

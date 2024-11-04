@@ -374,8 +374,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
 
             // Types can be different but have the same logical sort order, e.g. all numeric types
-            if (leftType.IsSameAs(DataTypeHelpers.UniqueIdentifier) && rightType.IsSameAs(DataTypeHelpers.EntityReference) ||
-                leftType.IsSameAs(DataTypeHelpers.EntityReference) && rightType.IsSameAs(DataTypeHelpers.UniqueIdentifier))
+            if (leftType.IsSameAs(DataTypeHelpers.UniqueIdentifier) && rightType.IsEntityReference() ||
+                leftType.IsEntityReference() && rightType.IsSameAs(DataTypeHelpers.UniqueIdentifier) ||
+                leftType.IsEntityReference() && rightType.IsEntityReference())
                 return true;
 
             if (leftType is SqlDataTypeReference leftSqlType && rightType is SqlDataTypeReference rightSqlType)

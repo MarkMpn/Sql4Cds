@@ -4,11 +4,7 @@ using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.Serialization.Formatters;
-using System.Text;
-using System.Web;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
-using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -272,6 +268,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(271, column, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
+        internal static Sql4CdsError ReadOnlyColumn(string name)
+        {
+            return Create(271, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
         internal static Sql4CdsError InvalidDataType(DataTypeReference type)
         {
             var name = GetTypeName(type);
@@ -391,6 +392,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError GuidParseError(TSqlFragment fragment)
         {
             return Create(8169, fragment);
+        }
+
+        internal static Sql4CdsError GuidTruncationError(TSqlFragment fragment)
+        {
+            return Create(8170, fragment);
         }
 
         internal static Sql4CdsError AsJsonRequiresNVarCharMax(DataTypeReference fragment)
@@ -809,6 +815,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError InvalidDateFormat(TSqlFragment fragment, string format)
         {
             return Create(2741, fragment, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
+        }
+
+        internal static Sql4CdsError InvalidEntityReferenceType(TSqlFragment fragment, string actual, string required)
+        {
+            return new Sql4CdsError(16, 50001, $"Cannot convert entity reference from {actual} to {required}", fragment);
         }
 
         private static string GetTypeName(DataTypeReference type)

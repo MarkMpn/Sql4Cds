@@ -102,6 +102,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static UserDataTypeReference EntityReference { get; } = Object(nameof(EntityReference));
 
+        public static UserDataTypeReference TypedEntityReference(string logicalName)
+        {
+            var type = Object(nameof(EntityReference));
+            type.Parameters.Add(new StringLiteral { Value = logicalName });
+            return type;
+        }
+
         public static XmlDataTypeReference Xml { get; } = new XmlDataTypeReference();
 
         public static SqlDataTypeReference Variant { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Sql_Variant };
@@ -249,8 +256,8 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (!(type is SqlDataTypeReference dataType))
             {
-                if (type.IsSameAs(EntityReference))
-                    dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                if (type.IsEntityReference())
+                    dataType = UniqueIdentifier;
                 else if (type is XmlDataTypeReference)
                     return Int32.MaxValue;
                 else
@@ -456,6 +463,46 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Checks if a data type is an entity reference
+        /// </summary>
+        /// <param name="type">The type to check</param>
+        /// <returns><c>true</c> if <paramref name="type"/> is an entity reference type, or <c>false</c> otherwise</returns>
+        public static bool IsEntityReference(this DataTypeReference type)
+        {
+            return type.IsEntityReference(out _);
+        }
+
+        /// <summary>
+        /// Checks if a data type is an entity reference
+        /// </summary>
+        /// <param name="type">The type to check</param>
+        /// <param name="logicalName">If the <paramref name="type"/> is a typed entity reference, this will be set to the corresponding entity logical name</param>
+        /// <returns><c>true</c> if <paramref name="type"/> is an entity reference type, or <c>false</c> otherwise</returns>
+        public static bool IsEntityReference(this DataTypeReference type, out string logicalName)
+        {
+            if (!(type is UserDataTypeReference user))
+            {
+                logicalName = null;
+                return false;
+            }
+
+            if (!user.Name.Identifiers[0].Value.Equals(nameof(EntityReference), StringComparison.OrdinalIgnoreCase))
+            {
+                logicalName = null;
+                return false;
+            }
+
+            if (user.Parameters.Count == 0)
+            {
+                logicalName = null;
+                return true;
+            }
+
+            logicalName = user.Parameters[0].Value;
+            return true;
+        }
+
+        /// <summary>
         /// Parses a data type from a string
         /// </summary>
         /// <param name="context">The context in which the type name is being parsed</param>
@@ -498,8 +545,25 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (parameters.Count > 0)
                     return false;
 
-                parsedType = DataTypeHelpers.Xml;
+                parsedType = Xml;
                 return true;
+            }
+
+            if (name.Equals(nameof(EntityReference), StringComparison.OrdinalIgnoreCase))
+            {
+                if (parameters.Count == 1 && parameters[0] is StringLiteral erType)
+                {
+                    parsedType = TypedEntityReference(erType.Value);
+                    return true;
+                }
+
+                if (parameters.Count == 0)
+                {
+                    parsedType = EntityReference;
+                    return true;
+                }
+
+                return false;
             }
 
             if (!Enum.TryParse<SqlDataTypeOption>(name, true, out var sqlType))
@@ -549,7 +613,27 @@ namespace MarkMpn.Sql4Cds.Engine
             var yXml = y as XmlDataTypeReference;
 
             if (xUser != null && yUser != null)
-                return String.Join(".", xUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", yUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
+            {
+                if (xUser.Name.Identifiers.Count != yUser.Name.Identifiers.Count)
+                    return false;
+
+                for (var i = 0; i < xUser.Name.Identifiers.Count; i++)
+                {
+                    if (!xUser.Name.Identifiers[i].Value.Equals(yUser.Name.Identifiers[i].Value, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
+
+                if (xUser.Parameters.Count != yUser.Parameters.Count)
+                    return false;
+
+                for (var i = 0; i < xUser.Parameters.Count; i++)
+                {
+                    if (!xUser.Parameters[i].Value.Equals(yUser.Parameters[i].Value, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
+
+                return true;
+            }
 
             if (xXml != null && yXml != null)
                 return xXml.XmlDataTypeOption == yXml.XmlDataTypeOption && xXml.XmlSchemaCollection == yXml.XmlSchemaCollection;

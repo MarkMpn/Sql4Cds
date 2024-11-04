@@ -10,8 +10,8 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     class SqlDataReaderWrapper : DbDataReader
     {
-        private SqlConnection _sqlConnection;
-        private SqlCommand _sqlCommand;
+        private readonly SqlConnection _sqlConnection;
+        private readonly SqlCommand _sqlCommand;
         private SqlDataReader _sqlDataReader;
         private readonly SqlNode _node;
 
@@ -147,6 +147,21 @@ namespace MarkMpn.Sql4Cds.Engine
         public override int GetValues(object[] values)
         {
             return HandleException(() => _sqlDataReader.GetValues(values));
+        }
+
+        public override Type GetProviderSpecificFieldType(int ordinal)
+        {
+            return HandleException(() => _sqlDataReader.GetProviderSpecificFieldType(ordinal));
+        }
+
+        public override object GetProviderSpecificValue(int ordinal)
+        {
+            return HandleException(() => _sqlDataReader.GetProviderSpecificValue(ordinal));
+        }
+
+        public override int GetProviderSpecificValues(object[] values)
+        {
+            return HandleException(() => _sqlDataReader.GetProviderSpecificValues(values));
         }
 
         public override bool IsDBNull(int ordinal)

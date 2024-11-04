@@ -436,11 +436,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (join is NestedLoopNode loop && loop.OuterReferences != null)
             {
-                var innerParameterTypes = context.ParameterTypes
-                    .Concat(loop.OuterReferences.Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type)))
+                var innerParameterTypes = loop.OuterReferences
+                    .Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type))
                     .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
 
-                rightContext = new NodeCompilationContext(context, innerParameterTypes);
+                rightContext = context.CreateChildContext(innerParameterTypes);
             }
 
             var rightSchema = join.RightSource.GetSchema(rightContext);
@@ -798,11 +798,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         var leftSchema = join.LeftSource.GetSchema(context);
 
-                        var innerParameterTypes = context.ParameterTypes
-                            .Concat(loop.OuterReferences.Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type)))
+                        var innerParameterTypes = loop.OuterReferences
+                            .Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type))
                             .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
 
-                        outerContext = new NodeCompilationContext(context, innerParameterTypes);
+                        outerContext = context.CreateChildContext(innerParameterTypes);
                     }
 
                     var outerSchema = outerSource.GetSchema(outerContext);
@@ -1775,11 +1775,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (join is NestedLoopNode loop && loop.OuterReferences != null && loop.OuterReferences.Count > 0)
                     {
                         var leftSchema = join.LeftSource.GetSchema(context);
-                        var innerParameterTypes = context.ParameterTypes
-                            .Concat(loop.OuterReferences.Select(or => new KeyValuePair<string,DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type)))
+                        var innerParameterTypes = loop.OuterReferences
+                            .Select(or => new KeyValuePair<string,DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type))
                             .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
 
-                        childContext = new NodeCompilationContext(context, innerParameterTypes);
+                        childContext = context.CreateChildContext(innerParameterTypes);
                     }
 
                     foreach (var subSource in GetFoldableSources(join.RightSource, childContext))
