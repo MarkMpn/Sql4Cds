@@ -405,5 +405,17 @@ namespace MarkMpn.Sql4Cds.Tests
 
             CollectionAssert.IsSubsetOf(new[] { "@i", "@x", "@@ROWCOUNT", "@@IDENTITY", "@@SERVERNAME", "@@VERSION" }, suggestions);
         }
+
+        [TestMethod]
+        public void TrailingComment()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/569
+            var prefix = "SELECT * FROM a";
+            var suffix = "\r\n-- comment";
+            var sql = prefix + suffix;
+            var suggestions = _autocomplete.GetSuggestions(sql, prefix.Length - 1).Where(s => s.ImageIndex == 4).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "account" }, suggestions);
+        }
     }
 }

@@ -1023,6 +1023,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             while ((i = text.IndexOfAny(new[] { '\n', '-', '\'', '/' }, i + 1)) != -1)
             {
+                if (i > pos)
+                    break;
+
                 if (text[i] == '\n')
                     inSingleLineComment = false;
                 else if (i > 0 && !inQuotes && text[i - 1] == '-' && text[i] == '-')
