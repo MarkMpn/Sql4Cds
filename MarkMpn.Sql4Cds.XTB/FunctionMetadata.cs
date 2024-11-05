@@ -49,11 +49,17 @@ namespace MarkMpn.Sql4Cds.XTB
             [Description("Creates a lookup value to reference a record")]
             public abstract EntityReference createlookup(string logicalName, Guid id);
 
+            [Description("Creates a lookup value to reference a record in an elastic table")]
+            public abstract EntityReference createelasticlookup(string logicalName, Guid id, string partitionId);
+
             [Description("Finds the difference between two date values")]
             public abstract int datediff(string datepart, DateTime startdate, DateTime enddate);
 
             [Description("Adds a number value to a date value")]
             public abstract DateTime dateadd(string datepart, int number, DateTime date);
+
+            [Description("Truncates a date value")]
+            public abstract DateTime datetrunc(string datepart, DateTime date);
 
             [Description("Extracts a scalar value from a JSON string")]
             public abstract string json_value(string json, string path);
