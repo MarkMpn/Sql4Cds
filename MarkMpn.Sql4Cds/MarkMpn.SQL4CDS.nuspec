@@ -24,42 +24,29 @@ Queries can also run using the preview TDS Endpoint. A wide range of SQL functio
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
     <releaseNotes>New SQL support
-* `STRING_SPLIT` function
-* `metadata.alternate_key` table to query entity key metadata
-* `EXCEPT` and `INTERSECT` set operators
+* `NEWID` function
+* `DATETRUNC` function
 
-Copilot improvements
-* Improved Copilot resiliency when errors occur from OpenAI
-* Show feedback when Copilot attempts to execute an invalid query
-* Require more explicit permission to run queries from Copilot
+SQL Server compatibility improvements
+* Improved data type conversions for better SQL Server compatibility
+* Reworked `DATEPART` / `DATEADD` / `DATEDIFF` functions for improved SQL Server compatibility
 
-User experience
-* Expose multiple errors in the same query execution
-* Fixed formatting queries using comments and escaped identifiers
-* Improved highlighting of error lines
+DML operation optimizations
+* Update/delete records without reading them first if possible - disable if necessary with `NO_DIRECT_DML` query hint
+* Implemented minimal updates via new `MINIMAL_UPDATES` query hint
+* Refactored type conversion logic for consistency across insert/update/delete operations
 
-FetchXML compatibility improvements
-* Support grouping by date columns in both UTC and local time zones
-* Handle null primary key values returned by virtual entity providers
-* Do not fold `DISTINCT` to queries including `audit.objectid` column
-* Do not fold `DISTINCT` to queries including partylist attributes
-* Do not fold `eq-userid` condition to non-lookup fields
-* Improved moving filters to correct `link-entity`
-* Improved folding sorts to aggregate FetchXML
-* Hide virtual attributes from `solutioncomponent` entity
-* Standardised use of aliases in query-defined tables
-* Fixed use of `IS DISTINCT FROM` operator with cross-column comparisons
+Other improvements
+* Extended support for executing messages with more parameter types
+* TDS Endpoint compatibility improvements
 
-Performance improvements
-* Inject dynamic filter values into FetchXML queries via nested loop
-
-Type conversions
-* Fixed converting `datetime` to numeric types
-* Decimal type conversion fixes for improved T-SQL compatibility
-* Improved reporting of arithmetic overflow errors
-* Extended type checking for join comparisons
-* Do not require explicit conversion for different decimal types
-* Do not attempt to statically validate data types of variable filters
+Bug fixes
+* Fixed filtering on `metadata.alternate_key.entitykeyindexstatus`
+* Show confirmation message before executing bulk delete job
+* Fixed use of `INSERT` and `UPDATE` with virtual tables
+* Fixed use of `FULL OUTER JOIN` with Fetch XML
+* Fixed filtering of `OUTER JOIN` / `OUTER APPLY` results when using nested loops
+* Fixed use of alias in filters when converting from Fetch XML to SQL
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

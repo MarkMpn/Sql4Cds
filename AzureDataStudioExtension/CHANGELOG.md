@@ -1,5 +1,31 @@
 # Change Log
 
+## [v9.4.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.4.0) - 2024-11-06
+New SQL support
+* `NEWID` function
+* `DATETRUNC` function
+
+SQL Server compatibility improvements
+* Improved data type conversions for better SQL Server compatibility
+* Reworked `DATEPART` / `DATEADD` / `DATEDIFF` functions for improved SQL Server compatibility
+
+DML operation optimizations
+* Update/delete records without reading them first if possible - disable if necessary with `NO_DIRECT_DML` query hint
+* Implemented minimal updates via new `MINIMAL_UPDATES` query hint
+* Refactored type conversion logic for consistency across insert/update/delete operations
+
+Other improvements
+* Extended support for executing messages with more parameter types
+* TDS Endpoint compatibility improvements
+
+Bug fixes
+* Fixed filtering on `metadata.alternate_key.entitykeyindexstatus`
+* Show confirmation message before executing bulk delete job
+* Fixed use of `INSERT` and `UPDATE` with virtual tables
+* Fixed use of `FULL OUTER JOIN` with Fetch XML
+* Fixed filtering of `OUTER JOIN` / `OUTER APPLY` results when using nested loops
+* Fixed use of alias in filters when converting from Fetch XML to SQL
+
 ## [v9.3.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.3.0) - 2024-08-26
 New SQL support
 * `STRING_SPLIT` function
