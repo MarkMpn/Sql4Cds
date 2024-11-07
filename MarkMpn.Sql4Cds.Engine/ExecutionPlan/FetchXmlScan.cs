@@ -515,7 +515,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                 }
 
+                // Apply the standard SQL string -> target type conversion to each value - it will throw an exception if any values are in the incorrect format.
                 var conversion = SqlTypeConverter.GetConversion(DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), attrType);
+
+                // Special case: we convert datetime values to a different format to be understood by Dataverse which is different
+                // from the SQL formats in BaseDataNode.TranslateFetchXMLCriteriaWithVirtualAttributes
+                if (attrType.IsSameAs(DataTypeHelpers.DateTime))
+                {
+                    conversion = (value, ctx) =>
+                    {
+                        if (value is SqlString str && DateTimeOffset.TryParseExact(str.Value, "yyyy-MM-ddTHH:mm:ss.FFFzzz", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+                            return new SqlDateTimeOffset(dt);
+
+                        return conversion(value, ctx);
+                    };
+                }
 
                 if (condition.value != null)
                     conversion(dataSource.DefaultCollation.ToSqlString(condition.value), context);

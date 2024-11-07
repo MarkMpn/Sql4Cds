@@ -975,40 +975,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (attribute is DateTimeAttributeMetadata && literals != null &&
                 (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le || op == @operator.@in || op == @operator.notin))
             {
+                var ecc = new ExpressionCompilationContext(context, null, null);
+                var eec = new ExpressionExecutionContext(ecc);
+
                 for (var i = 0; i < literals.Length; i++)
                 {
                     if (!(literals[i] is Literal lit))
                         continue;
 
-                    try
-                    {
-                        DateTime dt;
+                    lit.GetType(ecc, out var sourceType);
+                    var targetType = attribute.GetAttributeSqlType(dataSource, false);
 
-                        if (lit is StringLiteral)
-                            dt = SqlDateTime.Parse(lit.Value).Value;
-                        else if (lit is IntegerLiteral || lit is NumericLiteral || lit is RealLiteral)
-                            dt = new DateTime(1900, 1, 1).AddDays(Double.Parse(lit.Value, CultureInfo.InvariantCulture));
-                        else
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DateTimeParseError(lit));
-
-                        DateTimeOffset dto;
-
-                        if (context.Options.UseLocalTimeZone)
-                            dto = new DateTimeOffset(dt, TimeZoneInfo.Local.GetUtcOffset(dt));
-                        else
-                            dto = new DateTimeOffset(dt, TimeSpan.Zero);
-
-                        var formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
-
-                        if (literals.Length == 1)
-                            value = formatted;
-
-                        values[i].Value = formatted;
-                    }
-                    catch (FormatException)
-                    {
+                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.DateTimeParseError(lit));
-                    }
+
+                    var sqlValue = (INullable)lit.Compile(ecc)(eec);
+                    var conversion = SqlTypeConverter.GetConversion(sourceType, targetType);
+                    var datetimeValue = (SqlDateTime)conversion(sqlValue, eec);
+                    var dt = datetimeValue.Value;
+
+                    DateTimeOffset dto;
+
+                    if (context.Options.UseLocalTimeZone)
+                        dto = new DateTimeOffset(dt, TimeZoneInfo.Local.GetUtcOffset(dt));
+                    else
+                        dto = new DateTimeOffset(dt, TimeSpan.Zero);
+
+                    var formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
+
+                    if (literals.Length == 1)
+                        value = formatted;
+
+                    values[i].Value = formatted;
                 }
             }
 
