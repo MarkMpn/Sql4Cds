@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // SELECT (columns from first table)
             var entity = fetch.Items.OfType<FetchEntityType>().SingleOrDefault();
-            AddSelectElements(query, entity.Items, entity?.name);
+            AddSelectElements(query, entity.Items, entity?.name, true);
 
             if (query.SelectElements.Count == 0)
                 query.SelectElements.Add(new SelectStarExpression());
@@ -256,7 +256,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="query">The SQL query to append to the SELECT clause of</param>
         /// <param name="items">The FetchXML items to process</param>
         /// <param name="prefix">The name or alias of the table being processed</param>
-        private static void AddSelectElements(QuerySpecification query, object[] items, string prefix)
+        private static void AddSelectElements(QuerySpecification query, object[] items, string prefix, bool isRoot)
         {
             if (items == null)
                 return;
@@ -347,6 +347,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Apply alias
                 if (!String.IsNullOrEmpty(attr.alias) && (attr.aggregateSpecified || attr.alias != attr.name))
                     element.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = attr.alias } };
+                else if (!isRoot)
+                    element.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = $"{prefix}_{attr.name}" } };
 
                 query.SelectElements.Add(element);
 
@@ -464,8 +466,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else if (link.linktype == "matchfirstrowusingcrossapply")
                     {
-                        AddSelectElements(subquery, link.Items, link.alias ?? link.name);
-                        AddSelectElements(query, link.Items, link.alias ?? link.name);
+                        AddSelectElements(subquery, link.Items, link.alias ?? link.name, true);
+                        AddSelectElements(query, link.Items, link.alias ?? link.name, false);
                     }
 
                     subquery.FromClause = new FromClause
@@ -624,7 +626,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
 
                 // Update the SELECT clause
-                AddSelectElements(query, link.Items, link.alias ?? link.name);
+                AddSelectElements(query, link.Items, link.alias ?? link.name, false);
 
                 // Handle any filters within the <link-entity> as additional join criteria
                 var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
