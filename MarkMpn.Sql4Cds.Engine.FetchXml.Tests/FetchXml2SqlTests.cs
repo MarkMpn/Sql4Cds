@@ -67,7 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name AS account_name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid AND account.name = 'data8' WHERE contact.firstname = 'Mark'", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name AS account_name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid AND account.name = 'data8' WHERE contact.firstname = 'Mark'", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT contact.firstname, contact.lastname, a.name FROM contact INNER JOIN account AS a ON contact.parentcustomerid = a.accountid", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, a.name AS a_name FROM contact INNER JOIN account AS a ON contact.parentcustomerid = a.accountid", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT contact.firstname, contact.lastname, a.name FROM contact INNER JOIN account AS a ON contact.parentcustomerid = a.accountid WHERE a.name = 'data8'", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, a.name AS a_name FROM contact INNER JOIN account AS a ON contact.parentcustomerid = a.accountid WHERE a.name = 'data8'", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -228,7 +228,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid ORDER BY account.name ASC, contact.firstname ASC", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name AS account_name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid ORDER BY account.name ASC, contact.firstname ASC", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -527,7 +527,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM archive.contact INNER JOIN archive.account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name AS account_name FROM archive.contact INNER JOIN archive.account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -725,7 +725,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
 
             Assert.AreEqual(NormalizeWhitespace(@"
-                SELECT contact.fullname, account.accountid, account.name FROM contact CROSS APPLY ( SELECT TOP 1 account.accountid, account.name FROM account WHERE contact.contactid = account.primarycontactid ) AS account"), NormalizeWhitespace(converted));
+                SELECT contact.fullname, account.accountid AS account_accountid, account.name AS account_name FROM contact CROSS APPLY ( SELECT TOP 1 account.accountid, account.name FROM account WHERE contact.contactid = account.primarycontactid ) AS account"), NormalizeWhitespace(converted));
         }
 
         [TestMethod]
@@ -777,7 +777,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
 
             Assert.AreEqual(NormalizeWhitespace(@"
-                SELECT contact.contactid, contact.fullname, acct.name FROM contact LEFT OUTER JOIN account AS acct ON contact.parentcustomerid = acct.accountid WHERE contact.fullname = acct.name"), NormalizeWhitespace(converted));
+                SELECT contact.contactid, contact.fullname, acct.name AS acct_name FROM contact LEFT OUTER JOIN account AS acct ON contact.parentcustomerid = acct.accountid WHERE contact.fullname = acct.name"), NormalizeWhitespace(converted));
         }
 
         [TestMethod]
