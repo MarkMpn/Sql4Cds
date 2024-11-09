@@ -11,6 +11,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using System.Collections.Concurrent;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -66,8 +67,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             public ExecuteMultipleRequest EMR { get; set; }
 
+            public int NextBatchSize { get; set; }
+
             public bool Error { get; set; }
         }
+
+        private int _entityCount;
+        private int _inProgressCount;
+        private int _successCount;
+        private int _errorCount;
+        private int _threadCount;
+        private ParallelOptions _parallelOptions;
+        private ConcurrentQueue<OrganizationRequest> _retryQueue;
+        private ConcurrentDictionary<ParallelThreadState, DateTime> _delayedUntil;
+        private OrganizationServiceFault _fault;
 
         /// <summary>
         /// The SQL string that the query was converted from
@@ -389,6 +402,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             /// The completed name of the operation to include in the middle of a log message, e.g. "updated"
             /// </summary>
             public string CompletedLowercase { get; set; }
+
+            /// <summary>
+            /// The completed name of the operation to include at the start of a log message, e.g. "Updated"
+            /// </summary>
+            public string CompletedUppercase { get; set; }
         }
 
         /// <summary>
@@ -406,10 +424,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="responseHandler">An optional parameter to handle the response messages from the server</param>
         protected void ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, NodeExecutionContext context, out int recordsAffected, out string message, Action<OrganizationResponse> responseHandler = null)
         {
-            var inProgressCount = 0;
-            var count = 0;
-            var errorCount = 0;
-            var threadCount = 0;
+            _entityCount = entities.Count;
+            _inProgressCount = 0;
+            _successCount = 0;
+            _errorCount = 0;
+            _threadCount = 0;
 
 #if NETCOREAPP
             var svc = dataSource.Connection as ServiceClient;
@@ -425,7 +444,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (maxDop == 1)
                 svc = null;
 
-            var useAffinityCookie = maxDop == 1 || entities.Count < 100;
+            var useAffinityCookie = maxDop == 1 || _entityCount < 100;
 
             try
             {
@@ -433,87 +452,68 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (UseParallelConnections())
                 {
-                    Parallel.ForEach(entities,
-                        new ParallelOptions { MaxDegreeOfParallelism = maxDop },
+                    _parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = maxDop };
+                    _retryQueue = new ConcurrentQueue<OrganizationRequest>();
+                    _delayedUntil = new ConcurrentDictionary<ParallelThreadState, DateTime>();
+
+                    new DynamicParallel<Entity, ParallelThreadState>(
+                        entities,
+                        _parallelOptions,
                         () =>
                         {
                             var service = svc?.Clone() ?? dataSource.Connection;
 
 #if NETCOREAPP
-                            if (!useAffinityCookie && service is ServiceClient crmService)
-                                crmService.EnableAffinityCookie = false;
+                            if (service is ServiceClient crmService)
+                            {
+                                crmService.MaxRetryCount = 0;
+                                crmService.EnableAffinityCookie = useAffinityCookie;
+                            }
 #else
-                            if (!useAffinityCookie && service is CrmServiceClient crmService)
-                                crmService.EnableAffinityCookie = false;
+                            if (service is CrmServiceClient crmService)
+                            {
+                                crmService.MaxRetryCount = 0;
+                                crmService.EnableAffinityCookie = useAffinityCookie;
+                            }
 #endif
-                            Interlocked.Increment(ref threadCount);
+                            Interlocked.Increment(ref _threadCount);
 
-                            return new ParallelThreadState { Service = service, EMR = default(ExecuteMultipleRequest), Error = false };
+                            return new ParallelThreadState
+                            {
+                                Service = service,
+                                EMR = null,
+                                Error = false,
+                                NextBatchSize = 1
+                            };
                         },
-                        (entity, loopState, index, threadLocalState) =>
+                        async (entity, loopState, threadLocalState) =>
                         {
                             try
                             {
                                 if (options.CancellationToken.IsCancellationRequested)
                                 {
                                     loopState.Stop();
-                                    return threadLocalState;
+                                    return DynamicParallelVote.DecreaseThreads;
                                 }
+
+                                // TODO: Take any requests from the retry queue and execute them first
 
                                 var request = requestGenerator(entity);
 
                                 if (BypassCustomPluginExecution)
                                     request.Parameters["BypassCustomPluginExecution"] = true;
 
-                                if (BatchSize == 1)
+                                if (threadLocalState.NextBatchSize == 1)
                                 {
-                                    var newCount = Interlocked.Increment(ref inProgressCount);
-                                    var progress = (double)newCount / entities.Count;
+                                    DynamicParallelVote? vote = null;
 
-                                    if (threadCount < 2)
-                                        options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
-                                    else
-                                        options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount - threadCount + 1:N0}-{newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0}, {threadCount:N0} threads)...");
-
-                                    while (true)
+                                    await UpdateNextBatchSize(threadLocalState, async () =>
                                     {
-                                        try
-                                        {
-                                            var response = dataSource.Execute(threadLocalState.Service, request);
-                                            Interlocked.Increment(ref count);
+                                        vote = await ExecuteSingleRequest(request, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState);
+                                    });
 
-                                            responseHandler?.Invoke(response);
-                                            break;
-                                        }
-                                        catch (FaultException<OrganizationServiceFault> ex)
-                                        {
-                                            if (ex.Detail.ErrorCode == 429 || // Virtual/elastic tables
-                                                ex.Detail.ErrorCode == -2147015902 || // Number of requests exceeded the limit of 6000 over time window of 300 seconds.
-                                                ex.Detail.ErrorCode == -2147015903 || // Combined execution time of incoming requests exceeded limit of 1,200,000 milliseconds over time window of 300 seconds. Decrease number of concurrent requests or reduce the duration of requests and try again later.
-                                                ex.Detail.ErrorCode == -2147015898) // Number of concurrent requests exceeded the limit of 52.
-                                            {
-                                                // In case throttling isn't handled by normal retry logic in the service client
-                                                var retryAfterSeconds = 2;
-
-                                                if (ex.Detail.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && (retryAfter is int || retryAfter is string s && Int32.TryParse(s, out _)))
-                                                    retryAfterSeconds = Convert.ToInt32(retryAfter);
-
-                                                Thread.Sleep(retryAfterSeconds * 1000);
-                                                continue;
-                                            }
-
-                                            if (FilterErrors(context, request, ex.Detail))
-                                            {
-                                                if (ContinueOnError)
-                                                    fault = fault ?? ex.Detail;
-                                                else
-                                                    throw;
-                                            }
-
-                                            Interlocked.Increment(ref errorCount);
-                                            break;
-                                        }
-                                    }
+                                    if (vote != null)
+                                        return vote;
                                 }
                                 else
                                 {
@@ -532,15 +532,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                     threadLocalState.EMR.Requests.Add(request);
 
-                                    if (threadLocalState.EMR.Requests.Count == BatchSize)
-                                    {
-                                        ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, ref fault);
+                                    if (threadLocalState.EMR.Requests.Count < threadLocalState.NextBatchSize)
+                                        return null;
 
-                                        threadLocalState.EMR = null;
-                                    }
+                                    DynamicParallelVote? vote = null;
+
+                                    await UpdateNextBatchSize(threadLocalState, async () =>
+                                    {
+                                        vote = await ProcessBatch(threadLocalState.EMR, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState);
+                                    });
+
+                                    threadLocalState.EMR = null;
+
+                                    if (vote != null)
+                                        return vote;
                                 }
 
-                                return threadLocalState;
+                                return DynamicParallelVote.IncreaseThreads;
                             }
                             catch
                             {
@@ -548,16 +556,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 throw;
                             }
                         },
-                        (threadLocalState) =>
+                        async (threadLocalState) =>
                         {
                             if (threadLocalState.EMR != null && !threadLocalState.Error)
-                                ProcessBatch(threadLocalState.EMR, threadCount, ref count, ref inProgressCount, ref errorCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, ref fault);
+                                await ProcessBatch(threadLocalState.EMR, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState);
 
-                            Interlocked.Decrement(ref threadCount);
+                            Interlocked.Decrement(ref _threadCount);
 
                             if (threadLocalState.Service != dataSource.Connection && threadLocalState.Service is IDisposable disposableClient)
                                 disposableClient.Dispose();
-                        });
+                        })
+                        .ForEach(options.CancellationToken);
                 }
 
                 if (fault != null)
@@ -567,11 +576,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var originalEx = ex;
 
-                if (ex is AggregateException agg && agg.InnerExceptions.Count == 1)
-                    ex = agg.InnerException;
+                if (ex is AggregateException agg)
+                {
+                    if (agg.InnerExceptions.Count == 1)
+                        ex = agg.InnerException;
+                    else if (agg.InnerExceptions.All(inner => inner is OperationCanceledException))
+                        ex = agg.InnerExceptions[0];
+                }
 
-                if (count > 0)
-                    context.Log(new Sql4CdsError(1, 0, $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}"));
+                if (_successCount > 0)
+                    context.Log(new Sql4CdsError(1, 0, $"{_successCount:N0} {GetDisplayName(_successCount, meta)} {operationNames.CompletedLowercase}"));
 
                 if (ex == originalEx)
                     throw;
@@ -579,9 +593,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw ex;
             }
 
-            recordsAffected = count;
-            message = $"({count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase})";
-            context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)count;
+            recordsAffected = _successCount;
+            message = $"({_successCount:N0} {GetDisplayName(_successCount, meta)} {operationNames.CompletedLowercase})";
+            context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)_successCount;
+        }
+
+        private async Task UpdateNextBatchSize(ParallelThreadState threadLocalState, Func<Task> action)
+        {
+            // Time how long the action takes
+            var timer = new Timer();
+            using (timer.Run())
+            {
+                await action();
+            }
+
+            // Adjust the batch size based on the time taken to try and keep the total time around 10sec
+            var multiplier = TimeSpan.FromSeconds(10).TotalMilliseconds / timer.Duration.TotalMilliseconds;
+            threadLocalState.NextBatchSize = Math.Max(1, Math.Min(BatchSize, (int)(threadLocalState.NextBatchSize * multiplier)));
+        }
+
+        private bool IsThrottlingException(FaultException<OrganizationServiceFault> ex)
+        {
+            if (ex == null)
+                return false;
+
+            if (ex.Detail.ErrorCode == 429 || // Virtual/elastic tables
+                ex.Detail.ErrorCode == -2147015902 || // Number of requests exceeded the limit of 6000 over time window of 300 seconds.
+                ex.Detail.ErrorCode == -2147015903 || // Combined execution time of incoming requests exceeded limit of 1,200,000 milliseconds over time window of 300 seconds. Decrease number of concurrent requests or reduce the duration of requests and try again later.
+                ex.Detail.ErrorCode == -2147015898) // Number of concurrent requests exceeded the limit of 52.
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool IsRetryableFault(OrganizationServiceFault fault)
+        {
+            if (fault == null)
+                return false;
+
+            if (fault.ErrorCode == -2147188475) // More than one concurrent {0} results detected for an Entity {1} and ObjectTypeCode {2}
+            {
+                return true;
+            }
+
+            return false;
         }
 
         protected class BulkApiErrorDetail
@@ -591,39 +648,216 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public int StatusCode { get; set; }
         }
 
-        private void ProcessBatch(ExecuteMultipleRequest req, int threadCount, ref int count, ref int inProgressCount, ref int errorCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, NodeExecutionContext context, Action<OrganizationResponse> responseHandler, ref OrganizationServiceFault fault)
+        private async Task<DynamicParallelVote?> ExecuteSingleRequest(OrganizationRequest req, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, NodeExecutionContext context, Action<OrganizationResponse> responseHandler, ParallelThreadState threadState)
         {
-            var newCount = Interlocked.Add(ref inProgressCount, req.Requests.Count);
-            var progress = (double)newCount / entities.Count;
-            var threadCountMessage = threadCount < 2 ? "" : $" ({threadCount:N0} threads)";
-            options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {count + errorCount + 1:N0} - {newCount:N0} of {entities.Count:N0}{threadCountMessage}...");
-            var resp = ExecuteMultiple(dataSource, org, meta, req);
+            var newCount = Interlocked.Increment(ref _inProgressCount);
+            ShowProgress(options, newCount, operationNames, meta);
 
-            if (responseHandler != null)
+            for (var retry = 0; ; retry++)
             {
-                foreach (var item in resp.Responses)
+                try
                 {
-                    if (item.Response != null)
-                        responseHandler(item.Response);
+                    var response = dataSource.Execute(org, req);
+                    Interlocked.Increment(ref _successCount);
+
+                    responseHandler?.Invoke(response);
+                    break;
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    if (IsThrottlingException(ex))
+                    {
+                        // Handle service protection limit retries ourselves to manage multi-threading
+                        // Wait for the recommended retry time, then add the request to the queue for retrying
+                        // Terminate this thread so we don't continue to overload the server
+                        var retryDelay = TimeSpan.FromSeconds(2);
+
+                        if (ex.Detail.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && retryAfter is TimeSpan ts)
+                            retryDelay = ts;
+
+                        newCount = Interlocked.Decrement(ref _inProgressCount);
+                        _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
+                        ShowProgress(options, newCount, operationNames, meta);
+
+                        await Task.Delay(retryDelay, options.CancellationToken);
+                        _delayedUntil.TryRemove(threadState, out _);
+                        _retryQueue.Enqueue(req);
+                        return DynamicParallelVote.DecreaseThreads;
+                    }
+
+                    if (IsRetryableFault(ex?.Detail))
+                    {
+                        // Retry the request after a short delay
+                        Thread.Sleep(TimeSpan.FromSeconds(2));
+                        continue;
+                    }
+
+                    if (FilterErrors(context, req, ex.Detail))
+                    {
+                        if (ContinueOnError)
+                            _fault = _fault ?? ex.Detail;
+                        else
+                            throw;
+                    }
+
+                    Interlocked.Increment(ref _errorCount);
+                    break;
                 }
             }
 
-            var errorResponses = resp.Responses
-                .Where(r => r.Fault != null)
-                .ToList();
+            return null;
+        }
 
-            Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
-            Interlocked.Add(ref errorCount, errorResponses.Count);
+        private void ShowProgress(IQueryExecutionOptions options, int newCount, OperationNames operationNames, EntityMetadata meta)
+        {
+            var progress = (double)newCount / _entityCount;
+            var threadCountMessage = _threadCount < 2 ? "" : $" ({_threadCount:N0} threads)";
+            var operationName = operationNames.InProgressUppercase;
 
-            var error = errorResponses.FirstOrDefault(item => FilterErrors(context, req.Requests[item.RequestIndex], item.Fault));
-
-            if (error != null)
+            var delayedUntilValues = _delayedUntil.Values.ToArray();
+            if (delayedUntilValues.Length > 0)
             {
-                fault = fault ?? error.Fault;
-
-                if (!ContinueOnError)
-                    throw new FaultException<OrganizationServiceFault>(fault, new FaultReason(fault.Message));
+                operationName = operationNames.CompletedUppercase;
+                threadCountMessage += $" ({delayedUntilValues.Length:N0} threads paused until {delayedUntilValues.Min().ToShortTimeString()} due to service protection limits)";
             }
+
+            if (_successCount + _errorCount + 1 >= newCount)
+                options.Progress(progress, $"{operationName} {GetDisplayName(0, meta)} {newCount:N0} of {_entityCount:N0}{threadCountMessage}...");
+            else
+                options.Progress(progress, $"{operationName} {GetDisplayName(0, meta)} {_successCount + _errorCount + 1:N0} - {newCount:N0} of {_entityCount:N0}{threadCountMessage}...");
+        }
+
+        private async Task<DynamicParallelVote?> ProcessBatch(ExecuteMultipleRequest req, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, NodeExecutionContext context, Action<OrganizationResponse> responseHandler, ParallelThreadState threadState)
+        {
+            var newCount = Interlocked.Add(ref _inProgressCount, req.Requests.Count);
+            ShowProgress(options, newCount, operationNames, meta);
+
+            for (var retry = 0; !options.CancellationToken.IsCancellationRequested; retry++)
+            {
+                try
+                {
+                    var resp = ExecuteMultiple(dataSource, org, meta, req);
+
+                    if (responseHandler != null)
+                    {
+                        foreach (var item in resp.Responses)
+                        {
+                            if (item.Response != null)
+                                responseHandler(item.Response);
+                        }
+                    }
+
+                    var errorResponses = resp.Responses
+                        .Where(r => r.Fault != null)
+                        .ToList();
+
+                    var nonRetryableErrorResponses = errorResponses
+                        .Where(r => !IsRetryableFault(r.Fault))
+                        .ToList();
+
+                    Interlocked.Add(ref _successCount, req.Requests.Count - errorResponses.Count);
+                    Interlocked.Add(ref _errorCount, nonRetryableErrorResponses.Count);
+
+                    var error = errorResponses.FirstOrDefault(item => FilterErrors(context, req.Requests[item.RequestIndex], item.Fault) && !IsRetryableFault(item.Fault));
+
+                    if (error != null)
+                    {
+                        _fault = _fault ?? error.Fault;
+
+                        if (!ContinueOnError)
+                            throw new FaultException<OrganizationServiceFault>(_fault, new FaultReason(_fault.Message));
+                    }
+
+                    if (ContinueOnError)
+                    {
+                        var retryableErrors = errorResponses.Where(item => IsRetryableFault(item.Fault)).ToList();
+
+                        if (retryableErrors.Count > 0)
+                        {
+                            // Create a new ExecuteMultipleRequest with all the requests that haven't been processed yet
+                            var retryReq = new ExecuteMultipleRequest
+                            {
+                                Requests = new OrganizationRequestCollection(),
+                                Settings = new ExecuteMultipleSettings
+                                {
+                                    ContinueOnError = IgnoresSomeErrors,
+                                    ReturnResponses = responseHandler != null
+                                }
+                            };
+
+                            foreach (var errorItem in retryableErrors)
+                                retryReq.Requests.Add(req.Requests[errorItem.RequestIndex]);
+
+                            // Wait and retry
+                            var retryDelay = TimeSpan.FromSeconds(2);
+
+                            if (retryableErrors[0].Fault.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && retryDelay is TimeSpan ts)
+                                retryDelay = ts;
+
+                            await Task.Delay(retryDelay, options.CancellationToken);
+                            req = retryReq;
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        var firstRetryableError = errorResponses.FirstOrDefault(item => IsRetryableFault(item.Fault));
+
+                        if (firstRetryableError != null)
+                        {
+                            // Create a new ExecuteMultipleRequest with all the requests that haven't been processed yet
+                            var retryReq = new ExecuteMultipleRequest
+                            {
+                                Requests = new OrganizationRequestCollection(),
+                                Settings = new ExecuteMultipleSettings
+                                {
+                                    ContinueOnError = IgnoresSomeErrors,
+                                    ReturnResponses = responseHandler != null
+                                }
+                            };
+
+                            for (var i = firstRetryableError.RequestIndex; i < req.Requests.Count; i++)
+                                retryReq.Requests.Add(req.Requests[i]);
+
+                            // Wait and retry
+                            var retryDelay = TimeSpan.FromSeconds(2);
+
+                            if (firstRetryableError.Fault.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && retryAfter is TimeSpan ts)
+                                retryDelay = ts;
+
+                            await Task.Delay(retryDelay, options.CancellationToken);
+                            req = retryReq;
+                            continue;
+                        }
+                    }
+
+                    break;
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    if (!IsThrottlingException(ex))
+                        throw;
+
+                    // Handle service protection limit retries ourselves to manage multi-threading
+                    // Wait for the recommended retry time, then add the request to the queue for retrying
+                    // Terminate this thread so we don't continue to overload the server
+                    var retryDelay = TimeSpan.FromSeconds(2);
+
+                    if (ex.Detail.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && retryAfter is TimeSpan ts)
+                        retryDelay = ts;
+
+                    newCount = Interlocked.Add(ref _inProgressCount, -req.Requests.Count);
+                    _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
+                    ShowProgress(options, newCount, operationNames, meta);
+
+                    await Task.Delay(retryDelay, options.CancellationToken);
+                    _delayedUntil.TryRemove(threadState, out _);
+                    _retryQueue.Enqueue(req);
+                    return DynamicParallelVote.DecreaseThreads;
+                }
+            }
+
+            return null;
         }
 
         protected virtual bool FilterErrors(NodeExecutionContext context, OrganizationRequest request, OrganizationServiceFault fault)

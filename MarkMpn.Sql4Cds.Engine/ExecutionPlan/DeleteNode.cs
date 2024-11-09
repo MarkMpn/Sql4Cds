@@ -134,7 +134,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             InProgressUppercase = "Deleting",
                             InProgressLowercase = "deleting",
-                            CompletedLowercase = "deleted"
+                            CompletedLowercase = "deleted",
+                            CompletedUppercase = "Deleted"
                         },
                         context,
                         out recordsAffected,
@@ -146,6 +147,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (ex.Node == null)
                     ex.Node = this;
 
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
                 throw;
             }
             catch (Exception ex)
