@@ -11,30 +11,9 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>New SQL support
-* `NEWID` function
-* `DATETRUNC` function
-
-SQL Server compatibility improvements
-* Improved data type conversions for better SQL Server compatibility
-* Reworked `DATEPART` / `DATEADD` / `DATEDIFF` functions for improved SQL Server compatibility
-
-DML operation optimizations
-* Update/delete records without reading them first if possible - disable if necessary with `NO_DIRECT_DML` query hint
-* Implemented minimal updates via new `MINIMAL_UPDATES` query hint
-* Refactored type conversion logic for consistency across insert/update/delete operations
-
-Other improvements
-* Extended support for executing messages with more parameter types
-* TDS Endpoint compatibility improvements
-
-Bug fixes
-* Fixed filtering on `metadata.alternate_key.entitykeyindexstatus`
-* Show confirmation message before executing bulk delete job
-* Fixed use of `INSERT` and `UPDATE` with virtual tables
-* Fixed use of `FULL OUTER JOIN` with Fetch XML
-* Fixed filtering of `OUTER JOIN` / `OUTER APPLY` results when using nested loops
-* Fixed use of alias in filters when converting from Fetch XML to SQL
+    <releaseNotes>Include join alias in output column aliases when converting from Fetch XML to SQL
+Improved SQL to Fetch XML conversion of datetime filters
+Fixed use of case-insensitive table names in INSERT statements
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
