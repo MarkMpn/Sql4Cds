@@ -1435,7 +1435,7 @@ namespace MarkMpn.Sql4Cds.Engine
 #endif
 
                     if (orgVersion == null)
-                        orgVersion = ((RetrieveVersionResponse)dataSource.Execute(new RetrieveVersionRequest())).Version;
+                        orgVersion = ((RetrieveVersionResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(new RetrieveVersionRequest(), context.Options, "Retrieving server version...")).Version;
 
                     return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(orgVersion), context);
             }

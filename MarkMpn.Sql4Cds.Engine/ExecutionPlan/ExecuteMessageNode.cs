@@ -286,7 +286,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
-            context.Options.Progress(0, $"Executing {MessageName}...");
+            var progressMessage = $"Executing {MessageName}...";
+            context.Options.Progress(0, progressMessage);
 
             // Get the first page of results
             if (!context.Options.ContinueRetrieve(0))
@@ -302,7 +303,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (BypassCustomPluginExecution)
                 request.Parameters["BypassCustomPluginExecution"] = true;
 
-            var response = dataSource.Connection.Execute(request);
+            var response = dataSource.ExecuteWithServiceProtectionLimitLogging(request, context.Options, progressMessage);
             var entities = GetEntityCollection(response);
             PagesRetrieved++;
 
@@ -325,7 +326,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
 
 
-                response = dataSource.Connection.Execute(request);
+                response = dataSource.ExecuteWithServiceProtectionLimitLogging(request, context.Options, progressMessage);
                 entities = GetEntityCollection(response);
                 PagesRetrieved++;
 

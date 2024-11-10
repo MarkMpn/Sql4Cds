@@ -612,22 +612,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             threadLocalState.NextBatchSize = Math.Max(1, Math.Min(BatchSize, (int)(threadLocalState.NextBatchSize * multiplier)));
         }
 
-        private bool IsThrottlingException(FaultException<OrganizationServiceFault> ex)
-        {
-            if (ex == null)
-                return false;
-
-            if (ex.Detail.ErrorCode == 429 || // Virtual/elastic tables
-                ex.Detail.ErrorCode == -2147015902 || // Number of requests exceeded the limit of 6000 over time window of 300 seconds.
-                ex.Detail.ErrorCode == -2147015903 || // Combined execution time of incoming requests exceeded limit of 1,200,000 milliseconds over time window of 300 seconds. Decrease number of concurrent requests or reduce the duration of requests and try again later.
-                ex.Detail.ErrorCode == -2147015898) // Number of concurrent requests exceeded the limit of 52.
-            {
-                return true;
-            }
-
-            return false;
-        }
-
         private bool IsRetryableFault(OrganizationServiceFault fault)
         {
             if (fault == null)
@@ -665,17 +649,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 catch (FaultException<OrganizationServiceFault> ex)
                 {
-                    if (IsThrottlingException(ex))
+                    if (ex.IsThrottlingException(out var retryDelay))
                     {
                         // Handle service protection limit retries ourselves to manage multi-threading
                         // Wait for the recommended retry time, then add the request to the queue for retrying
                         // Terminate this thread so we don't continue to overload the server
-                        var retryDelay = TimeSpan.FromSeconds(2);
-
-                        if (ex.Detail.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && retryAfter is TimeSpan ts)
-                            retryDelay = ts;
-
                         newCount = Interlocked.Decrement(ref _inProgressCount);
+
+                        // The server can report too-long delays. Wait the full 5 minutes to start with,
+                        // then reduce to 2 minutes then 1 minute
+                        if (retry < 1 && retryDelay > TimeSpan.FromMinutes(5))
+                            retryDelay = TimeSpan.FromMinutes(5);
+                        else if (retry >= 1 && retry < 3 && retryDelay > TimeSpan.FromMinutes(2))
+                            retryDelay = TimeSpan.FromMinutes(2);
+                        else if (retry >= 3 && retryDelay > TimeSpan.FromMinutes(1))
+                            retryDelay = TimeSpan.FromMinutes(1);
+
                         _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
                         ShowProgress(options, newCount, operationNames, meta);
 
@@ -715,9 +704,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var operationName = operationNames.InProgressUppercase;
 
             var delayedUntilValues = _delayedUntil.Values.ToArray();
-            if (delayedUntilValues.Length > 0)
+            if (delayedUntilValues.Length == _threadCount)
             {
                 operationName = operationNames.CompletedUppercase;
+                threadCountMessage += $" (paused until {delayedUntilValues.Min().ToShortTimeString()} due to service protection limits)";
+            }
+            else if (delayedUntilValues.Length > 0)
+            {
                 threadCountMessage += $" ({delayedUntilValues.Length:N0} threads paused until {delayedUntilValues.Min().ToShortTimeString()} due to service protection limits)";
             }
 
@@ -835,18 +828,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 catch (FaultException<OrganizationServiceFault> ex)
                 {
-                    if (!IsThrottlingException(ex))
+                    if (!ex.IsThrottlingException(out var retryDelay))
                         throw;
 
                     // Handle service protection limit retries ourselves to manage multi-threading
                     // Wait for the recommended retry time, then add the request to the queue for retrying
                     // Terminate this thread so we don't continue to overload the server
-                    var retryDelay = TimeSpan.FromSeconds(2);
-
-                    if (ex.Detail.ErrorDetails.TryGetValue("Retry-After", out var retryAfter) && retryAfter is TimeSpan ts)
-                        retryDelay = ts;
-
                     newCount = Interlocked.Add(ref _inProgressCount, -req.Requests.Count);
+
+                    // The server can report too-long delays. Wait the full 5 minutes to start with,
+                    // then reduce to 2 minutes then 1 minute
+                    if (retry < 1 && retryDelay > TimeSpan.FromMinutes(5))
+                        retryDelay = TimeSpan.FromMinutes(5);
+                    else if (retry >= 1 && retry < 3 && retryDelay > TimeSpan.FromMinutes(2))
+                        retryDelay = TimeSpan.FromMinutes(2);
+                    else if (retry >= 3 && retryDelay > TimeSpan.FromMinutes(1))
+                        retryDelay = TimeSpan.FromMinutes(1);
+
                     _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
                     ShowProgress(options, newCount, operationNames, meta);
 
