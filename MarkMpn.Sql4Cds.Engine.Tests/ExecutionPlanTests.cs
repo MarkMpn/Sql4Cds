@@ -2977,6 +2977,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void CaseInsensitiveUpdate()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = "UPDATE Account SET Name = 'foo' WHERE name = 'bar'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual("account", update.LogicalName);
+            Assert.AreEqual("Account.accountid", update.PrimaryIdAccessors.Single().SourceAttributes.Single());
+            Assert.AreEqual("Expr1", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
+            var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            Assert.AreEqual("Account", fetch.Alias);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='bar' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void UpdateFromJoin()
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
@@ -3388,6 +3418,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void CaseInsensitiveDelete()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = "DELETE FROM Account WHERE name = 'bar'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var delete = AssertNode<DeleteNode>(plans[0]);
+            Assert.AreEqual("account", delete.LogicalName);
+            Assert.AreEqual("accountid", delete.PrimaryIdAccessors.Single().TargetAttribute);
+            Assert.AreEqual("Account.accountid", delete.PrimaryIdAccessors.Single().SourceAttributes.Single());
+            var fetch = AssertNode<FetchXmlScan>(delete.Source);
+            Assert.AreEqual("Account", fetch.Alias);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='bar' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SimpleInsertSelect()
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
@@ -3412,6 +3470,26 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void CaseInsensitiveInsert()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = "INSERT INTO Account (Name) VALUES ('Data8')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var insert = AssertNode<InsertNode>(plans[0]);
+            Assert.AreEqual("account", insert.LogicalName);
+            Assert.AreEqual("name", insert.Accessors.Single().TargetAttribute);
+            Assert.AreEqual("Expr2", insert.Accessors.Single().SourceAttributes.Single());
+            var constantScan = AssertNode<ConstantScanNode>(insert.Source);
+            Assert.AreEqual("Expr2", constantScan.Schema.Single().Key);
+            Assert.AreEqual(1, constantScan.Values.Count);
         }
 
         [TestMethod]
