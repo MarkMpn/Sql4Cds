@@ -12,13 +12,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// Provides similar methods to the <see cref="Parallel"/> class, but allows the loop to indicate that the number of threads
     /// should change during execution.
     /// </summary>
-    class DynamicParallel<TSource, TLocal>
+    class DynamicParallel<TSource, TLocal, TLoop>
+        where TLoop : DynamicParallelLoopState, new()
     {
         class DynamicParallelThreadState
         {
             public Task Task { get; set; }
-
-            public DynamicParallelVote? Vote { get; set; }
 
             public bool IsStopped { get; set; }
 
@@ -27,23 +26,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private readonly ConcurrentQueue<TSource> _queue;
         private readonly List<DynamicParallelThreadState> _threads;
-        private readonly DynamicParallelLoopState _loopState;
+        private readonly TLoop _loopState;
         private readonly ConcurrentBag<Exception> _exceptions;
         private readonly ParallelOptions _parallelOptions;
         private readonly Func<TLocal> _localInit;
-        private readonly Func<TSource, DynamicParallelLoopState, TLocal, Task<DynamicParallelVote?>> _body;
-        private readonly Func<TLocal, Task> _localFinally;
+        private readonly Func<TSource, TLoop, TLocal, Task> _body;
+        private readonly Func<TLoop, TLocal, Task> _localFinally;
 
         public DynamicParallel(
             IEnumerable<TSource> source,
             ParallelOptions parallelOptions,
             Func<TLocal> localInit,
-            Func<TSource, DynamicParallelLoopState, TLocal, Task<DynamicParallelVote?>> body,
-            Func<TLocal, Task> localFinally)
+            Func<TSource, TLoop, TLocal, Task> body,
+            Func<TLoop, TLocal, Task> localFinally)
         {
             _queue = new ConcurrentQueue<TSource>(source);
             _threads = new List<DynamicParallelThreadState>();
-            _loopState = new DynamicParallelLoopState();
+            _loopState = new TLoop();
             _exceptions = new ConcurrentBag<Exception>();
             _parallelOptions = parallelOptions;
             _localInit = localInit;
@@ -82,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     !threadState.IsStopped &&
                     _queue.TryDequeue(out var item))
                 {
-                    threadState.Vote = await _body(item, _loopState, local) ?? threadState.Vote;
+                    await _body(item, _loopState, local);
                 }
             }
             catch (Exception ex)
@@ -92,8 +91,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             finally
             {
-                await _localFinally(local);
-                threadState.Vote = null;
+                await _localFinally(_loopState, local);
+                threadState.IsStopped = true;
             }
         }
 
@@ -111,41 +110,56 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (task == allTasks)
                     break;
 
-                var votes = _threads.Where(t => t.Vote != null && !t.IsStopped).Select(t => t.Vote.Value).ToList();
-                var increase = votes.Count(v => v == DynamicParallelVote.IncreaseThreads);
-                var decrease = votes.Count(v => v == DynamicParallelVote.DecreaseThreads);
-
-                if (decrease > 0 && _threads.Count(t => !t.IsStopped) > 1)
+                if (_loopState.ResetReduceThreadCount() && _threads.Count(t => !t.IsStopped) > 1)
                 {
-                    var thread = _threads.First(t => !t.IsStopped && t.Vote == DynamicParallelVote.DecreaseThreads);
+                    var thread = _threads.First(t => !t.IsStopped);
                     thread.IsStopped = true;
                     hasDecreased = true;
                 }
-                else if (increase > 0 && !hasDecreased && _threads.Count(t => !t.IsStopped) < _parallelOptions.MaxDegreeOfParallelism)
+                else if (!hasDecreased && _threads.Count(t => !t.IsStopped) < _parallelOptions.MaxDegreeOfParallelism && _loopState.ResetIncreaseThreadCount())
                 {
                     StartThread(cancellationToken);
                 }
-
-                foreach (var thread in _threads)
-                    thread.Vote = null;
-
             }
         }
     }
 
     class DynamicParallelLoopState
     {
+        private int _reduceThreadCount;
+        private int _increaseThreadCount;
+
         public bool IsStopped { get; private set; }
 
         public void Stop()
         {
             IsStopped = true;
         }
-    }
 
-    enum DynamicParallelVote
-    {
-        IncreaseThreads,
-        DecreaseThreads,
+        public virtual void RequestReduceThreadCount()
+        {
+            Interlocked.Exchange(ref _reduceThreadCount, 1);
+        }
+
+        public virtual bool ResetReduceThreadCount()
+        {
+            if (Interlocked.CompareExchange(ref _reduceThreadCount, 0, 1) == 1)
+                return true;
+
+            return false;
+        }
+
+        public virtual void RequestIncreaseThreadCount()
+        {
+            Interlocked.Exchange(ref _increaseThreadCount, 1);
+        }
+
+        public virtual bool ResetIncreaseThreadCount()
+        {
+            if (Interlocked.CompareExchange(ref _increaseThreadCount, 0, 1) == 1)
+                return true;
+
+            return false;
+        }
     }
 }
