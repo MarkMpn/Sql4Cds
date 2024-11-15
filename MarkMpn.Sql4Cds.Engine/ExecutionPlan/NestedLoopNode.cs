@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public Dictionary<string,string> OuterReferences { get; set; }
 
         [Browsable(false)]
-        public string Warning => JoinCondition == null ? "No Join Predicate" : null;
+        public string Warning => JoinCondition == null && (OuterReferences == null || OuterReferences.Count == 0) ? "No Join Predicate or Outer References" : null;
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
