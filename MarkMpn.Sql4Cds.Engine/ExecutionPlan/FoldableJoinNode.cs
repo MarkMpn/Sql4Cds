@@ -821,7 +821,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     SecondExpression = new VariableReference { Name = outerReference }
                 }
             };
-            var foldedRightSource = filteredRightSource.FoldQuery(context, hints);
+            var contextWithOuterReference = context.CreateChildContext(new Dictionary<string, DataTypeReference>
+            {
+                [outerReference] = leftSchema.Schema[leftAttr].Type
+            });
+            var foldedRightSource = filteredRightSource.FoldQuery(contextWithOuterReference, hints);
 
             // If we can't fold the filter down to the data source, there's no benefit from doing this so stick with the
             // original join type

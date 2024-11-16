@@ -2977,6 +2977,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void CaseInsensitiveUpdate()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = "UPDATE Account SET Name = 'foo' WHERE name = 'bar'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual("account", update.LogicalName);
+            Assert.AreEqual("Account.accountid", update.PrimaryIdAccessors.Single().SourceAttributes.Single());
+            Assert.AreEqual("Expr1", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
+            var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            Assert.AreEqual("Account", fetch.Alias);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='bar' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void UpdateFromJoin()
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
@@ -3388,6 +3418,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void CaseInsensitiveDelete()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = "DELETE FROM Account WHERE name = 'bar'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var delete = AssertNode<DeleteNode>(plans[0]);
+            Assert.AreEqual("account", delete.LogicalName);
+            Assert.AreEqual("accountid", delete.PrimaryIdAccessors.Single().TargetAttribute);
+            Assert.AreEqual("Account.accountid", delete.PrimaryIdAccessors.Single().SourceAttributes.Single());
+            var fetch = AssertNode<FetchXmlScan>(delete.Source);
+            Assert.AreEqual("Account", fetch.Alias);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='bar' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SimpleInsertSelect()
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
@@ -3412,6 +3470,26 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void CaseInsensitiveInsert()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = "INSERT INTO Account (Name) VALUES ('Data8')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var insert = AssertNode<InsertNode>(plans[0]);
+            Assert.AreEqual("account", insert.LogicalName);
+            Assert.AreEqual("name", insert.Accessors.Single().TargetAttribute);
+            Assert.AreEqual("Expr2", insert.Accessors.Single().SourceAttributes.Single());
+            var constantScan = AssertNode<ConstantScanNode>(insert.Source);
+            Assert.AreEqual("Expr2", constantScan.Schema.Single().Key);
+            Assert.AreEqual(1, constantScan.Values.Count);
         }
 
         [TestMethod]
@@ -4761,10 +4839,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var nestedLoop = AssertNode<NestedLoopNode>(select.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
             Assert.AreEqual(1, nestedLoop.OuterReferences.Count);
-            Assert.AreEqual("@Cond1", nestedLoop.OuterReferences["entity.metadataid"]);
+            var outerReference = nestedLoop.OuterReferences["entity.metadataid"];
+            Assert.IsTrue(outerReference.StartsWith("@Cond"));
             var meta = AssertNode<MetadataQueryNode>(nestedLoop.LeftSource);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
-            AssertFetchXml(fetch, @"
+            AssertFetchXml(fetch, $@"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <attribute name='name' />
@@ -4772,7 +4851,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                             <attribute name='firstname' />
                         </link-entity>
                         <filter>
-                            <condition attribute='accountid' operator='eq' value='@Cond1' generator:IsVariable='true' />
+                            <condition attribute='accountid' operator='eq' value='{outerReference}' generator:IsVariable='true' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -7442,7 +7521,7 @@ FROM account a INNER JOIN contact c ON c.contactid = c.parentcustomerid";
             var select = AssertNode<SelectNode>(plans[0]);
             var loop = AssertNode<NestedLoopNode>(select.Source);
             Assert.IsNull(loop.JoinCondition);
-            Assert.AreEqual("No Join Predicate", loop.Warning);
+            Assert.AreEqual("No Join Predicate or Outer References", loop.Warning);
             var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
 
             AssertFetchXml(accountFetch, @"
@@ -8671,6 +8750,32 @@ FROM account a";
         </filter>
     </entity>
 </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldSingleRowJoinToNestedLoop()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/582
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT TOP 10 a.name,
+              e.logicalname
+FROM account AS a 
+     INNER JOIN
+     metadata.entity e
+     ON a.accountid = e.metadataid
+WHERE a.accountid = '9B8AAC69-EECA-497A-99AB-C65B9E702D89'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(top.Source);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var meta = AssertNode<MetadataQueryNode>(loop.RightSource);
         }
     }
 }

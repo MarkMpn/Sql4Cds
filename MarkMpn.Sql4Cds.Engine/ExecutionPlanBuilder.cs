@@ -1416,7 +1416,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var node = new InsertNode
             {
                 DataSource = dataSource.Name,
-                LogicalName = logicalName,
+                LogicalName = metadata.LogicalName,
                 Source = reader.Source,
                 Accessors = reader.ValidateInsertColumnMapping(targetColumns, sourceColumns)
             };
