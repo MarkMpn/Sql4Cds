@@ -4839,10 +4839,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var nestedLoop = AssertNode<NestedLoopNode>(select.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
             Assert.AreEqual(1, nestedLoop.OuterReferences.Count);
-            Assert.AreEqual("@Cond1", nestedLoop.OuterReferences["entity.metadataid"]);
+            var outerReference = nestedLoop.OuterReferences["entity.metadataid"];
+            Assert.IsTrue(outerReference.StartsWith("@Cond"));
             var meta = AssertNode<MetadataQueryNode>(nestedLoop.LeftSource);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
-            AssertFetchXml(fetch, @"
+            AssertFetchXml(fetch, $@"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <attribute name='name' />
@@ -4850,7 +4851,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                             <attribute name='firstname' />
                         </link-entity>
                         <filter>
-                            <condition attribute='accountid' operator='eq' value='@Cond1' generator:IsVariable='true' />
+                            <condition attribute='accountid' operator='eq' value='{outerReference}' generator:IsVariable='true' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -7520,7 +7521,7 @@ FROM account a INNER JOIN contact c ON c.contactid = c.parentcustomerid";
             var select = AssertNode<SelectNode>(plans[0]);
             var loop = AssertNode<NestedLoopNode>(select.Source);
             Assert.IsNull(loop.JoinCondition);
-            Assert.AreEqual("No Join Predicate", loop.Warning);
+            Assert.AreEqual("No Join Predicate or Outer References", loop.Warning);
             var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
 
             AssertFetchXml(accountFetch, @"
@@ -8749,6 +8750,32 @@ FROM account a";
         </filter>
     </entity>
 </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldSingleRowJoinToNestedLoop()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/582
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT TOP 10 a.name,
+              e.logicalname
+FROM account AS a 
+     INNER JOIN
+     metadata.entity e
+     ON a.accountid = e.metadataid
+WHERE a.accountid = '9B8AAC69-EECA-497A-99AB-C65B9E702D89'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(top.Source);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var meta = AssertNode<MetadataQueryNode>(loop.RightSource);
         }
     }
 }

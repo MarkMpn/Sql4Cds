@@ -23,6 +23,24 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly Version _version;
         private readonly IAttributeMetadataCache _metadata;
 
+        // Entites that return 0 for RetrieveTotalRecordCountRequest but actually have values, found through trial and error
+        // Some of these can have large numbers of records, so returning an estimated count of 0 can lead to some very slow
+        // execution plans
+        private static readonly string[] _unreliableRetrieveTotalRecordCountEntities = new[]
+        {
+            "attribute",
+            "attributeimageconfig",
+            "commitment",
+            "connector",
+            "entity",
+            "entityimageconfig",
+            "entitykey",
+            "entityrelationship",
+            "environmentvariabledefinition",
+            "environmentvariablevalue",
+            "relationship"
+        };
+
         public TableSizeCache(IOrganizationService org, IAttributeMetadataCache metadata)
         {
             _tableSize = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -58,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     count = 1000;
                     useFetch = false;
                 }
-                else if (UseRetrieveTotalRecordCountRequest)
+                else if (UseRetrieveTotalRecordCountRequest && !_unreliableRetrieveTotalRecordCountEntities.Contains(logicalName))
                 {
                     try
                     {
