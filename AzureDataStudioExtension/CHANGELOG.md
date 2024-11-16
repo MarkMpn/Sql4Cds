@@ -1,5 +1,11 @@
 # Change Log
 
+## [v9.4.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.4.1) - 2024-11-10
+
+Fixed Intellisense with trailing comments
+Improved SQL to Fetch XML conversion of datetime filters
+Fixed use of case-insensitive table names in INSERT statements
+
 ## [v9.4.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.4.0) - 2024-11-06
 New SQL support
 * `NEWID` function
