@@ -106,10 +106,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _successCount;
         private int _errorCount;
         private int _threadCount;
+        private int _maxThreadCount;
+        private int _pausedThreadCount;
+        private int _batchExecutionCount;
         private ParallelOptions _parallelOptions;
         private ConcurrentQueue<OrganizationRequest> _retryQueue;
         private ConcurrentDictionary<ParallelThreadState, DateTime> _delayedUntil;
         private OrganizationServiceFault _fault;
+        private int _serviceProtectionLimitHits;
+        private int[] _threadCountHistory;
+        private int[] _rpmHistory;
+        private float[] _batchSizeHistory;
 
         /// <summary>
         /// The SQL string that the query was converted from
@@ -148,12 +155,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The maximum degree of parallelism to apply to this operation
         /// </summary>
+        [DisplayName("Max Degree of Parallelism")]
         [Description("The maximum number of operations that will be performed in parallel")]
         public abstract int MaxDOP { get; set; }
+
+        [Category("Statistics")]
+        [DisplayName("Actual Degree of Parallelism")]
+        [BrowsableInEstimatedPlan(false)]
+        [Description("The number of threads that were running each minute during the operation")]
+        [TypeConverter(typeof(MiniChartConverter))]
+#if !NETCOREAPP
+        [Editor(typeof(MiniChartEditor), typeof(System.Drawing.Design.UITypeEditor))]
+#endif
+        public float[] ActualDOP => _threadCountHistory.Select(i => (float)i).ToArray();
+
+        [Category("Statistics")]
+        [DisplayName("Records Per Minute")]
+        [BrowsableInEstimatedPlan(false)]
+        [Description("The number of records that were processed each minute during the operation")]
+        [TypeConverter(typeof(MiniChartConverter))]
+#if !NETCOREAPP
+        [Editor(typeof(MiniChartEditor), typeof(System.Drawing.Design.UITypeEditor))]
+#endif
+        public float[] RPM => _rpmHistory.Select(i => (float)i).ToArray();
+
+        [Category("Statistics")]
+        [DisplayName("Actual Batch Size")]
+        [BrowsableInEstimatedPlan(false)]
+        [Description("The average number of records that were processed per batch each minute during the operation")]
+        [TypeConverter(typeof(MiniChartConverter))]
+#if !NETCOREAPP
+        [Editor(typeof(MiniChartEditor), typeof(System.Drawing.Design.UITypeEditor))]
+#endif
+        public float[] ActualBatchSize => _batchSizeHistory;
+
+        [Category("Statistics")]
+        [DisplayName("Service Protection Limit Hits")]
+        [BrowsableInEstimatedPlan(false)]
+        [Description("The number of times execution was paused due to service protection limits")]
+        public int ServiceProtectionLimitHits => _serviceProtectionLimitHits;
 
         /// <summary>
         /// The number of requests that will be submitted in a single batch
         /// </summary>
+        [DisplayName("Max Batch Size")]
         [Description("The number of requests that will be submitted in a single batch")]
         public abstract int BatchSize { get; set; }
 
@@ -458,12 +503,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _successCount = 0;
             _errorCount = 0;
             _threadCount = 0;
+            _batchExecutionCount = 0;
 
 #if NETCOREAPP
             var svc = dataSource.Connection as ServiceClient;
 #else
             var svc = dataSource.Connection as CrmServiceClient;
 #endif
+
+            var threadCountHistory = new List<int>();
+            var rpmHistory = new List<int>();
+            var batchSizeHistory = new List<float>();
 
             var maxDop = MaxDOP;
 
@@ -474,6 +524,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 svc = null;
 
             var useAffinityCookie = maxDop == 1 || _entityCount < 100;
+            var completed = new CancellationTokenSource();
+
+            // Set up one background thread to monitor the performance for debugging
+            var performanceMonitor = Task.Factory.StartNew(async () =>
+            {
+                var lastSuccess = 0;
+                var lastBatchCount = 0;
+
+                while (!completed.Token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMinutes(1), completed.Token);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        break;
+                    }
+
+                    threadCountHistory.Add(_maxThreadCount);
+                    var prevSuccess = Interlocked.Exchange(ref lastSuccess, _successCount);
+                    var prevBatchCount = Interlocked.Exchange(ref lastBatchCount, _batchExecutionCount);
+                    var recordCount = lastSuccess - prevSuccess;
+                    var batchCount = lastBatchCount - prevBatchCount;
+                    rpmHistory.Add(recordCount);
+                    if (batchCount == 0)
+                        batchSizeHistory.Add(0);
+                    else
+                        batchSizeHistory.Add((float)recordCount / batchCount);
+                    _maxThreadCount = _threadCount;
+                    lastSuccess = _successCount;
+                }
+
+                threadCountHistory.Add(_maxThreadCount);
+                var finalRecordCount = _successCount - lastSuccess;
+                var finalBatchCount = _batchExecutionCount - lastBatchCount;
+                rpmHistory.Add(finalRecordCount);
+                if (finalBatchCount == 0)
+                    batchSizeHistory.Add(0);
+                else
+                    batchSizeHistory.Add((float)finalRecordCount / finalBatchCount);
+            });
 
             try
             {
@@ -506,6 +598,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
 #endif
                             Interlocked.Increment(ref _threadCount);
+
+                            _maxThreadCount = Math.Max(_maxThreadCount, _threadCount);
 
                             return new ParallelThreadState
                             {
@@ -657,6 +751,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     throw ex;
             }
+            finally
+            {
+                completed.Cancel();
+                performanceMonitor.ConfigureAwait(false).GetAwaiter().GetResult();
+
+                _threadCountHistory = threadCountHistory.ToArray();
+                _rpmHistory = rpmHistory.ToArray();
+                _batchSizeHistory = batchSizeHistory.ToArray();
+            }
 
             recordsAffected = _successCount;
             message = $"({_successCount:N0} {GetDisplayName(_successCount, meta)} {operationNames.CompletedLowercase})";
@@ -675,6 +778,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Adjust the batch size based on the time taken to try and keep the total time around 10sec
             var multiplier = TimeSpan.FromSeconds(10).TotalMilliseconds / timer.Duration.TotalMilliseconds;
             threadLocalState.NextBatchSize = Math.Max(1, Math.Min(BatchSize, (int)(threadLocalState.NextBatchSize * multiplier)));
+
+            // Update the statistics of the number of batches we have executed
+            Interlocked.Increment(ref _batchExecutionCount);
         }
 
         private bool IsRetryableFault(OrganizationServiceFault fault)
@@ -733,10 +839,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             retryDelay = TimeSpan.FromMinutes(1);
 
                         _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
+                        if (Interlocked.Increment(ref _pausedThreadCount) == 1)
+                            Interlocked.Increment(ref _serviceProtectionLimitHits);
                         ShowProgress(options, operationNames, meta);
 
                         loopState.RequestReduceThreadCount();
                         await Task.Delay(retryDelay, options.CancellationToken);
+                        Interlocked.Decrement(ref _pausedThreadCount);
                         _delayedUntil.TryRemove(threadState, out _);
                         ShowProgress(options, operationNames, meta); 
                         _retryQueue.Enqueue(req);
@@ -910,10 +1019,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         retryDelay = TimeSpan.FromMinutes(1);
 
                     _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
+                    if (Interlocked.Increment(ref _pausedThreadCount) == 1)
+                        Interlocked.Increment(ref _serviceProtectionLimitHits);
                     ShowProgress(options, operationNames, meta);
 
                     loopState.RequestReduceThreadCount();
                     await Task.Delay(retryDelay, options.CancellationToken);
+                    Interlocked.Decrement(ref _pausedThreadCount);
                     _delayedUntil.TryRemove(threadState, out _);
                     ShowProgress(options, operationNames, meta);
                     _retryQueue.Enqueue(req);
