@@ -807,7 +807,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             Interlocked.Increment(ref _inProgressCount);
 
-            for (var retry = 0; ; retry++)
+            for (var retry = 0; !options.CancellationToken.IsCancellationRequested; retry++)
             {
                 try
                 {
@@ -873,6 +873,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return true;
                 }
             }
+
+            return true;
         }
 
         private void ShowProgress(IQueryExecutionOptions options, OperationNames operationNames, EntityMetadata meta)
@@ -941,57 +943,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             throw new FaultException<OrganizationServiceFault>(_fault, new FaultReason(_fault.Message));
                     }
 
+                    List<OrganizationRequest> retryRequests;
+
                     if (ContinueOnError)
                     {
+                        // The server will already have tried to execute every request, so we can just pull the ones
+                        // that have a fault that we know we can retry
                         var retryableErrors = errorResponses.Where(item => IsRetryableFault(item.Fault)).ToList();
-
-                        if (retryableErrors.Count > 0)
-                        {
-                            // Create a new ExecuteMultipleRequest with all the requests that haven't been processed yet
-                            var retryReq = new ExecuteMultipleRequest
-                            {
-                                Requests = new OrganizationRequestCollection(),
-                                Settings = new ExecuteMultipleSettings
-                                {
-                                    ContinueOnError = IgnoresSomeErrors,
-                                    ReturnResponses = responseHandler != null
-                                }
-                            };
-
-                            foreach (var errorItem in retryableErrors)
-                                retryReq.Requests.Add(req.Requests[errorItem.RequestIndex]);
-
-                            // Wait and retry
-                            await Task.Delay(TimeSpan.FromSeconds(2), options.CancellationToken);
-                            req = retryReq;
-                            continue;
-                        }
+                        retryRequests = retryableErrors.Select(item => req.Requests[item.RequestIndex]).ToList();
                     }
                     else
                     {
+                        // The server will have stopped at the first fault. If that was a retryable fault, add that
+                        // and all the subsequent requests to try again
                         var firstRetryableError = errorResponses.FirstOrDefault(item => IsRetryableFault(item.Fault));
 
-                        if (firstRetryableError != null)
+                        if (firstRetryableError == null)
+                            retryRequests = new List<OrganizationRequest>();
+                        else
+                            retryRequests = req.Requests.Skip(firstRetryableError.RequestIndex).ToList();
+                    }
+
+                    if (retryRequests.Count > 0)
+                    {
+                        // Create a new ExecuteMultipleRequest with all the requests that haven't been processed yet
+                        var retryReq = new ExecuteMultipleRequest
                         {
-                            // Create a new ExecuteMultipleRequest with all the requests that haven't been processed yet
-                            var retryReq = new ExecuteMultipleRequest
+                            Requests = new OrganizationRequestCollection(),
+                            Settings = new ExecuteMultipleSettings
                             {
-                                Requests = new OrganizationRequestCollection(),
-                                Settings = new ExecuteMultipleSettings
-                                {
-                                    ContinueOnError = IgnoresSomeErrors,
-                                    ReturnResponses = responseHandler != null
-                                }
-                            };
+                                ContinueOnError = IgnoresSomeErrors,
+                                ReturnResponses = responseHandler != null
+                            }
+                        };
 
-                            for (var i = firstRetryableError.RequestIndex; i < req.Requests.Count; i++)
-                                retryReq.Requests.Add(req.Requests[i]);
+                        foreach (var retryRequest in retryRequests)
+                            retryReq.Requests.Add(retryRequest);
 
-                            // Wait and retry
-                            await Task.Delay(TimeSpan.FromSeconds(2), options.CancellationToken);
-                            req = retryReq;
-                            continue;
-                        }
+                        // Wait and retry
+                        await Task.Delay(TimeSpan.FromSeconds(2), options.CancellationToken);
+                        req = retryReq;
+                        continue;
                     }
 
                     break;
