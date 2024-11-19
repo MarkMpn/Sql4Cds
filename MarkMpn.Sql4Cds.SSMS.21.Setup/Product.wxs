@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-	<Product Id="*" Name="SQL 4 CDS - SSMS 19.x Edition" Language="1033" Version="!(bind.fileVersion.MarkMpn.Sql4Cds.SSMS.dll)" Manufacturer="Mark Carrington" UpgradeCode="68e93102-c229-489b-855c-fa5602a0d5f8">
+	<Product Id="*" Name="SQL 4 CDS - SSMS 21.x Edition" Language="1033" Version="!(bind.fileVersion.MarkMpn.Sql4Cds.SSMS.dll)" Manufacturer="Mark Carrington" UpgradeCode="131a41ae-8eed-415d-9be6-254c054f2cab">
 		<Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
 
 		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
@@ -36,13 +36,15 @@
 
 	<Fragment>
 		<Directory Id="TARGETDIR" Name="SourceDir">
-      <!--C:\Program Files (x86)\Microsoft SQL Server Management Studio 19\Common7\IDE\Extensions\MarkMpn.Sql4Cds.SSMS-->
+      <!--C:\Program Files\Microsoft SQL Server Management Studio 21\Preview\Common7\IDE\Extensions\MarkMpn.Sql4Cds.SSMS-->
 			<Directory Id="ProgramFilesFolder">
-        <Directory Id="SSMSFolder" Name="Microsoft SQL Server Management Studio 19">
-          <Directory Id="Common7Folder" Name="Common7">
-            <Directory Id="IDEFolder" Name="IDE">
-              <Directory Id="ExtensionsFolder" Name="Extensions">
-                <Directory Id="INSTALLFOLDER" Name="MarkMpn.Sql4Cds.SSMS" />
+        <Directory Id="SSMSFolder" Name="Microsoft SQL Server Management Studio 21">
+          <Directory Id="Preview" Name="Preview">
+            <Directory Id="Common7Folder" Name="Common7">
+              <Directory Id="IDEFolder" Name="IDE">
+                <Directory Id="ExtensionsFolder" Name="Extensions">
+                  <Directory Id="INSTALLFOLDER" Name="MarkMpn.Sql4Cds.SSMS" />
+                </Directory>
               </Directory>
             </Directory>
           </Directory>
