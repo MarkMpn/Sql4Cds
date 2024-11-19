@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
+using System.Drawing.Design;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -161,6 +163,10 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             get
             {
+                var propTypeConverterAttr = _prop?.GetCustomAttribute<TypeConverterAttribute>();
+                if (propTypeConverterAttr != null)
+                    return (TypeConverter)Activator.CreateInstance(Type.GetType(propTypeConverterAttr.ConverterTypeName));
+
                 var type = _value?.GetType() ?? _prop.PropertyType;
 
                 if ((type.IsClass || type.IsInterface) && type != typeof(string))
@@ -424,5 +430,47 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Property)]
     class DictionaryValueAttribute : Attribute
     {
+    }
+
+#if !NETCOREAPP
+    class MiniChartEditor : UITypeEditor
+    {
+        public override bool GetPaintValueSupported(ITypeDescriptorContext context)
+        {
+            return true;
+        }
+
+        public override void PaintValue(PaintValueEventArgs e)
+        {
+            var values = (float[])((ExecutionPlanNodeTypeDescriptor)e.Value).GetPropertyOwner(null);
+            var brush = Brushes.DarkBlue;
+            var barWidth = (float)e.Bounds.Width / values.Length;
+            var maxValue = values.Max();
+
+            for (var i = 0; i < values.Length && maxValue > 0; i++)
+            {
+                var height = e.Bounds.Height * values[i] / maxValue;
+                e.Graphics.FillRectangle(brush, e.Bounds.X + i * barWidth, e.Bounds.Bottom - height, barWidth, height);
+            }
+        }
+    }
+#endif
+
+    class MiniChartConverter : DataCollectionConverter
+    {
+        public override object ConvertTo(ITypeDescriptorContext context, CultureInfo culture, object value, Type destinationType)
+        {
+            if (value is ICustomTypeDescriptor desc)
+                value = desc.GetPropertyOwner(null);
+
+            var values = (float[])value;
+            var maxValue = values.Max();
+            var minValue = values.Min();
+
+            if (minValue == maxValue)
+                return minValue.ToString();
+            else
+                return $"{minValue} - {maxValue}";
+        }
     }
 }

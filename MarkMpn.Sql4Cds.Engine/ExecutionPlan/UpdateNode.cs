@@ -459,7 +459,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             InProgressUppercase = "Updating",
                             InProgressLowercase = "updating",
-                            CompletedLowercase = "updated"
+                            CompletedLowercase = "updated",
+                            CompletedUppercase = "Updated"
                         },
                         context,
                         out recordsAffected,
@@ -471,6 +472,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (ex.Node == null)
                     ex.Node = this;
 
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
                 throw;
             }
             catch (Exception ex)

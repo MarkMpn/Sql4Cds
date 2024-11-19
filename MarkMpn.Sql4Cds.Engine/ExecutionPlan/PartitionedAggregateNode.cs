@@ -53,6 +53,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The maximum number of partitions that will be executed in parallel")]
         public int MaxDOP { get; set; }
 
+        [Browsable(false)]
+        internal string ProgressMessage { get; set; }
+
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(context, hints);
@@ -213,7 +216,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             lock (_lock)
                             {
                                 _progress += partition.Percentage;
-                                context.Options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
+                                ProgressMessage = $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...";
+
+                                context.Options.Progress(0, ProgressMessage);
                             }
 
                             if (Interlocked.Decrement(ref _pendingPartitions) == 0)

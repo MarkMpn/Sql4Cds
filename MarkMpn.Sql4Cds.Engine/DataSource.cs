@@ -6,6 +6,10 @@ using System.Collections.Generic;
 using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Microsoft.Crm.Sdk.Messages;
 using System.Linq;
+using System.ServiceModel;
+using System.Threading.Tasks;
+
+
 
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -174,16 +178,65 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Executes a request against the data source
+        /// Executes a request against the data source, with additional feedback when the response is delayed due to service protection limits
         /// </summary>
         /// <param name="request">The request to execute</param>
+        /// <param name="options">The <see cref="IQueryExecutionOptions"/> which provides logging capabilities</param>
+        /// <param name="logMessage">The templated log message to display when the request is being throttled</param>
         /// <returns>The response to the request</returns>
-        /// <remarks>
-        /// This method automatically preserves the session token for Elastic table consistency
-        /// </remarks>
-        internal OrganizationResponse Execute(OrganizationRequest request)
+        internal OrganizationResponse ExecuteWithServiceProtectionLimitLogging(OrganizationRequest request, IQueryExecutionOptions options, string logMessage)
         {
-            return Execute(Connection, request);
+            var oldRetryCount = 0;
+
+#if NETCOREAPP
+            var crmService = Connection as ServiceClient;
+#else
+            var crmService = Connection as CrmServiceClient;
+#endif
+
+            if (crmService != null)
+            {
+                oldRetryCount = crmService.MaxRetryCount;
+                crmService.MaxRetryCount = 0;
+            }
+
+            try
+            {
+                var task = Task.Run(() =>
+                {
+                    for (var retry = 0; ; retry++)
+                    {
+                        try
+                        {
+                            return Execute(Connection, request);
+                        }
+                        catch (FaultException<OrganizationServiceFault> ex)
+                        {
+                            if (!ex.IsThrottlingException(out var retryDelay))
+                                throw;
+
+                            options.Progress(0, logMessage + $" (paused until {DateTime.Now.Add(retryDelay).ToShortTimeString()} due to service protection limits)");
+                            Task.Delay(retryDelay, options.CancellationToken).Wait();
+                        }
+                    }
+                });
+
+                try
+                {
+                    task.Wait(options.CancellationToken);
+                }
+                catch (AggregateException ex)
+                {
+                    throw ex.InnerException;
+                }
+
+                return task.Result;
+            }
+            finally
+            {
+                if (crmService != null)
+                    crmService.MaxRetryCount = oldRetryCount;
+            }
         }
 
         /// <summary>

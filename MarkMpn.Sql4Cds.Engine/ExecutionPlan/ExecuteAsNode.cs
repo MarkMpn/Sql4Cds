@@ -134,7 +134,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var qry = new Microsoft.Xrm.Sdk.Query.QueryExpression("systemuser");
                             qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
-                            var actualUserId = ((RetrieveMultipleResponse)dataSource.Execute(new RetrieveMultipleRequest { Query = qry })).EntityCollection.Entities.Single().Id;
+                            var actualUserId = ((RetrieveMultipleResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(new RetrieveMultipleRequest { Query = qry }, context.Options, "Impersonating user...")).EntityCollection.Entities.Single().Id;
 
                             if (actualUserId != userId)
                                 throw new QueryExecutionException(Sql4CdsError.ImpersonationError(username), new ApplicationException("User was found but the server could not impersonate it"));
