@@ -297,8 +297,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var meta = dataSource.Metadata[name];
             _isVirtualEntity = meta.DataProviderId != null && meta.DataProviderId != DataProviders.ElasticDataProvider;
 
-            if (!(Parent is PartitionedAggregateNode))
-                context.Options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
+            string progressMessage;
+
+            if (Parent is PartitionedAggregateNode partitioned)
+            {
+                progressMessage = partitioned.ProgressMessage;
+            }
+            else
+            {
+                progressMessage = $"Retrieving {GetDisplayName(0, meta)}...";
+                context.Options.Progress(0, progressMessage);
+            }
 
             // Get the first page of results
             if (!context.Options.ContinueRetrieve(0))
@@ -349,21 +358,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                var task = Task.Run(() =>
-                {
-                    return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
-                });
-
-                try
-                {
-                    task.Wait(context.Options.CancellationToken);
-                }
-                catch (AggregateException ex)
-                {
-                    throw ex.InnerException;
-                }
-
-                res = task.Result;
+                res = ((RetrieveMultipleResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(req, context.Options, progressMessage)).EntityCollection;
             }
             catch (FaultException<OrganizationServiceFault> ex)
             {
@@ -400,7 +395,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             while (AllPages && res.MoreRecords && context.Options.ContinueRetrieve(count))
             {
                 if (!(Parent is PartitionedAggregateNode))
-                    context.Options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
+                {
+                    progressMessage = $"Retrieved {count:N0} {GetDisplayName(count, meta)}...";
+                    context.Options.Progress(0, progressMessage);
+                }
 
                 filter pagingFilter = null;
 
@@ -422,22 +420,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 ((FetchExpression)req.Query).Query = Serialize(FetchXml);
-
-                var task = Task.Run(() =>
-                {
-                    return ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
-                });
-
-                try
-                {
-                    task.Wait(context.Options.CancellationToken);
-                }
-                catch (AggregateException ex)
-                {
-                    throw ex.InnerException;
-                }
-
-                var nextPage = task.Result;
+                var nextPage = ((RetrieveMultipleResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(req, context.Options, progressMessage)).EntityCollection;
 
                 PagesRetrieved++;
 

@@ -56,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine
 #endif
 
                 if (orgVersion == null)
-                    orgVersion = ((RetrieveVersionResponse)dataSource.Execute(new RetrieveVersionRequest())).Version;
+                    orgVersion = ((RetrieveVersionResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(new RetrieveVersionRequest(), _context._options, "Retrieving server version...")).Version;
 
                 var assembly = typeof(Sql4CdsConnection).Assembly;
                 var assemblyVersion = assembly.GetName().Version;
