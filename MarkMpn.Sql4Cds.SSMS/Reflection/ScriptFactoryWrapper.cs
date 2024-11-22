@@ -16,7 +16,13 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
         }
 
-        public SqlScriptEditorControlWrapper GetCurrentlyActiveFrameDocView(Microsoft.SqlServer.Management.UI.VSIntegration.IVsMonitorSelection pMonSel, bool checkDocView, out IVsWindowFrame frame)
+        public SqlScriptEditorControlWrapper GetCurrentlyActiveFrameDocView(
+#if SSMS21
+            Microsoft.VisualStudio.Shell.Interop.IVsMonitorSelection pMonSel,
+#else
+            Microsoft.SqlServer.Management.UI.VSIntegration.IVsMonitorSelection pMonSel,
+#endif
+            bool checkDocView, out IVsWindowFrame frame)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
