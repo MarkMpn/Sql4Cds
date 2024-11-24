@@ -128,7 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         entity =>
                         {
                             eec.Entity = entity;
-                            return CreateDeleteRequest(meta, eec, PrimaryIdAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor));
+                            return CreateDeleteRequest(meta, eec, PrimaryIdAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor), dataSource);
                         },
                         new OperationNames
                         {
@@ -159,8 +159,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors)
+        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors, DataSource dataSource)
         {
+            // Special case messages for intersect entities
             if (meta.LogicalName == "principalobjectaccess")
             {
                 var objectId = (EntityReference)attributeAccessors["objectid"](context);
@@ -172,14 +173,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Revokee = principalId
                 };
             }
-
-            // Special case messages for intersect entities
-            if (meta.LogicalName == "listmember")
+            else if (meta.LogicalName == "listmember")
             {
                 return new RemoveMemberListRequest
                 {
                     ListId = (Guid)attributeAccessors["listid"](context),
                     EntityId = (Guid)attributeAccessors["entityid"](context)
+                };
+            }
+            else if (meta.LogicalName == "solutioncomponent")
+            {
+                return new RemoveSolutionComponentRequest
+                {
+                    ComponentId = (Guid)attributeAccessors["objectid"](context),
+                    ComponentType = ((OptionSetValue)attributeAccessors["componenttype"](context)).Value,
+                    SolutionUniqueName = GetSolutionName(((EntityReference)attributeAccessors["solutionid"](context)).Id, dataSource)
                 };
             }
             else if (meta.IsIntersect == true)
