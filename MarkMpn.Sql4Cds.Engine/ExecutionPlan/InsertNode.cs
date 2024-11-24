@@ -142,7 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         entity =>
                         {
                             eec.Entity = entity;
-                            return CreateInsertRequest(meta, eec, attributeAccessors, primaryIdAccessor, attributes);
+                            return CreateInsertRequest(meta, eec, attributeAccessors, primaryIdAccessor, attributes, dataSource);
                         },
                         new OperationNames
                         {
@@ -175,7 +175,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private OrganizationRequest CreateInsertRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string,Func<ExpressionExecutionContext,object>> attributeAccessors, Func<ExpressionExecutionContext,object> primaryIdAccessor, Dictionary<string,AttributeMetadata> attributes)
+        private OrganizationRequest CreateInsertRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string,Func<ExpressionExecutionContext,object>> attributeAccessors, Func<ExpressionExecutionContext,object> primaryIdAccessor, Dictionary<string,AttributeMetadata> attributes, DataSource dataSource)
         {
             // Special cases for intersect entities
             if (LogicalName == "listmember")
@@ -222,6 +222,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Principal = principalId,
                         AccessMask = (AccessRights)accessRightsMask
                     }
+                };
+            }
+
+            if (LogicalName == "solutioncomponent")
+            {
+                var componentId = GetNotNull<Guid>("objectid", context, attributeAccessors);
+                var componentType = GetNotNull<OptionSetValue>("componenttype", context, attributeAccessors);
+                var solutionId = GetNotNull<EntityReference>("solutionid", context, attributeAccessors);
+                OptionSetValue rootComponentBehavior = null;
+                if (attributeAccessors.TryGetValue("rootcomponentbehavior", out var accessor))
+                    rootComponentBehavior = (OptionSetValue)accessor(context);
+
+                return new AddSolutionComponentRequest
+                {
+                    ComponentId = componentId,
+                    ComponentType = componentType.Value,
+                    SolutionUniqueName = GetSolutionName(solutionId.Id, dataSource),
+                    DoNotIncludeSubcomponents = rootComponentBehavior != null && rootComponentBehavior.Value != 0,
+                    IncludedComponentSettingsValues = rootComponentBehavior != null && rootComponentBehavior.Value == 2 ? Array.Empty<string>() : null,
+                    AddRequiredComponents = false
                 };
             }
 

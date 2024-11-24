@@ -189,6 +189,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return new[] { "objectid", "objecttypecode", "principalid", "principaltypecode" };
             }
 
+            if (metadata.LogicalName == "solutioncomponent")
+            {
+                isIntersect = true;
+                return new[] { "objectid", "componenttype", "solutionid" };
+            }
+
             isIntersect = false;
 
             if (metadata.DataProviderId == DataProviders.ElasticDataProvider)
@@ -227,31 +233,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var accessors = ValidateInsertUpdateColumnMapping(DmlOperationDetails.Insert, colMappings, out var attributeNames);
 
-            // Special case: inserting into listmember requires listid and entityid
-            if (_metadata.LogicalName == "listmember")
-            {
-                if (!attributeNames.Contains("listid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "listid" }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target)) { Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the listid column to be set" };
-                if (!attributeNames.Contains("entityid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "entityid" }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target)) { Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the entityid column to be set" };
-            }
-            else if (_metadata.IsIntersect == true)
-            {
-                var relationship = _metadata.ManyToManyRelationships.Single();
-                if (!attributeNames.Contains(relationship.Entity1IntersectAttribute))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity1IntersectAttribute }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target)) { Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the {relationship.Entity1IntersectAttribute} column to be set" };
-                if (!attributeNames.Contains(relationship.Entity2IntersectAttribute))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = relationship.Entity2IntersectAttribute }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target)) { Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the {relationship.Entity2IntersectAttribute} column to be set" };
-            }
-            else if (_metadata.LogicalName == "principalobjectaccess")
-            {
-                if (!attributeNames.Contains("objectid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "objectid" }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target)) { Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the objectid column to be set" };
-                if (!attributeNames.Contains("principalid"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "principalid" }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target)) { Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the principalid column to be set" };
-                if (!attributeNames.Contains("accessrightsmask"))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotNullInsert(new Identifier { Value = "accessrightsmask" }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target)) { Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the accessrightsmask column to be set" };
-            }
+            var requiredAttributes = Array.Empty<string>();
+
+            // Special case: inserting into intersect tables requires the primary key columns to be set
+            var primaryKeyFields = GetPrimaryKeyFields(out var isIntersect);
+
+            if (isIntersect)
+                requiredAttributes = primaryKeyFields;
+
+            // Specialer case: lookup fields on principalobjectaccess could be set to EntityReference values,
+            // so typecode fields do not necessarily need to be set.
+            if (_metadata.LogicalName == "principalobjectaccess")
+                requiredAttributes = new[] { "objectid", "principalid", "accessrightsmask" };
+
+            var missingRequiredAttributeErrors = requiredAttributes
+                .Where(attr => !attributeNames.Contains(attr))
+                .Select(attr => new { Error = Sql4CdsError.NotNullInsert(new Identifier { Value = attr }, new Identifier { Value = _metadata.LogicalName }, "Insert", _target), Suggestion = $"Inserting values into the {_metadata.LogicalName} table requires the {attr} column to be set" })
+                .ToArray();
+
+            if (missingRequiredAttributeErrors.Any())
+                throw new NotSupportedQueryFragmentException(missingRequiredAttributeErrors.Select(e => e.Error).ToArray(), null) { Suggestion = String.Join(Environment.NewLine, missingRequiredAttributeErrors.Select(e => e.Suggestion)) };
 
             return accessors;
         }
@@ -287,44 +288,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            if (_metadata.IsIntersect == true)
+            var primaryKeyFields = GetPrimaryKeyFields(out var isIntersect);
+            if (isIntersect)
             {
-                var manyToManyRelationship = _metadata.ManyToManyRelationships.Single();
+                // Intersect tables can only have their primary key columns updated
                 foreach (var col in mappings.Keys)
                 {
-                    if (col.MultiPartIdentifier.Identifiers.Last().Value.Equals(manyToManyRelationship.Entity1IntersectAttribute, StringComparison.OrdinalIgnoreCase) ||
-                        col.MultiPartIdentifier.Identifiers.Last().Value.Equals(manyToManyRelationship.Entity2IntersectAttribute, StringComparison.OrdinalIgnoreCase))
+                    if (primaryKeyFields.Contains(col.MultiPartIdentifier.Identifiers.Last().Value, StringComparer.OrdinalIgnoreCase))
+                        continue;
+
+                    // Special case: solutioncomponent can have its rootcomponentbehavior column updated
+                    if (_metadata.LogicalName == "solutioncomponent" && col.MultiPartIdentifier.Identifiers.Last().Value.Equals("rootcomponentbehavior", StringComparison.OrdinalIgnoreCase))
                         continue;
 
                     errors.Add(Sql4CdsError.ReadOnlyColumn(col));
-                    suggestions.Add($"Only the {manyToManyRelationship.Entity1IntersectAttribute} and {manyToManyRelationship.Entity2IntersectAttribute} columns can be used when updating values in the {_metadata.LogicalName} table");
-                }
-            }
-            else if (_metadata.LogicalName == "listmember")
-            {
-                foreach (var col in mappings.Keys)
-                {
-                    if (col.MultiPartIdentifier.Identifiers.Last().Value.Equals("listid", StringComparison.OrdinalIgnoreCase) ||
-                        col.MultiPartIdentifier.Identifiers.Last().Value.Equals("entityid", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    errors.Add(Sql4CdsError.ReadOnlyColumn(col));
-                    suggestions.Add("Only the listid and entityid columns can be used when updating values in the listmember table");
-                }
-            }
-            else if (_metadata.LogicalName == "principalobjectaccess")
-            {
-                foreach (var col in mappings.Keys)
-                {
-                    if (col.MultiPartIdentifier.Identifiers.Last().Value.Equals("objectid", StringComparison.OrdinalIgnoreCase) ||
-                        col.MultiPartIdentifier.Identifiers.Last().Value.Equals("objecttypecode", StringComparison.OrdinalIgnoreCase) ||
-                        col.MultiPartIdentifier.Identifiers.Last().Value.Equals("principalid", StringComparison.OrdinalIgnoreCase) ||
-                        col.MultiPartIdentifier.Identifiers.Last().Value.Equals("principaltypecode", StringComparison.OrdinalIgnoreCase) ||
-                        col.MultiPartIdentifier.Identifiers.Last().Value.Equals("accessrightsmask", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    errors.Add(Sql4CdsError.ReadOnlyColumn(col));
-                    suggestions.Add("Only the objectid, principalid and accessrightsmask columns can be used when updating values in the principalobjectaccess table");
+                    var primaryKeyFieldNames = string.Join(", ", primaryKeyFields.Take(primaryKeyFields.Length - 1).Select(f => f)) + " and " + primaryKeyFields.Last();
+                    suggestions.Add($"Only the {primaryKeyFieldNames} columns can be used when updating values in the {_metadata.LogicalName} table");
                 }
             }
 
@@ -379,6 +358,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var attributes = _metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var primaryKeyFields = GetPrimaryKeyFields(out var isIntersect);
+
+            // Special case: solutioncomponent can have its rootcomponentbehavior column inserted/updated
+            if (_metadata.LogicalName == "solutioncomponent" && (operation == DmlOperationDetails.Insert || operation == DmlOperationDetails.UpdateNewValues || operation == DmlOperationDetails.UpdateExistingValues))
+                primaryKeyFields = primaryKeyFields.Concat(new[] { "rootcomponentbehavior" }).ToArray();
 
             var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
             var entityParam = Expression.Property(contextParam, nameof(ExpressionExecutionContext.Entity));
@@ -442,27 +427,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
                 }
 
-                if (_metadata.LogicalName == "listmember")
-                {
-                    if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
-                    {
-                        errors.Add(Sql4CdsError.ReadOnlyColumn(col));
-                        suggestions.Add($"Only the listid and entityid columns can be used when {operation.InProgressLowercase} values into the listmember table");
-                        continue;
-                    }
-                }
-                else if (_metadata.IsIntersect == true)
-                {
-                    var relationship = _metadata.ManyToManyRelationships.Single();
-
-                    if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
-                    {
-                        errors.Add(Sql4CdsError.ReadOnlyColumn(col));
-                        suggestions.Add($"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when {operation.InProgressLowercase} values into the {_metadata.LogicalName} table");
-                        continue;
-                    }
-                }
-                else if (_metadata.LogicalName == "principalobjectaccess")
+                if (_metadata.LogicalName == "principalobjectaccess")
                 {
                     if (attr.LogicalName == "objecttypecode" || attr.LogicalName == "principaltypecode")
                     {
@@ -486,6 +451,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         errors.Add(Sql4CdsError.ReadOnlyColumn(col));
                         suggestions.Add($"Only the objectid, principalid and accessrightsmask columns can be used when {operation.InProgressLowercase} values into the principalobjectaccess table");
+                        continue;
+                    }
+                }
+                else if (isIntersect)
+                {
+                    if (!primaryKeyFields.Contains(attr.LogicalName))
+                    {
+                        errors.Add(Sql4CdsError.ReadOnlyColumn(col));
+                        var primaryKeyFieldNames = string.Join(", ", primaryKeyFields.Take(primaryKeyFields.Length - 1).Select(f => f)) + " and " + primaryKeyFields.Last();
+                        suggestions.Add($"Only the {primaryKeyFieldNames} columns can be used when {operation.InProgressLowercase} values into the {_metadata.LogicalName} table");
                         continue;
                     }
                 }
