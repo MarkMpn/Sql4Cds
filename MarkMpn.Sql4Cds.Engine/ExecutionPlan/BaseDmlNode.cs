@@ -12,6 +12,8 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using System.Collections.Concurrent;
+using Microsoft.Xrm.Sdk.Query;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -117,6 +119,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int[] _threadCountHistory;
         private int[] _rpmHistory;
         private float[] _batchSizeHistory;
+        private ConcurrentDictionary<Guid, string> _solutionNames;
 
         /// <summary>
         /// The SQL string that the query was converted from
@@ -1036,6 +1039,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected virtual ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
             return (ExecuteMultipleResponse)dataSource.Execute(org, req);
+        }
+
+        protected string GetSolutionName(Guid solutionId, DataSource dataSource)
+        {
+            if (_solutionNames == null)
+                _solutionNames = new ConcurrentDictionary<Guid, string>();
+
+            return _solutionNames.GetOrAdd(solutionId, id =>
+            {
+                var solution = (RetrieveResponse)dataSource.Execute(dataSource.Connection, new RetrieveRequest
+                {
+                    Target = new EntityReference("solution", id),
+                    ColumnSet = new ColumnSet("uniquename")
+                });
+                return solution.Entity.GetAttributeValue<string>("uniquename");
+            });
         }
 
         public abstract object Clone();

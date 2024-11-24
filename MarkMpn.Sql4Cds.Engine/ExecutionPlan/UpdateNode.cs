@@ -314,6 +314,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     });
                                 }
                             }
+                            else if (meta.LogicalName == "solutioncomponent")
+                            {
+                                var componentIdPrev = preImage.GetAttributeValue<Guid>("objectid");
+                                var componentTypePrev = preImage.GetAttributeValue<OptionSetValue>("componenttype");
+                                var solutionIdPrev = preImage.GetAttributeValue<EntityReference>("solutionid");
+                                var rootComponentBehaviorPrev = preImage.GetAttributeValue<OptionSetValue>("rootcomponentbehavior");
+                                var componentIdNew = update.GetAttributeValue<Guid?>("objectid") ?? componentIdPrev;
+                                var componentTypeNew = update.GetAttributeValue<OptionSetValue>("componenttype") ?? componentTypePrev;
+                                var solutionIdNew = update.GetAttributeValue<EntityReference>("solutionid") ?? solutionIdPrev;
+                                var rootComponentBehaviorNew = update.GetAttributeValue<OptionSetValue>("rootcomponentbehavior");
+
+                                // If we're changing the component or the solution we need to remove the existing component first before
+                                // adding the new one. We also need to remove & re-add if the rootcomponentbehavior is changing to or
+                                // from 0 (IncludeSubcomponents), but not if it is changing between 1 (DoNotIncludeSubcomponents) and 2 (IncludeAsShellOnly)
+                                if (componentIdNew != componentIdPrev || componentTypeNew != componentTypePrev || solutionIdNew.Id != solutionIdPrev.Id ||
+                                    rootComponentBehaviorNew == null || rootComponentBehaviorPrev == null ||
+                                    rootComponentBehaviorNew.Value == 0 || rootComponentBehaviorPrev.Value == 0)
+                                {
+                                    requests.Add(new RemoveSolutionComponentRequest
+                                    {
+                                        ComponentId = componentIdPrev,
+                                        ComponentType = componentTypePrev.Value,
+                                        SolutionUniqueName = GetSolutionName(solutionIdPrev.Id, dataSource)
+                                    });
+                                }
+
+                                requests.Add(new AddSolutionComponentRequest
+                                {
+                                    ComponentId = componentIdNew,
+                                    ComponentType = componentTypeNew.Value,
+                                    SolutionUniqueName = GetSolutionName(solutionIdNew.Id, dataSource),
+                                    DoNotIncludeSubcomponents = rootComponentBehaviorNew != null && rootComponentBehaviorNew.Value != 0,
+                                    IncludedComponentSettingsValues = rootComponentBehaviorNew != null && rootComponentBehaviorNew.Value == 2 ? Array.Empty<string>() : null,
+                                    AddRequiredComponents = false
+                                });
+                            }
                             else
                             {
                                 var updateRequest = new UpdateRequest { Target = update };

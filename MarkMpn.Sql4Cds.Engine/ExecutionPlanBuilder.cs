@@ -1731,11 +1731,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 queryExpression.SelectElements.Add(
-                    new SelectScalarExpression
-                    {
-                        Expression = expression,
-                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = columnMapping.Key } }
-                    });
+                new SelectScalarExpression
+                {
+                    Expression = expression,
+                    ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = columnMapping.Key } }
+                });
             }
 
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
@@ -1925,6 +1925,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Changing principalobjectaccess.accesstypemask requires the existing value to determine which rights to remove
                 if (targetLogicalName == "principalobjectaccess" && targetAttrName == "accessrightsmask")
                     existingAttributes.Add("accessrightsmask");
+
+                // Changing the solutioncomponent.rootcomponentbehavior can be done efficiently for some combinations of new and old values
+                if (targetLogicalName == "solutioncomponent" && targetAttrName == "rootcomponentbehavior")
+                    existingAttributes.Add("rootcomponentbehavior");
     
                 // If selected, include the existing value of all attributes to avoid excessive updates
                 if (minimalUpdates)

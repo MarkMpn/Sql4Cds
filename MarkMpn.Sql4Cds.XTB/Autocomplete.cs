@@ -436,7 +436,14 @@ namespace MarkMpn.Sql4Cds.XTB
                             if (tables.TryGetValue(targetTable, out var tableName))
                             {
                                 if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
-                                    return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance)).OrderBy(a => a), currentWord);
+                                {
+                                    var attributes = metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null);
+
+                                    if (tableName == "solutioncomponent")
+                                        attributes = metadata.Attributes.Where(a => a.LogicalName == "objectid" || a.LogicalName == "componenttype" || a.LogicalName == "solutionid" || a.LogicalName == "rootcomponentbehavior");
+
+                                    return FilterList(attributes.SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true, instance)).OrderBy(a => a), currentWord);
+                                }
                             }
                         }
 
@@ -495,6 +502,10 @@ namespace MarkMpn.Sql4Cds.XTB
                                 else if (metadata.LogicalName == "principalobjectaccess")
                                 {
                                     attributeFilter = a => a.LogicalName == "objectid" || a.LogicalName == "objecttypecode" || a.LogicalName == "principalid" || a.LogicalName == "principaltypecode" || a.LogicalName == "accessrightsmask";
+                                }
+                                else if (metadata.LogicalName == "solutioncomponent")
+                                {
+                                    attributeFilter = a => a.LogicalName == "objectid" || a.LogicalName == "componenttype" || a.LogicalName == "solutionid" || a.LogicalName == "rootcomponentbehavior";
                                 }
                                 else
                                 {
