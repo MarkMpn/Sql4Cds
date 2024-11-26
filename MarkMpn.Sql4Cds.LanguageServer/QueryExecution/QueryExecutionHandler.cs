@@ -349,7 +349,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 var schemaTable = reader.GetSchemaTable();
 
                                 for (var i = 0; i < reader.FieldCount; i++)
-                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(reader.GetName(i), reader.GetDataTypeName(i), null);
+                                    resultSet.ColumnInfo[i] = new DbColumnWrapper((string)schemaTable.Rows[i]["ColumnName"], (string)schemaTable.Rows[i]["DataTypeName"], (short?)schemaTable.Rows[i]["NumericScale"]);
 
                                 resultSetInProgress = resultSet;
                                 resultSets.Add(resultSet);
