@@ -8777,5 +8777,84 @@ WHERE a.accountid = '9B8AAC69-EECA-497A-99AB-C65B9E702D89'";
             var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
             var meta = AssertNode<MetadataQueryNode>(loop.RightSource);
         }
+
+        class LoggingMetadataCache : IAttributeMetadataCache
+        {
+            private readonly IAttributeMetadataCache _cache;
+            private readonly Action<string> _log;
+
+            public LoggingMetadataCache(IAttributeMetadataCache cache, Action<string> log)
+            {
+                _cache = cache;
+                _log = log;
+            }
+
+            public EntityMetadata this[string name]
+            {
+                get
+                {
+                    _log(name);
+                    return _cache[name];
+                }
+            }
+
+            public EntityMetadata this[int otc]
+            {
+                get
+                {
+                    _log(otc.ToString());
+                    return _cache[otc];
+                }
+            }
+
+            public string[] RecycleBinEntities
+            {
+                get
+                {
+                    _log(nameof(RecycleBinEntities));
+                    return _cache.RecycleBinEntities;
+                }
+            }
+
+            public IEnumerable<EntityMetadata> GetAllEntities()
+            {
+                _log(nameof(GetAllEntities));
+                return _cache.GetAllEntities();
+            }
+
+            public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
+            {
+                _log($"{nameof(TryGetMinimalData)} {logicalName}");
+                return _cache.TryGetMinimalData(logicalName, out metadata);
+            }
+
+            public bool TryGetValue(string logicalName, out EntityMetadata metadata)
+            {
+                _log($"{nameof(TryGetValue)} {logicalName}");
+                return _cache.TryGetValue(logicalName, out metadata);
+            }
+        }
+
+        [TestMethod]
+        public void MinimalMetadata()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/593
+            var metadataLog = new HashSet<string>();
+            var dataSource = new FakeXrmDataSource
+            {
+                Name = "local",
+                Connection = _localDataSource.Connection,
+                Metadata = new LoggingMetadataCache(_localDataSource.Metadata, msg => metadataLog.Add(msg)),
+                TableSizeCache = _localDataSource.TableSizeCache,
+                MessageCache = _localDataSource.MessageCache
+            };
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(new Dictionary<string, DataSource> { [dataSource.Name] = dataSource }, this), this);
+
+            var query = "SELECT fullname FROM contact";
+
+            planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual("contact", String.Join(", ", metadataLog));
+        }
     }
 }

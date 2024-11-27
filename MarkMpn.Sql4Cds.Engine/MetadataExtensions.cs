@@ -63,9 +63,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!writeable)
             {
                 if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                    yield return new VirtualAttribute("name", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), null);
+                    yield return new VirtualAttribute("name", () => DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), null);
                 else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                    yield return new VirtualAttribute("name", DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
+                    yield return new VirtualAttribute("name", () => DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
             }
 
             if (attrMetadata is LookupAttributeMetadata lookup)
@@ -73,13 +73,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 // solutioncomponent entity doesn't return the names of lookup values
                 // https://github.com/MarkMpn/Sql4Cds/issues/524
                 if (!writeable && attrMetadata.EntityLogicalName != "solutioncomponent")
-                    yield return new VirtualAttribute("name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), null);
+                    yield return new VirtualAttribute("name", () => DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), null);
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    yield return new VirtualAttribute("type", DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
+                    yield return new VirtualAttribute("type", () => DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
 
-                if (lookup.Targets != null && lookup.Targets.Any(logicalName => dataSource.Metadata[logicalName].DataProviderId == DataProviders.ElasticDataProvider))
-                    yield return new VirtualAttribute("pid", DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
+                // Check if there should be a pid virtual column without loading the target metadata
+                // The system metadata seems to consistently use the pid suffix for a virtual attribute
+                if (lookup.Targets != null && dataSource.Metadata[lookup.EntityLogicalName].Attributes.Any(pid => pid.AttributeOf == lookup.LogicalName && pid.LogicalName == lookup.LogicalName + "pid"))
+                    yield return new VirtualAttribute("pid", () => DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
             }
         }
 
@@ -317,9 +319,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Creates a new <see cref="VirtualAttribute"/>
         /// </summary>
         /// <param name="suffix">The suffix for this virtual attribute</param>
-        /// <param name="dataType">The SQL data type of this virtual attribute</param>
+        /// <param name="dataType">A function to lazily-load the SQL data type of this virtual attribute</param>
         /// <param name="notNull">Indicates if this virtual attribute is known to be nullable or not-nullable</param>
-        internal VirtualAttribute(string suffix, DataTypeReference dataType, bool? notNull)
+        internal VirtualAttribute(string suffix, Func<DataTypeReference> dataType, bool? notNull)
         {
             Suffix = suffix;
             DataType = dataType;
@@ -334,7 +336,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// The SQL data type for this virtual attribute
         /// </summary>
-        public DataTypeReference DataType { get; }
+        public Func<DataTypeReference> DataType { get; }
 
         /// <summary>
         /// Indicates if this attribute is known to be nullable, not-nullable or whether it should inherit its nullability from the base attribute

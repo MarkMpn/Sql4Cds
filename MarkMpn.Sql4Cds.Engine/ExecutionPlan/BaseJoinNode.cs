@@ -182,7 +182,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         nullable = false;
                     }
 
-                    schema[column.Key] = new ColumnDefinition(column.Value.Type, nullable, column.Value.IsCalculated, column.Value.IsVisible);
+                    schema[column.Key] = nullable ? column.Value.Null() : column.Value.NotNull();
                 }
 
                 foreach (var alias in subSchema.Aliases)

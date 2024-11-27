@@ -965,7 +965,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                     names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
 
                     foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
-                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType));
+                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType()));
 
                     return names;
                 })
@@ -1056,7 +1056,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                     names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
 
                     foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
-                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType));
+                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType()));
 
                     return names;
                 })

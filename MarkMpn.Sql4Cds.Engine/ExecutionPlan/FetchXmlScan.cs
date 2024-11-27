@@ -1446,7 +1446,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var notNull = innerJoin && attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute;
 
             // Add the logical attribute
-            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, notNull);
+            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, null, notNull);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -1456,10 +1456,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
-                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), virtualAttr.DataType, virtualAttr.NotNull ?? notNull);
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull);
         }
 
-        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, bool notNull)
+        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull)
         {
             var parts = fullName.SplitMultiPartIdentifier();
             var visible = true;
@@ -1471,7 +1471,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_isVirtualEntity && type is SqlDataTypeReferenceWithCollation sqlType && sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
                 type = DataTypeHelpers.NVarChar(Int32.MaxValue, sqlType.Collation, sqlType.CollationLabel);
 
-            schema[fullName] = new ColumnDefinition(type, !notNull, false, visible);
+            if (type != null)
+                schema[fullName] = new ColumnDefinition(type, !notNull, false, visible);
+            else
+                schema[fullName] = new LazyColumnDefinition(typeLoader, !notNull, false, visible);
 
             if (simpleName == null)
                 return;
