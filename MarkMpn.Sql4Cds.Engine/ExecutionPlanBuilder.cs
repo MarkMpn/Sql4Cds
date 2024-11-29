@@ -4308,7 +4308,18 @@ namespace MarkMpn.Sql4Cds.Engine
                         return new GlobalOptionSetQueryNode
                         {
                             DataSource = dataSource.Name,
-                            Alias = table.Alias?.Value ?? entityName
+                            MetadataSource = OptionSetSource.OptionSet,
+                            OptionSetAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
+                    if (entityName.Equals("globaloptionsetvalue", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new GlobalOptionSetQueryNode
+                        {
+                            DataSource = dataSource.Name,
+                            MetadataSource = OptionSetSource.Value,
+                            ValuesAlias = table.Alias?.Value ?? entityName
                         };
                     }
 

@@ -107,11 +107,13 @@ namespace MarkMpn.Sql4Cds.Engine
             _customMetadata["metadata." + metadataNode.KeyAlias] = SchemaToMetadata(metadataSchema, metadataNode.KeyAlias);
 
             var optionsetNode = new GlobalOptionSetQueryNode();
-            optionsetNode.Alias = "globaloptionset";
+            optionsetNode.OptionSetAlias = "globaloptionset";
+            optionsetNode.ValuesAlias = "globaloptionsetvalue";
 
             var optionsetSchema = optionsetNode.GetSchema(new NodeCompilationContext(null, new StubOptions(), null, null));
 
-            _customMetadata["metadata." + optionsetNode.Alias] = SchemaToMetadata(optionsetSchema, optionsetNode.Alias);
+            _customMetadata["metadata." + optionsetNode.OptionSetAlias] = SchemaToMetadata(optionsetSchema, optionsetNode.OptionSetAlias);
+            _customMetadata["metadata." + optionsetNode.ValuesAlias] = SchemaToMetadata(optionsetSchema, optionsetNode.ValuesAlias);
         }
 
         private static EntityMetadata SchemaToMetadata(INodeSchema schema, string alias)

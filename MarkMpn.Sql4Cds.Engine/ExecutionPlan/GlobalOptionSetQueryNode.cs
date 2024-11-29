@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -24,9 +23,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         private static readonly Type[] _optionsetTypes;
+        private static readonly OptionSetProperty _optionsetIdProp;
         private static readonly Dictionary<string, OptionSetProperty> _optionsetProps;
+        private static readonly Dictionary<string, OptionSetProperty> _valueProps;
 
         private IDictionary<string, OptionSetProperty> _optionsetCols;
+        private IDictionary<string, OptionSetProperty> _valueCols;
 
         static GlobalOptionSetQueryNode()
         {
@@ -36,6 +38,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _optionsetProps = _optionsetTypes
                 .SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => new { Type = t, Property = p }))
                 .Where(p => p.Property.Name != nameof(AttributeMetadata.ExtensionData))
+                .Where(p => p.Property.PropertyType != typeof(OptionMetadataCollection))
                 .GroupBy(p => p.Property.Name, p => p, StringComparer.OrdinalIgnoreCase)
                 .Select(g =>
                 {
@@ -72,6 +75,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 })
                 .Where(p => p != null)
                 .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+
+
+            _valueProps = typeof(OptionMetadata)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.Name != nameof(AttributeMetadata.ExtensionData) && p.PropertyType != typeof(int[]))
+                .Select(p =>
+                {
+                    var type = MetadataQueryNode.GetPropertyType(p.PropertyType);
+                    var netType = type.ToNetType(out _);
+
+                    return new OptionSetProperty
+                    {
+                        Name = p.Name.ToLowerInvariant(),
+                        SqlType = type,
+                        NetType = netType,
+                        Accessors = new Dictionary<Type, Func<object, ExpressionExecutionContext, object>>
+                        {
+                            [typeof(OptionMetadata)] = MetadataQueryNode.GetPropertyAccessor(p, netType)
+                        },
+                        DataMemberOrder = MetadataQueryNode.GetDataMemberOrder(p)
+                    };
+                })
+                .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+
+            // Create a fake property to allow joining options to the parent optionset
+            _optionsetIdProp = new OptionSetProperty
+            {
+                DataMemberOrder = new IComparable[]
+                {
+                    0,
+                    0,
+                    "optionsetid"
+                },
+                Name = "optionsetid",
+                SqlType = DataTypeHelpers.UniqueIdentifier,
+                NetType = DataTypeHelpers.UniqueIdentifier.ToNetType(out _),
+            };
+            _valueProps[_optionsetIdProp.Name] = _optionsetIdProp;
         }
 
         /// <summary>
@@ -82,15 +123,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string DataSource { get; set; }
 
         /// <summary>
-        /// The alias to use for the dataset
+        /// The types of metadata to include in the result
         /// </summary>
         [Category("Global Optionset Query")]
-        [Description("The alias to use for the dataset")]
-        public string Alias { get; set; }
+        [Description("The types of global optionset metadata to include in the result")]
+        [DisplayName("Metadata Source")]
+        public OptionSetSource MetadataSource { get; set; }
+
+        /// <summary>
+        /// The alias to use for the optionset dataset
+        /// </summary>
+        [Category("Global Optionset Query")]
+        [Description("The alias to use for the optionset dataset")]
+        [DisplayName("OptionSet Alias")]
+        public string OptionSetAlias { get; set; }
+
+        /// <summary>
+        /// The alias to use for the values dataset
+        /// </summary>
+        [Category("Global Optionset Query")]
+        [Description("The alias to use for the values dataset")]
+        [DisplayName("Values Alias")]
+        public string ValuesAlias { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             _optionsetCols = new Dictionary<string, OptionSetProperty>();
+            _valueCols = new Dictionary<string, OptionSetProperty>();
 
             foreach (var col in requiredColumns)
             {
@@ -99,10 +158,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     continue;
 
-                if (parts[0].Equals(Alias, StringComparison.OrdinalIgnoreCase))
+                if (parts[0].Equals(OptionSetAlias, StringComparison.OrdinalIgnoreCase))
                 {
                     var prop = _optionsetProps[parts[1]];
                     _optionsetCols[col] = prop;
+                }
+                else if (parts[0].Equals(ValuesAlias, StringComparison.OrdinalIgnoreCase))
+                {
+                    var prop = _valueProps[parts[1]];
+                    _valueCols[col] = prop;
                 }
             }
         }
@@ -121,8 +185,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            string primaryKey = null;
 
-            var props = (IEnumerable<OptionSetProperty>)(_optionsetCols ?? _optionsetProps).Values;
+            if (MetadataSource.HasFlag(OptionSetSource.OptionSet))
+                AddSchemaCols(context, schema, aliases, _optionsetCols ?? _optionsetProps, OptionSetAlias, ref primaryKey);
+
+            if (MetadataSource.HasFlag(OptionSetSource.Value))
+            {
+                AddSchemaCols(context, schema, aliases, _valueCols ?? _valueProps, ValuesAlias, ref primaryKey);
+                primaryKey = null;
+            }
+
+            return new NodeSchema(
+                primaryKey: $"{OptionSetAlias}.{nameof(OptionSetMetadataBase.MetadataId)}",
+                schema: schema,
+                aliases: aliases,
+                sortOrder: Array.Empty<string>()
+                );
+        }
+
+        private void AddSchemaCols(NodeCompilationContext context, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, IDictionary<string, OptionSetProperty> cols, string alias, ref string primaryKey)
+        {
+            var props = (IEnumerable<OptionSetProperty>)cols.Values;
 
             if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
                 props = props.OrderBy(p => p.Name);
@@ -131,7 +215,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var prop in props)
             {
-                schema[$"{Alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, true, false);
+                schema[$"{alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, true, false);
 
                 if (!aliases.TryGetValue(prop.Name, out var a))
                 {
@@ -139,15 +223,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     aliases[prop.Name] = a;
                 }
 
-                ((List<string>)a).Add($"{Alias}.{prop.Name}");
+                ((List<string>)a).Add($"{alias}.{prop.Name}");
             }
 
-            return new NodeSchema(
-                primaryKey: $"{Alias}.{nameof(OptionSetMetadataBase.MetadataId)}",
-                schema: schema,
-                aliases: aliases,
-                sortOrder: Array.Empty<string>()
-                );
+            primaryKey = $"{alias}.{nameof(OptionSetMetadataBase.MetadataId)}";
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -163,19 +242,65 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var resp = (RetrieveAllOptionSetsResponse)dataSource.Connection.Execute(new RetrieveAllOptionSetsRequest());
             var eec = new ExpressionExecutionContext(context);
 
-            foreach (var optionset in resp.OptionSetMetadata)
-            {
-                var converted = new Entity("globaloptionset", optionset.MetadataId ?? Guid.Empty);
+            var results = resp.OptionSetMetadata.Select(os => new { OptionSet = os, Value = default(OptionMetadata) });
 
-                foreach (var col in _optionsetCols)
+            if (MetadataSource.HasFlag(OptionSetSource.Value))
+            {
+                results = results.SelectMany(os =>
                 {
-                    if (!col.Value.Accessors.TryGetValue(optionset.GetType(), out var optionsetProp))
+                    var values = (os.OptionSet as OptionSetMetadata)?.Options;
+
+                    if (values == null && os.OptionSet is BooleanOptionSetMetadata bos)
                     {
-                        converted[col.Key] = SqlTypeConverter.GetNullValue(col.Value.NetType);
-                        continue;
+                        values = new OptionMetadataCollection
+                        {
+                            bos.FalseOption,
+                            bos.TrueOption
+                        };
                     }
 
-                    converted[col.Key] = optionsetProp(optionset, eec);
+                    return values.Select(v => new { os.OptionSet, Value = v });
+                });
+            }
+
+            foreach (var result in results)
+            {
+                var converted = new Entity();
+
+                if (MetadataSource.HasFlag(OptionSetSource.OptionSet))
+                {
+                    converted.LogicalName = "globaloptionset";
+                    converted.Id = result.OptionSet.MetadataId ?? Guid.Empty;
+
+                    foreach (var col in _optionsetCols)
+                    {
+                        // Not all properties are available on all optionset types, so add null values as needed
+                        if (!col.Value.Accessors.TryGetValue(result.OptionSet.GetType(), out var optionsetProp))
+                        {
+                            converted[col.Key] = SqlTypeConverter.GetNullValue(col.Value.NetType);
+                            continue;
+                        }
+
+                        converted[col.Key] = optionsetProp(result.OptionSet, eec);
+                    }
+                }
+
+                if (MetadataSource.HasFlag(OptionSetSource.Value))
+                {
+                    converted.LogicalName = "globaloptionsetvalue";
+                    converted.Id = Guid.Empty;
+
+                    foreach (var col in _valueCols)
+                    {
+                        // Special case for parent optionset id
+                        if (col.Value == _optionsetIdProp)
+                        {
+                            converted[col.Key] = (SqlGuid)(result.OptionSet.MetadataId ?? Guid.Empty);
+                            continue;
+                        }
+
+                        converted[col.Key] = col.Value.Accessors[typeof(OptionMetadata)](result.Value, eec);
+                    }
                 }
 
                 yield return converted;
@@ -186,10 +311,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return new GlobalOptionSetQueryNode
             {
-                Alias = Alias,
+                MetadataSource = MetadataSource,
+                OptionSetAlias = OptionSetAlias,
+                ValuesAlias = ValuesAlias,
                 DataSource = DataSource,
-                _optionsetCols = _optionsetCols
+                _optionsetCols = _optionsetCols,
+                _valueCols = _valueCols,
             };
         }
+    }
+
+    [Flags]
+    public enum OptionSetSource
+    {
+        OptionSet = 1,
+        Value = 2,
     }
 }

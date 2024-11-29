@@ -827,7 +827,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         internal static DataTypeReference GetPropertyType(Type propType)
         {
             if (propType == typeof(OptionMetadata))
-                propType = typeof(SqlInt32);
+                propType = typeof(int);
 
             if (propType.BaseType != null && propType.BaseType.IsGenericType && propType.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
                 propType = propType.BaseType.GetGenericArguments()[0];
