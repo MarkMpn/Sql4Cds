@@ -4303,6 +4303,16 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
+                    if (entityName.Equals("optionsetvalue", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            DataSource = dataSource.Name,
+                            MetadataSource = MetadataSource.Value,
+                            ValueAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
                     if (entityName.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
                     {
                         return new GlobalOptionSetQueryNode
@@ -4319,7 +4329,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             DataSource = dataSource.Name,
                             MetadataSource = OptionSetSource.Value,
-                            ValuesAlias = table.Alias?.Value ?? entityName
+                            ValueAlias = table.Alias?.Value ?? entityName
                         };
                     }
 

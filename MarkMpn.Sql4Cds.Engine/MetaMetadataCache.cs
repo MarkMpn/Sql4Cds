@@ -96,6 +96,7 @@ namespace MarkMpn.Sql4Cds.Engine
             metadataNode.ManyToOneRelationshipAlias = "relationship_n_1";
             metadataNode.ManyToManyRelationshipAlias = "relationship_n_n";
             metadataNode.KeyAlias = "alternate_key";
+            metadataNode.ValueAlias = "optionsetvalue";
 
             var metadataSchema = metadataNode.GetSchema(new NodeCompilationContext(null, new StubOptions(), null, null));
 
@@ -105,15 +106,16 @@ namespace MarkMpn.Sql4Cds.Engine
             _customMetadata["metadata." + metadataNode.ManyToOneRelationshipAlias] = SchemaToMetadata(metadataSchema, metadataNode.ManyToOneRelationshipAlias);
             _customMetadata["metadata." + metadataNode.ManyToManyRelationshipAlias] = SchemaToMetadata(metadataSchema, metadataNode.ManyToManyRelationshipAlias);
             _customMetadata["metadata." + metadataNode.KeyAlias] = SchemaToMetadata(metadataSchema, metadataNode.KeyAlias);
+            _customMetadata["metadata." + metadataNode.ValueAlias] = SchemaToMetadata(metadataSchema, metadataNode.ValueAlias);
 
             var optionsetNode = new GlobalOptionSetQueryNode();
             optionsetNode.OptionSetAlias = "globaloptionset";
-            optionsetNode.ValuesAlias = "globaloptionsetvalue";
+            optionsetNode.ValueAlias = "globaloptionsetvalue";
 
             var optionsetSchema = optionsetNode.GetSchema(new NodeCompilationContext(null, new StubOptions(), null, null));
 
             _customMetadata["metadata." + optionsetNode.OptionSetAlias] = SchemaToMetadata(optionsetSchema, optionsetNode.OptionSetAlias);
-            _customMetadata["metadata." + optionsetNode.ValuesAlias] = SchemaToMetadata(optionsetSchema, optionsetNode.ValuesAlias);
+            _customMetadata["metadata." + optionsetNode.ValueAlias] = SchemaToMetadata(optionsetSchema, optionsetNode.ValueAlias);
         }
 
         private static EntityMetadata SchemaToMetadata(INodeSchema schema, string alias)
@@ -145,81 +147,104 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private static OneToManyRelationshipMetadata[] CreateOneToManyRelationships(string alias)
         {
-            if (alias == "metadata.entity")
-            {
-                var attrRelationship = new OneToManyRelationshipMetadata
-                {
-                    SchemaName = "entity_attributes",
-                    ReferencedEntity = "metadata.entity",
-                    ReferencedAttribute = "logicalname",
-                    ReferencingEntity = "metadata.attribute",
-                    ReferencingAttribute = "entitylogicalname"
-                };
-
-                var rel1nRelationship = new OneToManyRelationshipMetadata
-                {
-                    SchemaName = "entity_one_to_many_relationships",
-                    ReferencedEntity = "metadata.entity",
-                    ReferencedAttribute = "logicalname",
-                    ReferencingEntity = "metadata.relationship_1_n",
-                    ReferencingAttribute = "referencedentity"
-                };
-
-                var reln1Relationship = new OneToManyRelationshipMetadata
-                {
-                    SchemaName = "entity_many_to_one_relationships",
-                    ReferencedEntity = "metadata.entity",
-                    ReferencedAttribute = "logicalname",
-                    ReferencingEntity = "metadata.relationship_n_1",
-                    ReferencingAttribute = "referencingentity"
-                };
-
-                var relnnRelationship1 = new OneToManyRelationshipMetadata
-                {
-                    SchemaName = "entity_many_to_many_relationships_entity1",
-                    ReferencedEntity = "metadata.entity",
-                    ReferencedAttribute = "logicalname",
-                    ReferencingEntity = "metadata.relationship_n_n",
-                    ReferencingAttribute = "entity1logicalname"
-                };
-
-                var relnnRelationship2 = new OneToManyRelationshipMetadata
-                {
-                    SchemaName = "entity_many_to_many_relationships_entity2",
-                    ReferencedEntity = "metadata.entity",
-                    ReferencedAttribute = "logicalname",
-                    ReferencingEntity = "metadata.relationship_n_n",
-                    ReferencingAttribute = "entity2logicalname"
-                };
-
-                var relnnRelationshipIntersect = new OneToManyRelationshipMetadata
-                {
-                    SchemaName = "entity_many_to_many_relationships_intersect",
-                    ReferencedEntity = "metadata.entity",
-                    ReferencedAttribute = "logicalname",
-                    ReferencingEntity = "metadata.relationship_n_n",
-                    ReferencingAttribute = "intersectentityname"
-                };
-
-                return new[]
-                {
-                    attrRelationship,
-                    rel1nRelationship,
-                    reln1Relationship,
-                    relnnRelationship1,
-                    relnnRelationship2,
-                    relnnRelationshipIntersect
-                };
-            }
-
-            return Array.Empty<OneToManyRelationshipMetadata>();
+            return GetAllRelationships()
+                .Where(r => r.ReferencedEntity == alias)
+                .ToArray();
         }
 
         private static OneToManyRelationshipMetadata[] CreateManyToOneRelationships(string alias)
         {
-            var relationships = CreateOneToManyRelationships("metadata.entity");
+            return GetAllRelationships()
+                .Where(r => r.ReferencingEntity == alias)
+                .ToArray();
+        }
 
-            return relationships.Where(r => r.ReferencingEntity == alias).ToArray();
+        private static OneToManyRelationshipMetadata[] GetAllRelationships()
+        {
+
+            var attrRelationship = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "entity_attributes",
+                ReferencedEntity = "metadata.entity",
+                ReferencedAttribute = "logicalname",
+                ReferencingEntity = "metadata.attribute",
+                ReferencingAttribute = "entitylogicalname"
+            };
+
+            var rel1nRelationship = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "entity_one_to_many_relationships",
+                ReferencedEntity = "metadata.entity",
+                ReferencedAttribute = "logicalname",
+                ReferencingEntity = "metadata.relationship_1_n",
+                ReferencingAttribute = "referencedentity"
+            };
+
+            var reln1Relationship = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "entity_many_to_one_relationships",
+                ReferencedEntity = "metadata.entity",
+                ReferencedAttribute = "logicalname",
+                ReferencingEntity = "metadata.relationship_n_1",
+                ReferencingAttribute = "referencingentity"
+            };
+
+            var relnnRelationship1 = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "entity_many_to_many_relationships_entity1",
+                ReferencedEntity = "metadata.entity",
+                ReferencedAttribute = "logicalname",
+                ReferencingEntity = "metadata.relationship_n_n",
+                ReferencingAttribute = "entity1logicalname"
+            };
+
+            var relnnRelationship2 = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "entity_many_to_many_relationships_entity2",
+                ReferencedEntity = "metadata.entity",
+                ReferencedAttribute = "logicalname",
+                ReferencingEntity = "metadata.relationship_n_n",
+                ReferencingAttribute = "entity2logicalname"
+            };
+
+            var relnnRelationshipIntersect = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "entity_many_to_many_relationships_intersect",
+                ReferencedEntity = "metadata.entity",
+                ReferencedAttribute = "logicalname",
+                ReferencingEntity = "metadata.relationship_n_n",
+                ReferencingAttribute = "intersectentityname"
+            };
+
+            var attributeValuesRelationship = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "attribute_optionsetvalues",
+                ReferencedEntity = "metadata.attribute",
+                ReferencedAttribute = "metadataid",
+                ReferencingEntity = "metadata.optionsetvalue",
+                ReferencingAttribute = "attributeid"
+            };
+
+            var globalOptionsetValuesRelationship = new OneToManyRelationshipMetadata
+            {
+                SchemaName = "globaloptionset_optionsetvalues",
+                ReferencedEntity = "metadata.globaloptionset",
+                ReferencedAttribute = "metadataid",
+                ReferencingEntity = "metadata.globaloptionsetvalue",
+                ReferencingAttribute = "optionsetid"
+            };
+
+            return new[]
+            {
+                attrRelationship,
+                rel1nRelationship,
+                reln1Relationship,
+                relnnRelationship1,
+                relnnRelationship2,
+                relnnRelationshipIntersect,
+                attributeValuesRelationship,
+                globalOptionsetValuesRelationship
+            };
         }
 
         private static void SetSealedProperty(object target, string prop, object value)

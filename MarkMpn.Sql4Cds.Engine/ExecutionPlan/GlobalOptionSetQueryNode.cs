@@ -76,7 +76,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(p => p != null)
                 .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
 
-
             _valueProps = typeof(OptionMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => p.Name != nameof(AttributeMetadata.ExtensionData) && p.PropertyType != typeof(int[]))
@@ -143,8 +142,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Global Optionset Query")]
         [Description("The alias to use for the values dataset")]
-        [DisplayName("Values Alias")]
-        public string ValuesAlias { get; set; }
+        [DisplayName("Value Alias")]
+        public string ValueAlias { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -163,7 +162,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var prop = _optionsetProps[parts[1]];
                     _optionsetCols[col] = prop;
                 }
-                else if (parts[0].Equals(ValuesAlias, StringComparison.OrdinalIgnoreCase))
+                else if (parts[0].Equals(ValueAlias, StringComparison.OrdinalIgnoreCase))
                 {
                     var prop = _valueProps[parts[1]];
                     _valueCols[col] = prop;
@@ -192,7 +191,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (MetadataSource.HasFlag(OptionSetSource.Value))
             {
-                AddSchemaCols(context, schema, aliases, _valueCols ?? _valueProps, ValuesAlias, ref primaryKey);
+                AddSchemaCols(context, schema, aliases, _valueCols ?? _valueProps, ValueAlias, ref primaryKey);
                 primaryKey = null;
             }
 
@@ -313,7 +312,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 MetadataSource = MetadataSource,
                 OptionSetAlias = OptionSetAlias,
-                ValuesAlias = ValuesAlias,
+                ValueAlias = ValueAlias,
                 DataSource = DataSource,
                 _optionsetCols = _optionsetCols,
                 _valueCols = _valueCols,

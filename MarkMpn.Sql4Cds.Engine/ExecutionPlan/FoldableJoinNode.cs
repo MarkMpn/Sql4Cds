@@ -702,7 +702,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // Check if this is a simple join that the MetadataQueryNode can handle - joining from entity metadata to one of it's children
-            if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 && (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Entity))
+            if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 &&
+                (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Entity) &&
+                !(leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Value))
             {
                 // We're joining an entity list with an attribute/relationship list. Check the join is on the entity name fields
                 if (!leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftKey) ||
@@ -790,6 +792,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return true;
                 }
             }
+            else if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 &&
+                (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Attribute| MetadataSource.Value))
+            {
+                // We can also join from attribute to optionset value. Check the join is on the attribute ID fields
+                if (!leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftKey) ||
+                    !rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightKey))
+                    return false;
+
+                var attributeMeta = leftMeta.MetadataSource.HasFlag(MetadataSource.Attribute) ? leftMeta : rightMeta;
+                var attributeKey = attributeMeta == leftMeta ? leftKey : rightKey;
+                var otherMeta = attributeMeta == leftMeta ? rightMeta : leftMeta;
+                var otherKey = attributeMeta == leftMeta ? rightKey : leftKey;
+
+                if (!attributeKey.Equals($"{attributeMeta.AttributeAlias}.{nameof(AttributeMetadata.MetadataId)}", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                if (otherMeta.MetadataSource == MetadataSource.Value)
+                {
+                    if (!otherKey.Equals($"{otherMeta.ValueAlias}.attributeid", StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    // Move the value details into the attribute source
+                    attributeMeta.MetadataSource |= otherMeta.MetadataSource;
+                    attributeMeta.ValueAlias = otherMeta.ValueAlias;
+
+                    folded = attributeMeta;
+                    return true;
+                }
+            }
 
             return false;
         }
@@ -818,12 +849,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!entityKey.Equals($"{optionset.OptionSetAlias}.{nameof(OptionSetMetadataBase.MetadataId)}", StringComparison.OrdinalIgnoreCase))
                     return false;
 
-                if (!otherKey.Equals($"{value.ValuesAlias}.optionsetid", StringComparison.OrdinalIgnoreCase))
+                if (!otherKey.Equals($"{value.ValueAlias}.optionsetid", StringComparison.OrdinalIgnoreCase))
                     return false;
 
                 // Move the attribute details into the entity source
                 optionset.MetadataSource |= value.MetadataSource;
-                optionset.ValuesAlias = value.ValuesAlias;
+                optionset.ValueAlias = value.ValueAlias;
 
                 folded = optionset;
                 return true;
