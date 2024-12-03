@@ -8856,5 +8856,107 @@ WHERE a.accountid = '9B8AAC69-EECA-497A-99AB-C65B9E702D89'";
 
             Assert.AreEqual("contact", String.Join(", ", metadataLog));
         }
+
+        [TestMethod]
+        public void ColumnComparisonOnLinkEntity()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/595
+            // We can't use a column comparison condition inside a <link-entity> that references a sub-<link-entity>
+            // as filters on <link-entity> are used for join conditions to their parent and so the child table
+            // is not available at the point it is evaluated
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+UPDATE c
+SET c.employees = au.ParentEmployees
+FROM account AS c INNER JOIN (
+  SELECT c1.accountid,
+         p.employees AS ParentEmployees
+  FROM   account c1 INNER JOIN account AS p ON c1.parentaccountid = p.accountid
+  WHERE  c1.employees <> p.employees
+  ) as au on c.parentaccountid = au.accountid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            var join = AssertNode<MergeJoinNode>(update.Source);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            Assert.AreEqual("au", fetch1.Alias);
+            AssertFetchXml(fetch1, @"
+<fetch>
+  <entity name='account'>
+    <attribute name='accountid' />
+    <link-entity name='account' to='parentaccountid' from='accountid' alias='p' link-type='inner'>
+      <attribute name='employees' alias='ParentEmployees' />
+      <filter>
+        <condition attribute='employees' operator='not-null' />
+      </filter>
+    </link-entity>
+    <filter>
+      <condition attribute='employees' operator='ne' valueof='p.employees' />
+      <condition attribute='employees' operator='not-null' />
+    </filter>
+    <order attribute='accountid' />
+  </entity>
+</fetch>");
+
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var fetch2 = AssertNode<FetchXmlScan>(sort.Source);
+            Assert.AreEqual("c", fetch2.Alias);
+            AssertFetchXml(fetch2, @"
+<fetch>
+  <entity name='account'>
+    <attribute name='accountid' />
+    <attribute name='parentaccountid' />
+    <filter>
+      <condition attribute='parentaccountid' operator='not-null' />
+    </filter>
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void TopClauseOnQueryDefinedTable()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT c.name, p.name
+FROM account AS c
+INNER JOIN (SELECT TOP 10 accountid, name FROM account) AS p ON c.parentaccountid = p.accountid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<MergeJoinNode>(select.Source);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            Assert.AreEqual("p", fetch1.Alias);
+            AssertFetchXml(fetch1, @"
+<fetch top='10'>
+  <entity name='account'>
+    <attribute name='accountid' />
+    <attribute name='name' />
+    <order attribute='accountid' />
+  </entity>
+</fetch>");
+
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var fetch2 = AssertNode<FetchXmlScan>(sort.Source);
+            Assert.AreEqual("c", fetch2.Alias);
+            AssertFetchXml(fetch2, @"
+<fetch>
+  <entity name='account'>
+    <attribute name='name' />
+    <attribute name='parentaccountid' />
+    <filter>
+      <condition attribute='parentaccountid' operator='not-null' />
+    </filter>
+  </entity>
+</fetch>");
+        }
     }
 }

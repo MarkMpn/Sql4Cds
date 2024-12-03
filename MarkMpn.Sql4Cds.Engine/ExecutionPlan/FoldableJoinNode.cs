@@ -392,6 +392,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (leftFetch.FetchXml.distinct ^ rightFetch.FetchXml.distinct)
                 return false;
 
+            // Can't fold joins if a top clause has already been applied
+            if (leftFetch.FetchXml.top != null || rightFetch.FetchXml.top != null ||
+                leftFetch.FetchXml.page != null || rightFetch.FetchXml.page != null)
+                return false;
+
             // Check that the alias is valid for FetchXML
             if (!FetchXmlScan.IsValidAlias(rightFetch.Alias))
                 return false;
@@ -494,6 +499,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             if (IsInvalidAuditJoin(rightFetch, rightAttributeParts, leftFetch, leftAttributeParts))
+                return false;
+
+            // If the inner source has any column comparisons to sub-linkentities, we can't fold the join
+            // as those filters would then be interpreted as join criteria to the parent table and produce invalid SQL
+            // https://github.com/MarkMpn/Sql4Cds/issues/595
+            if (HasChildColumnComparisons(rightFetch.Entity))
                 return false;
 
             // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
@@ -625,6 +636,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return true;
+        }
+
+        private bool HasChildColumnComparisons(FetchEntityType entity)
+        {
+            // Check if the entity contains any <condition attribute="myattr" operator="eq" valueof="child.attribute" /> elements
+            return entity.GetConditions()
+                .Any(c => c.ValueOf != null && c.ValueOf.Contains("."));
         }
 
         private bool IsInvalidAuditJoin(FetchXmlScan leftFetch, string[] leftAttributeParts, FetchXmlScan rightFetch, string[] rightAttributeParts)
