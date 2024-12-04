@@ -2930,7 +2930,7 @@ SELECT CAST(@i / 1000.0 as VARCHAR(7))";
         }
 
         [TestMethod]
-        public void ErrorOnTruncateEntityReferenc()
+        public void ErrorOnTruncateEntityReference()
         {
             using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
@@ -2948,6 +2948,34 @@ SELECT CAST(@i / 1000.0 as VARCHAR(7))";
                 catch (Sql4CdsException ex)
                 {
                     Assert.AreEqual(8170, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void NestedPrimaryFunctions()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('Data8')";
+                cmd.ExecuteNonQuery();
+                cmd.CommandText = "INSERT INTO account (name) VALUES (null)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name, MAX(IIF(name = 'Data8', COALESCE(turnover, -1), 0)) FROM account GROUP BY name";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.AreEqual(0, reader.GetDecimal(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Data8", reader.GetString(0));
+                    Assert.AreEqual(-1, reader.GetDecimal(1));
+
+                    Assert.IsFalse(reader.Read());
                 }
             }
         }

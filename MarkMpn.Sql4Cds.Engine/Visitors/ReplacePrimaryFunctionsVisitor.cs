@@ -31,6 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                         ThenExpression = expr
                     });
 
+                caseExpr.Accept(this);
                 return caseExpr;
             }
 
@@ -42,13 +43,14 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     {
                         new SearchedWhenClause
                         {
-                            WhenExpression = iif.Predicate,
-                            ThenExpression = iif.ThenExpression
+                            WhenExpression = iif.Predicate.Clone(),
+                            ThenExpression = iif.ThenExpression.Clone()
                         }
                     },
-                    ElseExpression = iif.ElseExpression
+                    ElseExpression = iif.ElseExpression.Clone()
                 };
 
+                caseExpr.Accept(this);
                 return caseExpr;
             }
 
@@ -60,8 +62,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 };
 
                 foreach (var param in left.Parameters)
-                    leftFunc.Parameters.Add(param);
+                    leftFunc.Parameters.Add(param.Clone());
 
+                leftFunc.Accept(this);
                 return leftFunc;
             }
 
@@ -75,16 +78,17 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                         {
                             WhenExpression = new BooleanComparisonExpression
                             {
-                                ComparisonType = BooleanComparisonType.Equals,
                                 FirstExpression = nullif.FirstExpression.Clone(),
-                                SecondExpression = nullif.SecondExpression
+                                ComparisonType = BooleanComparisonType.Equals,
+                                SecondExpression = nullif.SecondExpression.Clone()
                             },
                             ThenExpression = new NullLiteral()
                         }
                     },
-                    ElseExpression = nullif.FirstExpression
+                    ElseExpression = nullif.FirstExpression.Clone()
                 };
 
+                caseExpr.Accept(this);
                 return caseExpr;
             }
 
@@ -96,8 +100,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 };
 
                 foreach (var param in right.Parameters)
-                    rightFunc.Parameters.Add(param);
+                    rightFunc.Parameters.Add(param.Clone());
 
+                rightFunc.Accept(this);
                 return rightFunc;
             }
 
@@ -126,9 +131,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     {
                         FirstExpression = new BooleanComparisonExpression
                         {
-                            FirstExpression = between.FirstExpression,
+                            FirstExpression = between.FirstExpression.Clone(),
                             ComparisonType = between.TernaryExpressionType == BooleanTernaryExpressionType.Between ? BooleanComparisonType.GreaterThanOrEqualTo : BooleanComparisonType.LessThan,
-                            SecondExpression = between.SecondExpression,
+                            SecondExpression = between.SecondExpression.Clone(),
 
                             FirstTokenIndex = between.FirstTokenIndex,
                             LastTokenIndex = between.LastTokenIndex,
@@ -137,9 +142,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                         BinaryExpressionType = between.TernaryExpressionType == BooleanTernaryExpressionType.Between ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or,
                         SecondExpression = new BooleanComparisonExpression
                         {
-                            FirstExpression = between.FirstExpression,
+                            FirstExpression = between.FirstExpression.Clone(),
                             ComparisonType = between.TernaryExpressionType == BooleanTernaryExpressionType.Between ? BooleanComparisonType.LessThanOrEqualTo : BooleanComparisonType.GreaterThan,
-                            SecondExpression = between.ThirdExpression,
+                            SecondExpression = between.ThirdExpression.Clone(),
 
                             FirstTokenIndex = between.FirstTokenIndex,
                             LastTokenIndex = between.LastTokenIndex,
@@ -156,6 +161,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     ScriptTokenStream = between.ScriptTokenStream
                 };
 
+                converted.Accept(this);
                 return converted;
             }
 
