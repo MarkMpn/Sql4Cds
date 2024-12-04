@@ -18,3 +18,6 @@ A clear and concise description of any alternative solutions or features you've 
 
 **Additional context**
 Add any other context or screenshots about the feature request here.
+
+**Sponsorship**
+If you find this tool useful, please consider [sponsoring its development](https://github.com/sponsors/MarkMpn).

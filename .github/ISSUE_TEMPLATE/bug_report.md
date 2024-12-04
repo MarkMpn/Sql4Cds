@@ -29,3 +29,6 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here.
+
+**Sponsorship**
+If you find this tool useful, please consider [sponsoring its development](https://github.com/sponsors/MarkMpn).

@@ -20,6 +20,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             var tokens = new Sql160ScriptGenerator().GenerateTokens(fragment);
 
+            // Remove any trailing whitespace tokens
+            while (tokens.Count > 0 && tokens[tokens.Count - 1].TokenType == TSqlTokenType.WhiteSpace)
+                tokens.RemoveAt(tokens.Count - 1);
+
             // Insert any comments from the original tokens. Ignore whitespace tokens.
             for (int srcIndex = 0, dstIndex = -1; srcIndex < fragment.ScriptTokenStream.Count; srcIndex++)
             {
@@ -47,7 +51,7 @@ namespace MarkMpn.Sql4Cds.XTB
                         IsMatchingWhitespace(tokens[dstIndex + whitespaceCount], fragment.ScriptTokenStream[srcIndex - whitespaceCount - 1]))
                         whitespaceCount++;
 
-                    CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, dstIndex + whitespaceCount);
+                    dstIndex += CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, dstIndex + whitespaceCount);
                 }
                 else
                 {
@@ -83,12 +87,16 @@ namespace MarkMpn.Sql4Cds.XTB
             return false;
         }
 
-        private static void CopyComment(IList<TSqlParserToken> src, int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
+        private static int CopyComment(IList<TSqlParserToken> src, int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
         {
+            var insertedTokenCount = 0;
+
             if (dstIndex >= dst.Count)
                 dst.Add(src[srcIndex]);
             else
                 dst.Insert(dstIndex, src[srcIndex]);
+
+            insertedTokenCount++;
 
             // Also add any leading or trailing whitespace
             var leadingSrcIndex = srcIndex - 1;
@@ -97,13 +105,14 @@ namespace MarkMpn.Sql4Cds.XTB
 
             while (leadingDstIndex < dst.Count && leadingSrcIndex >= 0 && src[leadingSrcIndex].TokenType == TSqlTokenType.WhiteSpace)
             {
-                if (IsMatchingWhitespace(dst[leadingDstIndex], src[leadingSrcIndex]))
+                if (leadingDstIndex >= 0 && IsMatchingWhitespace(dst[leadingDstIndex], src[leadingSrcIndex]))
                     break;
 
                 dst.Insert(insertPoint, src[leadingSrcIndex]);
                 leadingSrcIndex--;
                 leadingDstIndex--;
                 dstIndex++;
+                insertedTokenCount++;
             }
 
             var trailingSrcIndex = srcIndex + 1;
@@ -121,7 +130,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 trailingSrcIndex++;
                 trailingDstIndex++;
+                insertedTokenCount++;
             }
+
+            return insertedTokenCount;
         }
 
         private static bool IsMatchingWhitespace(TSqlParserToken x, TSqlParserToken y)

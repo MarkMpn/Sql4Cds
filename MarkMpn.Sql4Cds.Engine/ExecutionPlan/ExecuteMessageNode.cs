@@ -253,6 +253,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Schema[name] = new ColumnDefinition(type, true, false);
         }
 
+        private void AddSchemaColumn(string name, Func<DataTypeReference> typeLoader)
+        {
+            Schema[name] = new LazyColumnDefinition(typeLoader, true, false);
+        }
+
         private string PrefixWithAlias(string columnName)
         {
             if (String.IsNullOrEmpty(Alias))

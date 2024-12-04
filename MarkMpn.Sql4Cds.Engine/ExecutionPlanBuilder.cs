@@ -4303,12 +4303,33 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
+                    if (entityName.Equals("optionsetvalue", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            DataSource = dataSource.Name,
+                            MetadataSource = MetadataSource.Value,
+                            ValueAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
                     if (entityName.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
                     {
                         return new GlobalOptionSetQueryNode
                         {
                             DataSource = dataSource.Name,
-                            Alias = table.Alias?.Value ?? entityName
+                            MetadataSource = OptionSetSource.OptionSet,
+                            OptionSetAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
+                    if (entityName.Equals("globaloptionsetvalue", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new GlobalOptionSetQueryNode
+                        {
+                            DataSource = dataSource.Name,
+                            MetadataSource = OptionSetSource.Value,
+                            ValueAlias = table.Alias?.Value ?? entityName
                         };
                     }
 

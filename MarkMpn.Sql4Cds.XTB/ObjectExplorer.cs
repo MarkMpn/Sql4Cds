@@ -259,9 +259,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 {
                     var node = new TreeNode(msg.Name);
                     node.Tag = msg;
-                    node.ImageIndex = 25;
-                    node.SelectedImageIndex = 25;
-                    node.ContextMenuStrip = functionContextMenuStrip;
+                    node.ImageIndex = imageIndex;
+                    node.SelectedImageIndex = imageIndex;
+                    node.ContextMenuStrip = menu;
                     return node;
                 })
                 .ToArray();
@@ -777,7 +777,15 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 TableReferences = { tvfReference }
             };
 
-            foreach (var param in tvf.InputParameters)
+            var parameters = tvf.InputParameters
+                .Where(p => p.Type != typeof(PagingInfo));
+
+            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Alphabetical)
+                parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+            else
+                parameters = parameters.OrderBy(p => p.Position);
+
+            foreach (var param in parameters)
             {
                 tvfReference.Parameters.Add(new VariableReference
                 {
@@ -805,7 +813,15 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int }
             });
 
-            foreach (var param in sproc.InputParameters.Concat(sproc.OutputParameters))
+            var parameters = sproc.InputParameters
+                .Where(p => p.Type != typeof(PagingInfo));
+
+            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Alphabetical)
+                parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+            else
+                parameters = parameters.OrderBy(p => p.Position);
+
+            foreach (var param in parameters.Concat(sproc.OutputParameters))
             {
                 declare.Declarations.Add(new DeclareVariableElement
                 {
@@ -839,7 +855,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 }
             };
 
-            foreach (var param in sproc.InputParameters)
+            foreach (var param in parameters)
             {
                 exec.ExecuteSpecification.ExecutableEntity.Parameters.Add(new ExecuteParameter
                 {
@@ -965,7 +981,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                     names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
 
                     foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
-                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType));
+                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType()));
 
                     return names;
                 })
@@ -1056,7 +1072,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                     names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
 
                     foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
-                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType));
+                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType()));
 
                     return names;
                 })

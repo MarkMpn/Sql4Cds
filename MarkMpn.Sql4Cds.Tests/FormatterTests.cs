@@ -119,5 +119,37 @@ FROM   (SELECT sc.solutionidname AS uniquename,
 
             Assert.AreEqual(expected, Formatter.Format(original));
         }
+
+        [TestMethod]
+        public void Issue599()
+        {
+            var original = @"SELECT *
+FROM businessunit
+	--aaa
+	--bbb";
+
+            var expected = @"SELECT *
+FROM   businessunit;
+	--aaa
+	--bbb";
+
+            Assert.AreEqual(expected, Formatter.Format(original));
+        }
+
+        [TestMethod]
+        public void Issue600()
+        {
+            var original = @"SELECT
+	-- b.name,
+	b.*
+FROM businessunit as b";
+
+            var expected = @"SELECT
+	-- b.name,
+	 b.*
+FROM   businessunit AS b;";
+
+            Assert.AreEqual(expected, Formatter.Format(original));
+        }
     }
 }

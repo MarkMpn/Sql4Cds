@@ -146,26 +146,114 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
     }
 
+    class LazyColumnDefinition : IColumnDefinition
+    {
+        private readonly Lazy<DataTypeReference> _type;
+
+        public LazyColumnDefinition(Func<DataTypeReference> typeLoader, bool isNullable, bool isCalculated, bool isVisible = true)
+        {
+            _type = new Lazy<DataTypeReference>(typeLoader);
+            IsNullable = isNullable;
+            IsCalculated = isCalculated;
+            IsVisible = isVisible;
+        }
+
+        public DataTypeReference Type => _type.Value;
+
+        public bool IsNullable { get; }
+
+        public bool IsCalculated { get; }
+
+        public bool IsVisible { get; }
+
+        public override string ToString()
+        {
+            return $"{Type.ToSql()} {(IsNullable ? "NULL" : "NOT NULL")}";
+        }
+    }
+
     static class ColumnDefinitionExtensions
     {
+        class NullableColumnDefinition : IColumnDefinition
+        {
+            private readonly IColumnDefinition _inner;
+
+            public NullableColumnDefinition(IColumnDefinition inner, bool nullable)
+            {
+                _inner = inner;
+                IsNullable = nullable;
+            }
+
+            public DataTypeReference Type => _inner.Type;
+
+            public bool IsNullable { get; }
+
+            public bool IsCalculated => _inner.IsCalculated;
+
+            public bool IsVisible => _inner.IsVisible;
+        }
+
+        class VisibleColumnDefinition : IColumnDefinition
+        {
+            private readonly IColumnDefinition _inner;
+
+            public VisibleColumnDefinition(IColumnDefinition inner, bool visible)
+            {
+                _inner = inner;
+                IsVisible = visible;
+            }
+
+            public DataTypeReference Type => _inner.Type;
+
+            public bool IsNullable => _inner.IsNullable;
+
+            public bool IsCalculated => _inner.IsCalculated;
+
+            public bool IsVisible { get; }
+        }
+
+        class CalculatedColumnDefinition : IColumnDefinition
+        {
+            private readonly IColumnDefinition _inner;
+
+            public CalculatedColumnDefinition(IColumnDefinition inner, bool calculated)
+            {
+                _inner = inner;
+                IsCalculated = calculated;
+            }
+
+            public DataTypeReference Type => _inner.Type;
+
+            public bool IsNullable => _inner.IsNullable;
+
+            public bool IsCalculated { get; }
+
+            public bool IsVisible => _inner.IsVisible;
+        }
+
         public static IColumnDefinition NotNull(this IColumnDefinition col)
         {
-            return new ColumnDefinition(col.Type, false, col.IsCalculated, col.IsVisible);
+            return new NullableColumnDefinition(col, false);
         }
 
         public static IColumnDefinition Null(this IColumnDefinition col)
         {
-            return new ColumnDefinition(col.Type, true, col.IsCalculated, col.IsVisible);
+            return new NullableColumnDefinition(col, true);
         }
 
         public static IColumnDefinition Invisible(this IColumnDefinition col)
         {
-            return new ColumnDefinition(col.Type, col.IsNullable, col.IsCalculated, false);
+            return new VisibleColumnDefinition(col, false);
         }
 
         public static IColumnDefinition Calculated(this IColumnDefinition col)
         {
-            return new ColumnDefinition(col.Type, col.IsNullable, true, col.IsVisible);
+            return new CalculatedColumnDefinition(col, true);
+        }
+
+        public static IColumnDefinition NotCalculated(this IColumnDefinition col)
+        {
+            return new CalculatedColumnDefinition(col, false);
         }
     }
 

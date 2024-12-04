@@ -134,6 +134,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var rightJoin = (rightFilter?.Source ?? RightSource) as BaseJoinNode;
                 var leftMeta = (leftFilter?.Source ?? LeftSource) as MetadataQueryNode;
                 var rightMeta = (rightFilter?.Source ?? RightSource) as MetadataQueryNode;
+                var leftOptionSet = (leftFilter?.Source ?? LeftSource) as GlobalOptionSetQueryNode;
+                var rightOptionSet = (rightFilter?.Source ?? RightSource) as GlobalOptionSetQueryNode;
 
                 if (leftFetch != null && rightFetch != null && FoldFetchXmlJoin(context, hints, leftFetch, leftSchema, rightFetch, rightSchema, out folded))
                     return PrependFilters(folded, context, hints, leftFilter, rightFilter);
@@ -145,6 +147,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
                 if (leftMeta != null && rightMeta != null && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(context, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
+                {
+                    folded = PrependFilters(folded, context, hints, leftFilter, rightFilter);
+
+                    if (AdditionalJoinCriteria != null)
+                    {
+                        folded = new FilterNode
+                        {
+                            Source = folded,
+                            Filter = AdditionalJoinCriteria
+                        }.FoldQuery(context, hints);
+                    }
+
+                    return folded;
+                }
+
+                if (leftOptionSet != null && rightOptionSet != null && JoinType == QualifiedJoinType.Inner && FoldOptionSetJoin(context, hints, leftOptionSet, leftSchema, rightOptionSet, rightSchema, out folded))
                 {
                     folded = PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
@@ -374,6 +392,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (leftFetch.FetchXml.distinct ^ rightFetch.FetchXml.distinct)
                 return false;
 
+            // Can't fold joins if a top clause has already been applied
+            if (leftFetch.FetchXml.top != null || rightFetch.FetchXml.top != null ||
+                leftFetch.FetchXml.page != null || rightFetch.FetchXml.page != null)
+                return false;
+
             // Check that the alias is valid for FetchXML
             if (!FetchXmlScan.IsValidAlias(rightFetch.Alias))
                 return false;
@@ -476,6 +499,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             if (IsInvalidAuditJoin(rightFetch, rightAttributeParts, leftFetch, leftAttributeParts))
+                return false;
+
+            // If the inner source has any column comparisons to sub-linkentities, we can't fold the join
+            // as those filters would then be interpreted as join criteria to the parent table and produce invalid SQL
+            // https://github.com/MarkMpn/Sql4Cds/issues/595
+            if (HasChildColumnComparisons(rightFetch.Entity))
                 return false;
 
             // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
@@ -609,6 +638,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
+        private bool HasChildColumnComparisons(FetchEntityType entity)
+        {
+            // Check if the entity contains any <condition attribute="myattr" operator="eq" valueof="child.attribute" /> elements
+            return entity.GetConditions()
+                .Any(c => c.ValueOf != null && c.ValueOf.Contains("."));
+        }
+
         private bool IsInvalidAuditJoin(FetchXmlScan leftFetch, string[] leftAttributeParts, FetchXmlScan rightFetch, string[] rightAttributeParts)
         {
             var isJoinFromAudit = false;
@@ -684,7 +720,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // Check if this is a simple join that the MetadataQueryNode can handle - joining from entity metadata to one of it's children
-            if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 && (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Entity))
+            if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 &&
+                (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Entity) &&
+                !(leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Value))
             {
                 // We're joining an entity list with an attribute/relationship list. Check the join is on the entity name fields
                 if (!leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftKey) ||
@@ -771,6 +809,73 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     folded = entityMeta;
                     return true;
                 }
+            }
+            else if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 &&
+                (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Attribute| MetadataSource.Value))
+            {
+                // We can also join from attribute to optionset value. Check the join is on the attribute ID fields
+                if (!leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftKey) ||
+                    !rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightKey))
+                    return false;
+
+                var attributeMeta = leftMeta.MetadataSource.HasFlag(MetadataSource.Attribute) ? leftMeta : rightMeta;
+                var attributeKey = attributeMeta == leftMeta ? leftKey : rightKey;
+                var otherMeta = attributeMeta == leftMeta ? rightMeta : leftMeta;
+                var otherKey = attributeMeta == leftMeta ? rightKey : leftKey;
+
+                if (!attributeKey.Equals($"{attributeMeta.AttributeAlias}.{nameof(AttributeMetadata.MetadataId)}", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                if (otherMeta.MetadataSource == MetadataSource.Value)
+                {
+                    if (!otherKey.Equals($"{otherMeta.ValueAlias}.attributeid", StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    // Move the value details into the attribute source
+                    attributeMeta.MetadataSource |= otherMeta.MetadataSource;
+                    attributeMeta.ValueAlias = otherMeta.ValueAlias;
+
+                    folded = attributeMeta;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool FoldOptionSetJoin(NodeCompilationContext context, IList<OptimizerHint> hints, GlobalOptionSetQueryNode leftOptionSet, INodeSchema leftSchema, GlobalOptionSetQueryNode rightOptionSet, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
+        {
+            folded = null;
+
+            // Can't join data from different sources
+            if (!leftOptionSet.DataSource.Equals(rightOptionSet.DataSource, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // Check if this is a simple join that the GlobalOptionSetQueryNode can handle - joining from optionset to its value
+            if ((leftOptionSet.MetadataSource & rightOptionSet.MetadataSource) == 0 && (leftOptionSet.MetadataSource | rightOptionSet.MetadataSource) == (OptionSetSource.OptionSet | OptionSetSource.Value))
+            {
+                // We're joining an optionset list with a value list. Check the join is on the metadataid fields
+                if (!leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftKey) ||
+                    !rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightKey))
+                    return false;
+
+                var optionset = leftOptionSet.MetadataSource == OptionSetSource.OptionSet ? leftOptionSet : rightOptionSet;
+                var entityKey = optionset == leftOptionSet ? leftKey : rightKey;
+                var value = optionset == leftOptionSet ? rightOptionSet : leftOptionSet;
+                var otherKey = optionset == leftOptionSet ? rightKey : leftKey;
+
+                if (!entityKey.Equals($"{optionset.OptionSetAlias}.{nameof(OptionSetMetadataBase.MetadataId)}", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                if (!otherKey.Equals($"{value.ValueAlias}.optionsetid", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                // Move the attribute details into the entity source
+                optionset.MetadataSource |= value.MetadataSource;
+                optionset.ValueAlias = value.ValueAlias;
+
+                folded = optionset;
+                return true;
             }
 
             return false;

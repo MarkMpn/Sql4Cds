@@ -396,7 +396,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    targetType = virtualAttr.DataType;
+                    targetType = virtualAttr.DataType();
                     targetClrType = typeof(string);
 
                     if (!complexLookupAttributes.TryGetValue(attr.LogicalName, out var lookupDetails))

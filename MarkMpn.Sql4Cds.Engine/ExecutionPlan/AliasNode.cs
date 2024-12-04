@@ -250,7 +250,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             var mapped = $"{escapedAlias}.{outputColumn}";
-            schema[mapped] = new ColumnDefinition(sourceSchema.Schema[normalized].Type, sourceSchema.Schema[normalized].IsNullable, false);
+            schema[mapped] = sourceSchema.Schema[normalized].NotCalculated();
             mappings[normalized] = mapped;
 
             if (normalized == sourceSchema.PrimaryKey)
