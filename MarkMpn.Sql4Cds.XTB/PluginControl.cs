@@ -664,14 +664,15 @@ namespace MarkMpn.Sql4Cds.XTB
 
         public override void ClosingPlugin(PluginCloseInfo info)
         {
-            if (!ConfirmBulkClose(dockPanel.Contents.OfType<IDocumentWindow>().Cast<IDockContent>().ToArray(), info.Silent))
+            if (Settings.Instance.RememberSession)
+            {
+                SaveSettings();
+            }
+            else if (!ConfirmBulkClose(dockPanel.Contents.OfType<IDocumentWindow>().Cast<IDockContent>().ToArray(), info.Silent))
             {
                 info.Cancel = true;
                 return;
             }
-
-            if (Settings.Instance.RememberSession)
-                SaveSettings();
 
             base.ClosingPlugin(info);
         }
@@ -898,7 +899,7 @@ in
                 .Where(query => query.Modified)
                 .ToArray();
 
-            if (unsavedDocuments.Length > 0 && !Settings.Instance.RememberSession)
+            if (unsavedDocuments.Length > 0)
             {
                 using (var form = new ConfirmCloseForm(unsavedDocuments.Select(query => query.DisplayName).ToArray(), !silent))
                 {
