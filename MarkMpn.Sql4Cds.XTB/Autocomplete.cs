@@ -539,7 +539,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                         message.IsValidAsTableValuedFunction())
                                     {
                                         if (!Guid.TryParse(table.Key, out _))
-                                            items.Add(new TVFAutocompleteItem(message, table.Key, currentLength));
+                                            items.Add(new TVFAutocompleteItem(message, instance, table.Key, currentLength));
 
                                         attributes.AddRange(GetMessageOutputAttributes(message, instance));
                                     }
@@ -785,7 +785,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     // Show TVF list
                     if (fromClause && ds.MessageCache != null)
-                        list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, currentLength)));
+                        list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, ds, currentLength)));
                 }
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
@@ -855,7 +855,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     if (fromClause)
                     {
                         messages = messages.Where(e => e.IsValidAsTableValuedFunction() && e.Name.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
-                        list.AddRange(messages.Select(e => new TVFAutocompleteItem(e, _columnOrdering, lastPartLength)));
+                        list.AddRange(messages.Select(e => new TVFAutocompleteItem(e, _columnOrdering, instance, lastPartLength)));
                     }
                 }
             }
@@ -1534,16 +1534,19 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             private readonly Message _message;
             private readonly ColumnOrdering _columnOrdering;
+            private readonly DataSource _dataSource;
 
-            public TVFAutocompleteItem(Message message, ColumnOrdering columnOrdering, int replaceLength) : base(message.Name, replaceLength, 25)
+            public TVFAutocompleteItem(Message message, ColumnOrdering columnOrdering, DataSource dataSource, int replaceLength) : base(message.Name, replaceLength, 25)
             {
                 _message = message;
                 _columnOrdering = columnOrdering;
+                _dataSource = dataSource;
             }
 
-            public TVFAutocompleteItem(Message message, string alias, int replaceLength) : base(alias, replaceLength, 25)
+            public TVFAutocompleteItem(Message message, DataSource dataSource, string alias, int replaceLength) : base(alias, replaceLength, 25)
             {
                 _message = message;
+                _dataSource = dataSource;
             }
 
             public override string ToolTipTitle
@@ -1564,7 +1567,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     else
                         parameters = parameters.OrderBy(p => p.Position);
 
-                    return _message.Name + "(" + String.Join(", ", parameters.Select(p => p.Name + " " + p.GetSqlDataType(null).ToSql())) + ")";
+                    return _message.Name + "(" + String.Join(", ", parameters.Select(p => p.Name + " " + p.GetSqlDataType(_dataSource).ToSql())) + ")";
                 }
                 set => base.ToolTipText = value;
             }
