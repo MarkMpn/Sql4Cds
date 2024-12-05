@@ -1,5 +1,27 @@
 # Change Log
 
+## [v9.5.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.4.1) - 2024-12-07
+
+Updated to .NET 8
+
+Bulk DML improvements
+* Automatically adjust batch size to keep requests within timeout limits
+* Automatically adjust thread count to avoid hitting service protection limits
+* Provide better feedback when queries pause due to service protection limits
+* Automatically retry requests that have failed due to a transient error
+* Added DML support for `solutioncomponent` table
+
+Metadata improvements
+* Expose optionset values via `metadata.globaloptionsetvalue` and `metadata.optionsetvalue` tables
+* Reduced amount of metadata required to execute queries
+
+Bug fixes
+* Use correct scale when displaying numeric results
+* Fixed "Must declare the scalar variable @Cond" error when using nested loop for single-record joins
+* Do not trust `RetrieveTotalRecordCount` for certain metadata-related entities that give incorrect results
+* Avoid errors when using cross-table column comparisons and nested link entities
+* Handle nested primary functions
+
 ## [v9.4.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.4.1) - 2024-11-10
 
 Fixed Intellisense with trailing comments

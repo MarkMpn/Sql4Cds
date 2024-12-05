@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net462</TargetFrameworks>
+    <TargetFrameworks>net8.0;net462</TargetFrameworks>
     <AssemblyName>MarkMpn.Sql4Cds.Engine</AssemblyName>
     <RootNamespace>MarkMpn.Sql4Cds.Engine</RootNamespace>
     <Copyright>Copyright © 2020 - 2024 Mark Carrington</Copyright>
@@ -30,7 +30,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ApplicationInsights" Version="2.21.0" />
-    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.1.9" Condition=" '$(TargetFramework)' == 'net6.0' " />
+    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.2.2" Condition=" '$(TargetFramework)' == 'net8.0' " />
     <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.49" Condition=" '$(TargetFramework)' == 'net462' " />
     <PackageReference Include="Microsoft.CrmSdk.XrmTooling.CoreAssembly" Version="9.1.1.32" Condition=" '$(TargetFramework)' == 'net462' " />
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="161.8834.0" />

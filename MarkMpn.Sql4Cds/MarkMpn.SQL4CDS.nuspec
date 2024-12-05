@@ -23,10 +23,25 @@ plugins or integrations by writing familiar SQL and converting it.
 Queries can also run using the preview TDS Endpoint. A wide range of SQL functionality is also built
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed Intellisense with trailing comments
-Include join alias in output column aliases when converting from Fetch XML to SQL
-Improved SQL to Fetch XML conversion of datetime filters
-Fixed use of case-insensitive table names in INSERT statements
+    <releaseNotes>Bulk DML improvements
+* Automatically adjust batch size to keep requests within timeout limits
+* Automatically adjust thread count to avoid hitting service protection limits
+* Provide better feedback when queries pause due to service protection limits
+* Automatically retry requests that have failed due to a transient error
+* Added DML support for `solutioncomponent` table
+
+Metadata improvements
+* Expose optionset values via `metadata.globaloptionsetvalue` and `metadata.optionsetvalue` tables
+* Reduced amount of metadata required to execute queries
+
+Bug fixes
+* Fixed "Must declare the scalar variable @Cond" error when using nested loop for single-record joins
+* Do not trust `RetrieveTotalRecordCount` for certain metadata-related entities that give incorrect results
+* Avoid errors when using cross-table column comparisons and nested link entities
+* Handle nested primary functions
+* Improved handling of comments and whitespace when reformatting queries
+* Fixed generating TVF and sproc scripts
+* Show confirmation dialog when closing unsaved scripts
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
