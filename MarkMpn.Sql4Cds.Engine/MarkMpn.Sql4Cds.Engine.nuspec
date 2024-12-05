@@ -11,7 +11,9 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Bulk DML improvements
+    <releaseNotes>Updated to .NET 8
+
+Bulk DML improvements
 * Automatically adjust batch size to keep requests within timeout limits
 * Automatically adjust thread count to avoid hitting service protection limits
 * Provide better feedback when queries pause due to service protection limits
@@ -40,8 +42,8 @@ Bug fixes
         <dependency id="System.Data.SqlClient" version="4.8.6" />
         <dependency id="XPath2.Extensions" version="1.1.3" />
       </group>
-      <group targetFramework=".NETCoreApp6.0">
-        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="1.1.9" />
+      <group targetFramework=".NETCoreApp8.0">
+        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="1.2.2" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="161.8834.0" />
         <dependency id="Microsoft.ApplicationInsights" version="2.21.0" />
         <dependency id="System.Data.SqlClient" version="4.8.6" />
@@ -52,7 +54,7 @@ Bug fixes
   </metadata>
   <files>
     <file src=".\bin\Release\net462\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
-    <file src=".\bin\Release\net6.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net6.0\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src=".\bin\Release\net6.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net8.0\MarkMpn.Sql4Cds.Engine.dll" />
     <file src="..\README.md" target="docs\" />
   </files>
 </package>
