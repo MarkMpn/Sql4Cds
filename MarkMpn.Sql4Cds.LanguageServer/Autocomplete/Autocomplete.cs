@@ -6,7 +6,6 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using Data8.PowerPlatform.Dataverse.Client.Wsdl;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
@@ -314,7 +313,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                             var availableParameters = message.InputParameters
                                 .Concat(message.OutputParameters)
                                 .OrderBy(p => p.Name)
-                                .Select(p => new SprocParameterAutocompleteItem(message, p, currentLength));
+                                .Select(p => new SprocParameterAutocompleteItem(message, p, instance, currentLength));
 
                             return FilterList(availableParameters, currentWord);
                         }
@@ -877,7 +876,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
 
                 if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.MessageCache != null)
-                    list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, currentLength)));
+                    list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, ds, currentLength)));
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
@@ -905,7 +904,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
                 // Could be a sproc name
                 if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && instance?.MessageCache != null)
-                    list.AddRange(instance.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, lastPartLength)));
+                    list.AddRange(instance.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, instance, lastPartLength)));
             }
 
             list.Sort();
@@ -1600,11 +1599,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly Message _message;
             private readonly ColumnOrdering _columnOrdering;
+            private readonly DataSource _dataSource;
 
-            public SprocAutocompleteItem(Message message, ColumnOrdering columnOrdering, int replaceLength) : base(message.Name, replaceLength, CompletionItemKind.Method)
+            public SprocAutocompleteItem(Message message, ColumnOrdering columnOrdering, DataSource dataSource, int replaceLength) : base(message.Name, replaceLength, CompletionItemKind.Method)
             {
                 _message = message;
                 _columnOrdering = columnOrdering;
+                _dataSource = dataSource;
             }
 
             public override string ToolTipTitle
@@ -1625,7 +1626,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     else
                         parameters = parameters.OrderBy(p => p.Position);
 
-                    return _message.Name + " " + String.Join(", ", parameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + " OUTPUT]"))));
+                    return _message.Name + " " + String.Join(", ", parameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + " OUTPUT]"))));
                 }
                 set => base.ToolTipText = value;
             }
@@ -1635,22 +1636,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly Message _message;
             private readonly MessageParameter _parameter;
+            private readonly DataSource _dataSource;
 
-            public SprocParameterAutocompleteItem(Message message, MessageParameter parameter, int replaceLength) : base("@" + parameter.Name, replaceLength, CompletionItemKind.Variable)
+            public SprocParameterAutocompleteItem(Message message, MessageParameter parameter, DataSource dataSource, int replaceLength) : base("@" + parameter.Name, replaceLength, CompletionItemKind.Variable)
             {
                 _message = message;
                 _parameter = parameter;
+                _dataSource = dataSource;
             }
 
             public override string ToolTipTitle
             {
-                get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + _parameter.GetSqlDataType(null).ToSql() + ")";
+                get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + _parameter.GetSqlDataType(_dataSource).ToSql() + ")";
                 set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
-                get => _message.Name + " " + string.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : (_message.InputParameters.Count == 0 ? "" : ",") + " " + string.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(null).ToSql() + " OUTPUT]")));
+                get => _message.Name + " " + string.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : (_message.InputParameters.Count == 0 ? "" : ",") + " " + string.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + " OUTPUT]")));
                 set => base.ToolTipText = value;
             }
         }

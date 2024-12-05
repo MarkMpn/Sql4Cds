@@ -737,7 +737,10 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void functionContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             var tvf = (Engine.Message)treeView.SelectedNode.Tag;
-            selectToToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(tvf));
+            var connection = GetService(treeView.SelectedNode);
+            var dataSource = _dataSources[connection.ConnectionName];
+            
+            selectToToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(tvf, dataSource));
 
             selectToToolStripMenuItem.Enabled = true;
             insertToToolStripMenuItem.Enabled = false;
@@ -749,7 +752,10 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void procedureContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             var sproc = (Engine.Message)treeView.SelectedNode.Tag;
-            executeToToolStripMenuItem.Tag = (Func<string>)(() => GenerateExecuteQuery(sproc));
+            var connection = GetService(treeView.SelectedNode);
+            var dataSource = _dataSources[connection.ConnectionName];
+
+            executeToToolStripMenuItem.Tag = (Func<string>)(() => GenerateExecuteQuery(sproc, dataSource));
 
             selectToToolStripMenuItem.Enabled = false;
             insertToToolStripMenuItem.Enabled = false;
@@ -758,7 +764,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             executeToToolStripMenuItem.Enabled = true;
         }
 
-        private string GenerateSelectQuery(Engine.Message tvf)
+        private string GenerateSelectQuery(Engine.Message tvf, DataSource dataSource)
         {
             var querySpec = new QuerySpecification();
             querySpec.SelectElements.Add(new SelectScalarExpression { Expression = new ColumnReferenceExpression { ColumnType = ColumnType.Wildcard } });
@@ -789,7 +795,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             {
                 tvfReference.Parameters.Add(new VariableReference
                 {
-                    Name = $"<@{param.Name}, {param.GetSqlDataType(null).ToSql()}>"
+                    Name = $"<@{param.Name}, {param.GetSqlDataType(dataSource).ToSql()}>"
                 });
             }
 
@@ -801,7 +807,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             return querySpec.ToSql();
         }
 
-        private string GenerateExecuteQuery(Engine.Message sproc)
+        private string GenerateExecuteQuery(Engine.Message sproc, DataSource dataSource)
         {
             var batch = new TSqlBatch();
             var declare = new DeclareVariableStatement();
@@ -826,7 +832,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 declare.Declarations.Add(new DeclareVariableElement
                 {
                     VariableName = new Identifier { Value = $"@{param.Name}" },
-                    DataType = param.GetSqlDataType(null)
+                    DataType = param.GetSqlDataType(dataSource)
                 });
             }
 
