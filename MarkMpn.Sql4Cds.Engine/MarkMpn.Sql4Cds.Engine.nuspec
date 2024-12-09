@@ -54,7 +54,7 @@ Bug fixes
   </metadata>
   <files>
     <file src=".\bin\Release\net462\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
-    <file src=".\bin\Release\net6.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net8.0\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src=".\bin\Release\net8.0\MarkMpn.Sql4Cds.Engine.dll" target="lib\net8.0\MarkMpn.Sql4Cds.Engine.dll" />
     <file src="..\README.md" target="docs\" />
   </files>
 </package>
