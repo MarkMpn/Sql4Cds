@@ -1154,7 +1154,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (MetadataSource.HasFlag(MetadataSource.Value))
             {
                 results = results
-                    .Where(r => r.Attribute is EnumAttributeMetadata)
+                    .Where(r => r.Attribute is EnumAttributeMetadata a && a.OptionSet != null)
                     .SelectMany(r => ((EnumAttributeMetadata)r.Attribute).OptionSet.Options.Select(o => new { Entity = r.Entity, Attribute = r.Attribute, Relationship = r.Relationship, Key = r.Key, Value = o }))
                     .Concat(
                         results
@@ -1164,7 +1164,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 new { Entity = r.Entity, Attribute = r.Attribute, Relationship = r.Relationship, Key = r.Key, Value = ((BooleanAttributeMetadata)r.Attribute).OptionSet.FalseOption },
                                 new { Entity = r.Entity, Attribute = r.Attribute, Relationship = r.Relationship, Key = r.Key, Value = ((BooleanAttributeMetadata)r.Attribute).OptionSet.TrueOption },
                             })
-                    );
+                    )
+                    .Where(r => r.Value != null);
             }
 
             foreach (var result in results)
