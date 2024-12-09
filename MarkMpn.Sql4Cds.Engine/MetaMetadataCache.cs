@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Reuse the schema exposed by the nodes that actually execute the metadata queries
             var metadataNode = new MetadataQueryNode();
-            metadataNode.MetadataSource = MetadataSource.Entity | MetadataSource.Attribute | MetadataSource.OneToManyRelationship | MetadataSource.ManyToOneRelationship | MetadataSource.ManyToManyRelationship | MetadataSource.Key;
+            metadataNode.MetadataSource = MetadataSource.Entity | MetadataSource.Attribute | MetadataSource.OneToManyRelationship | MetadataSource.ManyToOneRelationship | MetadataSource.ManyToManyRelationship | MetadataSource.Key | MetadataSource.Value;
             metadataNode.EntityAlias = "entity";
             metadataNode.AttributeAlias = "attribute";
             metadataNode.OneToManyRelationshipAlias = "relationship_1_n";
@@ -109,6 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _customMetadata["metadata." + metadataNode.ValueAlias] = SchemaToMetadata(metadataSchema, metadataNode.ValueAlias);
 
             var optionsetNode = new GlobalOptionSetQueryNode();
+            optionsetNode.MetadataSource = OptionSetSource.OptionSet | OptionSetSource.Value;
             optionsetNode.OptionSetAlias = "globaloptionset";
             optionsetNode.ValueAlias = "globaloptionsetvalue";
 
