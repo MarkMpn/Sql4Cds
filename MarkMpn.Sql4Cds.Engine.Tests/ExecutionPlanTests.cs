@@ -8958,5 +8958,62 @@ INNER JOIN (SELECT TOP 10 accountid, name FROM account) AS p ON c.parentaccounti
   </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void InVariable()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+DECLARE @AccountId UNIQUEIDENTIFIER = NEWID();
+SELECT name FROM account WHERE accountid IN (@AccountId)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[2]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='account'>
+    <attribute name='name' />
+    <filter>
+      <condition attribute='accountid' operator='in'>
+        <value generator:IsVariable='true'>@AccountId</value>
+      </condition>
+    </filter>
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void InVariableAndLiteral()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+DECLARE @AccountId UNIQUEIDENTIFIER = NEWID();
+SELECT name FROM account WHERE accountid IN (@AccountId, '81349C3B-C0CA-46B6-8CF8-A5B82D27EC2F')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[2]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='account'>
+    <attribute name='name' />
+    <filter>
+      <condition attribute='accountid' operator='in'>
+        <value generator:IsVariable='true'>@AccountId</value>
+        <value>81349C3B-C0CA-46B6-8CF8-A5B82D27EC2F</value>
+      </condition>
+    </filter>
+  </entity>
+</fetch>");
+        }
     }
 }
