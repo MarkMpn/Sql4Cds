@@ -1248,7 +1248,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 @operator = op,
                 value = usesItems ? null : value,
                 Items = usesItems ? values : null,
-                IsVariable = isVariable
+                IsVariable = !usesItems && isVariable
             };
 
             // Filtering on "solution" entity via an outer join seems to generate an error:
