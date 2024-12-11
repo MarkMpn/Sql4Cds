@@ -556,6 +556,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = ConvertRaiseErrorStatement(raiserror);
             else if (statement is SetCommandStatement setCommand)
                 plans = ConvertSetCommandStatement(setCommand);
+            else if (statement is DeclareCursorStatement declareCursor)
+                plans = ConvertDeclareCursorStatement(declareCursor);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(statement, statement.GetType().Name.Replace("Statement", "").ToUpperInvariant()));
 
@@ -580,6 +582,36 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return output.ToArray();
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertDeclareCursorStatement(DeclareCursorStatement declareCursor)
+        {
+            // Validate the combination of cursor options
+            var options = declareCursor.CursorDefinition.Options.ToDictionary(o => o.OptionKind);
+
+            if (options.TryGetValue(CursorOptionKind.ScrollLocks, out var sl))
+                throw new NotSupportedQueryFragmentException("SCROLL_LOCKS is not supported", sl);
+
+            // Only support the FORWARD_ONLY and STATIC options for now
+            var unsupportedNavigationOptions = new[] { CursorOptionKind.Scroll };
+            var unsupportedCursorTypes = new[] { CursorOptionKind.Keyset, CursorOptionKind.Dynamic, CursorOptionKind.FastForward };
+
+            foreach (var option in unsupportedNavigationOptions)
+            {
+                if (options.TryGetValue(option, out var nav))
+                    throw new NotSupportedQueryFragmentException("Unsupported cursor navigation option " + option, nav);
+            }
+
+            foreach (var option in unsupportedCursorTypes)
+            {
+                if (options.TryGetValue(option, out var type))
+                    throw new NotSupportedQueryFragmentException("Unsupported cursor type " + option, type);
+            }
+
+            // TODO: Where is FOR UPDATE stored?
+
+            // Convert the query as normal
+            var select = ConvertSelectStatement(declareCursor.CursorDefinition.Select);
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)
