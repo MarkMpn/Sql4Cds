@@ -15,11 +15,8 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml
         [DefaultValue(false)]
         public bool IsVariable { get; set; }
 
-        public override bool Equals(object obj)
+        public bool IsSameAs(condition other)
         {
-            if (!(obj is condition other))
-                return false;
-
             if (other.entityname != entityname ||
                 other.attribute != attribute ||
                 other.@operator != @operator ||
@@ -51,34 +48,6 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml
             }
 
             return true;
-        }
-
-        public override int GetHashCode()
-        {
-            var hash = 0;
-            hash ^= entityname?.GetHashCode() ?? 0;
-            hash ^= attribute?.GetHashCode() ?? 0;
-            hash ^= @operator.GetHashCode();
-            hash ^= value?.GetHashCode() ?? 0;
-            hash ^= ValueOf?.GetHashCode() ?? 0;
-            hash ^= IsVariable.GetHashCode();
-            hash ^= aggregate.GetHashCode();
-            hash ^= aggregateSpecified.GetHashCode();
-            hash ^= alias?.GetHashCode() ?? 0;
-            hash ^= column?.GetHashCode() ?? 0;
-            hash ^= rowaggregate.GetHashCode();
-            hash ^= rowaggregateSpecified.GetHashCode();
-
-            if (Items != null)
-            {
-                foreach (var item in Items)
-                {
-                    hash ^= item.Value?.GetHashCode() ?? 0;
-                    hash ^= item.IsVariable.GetHashCode();
-                }
-            }
-
-            return hash;
         }
     }
 

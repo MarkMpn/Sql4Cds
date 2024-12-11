@@ -1749,7 +1749,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (item is condition c)
                 {
-                    if (newItems.OfType<condition>().Any(existing => existing.Equals(c)))
+                    if (newItems.OfType<condition>().Any(existing => existing.IsSameAs(c)))
                         continue;
                 }
 
