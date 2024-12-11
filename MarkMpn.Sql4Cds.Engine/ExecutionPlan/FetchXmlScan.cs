@@ -1729,6 +1729,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             MergeRootFilters();
             MergeSingleConditionFilters();
             MergeNestedFilters();
+            RemoveDuplicatedConditions();
+        }
+
+        private void RemoveDuplicatedConditions()
+        {
+            // If we've got two copies of a condition in the same filter, remove one of them
+            Entity.Items = RemoveDuplicatedConditions(Entity.Items);
+        }
+
+        private object[] RemoveDuplicatedConditions(object[] items)
+        {
+            if (items == null)
+                return items;
+
+            var newItems = new List<object>();
+
+            foreach (var item in items)
+            {
+                if (item is condition c)
+                {
+                    if (newItems.OfType<condition>().Any(existing => existing.Equals(c)))
+                        continue;
+                }
+
+                if (item is filter f)
+                {
+                    f.Items = RemoveDuplicatedConditions(f.Items);
+                }
+
+                if (item is FetchLinkEntityType linkEntity)
+                {
+                    linkEntity.Items = RemoveDuplicatedConditions(linkEntity.Items);
+                }
+
+                newItems.Add(item);
+            }
+
+            return newItems.ToArray();
         }
 
         private void RemoveIdentitySemiJoinLinkEntities(NodeCompilationContext context)
@@ -1797,9 +1835,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var filter in items.OfType<filter>().ToList())
             {
-                var entityName = GetConsistentEntityName(filter);
-
-                if (entityName != null && innerLinkEntities.TryGetValue(entityName, out var linkEntity))
+                if (IsConsistentEntityName(filter, out var entityName) &&
+                    entityName != null &&
+                    innerLinkEntities.TryGetValue(entityName, out var linkEntity))
                 {
                     linkEntity.AddItem(filter);
 
@@ -1826,24 +1864,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 RemoveEntityName(childFilter);
         }
 
-        private string GetConsistentEntityName(filter filter)
+        private bool IsConsistentEntityName(filter filter, out string entityName)
         {
-            var entityNames = filter.Items
-                .OfType<condition>()
-                .Select(c => c.entityname)
-                .Union(filter.Items.OfType<filter>().Select(GetConsistentEntityName))
-                .ToList();
-
-            if (entityNames.Count != 1)
-                return null;
-
-            foreach (var childFilter in filter.Items.OfType<filter>())
+            if (filter.Items == null)
             {
-                if (GetConsistentEntityName(childFilter) != entityNames[0])
-                    return null;
+                entityName = null;
+                return true;
             }
 
-            return entityNames[0];
+            entityName = null;
+            var setEntityName = false;
+
+            foreach (var item in filter.Items)
+            {
+                string currentEntityName;
+
+                if (item is condition c)
+                {
+                    currentEntityName = c.entityname;
+                }
+                else if (item is filter f)
+                {
+                    if (!IsConsistentEntityName(f, out currentEntityName))
+                        return false;
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (setEntityName && entityName != currentEntityName)
+                    return false;
+
+                entityName = currentEntityName;
+                setEntityName = true;
+            }
+
+            return true;
         }
 
         private object[] MoveConditionsToLinkEntities(Dictionary<string, FetchLinkEntityType> innerLinkEntities, object[] items)
