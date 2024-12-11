@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlTypes;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -9011,6 +9012,136 @@ SELECT name FROM account WHERE accountid IN (@AccountId, '81349C3B-C0CA-46B6-8CF
         <value generator:IsVariable='true'>@AccountId</value>
         <value>81349C3B-C0CA-46B6-8CF8-A5B82D27EC2F</value>
       </condition>
+    </filter>
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void LotsOfConditions()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT fullname 
+FROM contact 
+WHERE statecode = 0 
+      AND firstname <> 'Test1' 
+      AND firstname <> 'Test2' 
+      AND firstname <> 'Test3' 
+      AND firstname <> 'Test4' 
+      AND firstname <> 'Test5' 
+      AND firstname <> 'Test6' 
+      AND firstname <> 'Test7' 
+      AND firstname <> 'Test8' 
+      AND firstname <> 'Test9' 
+      AND firstname <> 'Test10' 
+      AND firstname <> 'Test11' 
+      AND firstname <> 'Test12' 
+      AND firstname <> 'Test13' 
+      AND firstname <> 'Test14' 
+      AND firstname <> 'Test15' 
+      AND firstname <> 'Test16' 
+      AND firstname <> 'Test17' 
+      AND firstname <> 'Test18' 
+      AND firstname <> 'Test19'
+      AND firstname <> 'Test20' 
+      AND firstname <> 'Test21' 
+      AND firstname <> 'Test22' 
+      AND firstname <> 'Test23' 
+      AND firstname <> 'Test24' 
+      AND firstname <> 'Test25' 
+      AND firstname <> 'Test26' 
+      AND firstname <> 'Test27' 
+      AND firstname <> 'Test28' 
+      AND firstname <> 'Test29'
+      AND firstname <> 'Test30' 
+      AND firstname <> 'Test31' 
+      AND firstname <> 'Test32' 
+      AND firstname <> 'Test33' 
+      AND firstname <> 'Test34' 
+      AND firstname <> 'Test35' 
+      AND firstname <> 'Test36' 
+      AND firstname <> 'Test37' 
+      AND firstname <> 'Test38' 
+      AND firstname <> 'Test39'
+      AND firstname <> 'Test40' 
+      AND firstname <> 'Test41' 
+      AND firstname <> 'Test42' 
+      AND firstname <> 'Test43' 
+      AND firstname <> 'Test44' 
+      AND firstname <> 'Test45' 
+      AND firstname <> 'Test46' 
+      AND firstname <> 'Test47' 
+      AND firstname <> 'Test48' 
+      AND firstname <> 'Test49'";
+
+            var timer = new Stopwatch();
+            timer.Start();
+            var plans = planBuilder.Build(query, null, out _);
+            timer.Stop();
+
+            Assert.IsTrue(timer.ElapsedMilliseconds < 2000, $"Query took {timer.ElapsedMilliseconds}ms");
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='contact'>
+    <attribute name='fullname' />
+    <filter>
+      <condition attribute='statecode' operator='eq' value='0' />
+      <condition attribute='firstname' operator='ne' value='Test1' />
+      <condition attribute='firstname' operator='not-null' />
+      <condition attribute='firstname' operator='ne' value='Test2' />
+        <condition attribute='firstname' operator='ne' value='Test3' />
+        <condition attribute='firstname' operator='ne' value='Test4' />
+        <condition attribute='firstname' operator='ne' value='Test5' />
+        <condition attribute='firstname' operator='ne' value='Test6' />
+        <condition attribute='firstname' operator='ne' value='Test7' />
+        <condition attribute='firstname' operator='ne' value='Test8' />
+        <condition attribute='firstname' operator='ne' value='Test9' />
+        <condition attribute='firstname' operator='ne' value='Test10' />
+        <condition attribute='firstname' operator='ne' value='Test11' />
+        <condition attribute='firstname' operator='ne' value='Test12' />
+        <condition attribute='firstname' operator='ne' value='Test13' />
+        <condition attribute='firstname' operator='ne' value='Test14' />
+        <condition attribute='firstname' operator='ne' value='Test15' />
+        <condition attribute='firstname' operator='ne' value='Test16' />
+        <condition attribute='firstname' operator='ne' value='Test17' />
+        <condition attribute='firstname' operator='ne' value='Test18' />
+        <condition attribute='firstname' operator='ne' value='Test19' />
+        <condition attribute='firstname' operator='ne' value='Test20' />
+        <condition attribute='firstname' operator='ne' value='Test21' />
+        <condition attribute='firstname' operator='ne' value='Test22' />
+        <condition attribute='firstname' operator='ne' value='Test23' />
+        <condition attribute='firstname' operator='ne' value='Test24' />
+        <condition attribute='firstname' operator='ne' value='Test25' />
+        <condition attribute='firstname' operator='ne' value='Test26' />
+        <condition attribute='firstname' operator='ne' value='Test27' />
+        <condition attribute='firstname' operator='ne' value='Test28' />
+        <condition attribute='firstname' operator='ne' value='Test29' />
+        <condition attribute='firstname' operator='ne' value='Test30' />
+        <condition attribute='firstname' operator='ne' value='Test31' />
+        <condition attribute='firstname' operator='ne' value='Test32' />
+        <condition attribute='firstname' operator='ne' value='Test33' />
+        <condition attribute='firstname' operator='ne' value='Test34' />
+        <condition attribute='firstname' operator='ne' value='Test35' />
+        <condition attribute='firstname' operator='ne' value='Test36' />
+        <condition attribute='firstname' operator='ne' value='Test37' />
+        <condition attribute='firstname' operator='ne' value='Test38' />
+        <condition attribute='firstname' operator='ne' value='Test39' />
+        <condition attribute='firstname' operator='ne' value='Test40' />
+        <condition attribute='firstname' operator='ne' value='Test41' />
+        <condition attribute='firstname' operator='ne' value='Test42' />
+        <condition attribute='firstname' operator='ne' value='Test43' />
+        <condition attribute='firstname' operator='ne' value='Test44' />
+        <condition attribute='firstname' operator='ne' value='Test45' />
+        <condition attribute='firstname' operator='ne' value='Test46' />
+        <condition attribute='firstname' operator='ne' value='Test47' />
+        <condition attribute='firstname' operator='ne' value='Test48' />
+        <condition attribute='firstname' operator='ne' value='Test49' />
     </filter>
   </entity>
 </fetch>");
