@@ -588,30 +588,48 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             // Validate the combination of cursor options
             var options = declareCursor.CursorDefinition.Options.ToDictionary(o => o.OptionKind);
+            var errors = new List<Sql4CdsError>();
 
-            if (options.TryGetValue(CursorOptionKind.ScrollLocks, out var sl))
-                throw new NotSupportedQueryFragmentException("SCROLL_LOCKS is not supported", sl);
-
-            // Only support the FORWARD_ONLY and STATIC options for now
-            var unsupportedNavigationOptions = new[] { CursorOptionKind.Scroll };
-            var unsupportedCursorTypes = new[] { CursorOptionKind.Keyset, CursorOptionKind.Dynamic, CursorOptionKind.FastForward };
-
-            foreach (var option in unsupportedNavigationOptions)
+            var exclusiveOptions = new[]
             {
-                if (options.TryGetValue(option, out var nav))
-                    throw new NotSupportedQueryFragmentException("Unsupported cursor navigation option " + option, nav);
+                new[] { CursorOptionKind.Local, CursorOptionKind.Global },
+                new[] { CursorOptionKind.ForwardOnly, CursorOptionKind.Scroll },
+                new[] { CursorOptionKind.Static, CursorOptionKind.Keyset, CursorOptionKind.Dynamic, CursorOptionKind.FastForward },
+                new[] { CursorOptionKind.ReadOnly, CursorOptionKind.ScrollLocks, CursorOptionKind.Optimistic },
+            };
+
+            foreach (var exclusiveSet in exclusiveOptions)
+            {
+                var matchingOptions = declareCursor.CursorDefinition.Options.Where(o => exclusiveSet.Contains(o.OptionKind)).ToList();
+
+                for (var i = 1; i < matchingOptions.Count; i++)
+                    errors.Add(Sql4CdsError.ConflictingCursorOption(matchingOptions[0], matchingOptions[i]));
             }
 
-            foreach (var option in unsupportedCursorTypes)
+            // We don't support all cursor options for now
+            var supportedOptions = new[]
             {
-                if (options.TryGetValue(option, out var type))
-                    throw new NotSupportedQueryFragmentException("Unsupported cursor type " + option, type);
+                CursorOptionKind.Local,
+                CursorOptionKind.Global,
+                CursorOptionKind.ForwardOnly,
+                CursorOptionKind.Static,
+                CursorOptionKind.ReadOnly,
+                CursorOptionKind.Insensitive,
+            };
+
+            foreach (var option in declareCursor.CursorDefinition.Options)
+            {
+                if (!supportedOptions.Contains(option.OptionKind))
+                    errors.Add(Sql4CdsError.NotSupported(option, option.ToNormalizedSql().Trim()));
             }
 
-            // TODO: Where is FOR UPDATE stored?
+            if (errors.Count > 0)
+                throw new NotSupportedQueryFragmentException(errors.ToArray(), null);
 
             // Convert the query as normal
             var select = ConvertSelectStatement(declareCursor.CursorDefinition.Select);
+
+            throw new NotImplementedException();
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)

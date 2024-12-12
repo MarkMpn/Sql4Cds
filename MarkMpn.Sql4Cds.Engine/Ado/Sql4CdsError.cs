@@ -817,6 +817,14 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(2741, fragment, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
         }
 
+        internal static Sql4CdsError ConflictingCursorOption(CursorOption firstOption, CursorOption secondOption)
+        {
+            var firstOptionText = firstOption.ToNormalizedSql().Trim();
+            var secondOptionText = secondOption.ToNormalizedSql().Trim();
+
+            return Create(1048, secondOption, firstOptionText, secondOptionText);
+        }
+
         internal static Sql4CdsError InvalidEntityReferenceType(TSqlFragment fragment, string actual, string required)
         {
             return new Sql4CdsError(16, 50001, $"Cannot convert entity reference from {actual} to {required}", fragment);
