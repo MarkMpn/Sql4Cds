@@ -11,24 +11,8 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Updated to .NET 8
-
-Bulk DML improvements
-* Automatically adjust batch size to keep requests within timeout limits
-* Automatically adjust thread count to avoid hitting service protection limits
-* Provide better feedback when queries pause due to service protection limits
-* Automatically retry requests that have failed due to a transient error
-* Added DML support for `solutioncomponent` table
-
-Metadata improvements
-* Expose optionset values via `metadata.globaloptionsetvalue` and `metadata.optionsetvalue` tables
-* Reduced amount of metadata required to execute queries
-
-Bug fixes
-* Fixed "Must declare the scalar variable @Cond" error when using nested loop for single-record joins
-* Do not trust `RetrieveTotalRecordCount` for certain metadata-related entities that give incorrect results
-* Avoid errors when using cross-table column comparisons and nested link entities
-* Handle nested primary functions
+    <releaseNotes>Improved performance with large numbers of filter conditions
+Fixed use of IN with a single variable
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

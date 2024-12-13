@@ -1,6 +1,12 @@
 # Change Log
 
-## [v9.5.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.4.1) - 2024-12-07
+## [v9.5.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.5.1) - 2024-12-12
+
+Fixed packaging to include all required files
+Improved performance with large numbers of filter conditions
+Fixed use of IN with a single variable
+
+## [v9.5.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.5.0) - 2024-12-10
 
 Updated to .NET 8
 

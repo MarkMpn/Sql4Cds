@@ -14,6 +14,41 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml
         [XmlAttribute(Namespace = "MarkMpn.SQL4CDS")]
         [DefaultValue(false)]
         public bool IsVariable { get; set; }
+
+        public bool IsSameAs(condition other)
+        {
+            if (other.entityname != entityname ||
+                other.attribute != attribute ||
+                other.@operator != @operator ||
+                other.value != value ||
+                other.ValueOf != ValueOf ||
+                other.IsVariable != IsVariable ||
+                other.aggregate != aggregate ||
+                other.aggregateSpecified != aggregateSpecified ||
+                other.alias != alias ||
+                other.column != column ||
+                other.rowaggregate != rowaggregate ||
+                other.rowaggregateSpecified != rowaggregateSpecified)
+                return false;
+
+            if (other.Items == null ^ Items == null)
+                return false;
+
+            if (Items != null)
+            {
+                if (other.Items.Length != Items.Length)
+                    return false;
+
+                for (var i = 0; i < Items.Length; i++)
+                {
+                    if (other.Items[i].Value != Items[i].Value ||
+                        other.Items[i].IsVariable != Items[i].IsVariable)
+                        return false;
+                }
+            }
+
+            return true;
+        }
     }
 
     partial class conditionValue
