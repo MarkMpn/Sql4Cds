@@ -699,10 +699,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 await ProcessBatch(threadLocalState.EMR, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
 
                             // If this is the final thread, execute any remaining requests in the retry queue
+                            var newThreadCount = Interlocked.Decrement(ref _threadCount);
+
                             if (!loopState.IsStopped &&
                                 !options.CancellationToken.IsCancellationRequested &&
-                                Interlocked.CompareExchange(ref _threadCount, 1, 1) == 1)
+                                newThreadCount == 0)
                             {
+                                Interlocked.Increment(ref _threadCount);
+
                                 // Take any requests from the retry queue and execute them
                                 while (_retryQueue.TryDequeue(out var retryReq))
                                 {
@@ -720,9 +724,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     else
                                         await ExecuteSingleRequest(retryReq, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
                                 }
+
+                                Interlocked.Decrement(ref _threadCount);
                             }
 
-                            Interlocked.Decrement(ref _threadCount);
                             ShowProgress(options, operationNames, meta);
 
                             if (threadLocalState.Service != dataSource.Connection && threadLocalState.Service is IDisposable disposableClient)
