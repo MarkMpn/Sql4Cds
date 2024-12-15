@@ -590,12 +590,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var options = declareCursor.CursorDefinition.Options.ToDictionary(o => o.OptionKind);
             var errors = new List<Sql4CdsError>();
 
+            var localOrGlobal = new[] { CursorOptionKind.Local, CursorOptionKind.Global };
+            var fowardOnlyOrScroll = new[] { CursorOptionKind.ForwardOnly, CursorOptionKind.Scroll };
+            var cursorType = new[] { CursorOptionKind.Static, CursorOptionKind.Keyset, CursorOptionKind.Dynamic, CursorOptionKind.FastForward };
+            var lockType = new[] { CursorOptionKind.ReadOnly, CursorOptionKind.ScrollLocks, CursorOptionKind.Optimistic };
+
             var exclusiveOptions = new[]
             {
-                new[] { CursorOptionKind.Local, CursorOptionKind.Global },
-                new[] { CursorOptionKind.ForwardOnly, CursorOptionKind.Scroll },
-                new[] { CursorOptionKind.Static, CursorOptionKind.Keyset, CursorOptionKind.Dynamic, CursorOptionKind.FastForward },
-                new[] { CursorOptionKind.ReadOnly, CursorOptionKind.ScrollLocks, CursorOptionKind.Optimistic },
+                localOrGlobal,
+                fowardOnlyOrScroll,
+                cursorType,
+                lockType,
             };
 
             foreach (var exclusiveSet in exclusiveOptions)
@@ -629,7 +634,26 @@ namespace MarkMpn.Sql4Cds.Engine
             // Convert the query as normal
             var select = ConvertSelectStatement(declareCursor.CursorDefinition.Select);
 
-            throw new NotImplementedException();
+            // Create the appropriate type of cursor
+            var type = CursorOptionKind.Static;
+
+            foreach (var t in cursorType)
+            {
+                if (options.ContainsKey(t))
+                    type = t;
+            }
+
+            switch (type)
+            {
+                case CursorOptionKind.Static:
+                    return new[]
+                    {
+                        StaticCursorNode.FromQuery(select)
+                    };
+
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)
