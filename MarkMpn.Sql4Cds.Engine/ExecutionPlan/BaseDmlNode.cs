@@ -770,7 +770,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)_successCount;
         }
 
-        protected void ExecuteTableOperation(NodeExecutionContext context, List<Entity> entities, DataTable dataTable, Action<Entity> tableAction, OperationNames operationNames, out int recordsAffected, out string message)
+        protected void ExecuteTableOperation(NodeExecutionContext context, List<Entity> entities, DataTable dataTable, Func<Entity, bool> tableAction, OperationNames operationNames, out int recordsAffected, out string message)
         {
             _entityCount = entities.Count;
             _inProgressCount = 0;

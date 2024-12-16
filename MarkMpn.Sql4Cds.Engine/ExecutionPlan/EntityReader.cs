@@ -450,8 +450,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        targetType = dataCol.DataType.ToSqlType(_dataSource);
-                        targetClrType = dataCol.DataType;
+                        var netSqlType = dataCol.DataType;
+
+                        if (netSqlType == typeof(long))
+                        {
+                            // Special case for auto-increment fields
+                            targetType = DataTypeHelpers.BigInt;
+                            targetClrType = typeof(long?);
+                        }
+                        else
+                        {
+                            targetType = netSqlType.ToSqlType(_dataSource);
+                            targetClrType = dataCol.DataType;
+                        }
                     }
                 }
                 else if (!attributes.TryGetValue(colName, out attr))

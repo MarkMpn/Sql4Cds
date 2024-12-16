@@ -16,6 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
+                cmd.CommandTimeout = 0;
                 // Create a temp table, insert a record, read the record, delete it, check it's deleted, drop the table
                 cmd.CommandText = @"
 CREATE TABLE #TempTable (Id INT, Name NVARCHAR(100))

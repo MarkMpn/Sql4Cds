@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -31,17 +32,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var cols = new ColumnList();
             var primaryKey = table.PrimaryKey.Length == 1 ? table.PrimaryKey[0].ColumnName : null;
-            
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
             foreach (DataColumn col in table.Columns)
             {
                 var netType = col.DataType;
+
+                if (!typeof(INullable).IsAssignableFrom(netType))
+                    netType = SqlTypeConverter.NetToSqlType(netType);
+
                 var sqlType = netType.ToSqlType(context.PrimaryDataSource);
-                cols.Add(col.ColumnName, new ColumnDefinition(sqlType, col.AllowDBNull, false));
+                var colDefinition = (IColumnDefinition)new ColumnDefinition(sqlType, col.AllowDBNull, false);
+
+                if (col.ColumnName == primaryKey)
+                    colDefinition = colDefinition.Invisible();
+
+                var baseColName = col.ColumnName.EscapeIdentifier();
+                var qualifiedColName = table.TableName.EscapeIdentifier() + "." + baseColName;
+                cols.Add(qualifiedColName, colDefinition);
+
+                if (!aliases.TryGetValue(baseColName, out var a))
+                {
+                    a = new List<string>();
+                    aliases[baseColName] = a;
+                }
+
+                ((List<string>)a).Add(qualifiedColName);
             }
 
             return new NodeSchema(
                 cols,
-                null,
+                aliases,
                 primaryKey,
                 null);
         }
@@ -75,11 +96,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (DataColumn col in table.Columns)
                 {
                     var value = row[col];
+                    var colName = table.TableName.EscapeIdentifier() + "." + col.ColumnName.EscapeIdentifier();
 
                     if (value == DBNull.Value)
-                        entity[col.ColumnName] = SqlTypeConverter.GetNullValue(col.DataType);
+                        entity[colName] = SqlTypeConverter.GetNullValue(col.DataType);
+                    else if (col == table.PrimaryKey.Single())
+                        entity[colName] = (SqlInt64)(long)value;
                     else
-                        entity[col.ColumnName] = value;
+                        entity[colName] = value;
                 }
 
                 yield return entity;

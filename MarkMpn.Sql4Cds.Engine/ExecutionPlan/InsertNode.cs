@@ -163,6 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 eec.Entity = entity;
                                 dataTable.Rows.Add(CreateDataRow(dataTable, eec, attributeAccessors));
+                                return true;
                             },
                             operationNames,
                             out recordsAffected,

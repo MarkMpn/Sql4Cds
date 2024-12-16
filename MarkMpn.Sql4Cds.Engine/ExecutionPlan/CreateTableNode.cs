@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -167,6 +168,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 
                 // TODO: More validation
             }
+
+            // Create a hidden primary key column
+            var pk = table.Columns.Add($"PK_{Guid.NewGuid():N}");
+            pk.DataType = typeof(long);
+            pk.AutoIncrement = true;
+            table.PrimaryKey = new[] { pk };
 
             if (errors.Count > 0)
                 throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
