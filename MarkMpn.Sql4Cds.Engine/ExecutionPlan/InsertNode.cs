@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.ServiceModel;
@@ -108,6 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
+                DataTable dataTable;
                 EntityMetadata meta;
                 Dictionary<string, AttributeMetadata> attributes;
                 Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors;
@@ -117,45 +119,74 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     entities = GetDmlSourceEntities(context, out var schema);
-                    meta = dataSource.Metadata[LogicalName];
-                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
+                    dataTable = context.Session.TempDb.Tables[LogicalName];
+                    meta = dataTable == null ? dataSource.Metadata[LogicalName] : null;
+                    attributes = meta?.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     attributeAccessors = Accessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
-                    attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
+
+                    if (dataTable != null && dataTable.PrimaryKey.Length == 1)
+                        attributeAccessors.TryGetValue(dataTable.PrimaryKey[0].ColumnName, out primaryIdAccessor);
+                    else if (meta != null)
+                        attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
+                    else
+                        primaryIdAccessor = null;
                 }
 
                 // Check again that the insert is allowed. Don't count any UI interaction in the execution time
-                var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
+                var confirmArgs = dataTable != null
+                    ? new ConfirmDmlStatementEventArgs(entities.Count, dataTable, BypassCustomPluginExecution)
+                    : new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
                 if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmInsert(confirmArgs);
                 if (confirmArgs.Cancel)
                     throw new QueryExecutionException(new Sql4CdsError(11, 0, 0, null, null, 0, "INSERT cancelled by user", null));
 
+                var operationNames = new OperationNames
+                {
+                    InProgressUppercase = "Inserting",
+                    InProgressLowercase = "inserting",
+                    CompletedLowercase = "inserted",
+                    CompletedUppercase = "Inserted",
+                };
+
                 using (_timer.Run())
                 {
-                    ExecuteDmlOperation(
-                        dataSource,
-                        context.Options,
-                        entities,
-                        meta,
-                        entity =>
-                        {
-                            eec.Entity = entity;
-                            return CreateInsertRequest(meta, eec, attributeAccessors, primaryIdAccessor, attributes, dataSource);
-                        },
-                        new OperationNames
-                        {
-                            InProgressUppercase = "Inserting",
-                            InProgressLowercase = "inserting",
-                            CompletedLowercase = "inserted",
-                            CompletedUppercase = "Inserted",
-                        },
-                        context,
-                        out recordsAffected,
-                        out message,
-                        r => SetIdentity(r, context.ParameterValues)
-                        );
+                    if (dataTable != null)
+                    {
+                        ExecuteTableOperation(
+                            context,
+                            entities,
+                            dataTable,
+                            entity =>
+                            {
+                                eec.Entity = entity;
+                                dataTable.Rows.Add(CreateDataRow(dataTable, eec, attributeAccessors));
+                            },
+                            operationNames,
+                            out recordsAffected,
+                            out message);
+                    }
+                    else
+                    {
+                        ExecuteDmlOperation(
+                            dataSource,
+                            context.Options,
+                            entities,
+                            meta,
+                            entity =>
+                            {
+                                eec.Entity = entity;
+                                return CreateInsertRequest(meta, eec, attributeAccessors, primaryIdAccessor, attributes, dataSource);
+                            },
+                            operationNames,
+                            context,
+                            out recordsAffected,
+                            out message,
+                            r => SetIdentity(r, context.ParameterValues)
+                            );
+                    }
                 }
             }
             catch (QueryExecutionException ex)
@@ -173,6 +204,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 throw new QueryExecutionException(ex.Message, ex) { Node = this };
             }
+        }
+
+        private DataRow CreateDataRow(DataTable dataTable, ExpressionExecutionContext eec, Dictionary<string, Func<ExpressionExecutionContext, object>> attributeAccessors)
+        {
+            var row = dataTable.NewRow();
+
+            foreach (var col in attributeAccessors)
+                row[col.Key] = col.Value(eec);
+
+            return row;
         }
 
         private OrganizationRequest CreateInsertRequest(EntityMetadata meta, ExpressionExecutionContext context, Dictionary<string,Func<ExpressionExecutionContext,object>> attributeAccessors, Func<ExpressionExecutionContext,object> primaryIdAccessor, Dictionary<string,AttributeMetadata> attributes, DataSource dataSource)

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
@@ -16,6 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     class EntityReader
     {
         private readonly EntityMetadata _metadata;
+        private readonly DataTable _dataTable;
         private readonly NodeCompilationContext _context;
         private readonly DataSource _dataSource;
         private readonly DataModificationStatement _statement;
@@ -155,6 +157,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         /// <summary>
+        /// Creates a new <see cref="EntityReader"/>
+        /// </summary>
+        /// <param name="metadata">The metadata of the entity type to read</param>
+        /// <param name="context">The context the operation is being compiled in</param>
+        /// <param name="dataSource">The data source the DML operation will be performed in </param>
+        /// <param name="statement">The DML statement that is being validated/executed</param>
+        /// <param name="target">The table that is being modified</param>
+        public EntityReader(DataTable dataTable,
+            NodeCompilationContext context,
+            DataSource dataSource,
+            DataModificationStatement statement,
+            NamedTableReference target,
+            IExecutionPlanNodeInternal source)
+            : this((EntityMetadata)null, context, dataSource, statement, target, source)
+        {
+            _dataTable = dataTable;
+        }
+
+        /// <summary>
         /// The source node that will provide the data to populate the entities from
         /// </summary>
         public IExecutionPlanNodeInternal Source { get; }
@@ -165,11 +186,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns></returns>
         public string[] GetPrimaryKeyFields(out bool isIntersect)
         {
-            return GetPrimaryKeyFields(_metadata, out isIntersect);
+            return GetPrimaryKeyFields(_metadata, _dataTable, out isIntersect);
         }
 
-        public static string[] GetPrimaryKeyFields(EntityMetadata metadata, out bool isIntersect)
+        public static string[] GetPrimaryKeyFields(EntityMetadata metadata, DataTable dataTable, out bool isIntersect)
         {
+            if (dataTable != null)
+            {
+                isIntersect = false;
+                return dataTable.PrimaryKey.Select(col => col.ColumnName).ToArray();
+            }
+
             if (metadata.LogicalName == "listmember")
             {
                 isIntersect = true;
@@ -243,7 +270,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Specialer case: lookup fields on principalobjectaccess could be set to EntityReference values,
             // so typecode fields do not necessarily need to be set.
-            if (_metadata.LogicalName == "principalobjectaccess")
+            if (_metadata?.LogicalName == "principalobjectaccess")
                 requiredAttributes = new[] { "objectid", "principalid", "accessrightsmask" };
 
             var missingRequiredAttributeErrors = requiredAttributes
@@ -277,7 +304,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var suggestions = new HashSet<string>();
 
             // partitionid is not writable even though it appears so in the metadata
-            if (_metadata.DataProviderId == DataProviders.ElasticDataProvider)
+            if (_metadata?.DataProviderId == DataProviders.ElasticDataProvider)
             {
                 var partitionId = mappings.Keys.FirstOrDefault(col => col.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
 
@@ -356,13 +383,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     col.SourceColumnName = renamed;
             }
 
-            var attributes = _metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
+            var attributes = _metadata?.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
+            var tableName = _metadata?.LogicalName ?? _dataTable.TableName;
             attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             var primaryKeyFields = GetPrimaryKeyFields(out var isIntersect);
 
             // Special case: solutioncomponent can have its rootcomponentbehavior column inserted/updated
-            if (_metadata.LogicalName == "solutioncomponent" && (operation == DmlOperationDetails.Insert || operation == DmlOperationDetails.UpdateNewValues || operation == DmlOperationDetails.UpdateExistingValues))
+            if (tableName == "solutioncomponent" && (operation == DmlOperationDetails.Insert || operation == DmlOperationDetails.UpdateNewValues || operation == DmlOperationDetails.UpdateExistingValues))
                 primaryKeyFields = primaryKeyFields.Concat(new[] { "rootcomponentbehavior" }).ToArray();
 
             var contextParam = Expression.Parameter(typeof(ExpressionExecutionContext));
@@ -384,7 +412,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Type targetClrType;
 
                 // Handle virtual __type and __pid attributes.
-                var attr = _metadata.FindBaseAttributeFromVirtualAttribute(colName, out var suffix);
+                string suffix = null;
+                var attr = _metadata?.FindBaseAttributeFromVirtualAttribute(colName, out suffix);
                 if (attr != null)
                 {
                     var virtualAttr = attr.GetVirtualAttributes(_dataSource, true)
@@ -410,6 +439,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (suffix == "pid")
                         lookupDetails.Pid = new ComplexLookupAttributeComponent { SourceColumns = new[] { colMapping.SourceColumnName }, TargetColumn = col, TargetColumnName = attr.LogicalName + suffix };
                 }
+                else if (_dataTable != null)
+                {
+                    var dataCol = _dataTable.Columns[colName];
+
+                    if (dataCol == null)
+                    {
+                        errors.Add(Sql4CdsError.InvalidColumnName(col));
+                        continue;
+                    }
+                    else
+                    {
+                        targetType = dataCol.DataType.ToSqlType(_dataSource);
+                        targetClrType = dataCol.DataType;
+                    }
+                }
                 else if (!attributes.TryGetValue(colName, out attr))
                 {
                     errors.Add(Sql4CdsError.InvalidColumnName(col));
@@ -427,7 +471,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
                 }
 
-                if (_metadata.LogicalName == "principalobjectaccess")
+                if (tableName == "principalobjectaccess")
                 {
                     if (attr.LogicalName == "objecttypecode" || attr.LogicalName == "principaltypecode")
                     {
@@ -466,7 +510,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else
                 {
-                    if (!operation.ValidAttributeFilter(attr))
+                    if (attr != null && !operation.ValidAttributeFilter(attr))
                     {
                         errors.Add(Sql4CdsError.ReadOnlyColumn(col));
                         suggestions.Add($"Column is not valid for {operation.ClauseName}");
@@ -483,7 +527,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     SqlTypeConverter.CanChangeTypeExplicit(sourceType, DataTypeHelpers.UniqueIdentifier))
                 {
                     // Special case: listmember.entityid does not require the virtual __type field as its type is defined by the list
-                    if (_metadata.LogicalName != "list" && attr.LogicalName != "entityid")
+                    if (tableName != "list" && attr.LogicalName != "entityid")
                     {
                         if (!complexLookupAttributes.TryGetValue(attr.LogicalName, out var lookupDetails))
                         {
@@ -495,7 +539,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (lookupDetails.Type == null && attr.GetVirtualAttributes(_dataSource, true).Any(va => va.Suffix == "type"))
                             lookupDetails.Type = new ComplexLookupAttributeComponent { TargetColumnName = attr.LogicalName + "type" };
-                        else if (lookupDetails.Type == null && _metadata.LogicalName == "principalobjectaccess")
+                        else if (lookupDetails.Type == null && tableName == "principalobjectaccess")
                             lookupDetails.Type = new ComplexLookupAttributeComponent { TargetColumnName = attr.LogicalName.Replace("id", "typecode") };
 
                         if (lookupDetails.Pid == null && attr.GetVirtualAttributes(_dataSource, true).Any(va => va.Suffix == "pid"))
@@ -538,7 +582,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             // Convert to destination SQL type - don't do this if we're converting from an EntityReference to a PartyList so
                             // we don't lose the entity name during the conversion via a string
-                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, contextParam, sourceType, targetType, throwOnTruncate: true, table: _metadata.LogicalName, column: colName);
+                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, contextParam, sourceType, targetType, throwOnTruncate: true, table: tableName, column: colName);
                         }
 
                         // Convert to final .NET SDK type
@@ -573,10 +617,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         // Check for null on the value BEFORE converting from the SQL to BCL type to avoid e.g. SqlDateTime.Null being converted to 1900-01-01
-                        accessor = Expression.Condition(
-                            SqlTypeConverter.NullCheck(expr),
-                            Expression.Constant(null, targetClrType),
-                            convertedExpr);
+                        if (typeof(INullable).IsAssignableFrom(targetClrType))
+                        {
+                            accessor = convertedExpr;
+                        }
+                        else
+                        {
+                            accessor = Expression.Condition(
+                                SqlTypeConverter.NullCheck(expr),
+                                Expression.Constant(null, targetClrType),
+                                convertedExpr);
+                        }
                     }
 
                     var usedAccessor = false;
@@ -607,7 +658,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         accessors.Add(new AttributeAccessor
                         {
                             SourceAttributes = new[] { colMapping.SourceColumnName },
-                            TargetAttribute = attr.LogicalName,
+                            TargetAttribute = colName,
                             Accessor = Expression.Lambda<Func<ExpressionExecutionContext, object>>(accessor, contextParam).Compile()
                         });
                     }
