@@ -108,6 +108,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
+        public override string ToString()
+        {
+            return "CREATE TABLE";
+        }
+
         public static CreateTableNode FromStatement(CreateTableStatement createTable)
         {
             // Check for a whole range of CREATE TABLE options we don't support

@@ -100,5 +100,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 TableName = TableName
             };
         }
+
+        public override string ToString()
+        {
+            return "DROP OBJECT";
+        }
     }
 }

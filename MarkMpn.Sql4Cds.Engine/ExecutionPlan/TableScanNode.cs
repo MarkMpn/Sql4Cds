@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var table = context.Session.TempDb.Tables[TableName];
 
             if (table == null)
-                throw new QueryExecutionException(Sql4CdsError.InvalidObjectName(new Identifier { Value = TableName }));
+                return new RowCountEstimate(0);
 
             return new RowCountEstimate(table.Rows.Count);
         }
@@ -116,6 +116,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 TableName = TableName
             };
+        }
+
+        public override string ToString()
+        {
+            return "Table Scan\r\n" + TableName.EscapeIdentifier();
         }
     }
 }
