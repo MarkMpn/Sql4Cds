@@ -24,7 +24,7 @@ INSERT INTO #TempTable (Id, Name) VALUES (1, 'Hello'), (2, 'World')
 SELECT * FROM #TempTable
 UPDATE #TempTable SET Name = 'Updated' WHERE Id = 1
 SELECT * FROM #TempTable
-DELETE FROM #TempTable
+DELETE FROM #TempTable WHERE Id = 2
 SELECT * FROM #TempTable
 DROP TABLE #TempTable";
 
@@ -46,6 +46,8 @@ DROP TABLE #TempTable";
 
                     Assert.IsTrue(reader.NextResult());
 
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Updated", reader["Name"]);
                     Assert.IsFalse(reader.Read());
 
                     Assert.IsFalse(reader.NextResult());

@@ -150,6 +150,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Database name"));
                 suggestions.Add("Only temporary tables are supported");
             }
+            else if (createTable.SchemaObjectName.SchemaIdentifier != null)
+            {
+                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Schema name"));
+                suggestions.Add("Only temporary tables are supported");
+            }
             else if (!createTable.SchemaObjectName.BaseIdentifier.Value.StartsWith("#"))
             {
                 errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Non-temporary table"));

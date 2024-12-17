@@ -561,6 +561,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = ConvertSetCommandStatement(setCommand);
             else if (statement is CreateTableStatement createTable)
                 plans = ConvertCreateTableStatement(createTable);
+            else if (statement is DropTableStatement dropTable)
+                plans = ConvertDropTableStatement(dropTable);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(statement, statement.GetType().Name.Replace("Statement", "").ToUpperInvariant()));
 
@@ -595,6 +597,59 @@ namespace MarkMpn.Sql4Cds.Engine
             Session.TempDb.Tables.Add(converted.TableDefinition.Clone());
 
             return new[] { converted };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertDropTableStatement(DropTableStatement dropTable)
+        {
+            var nodes = new List<IRootExecutionPlanNodeInternal>();
+            var errors = new List<Sql4CdsError>();
+            var suggestions = new HashSet<string>();
+
+            foreach (var table in dropTable.Objects)
+            {
+                // Only drop temporary tables for now
+                if (table.DatabaseIdentifier != null)
+                {
+                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Database name"));
+                    suggestions.Add("Only temporary tables are supported");
+                    continue;
+                }
+                else if (table.SchemaIdentifier != null)
+                {
+                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Schema name"));
+                    suggestions.Add("Only temporary tables are supported");
+                    continue;
+                }
+                else if (!table.BaseIdentifier.Value.StartsWith("#"))
+                {
+                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Non-temporary table"));
+                    suggestions.Add("Only temporary tables are supported");
+                    continue;
+                }
+                else if (!Session.TempDb.Tables.Contains(table.BaseIdentifier.Value))
+                {
+                    if (!dropTable.IsIfExists)
+                    {
+                        errors.Add(Sql4CdsError.InvalidObjectName(table));
+                        suggestions.Add("Check the table name is correct");
+                    }
+
+                    continue;
+                }
+
+                nodes.Add(new DropTableNode
+                {
+                    TableName = table.BaseIdentifier.Value
+                });
+
+                // Remove the table now in the local copy of the tempdb for validating later statements
+                Session.TempDb.Tables.Remove(table.BaseIdentifier.Value);
+            }
+
+            if (errors.Count > 0)
+                throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
+
+            return nodes.ToArray();
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)
@@ -1417,7 +1472,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var logicalName = target.SchemaObject.BaseIdentifier.Value;
             EntityReader reader;
 
-            if (logicalName.StartsWith("#"))
+            if (target.SchemaObject.DatabaseIdentifier == null && target.SchemaObject.SchemaIdentifier == null && logicalName.StartsWith("#"))
             {
                 var table = Session.TempDb.Tables[logicalName];
 
@@ -1533,21 +1588,35 @@ namespace MarkMpn.Sql4Cds.Engine
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
 
-            EntityMetadata targetMetadata;
+            EntityMetadata targetMetadata = null;
+            DataTable targetTable = null;
 
-            try
+            if (deleteTarget.Target.SchemaObject.DatabaseIdentifier == null && deleteTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
             {
-                targetMetadata = dataSource.Metadata[targetLogicalName];
+                targetTable = Session.TempDb.Tables[targetLogicalName];
+
+                if (targetTable == null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject));
+
+                targetLogicalName = targetTable.TableName;
             }
-            catch (FaultException ex)
+            else
             {
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
+                try
+                {
+                    targetMetadata = dataSource.Metadata[targetLogicalName];
+                    targetLogicalName = targetMetadata.LogicalName;
+                }
+                catch (FaultException ex)
+                {
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
+                }
             }
 
-            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, null, out _);
+            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, targetTable, out _);
             var columnMappings = primaryKeyFields.ToDictionary(f => f);
 
-            if (targetMetadata.LogicalName == "principalobjectaccess")
+            if (targetLogicalName == "principalobjectaccess")
             {
                 // principalid and objectid are polymorphic lookups, for compatibility with TDS Endpoint
                 // make sure we include the type values as well
@@ -1681,7 +1750,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
-                if (targetMetadata.LogicalName == "principalobjectaccess" && columnMapping.Key == "objecttypecode")
+                if (targetLogicalName == "principalobjectaccess" && columnMapping.Key == "objecttypecode")
                 {
                     // In case any of the records are for an activity, include the activitytypecode by joining to the activitypointer table
                     expression = new CoalesceExpression
@@ -1778,11 +1847,13 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add DELETE
             var deleteNode = new DeleteNode
             {
-                LogicalName = targetMetadata.LogicalName,
+                LogicalName = targetLogicalName,
                 DataSource = dataSource.Name
             };
 
-            var reader = new EntityReader(targetMetadata, _nodeContext, dataSource, statement, target, source);
+            var reader = targetMetadata != null
+                ? new EntityReader(targetMetadata, _nodeContext, dataSource, statement, target, source)
+                : new EntityReader(targetTable, _nodeContext, dataSource, statement, target, source);
             deleteNode.Source = reader.Source;
             deleteNode.PrimaryIdAccessors = reader.ValidateDeleteColumnMapping(columnMappings);
 
@@ -1845,7 +1916,7 @@ namespace MarkMpn.Sql4Cds.Engine
             DataTable dataTable = null;
             EntityMetadata targetMetadata = null;
 
-            if (targetLogicalName.StartsWith("#"))
+            if (updateTarget.Target.SchemaObject.DatabaseIdentifier == null && updateTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
             {
                 dataTable = Session.TempDb.Tables[targetLogicalName];
 
