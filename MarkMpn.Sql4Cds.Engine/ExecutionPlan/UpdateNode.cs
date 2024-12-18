@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading;
@@ -137,6 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
+                DataTable dataTable;
                 EntityMetadata meta;
                 Dictionary<string, AttributeMetadata> attributes;
                 Dictionary<string, Func<ExpressionExecutionContext, object>> newAttributeAccessors;
@@ -149,15 +151,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     entities = GetDmlSourceEntities(context, out var schema);
 
                     // Precompile mappings with type conversions
-                    meta = dataSource.Metadata[LogicalName];
-                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
+                    dataTable = context.Session.TempDb.Tables[LogicalName];
+                    meta = dataTable == null ? dataSource.Metadata[LogicalName] : null;
+                    attributes = meta?.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     newAttributeAccessors = NewValueAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
                     oldAttributeAccessors = ExistingValueAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
                     primaryIdAccessors = PrimaryIdAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor);
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
+                var confirmArgs = dataTable != null
+                    ? new ConfirmDmlStatementEventArgs(entities.Count, dataTable, BypassCustomPluginExecution)
+                    : new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
                 if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmUpdate(confirmArgs);
@@ -202,305 +207,334 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return isIntegrationUser || integrationUserId == user.Id;
                 }, LazyThreadSafetyMode.ExecutionAndPublication);
 
+                var operationNames = new OperationNames
+                {
+                    InProgressUppercase = "Updating",
+                    InProgressLowercase = "updating",
+                    CompletedLowercase = "updated",
+                    CompletedUppercase = "Updated"
+                };
+
                 using (_timer.Run())
                 {
-                    ExecuteDmlOperation(
-                        dataSource,
-                        context.Options,
-                        entities,
-                        meta,
-                        entity =>
-                        {
-                            eec.Entity = entity;
-                            var preImage = ExtractEntity(eec, meta, attributes, oldAttributeAccessors, primaryIdAccessors);
-                            var update = ExtractEntity(eec, meta, attributes, newAttributeAccessors, primaryIdAccessors);
-
-                            var requests = new OrganizationRequestCollection();
-
-                            if (meta.IsIntersect == true)
+                    if (dataTable != null)
+                    {
+                        ExecuteTableOperation(
+                            context,
+                            entities,
+                            dataTable,
+                            entity =>
                             {
-                                ManyToManyRelationshipMetadata relationship;
-                                string entity1IntersectAttribute;
-                                string entity2IntersectAttribute;
+                                eec.Entity = entity;
+                                var primaryId = primaryIdAccessors.Single().Value(eec);
+                                var row = dataTable.Rows.Find(primaryId);
 
-                                if (meta.LogicalName == "listmember")
+                                if (row == null)
+                                    return false;
+
+                                foreach (var col in newAttributeAccessors)
+                                    row[col.Key] = col.Value(eec);
+
+                                return true;
+                            },
+                            operationNames,
+                            out recordsAffected,
+                            out message);
+                    }
+                    else
+                    {
+                        ExecuteDmlOperation(
+                            dataSource,
+                            context.Options,
+                            entities,
+                            meta,
+                            entity =>
+                            {
+                                eec.Entity = entity;
+                                var preImage = ExtractEntity(eec, meta, attributes, oldAttributeAccessors, primaryIdAccessors);
+                                var update = ExtractEntity(eec, meta, attributes, newAttributeAccessors, primaryIdAccessors);
+
+                                var requests = new OrganizationRequestCollection();
+
+                                if (meta.IsIntersect == true)
                                 {
-                                    relationship = null;
-                                    entity1IntersectAttribute = "listid";
-                                    entity2IntersectAttribute = "entityid";
+                                    ManyToManyRelationshipMetadata relationship;
+                                    string entity1IntersectAttribute;
+                                    string entity2IntersectAttribute;
+
+                                    if (meta.LogicalName == "listmember")
+                                    {
+                                        relationship = null;
+                                        entity1IntersectAttribute = "listid";
+                                        entity2IntersectAttribute = "entityid";
+                                    }
+                                    else
+                                    {
+                                        relationship = meta.ManyToManyRelationships.Single();
+                                        entity1IntersectAttribute = relationship.Entity1IntersectAttribute;
+                                        entity2IntersectAttribute = relationship.Entity2IntersectAttribute;
+                                    }
+
+                                    var e1Prev = preImage.GetAttributeValue<Guid?>(entity1IntersectAttribute);
+                                    var e2Prev = preImage.GetAttributeValue<Guid?>(entity2IntersectAttribute);
+                                    var e1New = update.GetAttributeValue<Guid?>(entity1IntersectAttribute);
+                                    var e2New = update.GetAttributeValue<Guid?>(entity2IntersectAttribute);
+
+                                    if (!update.Contains(entity1IntersectAttribute))
+                                        e1New = e1Prev;
+                                    if (!update.Contains(entity2IntersectAttribute))
+                                        e2New = e2Prev;
+
+                                    if (e1New == null)
+                                        throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = entity1IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Update"));
+
+                                    if (e2New == null)
+                                        throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = entity2IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Update"));
+
+                                    if (meta.LogicalName == "listmember")
+                                    {
+                                        requests.Add(new RemoveMemberListRequest
+                                        {
+                                            ListId = e1Prev.Value,
+                                            EntityId = e2Prev.Value
+                                        });
+                                        requests.Add(new AddMemberListRequest
+                                        {
+                                            ListId = e1New.Value,
+                                            EntityId = e2New.Value
+                                        });
+                                    }
+                                    else
+                                    {
+                                        requests.Add(new DisassociateRequest
+                                        {
+                                            Target = new EntityReference(relationship.Entity1LogicalName, e1Prev.Value),
+                                            RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, e2Prev.Value) },
+                                            Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
+                                        });
+                                        requests.Add(new AssociateRequest
+                                        {
+                                            Target = new EntityReference(relationship.Entity1LogicalName, e1New.Value),
+                                            RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, e2New.Value) },
+                                            Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
+                                        });
+                                    }
+                                }
+                                else if (meta.LogicalName == "principalobjectaccess")
+                                {
+                                    var objectIdPrev = preImage.GetAttributeValue<EntityReference>("objectid");
+                                    var principalIdPrev = preImage.GetAttributeValue<EntityReference>("principalid");
+                                    var accessMaskPrev = (AccessRights)preImage.GetAttributeValue<int>("accessrightsmask");
+                                    var objectIdNew = update.GetAttributeValue<EntityReference>("objectid") ?? objectIdPrev;
+                                    var principalIdNew = update.GetAttributeValue<EntityReference>("principalid") ?? principalIdPrev;
+                                    var accessMaskNew = (AccessRights?)update.GetAttributeValue<int>("accessrightsmask") ?? accessMaskPrev;
+
+                                    // Check if we need to remove any previous share permissions
+                                    if (!objectIdPrev.Equals(objectIdNew) || !principalIdPrev.Equals(principalIdNew) || (accessMaskNew & accessMaskPrev) != accessMaskPrev)
+                                    {
+                                        requests.Add(new RevokeAccessRequest
+                                        {
+                                            Target = objectIdPrev,
+                                            Revokee = principalIdPrev
+                                        });
+                                    }
+
+                                    // Check if we need to add any new share permissions
+                                    if (accessMaskNew != AccessRights.None)
+                                    {
+                                        requests.Add(new GrantAccessRequest
+                                        {
+                                            Target = objectIdNew,
+                                            PrincipalAccess = new PrincipalAccess
+                                            {
+                                                Principal = principalIdNew,
+                                                AccessMask = accessMaskNew
+                                            }
+                                        });
+                                    }
+                                }
+                                else if (meta.LogicalName == "solutioncomponent")
+                                {
+                                    var componentIdPrev = preImage.GetAttributeValue<Guid>("objectid");
+                                    var componentTypePrev = preImage.GetAttributeValue<OptionSetValue>("componenttype");
+                                    var solutionIdPrev = preImage.GetAttributeValue<EntityReference>("solutionid");
+                                    var rootComponentBehaviorPrev = preImage.GetAttributeValue<OptionSetValue>("rootcomponentbehavior");
+                                    var componentIdNew = update.GetAttributeValue<Guid?>("objectid") ?? componentIdPrev;
+                                    var componentTypeNew = update.GetAttributeValue<OptionSetValue>("componenttype") ?? componentTypePrev;
+                                    var solutionIdNew = update.GetAttributeValue<EntityReference>("solutionid") ?? solutionIdPrev;
+                                    var rootComponentBehaviorNew = update.GetAttributeValue<OptionSetValue>("rootcomponentbehavior");
+
+                                    // If we're changing the component or the solution we need to remove the existing component first before
+                                    // adding the new one. We also need to remove & re-add if the rootcomponentbehavior is changing to or
+                                    // from 0 (IncludeSubcomponents), but not if it is changing between 1 (DoNotIncludeSubcomponents) and 2 (IncludeAsShellOnly)
+                                    if (componentIdNew != componentIdPrev || componentTypeNew != componentTypePrev || solutionIdNew.Id != solutionIdPrev.Id ||
+                                        rootComponentBehaviorNew == null || rootComponentBehaviorPrev == null ||
+                                        rootComponentBehaviorNew.Value == 0 || rootComponentBehaviorPrev.Value == 0)
+                                    {
+                                        requests.Add(new RemoveSolutionComponentRequest
+                                        {
+                                            ComponentId = componentIdPrev,
+                                            ComponentType = componentTypePrev.Value,
+                                            SolutionUniqueName = GetSolutionName(solutionIdPrev.Id, dataSource)
+                                        });
+                                    }
+
+                                    requests.Add(new AddSolutionComponentRequest
+                                    {
+                                        ComponentId = componentIdNew,
+                                        ComponentType = componentTypeNew.Value,
+                                        SolutionUniqueName = GetSolutionName(solutionIdNew.Id, dataSource),
+                                        DoNotIncludeSubcomponents = rootComponentBehaviorNew != null && rootComponentBehaviorNew.Value != 0,
+                                        IncludedComponentSettingsValues = rootComponentBehaviorNew != null && rootComponentBehaviorNew.Value == 2 ? Array.Empty<string>() : null,
+                                        AddRequiredComponents = false
+                                    });
                                 }
                                 else
                                 {
-                                    relationship = meta.ManyToManyRelationships.Single();
-                                    entity1IntersectAttribute = relationship.Entity1IntersectAttribute;
-                                    entity2IntersectAttribute = relationship.Entity2IntersectAttribute;
-                                }
+                                    var updateRequest = new UpdateRequest { Target = update };
 
-                                var e1Prev = preImage.GetAttributeValue<Guid?>(entity1IntersectAttribute);
-                                var e2Prev = preImage.GetAttributeValue<Guid?>(entity2IntersectAttribute);
-                                var e1New = update.GetAttributeValue<Guid?>(entity1IntersectAttribute);
-                                var e2New = update.GetAttributeValue<Guid?>(entity2IntersectAttribute);
+                                    var requestedState = update.GetAttributeValue<OptionSetValue>("statecode");
+                                    var requestedStatus = update.GetAttributeValue<OptionSetValue>("statuscode");
+                                    var currentState = preImage.GetAttributeValue<OptionSetValue>("statecode");
+                                    var currentStatus = preImage.GetAttributeValue<OptionSetValue>("statuscode");
 
-                                if (!update.Contains(entity1IntersectAttribute))
-                                    e1New = e1Prev;
-                                if (!update.Contains(entity2IntersectAttribute))
-                                    e2New = e2Prev;
+                                    if (requestedState == null && requestedStatus != null)
+                                        requestedState = GetStateCode(meta, requestedStatus.Value);
+                                    else if (requestedState != null && requestedStatus == null)
+                                        requestedStatus = GetDefaultStatusCode(meta, requestedState.Value);
 
-                                if (e1New == null)
-                                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = entity1IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Update"));
-
-                                if (e2New == null)
-                                    throw new QueryExecutionException(Sql4CdsError.NotNullInsert(new Identifier { Value = entity2IntersectAttribute }, new Identifier { Value = meta.LogicalName }, "Update"));
-
-                                if (meta.LogicalName == "listmember")
-                                {
-                                    requests.Add(new RemoveMemberListRequest
+                                    if ((LogicalName == "quote" || LogicalName == "salesorder" || LogicalName == "invoice") &&
+                                        currentState?.Value != 0 &&
+                                        !isSysAdminOrBackOfficeIntegrationUser.Value)
                                     {
-                                        ListId = e1Prev.Value,
-                                        EntityId = e2Prev.Value
-                                    });
-                                    requests.Add(new AddMemberListRequest
-                                    {
-                                        ListId = e1New.Value,
-                                        EntityId = e2New.Value
-                                    });
-                                }
-                                else
-                                {
-                                    requests.Add(new DisassociateRequest
-                                    {
-                                        Target = new EntityReference(relationship.Entity1LogicalName, e1Prev.Value),
-                                        RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, e2Prev.Value) },
-                                        Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
-                                    });
-                                    requests.Add(new AssociateRequest
-                                    {
-                                        Target = new EntityReference(relationship.Entity1LogicalName, e1New.Value),
-                                        RelatedEntities = new EntityReferenceCollection { new EntityReference(relationship.Entity2LogicalName, e2New.Value) },
-                                        Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
-                                    });
-                                }
-                            }
-                            else if (meta.LogicalName == "principalobjectaccess")
-                            {
-                                var objectIdPrev = preImage.GetAttributeValue<EntityReference>("objectid");
-                                var principalIdPrev = preImage.GetAttributeValue<EntityReference>("principalid");
-                                var accessMaskPrev = (AccessRights)preImage.GetAttributeValue<int>("accessrightsmask");
-                                var objectIdNew = update.GetAttributeValue<EntityReference>("objectid") ?? objectIdPrev;
-                                var principalIdNew = update.GetAttributeValue<EntityReference>("principalid") ?? principalIdPrev;
-                                var accessMaskNew = (AccessRights?)update.GetAttributeValue<int>("accessrightsmask") ?? accessMaskPrev;
+                                        // QOI records can only be updated if they are in an editable state or the user is a sysadmin or integration user
+                                        // Add a request to change the status back to editable before making the update, then change the status back again
+                                        // afterwards
+                                        var defaultDraftStatusCode = GetDefaultStatusCode(meta, 0);
 
-                                // Check if we need to remove any previous share permissions
-                                if (!objectIdPrev.Equals(objectIdNew) || !principalIdPrev.Equals(principalIdNew) || (accessMaskNew & accessMaskPrev) != accessMaskPrev)
-                                {
-                                    requests.Add(new RevokeAccessRequest
-                                    {
-                                        Target = objectIdPrev,
-                                        Revokee = principalIdPrev
-                                    });
-                                }
-
-                                // Check if we need to add any new share permissions
-                                if (accessMaskNew != AccessRights.None)
-                                {
-                                    requests.Add(new GrantAccessRequest
-                                    {
-                                        Target = objectIdNew,
-                                        PrincipalAccess = new PrincipalAccess
+                                        requests.Insert(0, new UpdateRequest
                                         {
-                                            Principal = principalIdNew,
-                                            AccessMask = accessMaskNew
-                                        }
-                                    });
-                                }
-                            }
-                            else if (meta.LogicalName == "solutioncomponent")
-                            {
-                                var componentIdPrev = preImage.GetAttributeValue<Guid>("objectid");
-                                var componentTypePrev = preImage.GetAttributeValue<OptionSetValue>("componenttype");
-                                var solutionIdPrev = preImage.GetAttributeValue<EntityReference>("solutionid");
-                                var rootComponentBehaviorPrev = preImage.GetAttributeValue<OptionSetValue>("rootcomponentbehavior");
-                                var componentIdNew = update.GetAttributeValue<Guid?>("objectid") ?? componentIdPrev;
-                                var componentTypeNew = update.GetAttributeValue<OptionSetValue>("componenttype") ?? componentTypePrev;
-                                var solutionIdNew = update.GetAttributeValue<EntityReference>("solutionid") ?? solutionIdPrev;
-                                var rootComponentBehaviorNew = update.GetAttributeValue<OptionSetValue>("rootcomponentbehavior");
+                                            Target = new Entity(LogicalName, update.Id)
+                                            {
+                                                ["statecode"] = new OptionSetValue(0),
+                                                ["statuscode"] = defaultDraftStatusCode
+                                            }
+                                        });
 
-                                // If we're changing the component or the solution we need to remove the existing component first before
-                                // adding the new one. We also need to remove & re-add if the rootcomponentbehavior is changing to or
-                                // from 0 (IncludeSubcomponents), but not if it is changing between 1 (DoNotIncludeSubcomponents) and 2 (IncludeAsShellOnly)
-                                if (componentIdNew != componentIdPrev || componentTypeNew != componentTypePrev || solutionIdNew.Id != solutionIdPrev.Id ||
-                                    rootComponentBehaviorNew == null || rootComponentBehaviorPrev == null ||
-                                    rootComponentBehaviorNew.Value == 0 || rootComponentBehaviorPrev.Value == 0)
-                                {
-                                    requests.Add(new RemoveSolutionComponentRequest
-                                    {
-                                        ComponentId = componentIdPrev,
-                                        ComponentType = componentTypePrev.Value,
-                                        SolutionUniqueName = GetSolutionName(solutionIdPrev.Id, dataSource)
-                                    });
-                                }
-
-                                requests.Add(new AddSolutionComponentRequest
-                                {
-                                    ComponentId = componentIdNew,
-                                    ComponentType = componentTypeNew.Value,
-                                    SolutionUniqueName = GetSolutionName(solutionIdNew.Id, dataSource),
-                                    DoNotIncludeSubcomponents = rootComponentBehaviorNew != null && rootComponentBehaviorNew.Value != 0,
-                                    IncludedComponentSettingsValues = rootComponentBehaviorNew != null && rootComponentBehaviorNew.Value == 2 ? Array.Empty<string>() : null,
-                                    AddRequiredComponents = false
-                                });
-                            }
-                            else
-                            {
-                                var updateRequest = new UpdateRequest { Target = update };
-
-                                var requestedState = update.GetAttributeValue<OptionSetValue>("statecode");
-                                var requestedStatus = update.GetAttributeValue<OptionSetValue>("statuscode");
-                                var currentState = preImage.GetAttributeValue<OptionSetValue>("statecode");
-                                var currentStatus = preImage.GetAttributeValue<OptionSetValue>("statuscode");
-
-                                if (requestedState == null && requestedStatus != null)
-                                    requestedState = GetStateCode(meta, requestedStatus.Value);
-                                else if (requestedState != null && requestedStatus == null)
-                                    requestedStatus = GetDefaultStatusCode(meta, requestedState.Value);
-
-                                if ((LogicalName == "quote" || LogicalName == "salesorder" || LogicalName == "invoice") &&
-                                    currentState?.Value != 0 &&
-                                    !isSysAdminOrBackOfficeIntegrationUser.Value)
-                                {
-                                    // QOI records can only be updated if they are in an editable state or the user is a sysadmin or integration user
-                                    // Add a request to change the status back to editable before making the update, then change the status back again
-                                    // afterwards
-                                    var defaultDraftStatusCode = GetDefaultStatusCode(meta, 0);
-
-                                    requests.Insert(0, new UpdateRequest
-                                    {
-                                        Target = new Entity(LogicalName, update.Id)
+                                        if (requestedState == null)
                                         {
-                                            ["statecode"] = new OptionSetValue(0),
-                                            ["statuscode"] = defaultDraftStatusCode
+                                            requestedState = currentState;
+                                            update["statecode"] = requestedState;
                                         }
-                                    });
 
-                                    if (requestedState == null)
-                                    {
-                                        requestedState = currentState;
-                                        update["statecode"] = requestedState;
+                                        if (requestedStatus == null)
+                                        {
+                                            requestedStatus = currentStatus;
+                                            update["statuscode"] = requestedStatus;
+                                        }
+
+                                        currentState = new OptionSetValue(0);
+                                        currentStatus = defaultDraftStatusCode;
                                     }
 
-                                    if (requestedStatus == null)
+                                    if ((requestedState != null || requestedStatus != null) && StateTransitions != null)
                                     {
-                                        requestedStatus = currentStatus;
-                                        update["statuscode"] = requestedStatus;
+                                        update.Attributes.Remove("statecode");
+                                        update.Attributes.Remove("statuscode");
                                     }
 
-                                    currentState = new OptionSetValue(0);
-                                    currentStatus = defaultDraftStatusCode;
-                                }
-
-                                if ((requestedState != null || requestedStatus != null) && StateTransitions != null)
-                                {
-                                    update.Attributes.Remove("statecode");
-                                    update.Attributes.Remove("statuscode");
-                                }
-
-                                if (MinimalUpdates)
-                                {
-                                    // Remove any attributes from the update target that have the same value in the pre image
-                                    foreach (var attr in update.Attributes.Keys.ToList())
+                                    if (MinimalUpdates)
                                     {
-                                        if (preImage.Contains(attr) && Equals(preImage[attr], update[attr]))
-                                            update.Attributes.Remove(attr);
+                                        // Remove any attributes from the update target that have the same value in the pre image
+                                        foreach (var attr in update.Attributes.Keys.ToList())
+                                        {
+                                            if (preImage.Contains(attr) && Equals(preImage[attr], update[attr]))
+                                                update.Attributes.Remove(attr);
+                                        }
+                                    }
+
+                                    if (update.Attributes.Any())
+                                        requests.Add(updateRequest);
+
+                                    if (requestedStatus != null && StateTransitions != null)
+                                        AddStateTransitions(update, currentStatus, requestedStatus, requests);
+
+                                    if (UseLegacyUpdateMessages)
+                                    {
+                                        // Replace updates for special attributes with dedicated messages
+                                        for (var i = 0; i < requests.Count; i++)
+                                        {
+                                            if (!(requests[i] is UpdateRequest updateReq))
+                                                continue;
+
+                                            if (updateReq.Target.Contains("ownerid"))
+                                            {
+                                                requests.Insert(i, new AssignRequest
+                                                {
+                                                    Target = updateReq.Target.ToEntityReference(),
+                                                    Assignee = updateReq.Target.GetAttributeValue<EntityReference>("ownerid")
+                                                });
+                                                updateReq.Target.Attributes.Remove("ownerid");
+                                                i++;
+                                            }
+
+                                            if (updateReq.Target.Contains("statecode") || updateReq.Target.Contains("statuscode"))
+                                            {
+                                                requests.Insert(i, new SetStateRequest
+                                                {
+                                                    EntityMoniker = updateReq.Target.ToEntityReference(),
+                                                    State = requestedState ?? currentState,
+                                                    Status = requestedStatus ?? new OptionSetValue(-1)
+                                                });
+                                                updateReq.Target.Attributes.Remove("statecode");
+                                                updateReq.Target.Attributes.Remove("statuscode");
+                                                i++;
+                                            }
+
+                                            // SetParentSystemUserRequest SetParentTeamRequest, and SetBusinessSystemUserRequest have important extra parameters,
+                                            // so don't automatically convert to them. They should be called using the stored procedure syntax instead.
+
+                                            if (updateReq.Target.Contains("parentbusinessunitid") && updateReq.Target.LogicalName == "businessunitid")
+                                            {
+                                                requests.Insert(i, new SetParentBusinessUnitRequest
+                                                {
+                                                    BusinessUnitId = updateReq.Target.Id,
+                                                    ParentId = updateReq.Target.GetAttributeValue<EntityReference>("parentbusinessunitid").Id
+                                                });
+                                                updateReq.Target.Attributes.Remove("parentbusinessunitid");
+                                                i++;
+                                            }
+
+                                            if (updateReq.Target.Contains("businessunitid") && updateReq.Target.LogicalName == "equipment")
+                                            {
+                                                requests.Insert(i, new SetBusinessEquipmentRequest
+                                                {
+                                                    BusinessUnitId = updateReq.Target.GetAttributeValue<EntityReference>("businessunitid").Id,
+                                                    EquipmentId = updateReq.Target.Id
+                                                });
+                                                updateReq.Target.Attributes.Remove("businessunitid");
+                                                i++;
+                                            }
+
+                                            if (updateReq.Target.Attributes.Count == 0)
+                                            {
+                                                requests.RemoveAt(i);
+                                                i--;
+                                            }
+                                        }
                                     }
                                 }
 
-                                if (update.Attributes.Any())
-                                    requests.Add(updateRequest);
+                                if (requests.Count == 1)
+                                    return requests[0];
 
-                                if (requestedStatus != null && StateTransitions != null)
-                                    AddStateTransitions(update, currentStatus, requestedStatus, requests);
-
-                                if (UseLegacyUpdateMessages)
-                                {
-                                    // Replace updates for special attributes with dedicated messages
-                                    for (var i = 0; i < requests.Count; i++)
-                                    {
-                                        if (!(requests[i] is UpdateRequest updateReq))
-                                            continue;
-
-                                        if (updateReq.Target.Contains("ownerid"))
-                                        {
-                                            requests.Insert(i, new AssignRequest
-                                            {
-                                                Target = updateReq.Target.ToEntityReference(),
-                                                Assignee = updateReq.Target.GetAttributeValue<EntityReference>("ownerid")
-                                            });
-                                            updateReq.Target.Attributes.Remove("ownerid");
-                                            i++;
-                                        }
-
-                                        if (updateReq.Target.Contains("statecode") || updateReq.Target.Contains("statuscode"))
-                                        {
-                                            requests.Insert(i, new SetStateRequest
-                                            {
-                                                EntityMoniker = updateReq.Target.ToEntityReference(),
-                                                State = requestedState ?? currentState,
-                                                Status = requestedStatus ?? new OptionSetValue(-1)
-                                            });
-                                            updateReq.Target.Attributes.Remove("statecode");
-                                            updateReq.Target.Attributes.Remove("statuscode");
-                                            i++;
-                                        }
-
-                                        // SetParentSystemUserRequest SetParentTeamRequest, and SetBusinessSystemUserRequest have important extra parameters,
-                                        // so don't automatically convert to them. They should be called using the stored procedure syntax instead.
-
-                                        if (updateReq.Target.Contains("parentbusinessunitid") && updateReq.Target.LogicalName == "businessunitid")
-                                        {
-                                            requests.Insert(i, new SetParentBusinessUnitRequest
-                                            {
-                                                BusinessUnitId = updateReq.Target.Id,
-                                                ParentId = updateReq.Target.GetAttributeValue<EntityReference>("parentbusinessunitid").Id
-                                            });
-                                            updateReq.Target.Attributes.Remove("parentbusinessunitid");
-                                            i++;
-                                        }
-
-                                        if (updateReq.Target.Contains("businessunitid") && updateReq.Target.LogicalName == "equipment")
-                                        {
-                                            requests.Insert(i, new SetBusinessEquipmentRequest
-                                            {
-                                                BusinessUnitId = updateReq.Target.GetAttributeValue<EntityReference>("businessunitid").Id,
-                                                EquipmentId = updateReq.Target.Id
-                                            });
-                                            updateReq.Target.Attributes.Remove("businessunitid");
-                                            i++;
-                                        }
-
-                                        if (updateReq.Target.Attributes.Count == 0)
-                                        {
-                                            requests.RemoveAt(i);
-                                            i--;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (requests.Count == 1)
-                                return requests[0];
-
-                            return new ExecuteTransactionRequest { Requests = requests };
-                        },
-                        new OperationNames
-                        {
-                            InProgressUppercase = "Updating",
-                            InProgressLowercase = "updating",
-                            CompletedLowercase = "updated",
-                            CompletedUppercase = "Updated"
-                        },
-                        context,
-                        out recordsAffected,
-                        out message);
+                                return new ExecuteTransactionRequest { Requests = requests };
+                            },
+                            operationNames,
+                            context,
+                            out recordsAffected,
+                            out message);
+                    }
                 }
             }
             catch (QueryExecutionException ex)

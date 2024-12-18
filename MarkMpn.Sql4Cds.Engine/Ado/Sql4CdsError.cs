@@ -830,6 +830,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return new Sql4CdsError(16, 50001, $"Cannot convert entity reference from {actual} to {required}", fragment);
         }
 
+        internal static Sql4CdsError DuplicateObjectName(TSqlFragment fragment, string name)
+        {
+            return Create(2714, fragment, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

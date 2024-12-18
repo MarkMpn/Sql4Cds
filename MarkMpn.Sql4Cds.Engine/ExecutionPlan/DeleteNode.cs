@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data;
 using System.Linq;
 using System.ServiceModel;
 using Microsoft.Crm.Sdk.Messages;
@@ -101,17 +102,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
+                DataTable dataTable;
                 EntityMetadata meta;
                 var eec = new ExpressionExecutionContext(context);
 
                 using (_timer.Run())
                 {
                     entities = GetDmlSourceEntities(context, out var schema);
-                    meta = dataSource.Metadata[LogicalName];
+                    dataTable = context.Session.TempDb.Tables[LogicalName];
+                    meta = dataTable == null ? dataSource.Metadata[LogicalName] : null;
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
+                var confirmArgs = dataTable != null
+                    ? new ConfirmDmlStatementEventArgs(entities.Count, dataTable, BypassCustomPluginExecution)
+                    : new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
                 if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmDelete(confirmArgs);
@@ -120,26 +125,53 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    ExecuteDmlOperation(
-                        dataSource,
-                        context.Options,
-                        entities,
-                        meta,
-                        entity =>
-                        {
-                            eec.Entity = entity;
-                            return CreateDeleteRequest(meta, eec, PrimaryIdAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor), dataSource);
-                        },
-                        new OperationNames
-                        {
-                            InProgressUppercase = "Deleting",
-                            InProgressLowercase = "deleting",
-                            CompletedLowercase = "deleted",
-                            CompletedUppercase = "Deleted"
-                        },
-                        context,
-                        out recordsAffected,
-                        out message);
+                    var operationNames = new OperationNames
+                    {
+                        InProgressUppercase = "Deleting",
+                        InProgressLowercase = "deleting",
+                        CompletedLowercase = "deleted",
+                        CompletedUppercase = "Deleted"
+                    };
+
+                    if (dataTable != null)
+                    {
+                        ExecuteTableOperation(
+                            context,
+                            entities,
+                            dataTable,
+                            entity =>
+                            {
+                                eec.Entity = entity;
+                                var primaryId = PrimaryIdAccessors.Single().Accessor(eec);
+                                var row = dataTable.Rows.Find(primaryId);
+
+                                if (row == null)
+                                    return false;
+
+                                dataTable.Rows.Remove(row);
+                                return true;
+                            },
+                            operationNames,
+                            out recordsAffected,
+                            out message);
+                    }
+                    else
+                    {
+                        ExecuteDmlOperation(
+                            dataSource,
+                            context.Options,
+                            entities,
+                            meta,
+                            entity =>
+                            {
+                                eec.Entity = entity;
+                                return CreateDeleteRequest(meta, eec, PrimaryIdAccessors.ToDictionary(a => a.TargetAttribute, a => a.Accessor), dataSource);
+                            },
+                            operationNames,
+                            context,
+                            out recordsAffected,
+                            out message);
+                    }
                 }
             }
             catch (QueryExecutionException ex)
