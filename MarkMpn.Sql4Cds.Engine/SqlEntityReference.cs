@@ -47,8 +47,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (entityReference.KeyAttributes.TryGetValue("partitionid", out var value))
                 {
-                    var primaryId = entityReference.KeyAttributes.Single(a => a.Value is Guid);
-                    _guid = (Guid)primaryId.Value;
+                    var primaryId = entityReference.KeyAttributes.Single(a => {
+                        try
+                        {
+                            return a.Value is Guid || Guid.TryParse(a.Value as string, out var _);
+                        }
+                        catch (Exception _)
+                        {
+                            return false;
+                        }
+                    });
+                    if (primaryId.Value is Guid)
+                        _guid = (Guid)primaryId.Value;
+                    else
+                        _guid = new Guid(primaryId.Value as string);
                     _primaryIdAttribute = primaryId.Key;
                     PartitionId = value as string;
                 }
