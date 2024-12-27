@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
@@ -1379,7 +1380,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return sql;
             }
 
-            throw new NotSupportedQueryFragmentException(Sql4CdsError.UnsupportedStatement(selectSource, "INSERT"));
+            throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(selectSource, "INSERT"));
         }
 
         private DataSource SelectDataSource(SchemaObjectName schemaObject)
@@ -2416,6 +2417,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidAggregateInWhereClause(aggregateCollector.Aggregates[0]));
             }
 
+            // Find any window functions we need to apply
+            var windowCollector = new WindowFunctionVisitor();
+            querySpec.Accept(windowCollector);
+
+            if (windowCollector.OutOfPlaceWindowFunctions.Count > 0)
+            {
+                throw new NotSupportedQueryFragmentException(windowCollector.OutOfPlaceWindowFunctions.Select(f => Sql4CdsError.WindowFunctionNotInSelectOrOrderBy(f)).ToArray(), null);
+            }
+
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             var node = querySpec.FromClause == null || querySpec.FromClause.TableReferences.Count == 0 ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
             var logicalSchema = node.GetSchema(context);
@@ -2480,6 +2490,16 @@ namespace MarkMpn.Sql4Cds.Engine
             try
             {
                 node = ConvertHavingClause(node, hints, querySpec.HavingClause, context, outerSchema, outerReferences, querySpec, nonAggregateSchema);
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+            }
+
+            // Add window functions
+            try
+            {
+                node = ConvertWindowFunctions(node, hints, querySpec, context, outerSchema, outerReferences, nonAggregateSchema, windowCollector.WindowFunctions);
             }
             catch (NotSupportedQueryFragmentException ex)
             {
@@ -2552,7 +2572,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
-                exception = NotSupportedQueryFragmentException.Combine(exception, new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTopWithOffset(querySpec.TopRowFilter)));
+                exception = NotSupportedQueryFragmentException.Combine(exception, Sql4CdsError.InvalidTopWithOffset(querySpec.TopRowFilter));
 
             try
             {
@@ -2592,6 +2612,122 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw exception;
 
             return selectNode;
+        }
+
+        private IDataExecutionPlanNodeInternal ConvertWindowFunctions(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, QuerySpecification querySpec, NodeCompilationContext context, INodeSchema outerSchema, Dictionary<string, string> outerReferences, INodeSchema nonAggregateSchema, List<FunctionCall> windowFunctions)
+        {
+            var calculationRewrites = new Dictionary<ScalarExpression, ScalarExpression>();
+            NotSupportedQueryFragmentException exception = null;
+            var computeScalar = new ComputeScalarNode
+            {
+                Source = source
+            };
+            var result = (IDataExecutionPlanNodeInternal)computeScalar;
+
+            foreach (var windowFunction in windowFunctions)
+            {
+                // Sort the data by the partition and ordering columns
+                var sort = new SortNode
+                {
+                    Source = result
+                };
+
+                var partitionCols = new List<string>();
+
+                if (windowFunction.OverClause.Partitions != null)
+                {
+                    foreach (var partition in windowFunction.OverClause.Partitions)
+                    {
+                        var partitionExpr = partition;
+
+                        try
+                        {
+                            var calculated = ComputeScalarExpression(partitionExpr, hints, querySpec, computeScalar, nonAggregateSchema, context, ref source);
+                            sort.Source = source;
+                            calculationRewrites[partitionExpr] = calculated.ToColumnReference();
+                            partitionExpr = calculated.ToColumnReference();
+
+                            sort.Sorts.Add(new ExpressionWithSortOrder
+                            {
+                                Expression = partitionExpr,
+                                SortOrder = SortOrder.Ascending
+                            });
+
+                            partitionCols.Add(((ColumnReferenceExpression)partitionExpr).GetColumnName());
+                        }
+                        catch (NotSupportedQueryFragmentException ex)
+                        {
+                            exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                        }
+                    }
+                }
+
+                if (windowFunction.OverClause.OrderByClause != null)
+                {
+                    foreach (var order in windowFunction.OverClause.OrderByClause.OrderByElements)
+                    {
+                        var sortExpr = order.Expression;
+
+                        try
+                        {
+                            if (sortExpr is IntegerLiteral)
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.WindowFunctionCannotUseOrderByIndex(sortExpr));
+                        }
+                        catch (NotSupportedQueryFragmentException ex)
+                        {
+                            exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                        }
+                    }
+                }
+
+                // Generate the segment number
+                var segmentCol = context.GetExpressionName();
+                var segment = new SegmentNode
+                {
+                    Source = sort,
+                    SegmentColumn = segmentCol,
+                    GroupBy = partitionCols
+                };
+
+                // Calculate the window function
+                var functionCol = context.GetExpressionName();
+
+                switch (windowFunction.FunctionName.Value.ToUpperInvariant())
+                {
+                    case "ROW_NUMBER":
+                        if (windowFunction.Parameters.Count != 0)
+                            exception = NotSupportedQueryFragmentException.Combine(exception, Sql4CdsError.FunctionTakesExactlyXArguments(windowFunction, 0));
+
+                        result = new SequenceProjectNode
+                        {
+                            Source = segment,
+                            SegmentColumn = segmentCol,
+                            DefinedValues =
+                            {
+                                [functionCol] = new Aggregate
+                                {
+                                    AggregateType = AggregateType.RowNumber,
+                                    ReturnType = DataTypeHelpers.BigInt
+                                }
+                            }
+                        };
+                        break;
+
+                    default:
+                        exception = NotSupportedQueryFragmentException.Combine(exception, Sql4CdsError.NotSupported(windowFunction));
+                        break;
+                }
+
+                calculationRewrites[windowFunction] = functionCol.ToColumnReference();
+            }
+
+            if (exception != null)
+                throw exception;
+
+            if (calculationRewrites.Count > 0)
+                querySpec.Accept(new RewriteVisitor(calculationRewrites));
+
+            return result;
         }
 
         private void ConvertForXmlClause(SelectNode selectNode, XmlForClause forXml, NodeCompilationContext context)
@@ -3459,7 +3595,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     aliases.TryGetValue(orderByCol.GetColumnName(), out var aliasedCols))
                 {
                     if (aliasedCols.Count > 1)
-                        exception = NotSupportedQueryFragmentException.Combine(exception, new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousColumnName(orderByCol)));
+                        exception = NotSupportedQueryFragmentException.Combine(exception, Sql4CdsError.AmbiguousColumnName(orderByCol));
 
                     order.Expression = aliasedCols[0].ToColumnReference();
                     order.ScriptTokenStream = null;
@@ -3696,7 +3832,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             var colType = schema.Schema[col].Type;
                             if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
-                                exception = NotSupportedQueryFragmentException.Combine(exception, new NotSupportedQueryFragmentException(colTypeColl.CollationConflictError));
+                                exception = NotSupportedQueryFragmentException.Combine(exception, colTypeColl.CollationConflictError);
                         }
 
                         select.ColumnSet.Add(new SelectColumn

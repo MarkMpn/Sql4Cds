@@ -20,7 +20,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         Sum,
         Average,
         First,
-        StringAgg
+        StringAgg,
+        RowNumber
     }
 
     /// <summary>
@@ -206,7 +207,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var s = (State)state;
 
-            var count = (SqlInt32) _count.GetValue(s.CountState);
+            var count = (SqlInt32)_count.GetValue(s.CountState);
             var sum = _sum.GetValue(s.SumState);
 
             if (sum is SqlInt32 i32)
@@ -471,7 +472,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var unboxed = Expression.Unbox(valueParam, sourceType.ToNetType(out _));
             var conversion = SqlTypeConverter.Convert(unboxed, contextParam, sourceType, returnType);
             conversion = Expr.Box(conversion);
-            _valueSelector = (Func<object, ExpressionExecutionContext, object>) Expression.Lambda(conversion, valueParam, contextParam).Compile();
+            _valueSelector = (Func<object, ExpressionExecutionContext, object>)Expression.Lambda(conversion, valueParam, contextParam).Compile();
         }
 
         protected override void Update(object value, ExpressionExecutionContext context, object state)
@@ -721,6 +722,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Distinct = new HashSet<object>(),
                 InnerState = _func.Reset()
             };
+        }
+    }
+
+    class RowNumber : AggregateFunction
+    {
+        public override DataTypeReference Type => throw new NotImplementedException();
+
+        class State
+        {
+            public long RowNumber { get; set; }
+        }
+
+        public RowNumber() : base(() => null)
+        {
+        }
+
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
+        {
+            ((State)state).RowNumber++;
+        }
+
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
+        {
+            throw new InvalidOperationException();
+        }
+
+        public override object GetValue(object state)
+        {
+            return (SqlInt64)((State)state).RowNumber;
+        }
+
+        public override object Reset()
+        {
+            return new State();
         }
     }
 }
