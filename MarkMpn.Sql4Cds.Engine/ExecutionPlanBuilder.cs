@@ -586,6 +586,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 output.AddRange(optimized);
+
+                if (plan is CreateTableNode createTable)
+                {
+                    // Create the table now in the local copy of the tempdb to allow converting later statements
+                    Session.TempDb.Tables.Add(createTable.TableDefinition.Clone());
+                }
+                else if (plan is DropTableNode dropTable)
+                {
+                    // Remove the table now in the local copy of the tempdb for validating later statements
+                    Session.TempDb.Tables.Remove(dropTable.TableName);
+                }
             }
 
             return output.ToArray();
@@ -593,12 +604,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNodeInternal[] ConvertCreateTableStatement(CreateTableStatement createTable)
         {
-            var converted = CreateTableNode.FromStatement(createTable);
-
-            // Create the table now in the local copy of the tempdb to allow converting later statements
-            Session.TempDb.Tables.Add(converted.TableDefinition.Clone());
-
-            return new[] { converted };
+            return new[] { CreateTableNode.FromStatement(createTable) };
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertDropTableStatement(DropTableStatement dropTable)
@@ -643,9 +649,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     TableName = table.BaseIdentifier.Value
                 });
-
-                // Remove the table now in the local copy of the tempdb for validating later statements
-                Session.TempDb.Tables.Remove(table.BaseIdentifier.Value);
             }
 
             if (errors.Count > 0)
@@ -716,10 +719,7 @@ namespace MarkMpn.Sql4Cds.Engine
             switch (type)
             {
                 case CursorOptionKind.Static:
-                    return new[]
-                    {
-                        StaticCursorNode.FromQuery(select)
-                    };
+                    return StaticCursorNode.FromQuery(_nodeContext, select);
 
                 default:
                     throw new NotImplementedException();

@@ -425,6 +425,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
+                    colName = attr.LogicalName + virtualAttr.Suffix;
                     targetType = virtualAttr.DataType();
                     targetClrType = typeof(string);
 
@@ -450,6 +451,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
+                        colName = dataCol.ColumnName;
                         var netSqlType = dataCol.DataType;
 
                         if (netSqlType == typeof(long))
@@ -472,6 +474,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else
                 {
+                    colName = attr.LogicalName;
                     targetType = attr.GetAttributeSqlType(_dataSource, true);
                     targetClrType = attr.GetAttributeType();
                 }
