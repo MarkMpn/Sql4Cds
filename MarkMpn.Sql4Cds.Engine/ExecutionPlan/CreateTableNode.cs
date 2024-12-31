@@ -120,49 +120,49 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var suggestions = new HashSet<string>();
 
             if (createTable.AsEdge)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "AS EDGE"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "AS EDGE"));
 
             if (createTable.AsFileTable)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "AS FILETABLE"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "AS FILETABLE"));
 
             if (createTable.AsNode)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "AS NODE"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "AS NODE"));
 
             if (createTable.CtasColumns != null && createTable.CtasColumns.Count > 0)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "CREATE TABLE AS SELECT"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "CREATE TABLE AS SELECT"));
 
             if (createTable.FederationScheme != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "FEDERATED"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "FEDERATED"));
 
             if (createTable.FileStreamOn != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "FILESTREAM_ON"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "FILESTREAM_ON"));
 
             if (createTable.OnFileGroupOrPartitionScheme != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "ON FILEGROUP"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "ON FILEGROUP"));
 
             if (createTable.SelectStatement != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "CREATE TABLE AS SELECT"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "CREATE TABLE AS SELECT"));
 
             if (createTable.TextImageOn != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "TEXTIMAGE_ON"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "TEXTIMAGE_ON"));
 
             foreach (var option in createTable.Options)
-                errors.Add(Sql4CdsError.UnsupportedStatement(option, option.ToNormalizedSql()));
+                errors.Add(Sql4CdsError.NotSupported(option, option.ToNormalizedSql()));
 
             // We can create tables in tempdb. Don't try to create tables in Dataverse itself for now.
             if (createTable.SchemaObjectName.DatabaseIdentifier != null)
             {
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Database name"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "Database name"));
                 suggestions.Add("Only temporary tables are supported");
             }
             else if (createTable.SchemaObjectName.SchemaIdentifier != null)
             {
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Schema name"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "Schema name"));
                 suggestions.Add("Only temporary tables are supported");
             }
             else if (!createTable.SchemaObjectName.BaseIdentifier.Value.StartsWith("#"))
             {
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Non-temporary table"));
+                errors.Add(Sql4CdsError.NotSupported(createTable, "Non-temporary table"));
                 suggestions.Add("Only temporary tables are supported");
             }
 
