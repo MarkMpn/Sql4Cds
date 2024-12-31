@@ -566,6 +566,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = ConvertDropTableStatement(dropTable);
             else if (statement is DeclareCursorStatement declareCursor)
                 plans = ConvertDeclareCursorStatement(declareCursor);
+            else if (statement is OpenCursorStatement openCursor)
+                plans = ConvertOpenCursorStatement(openCursor);
+            else if (statement is FetchCursorStatement fetchCursor)
+                plans = ConvertFetchCursorStatement(fetchCursor);
+            else if (statement is CloseCursorStatement closeCursor)
+                plans = ConvertCloseCursorStatement(closeCursor);
+            else if (statement is DeallocateCursorStatement deallocateCursor)
+                plans = ConvertDeallocateCursorStatement(deallocateCursor);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(statement, statement.GetType().Name.Replace("Statement", "").ToUpperInvariant()));
 
@@ -603,6 +611,29 @@ namespace MarkMpn.Sql4Cds.Engine
             return output.ToArray();
         }
 
+        private IRootExecutionPlanNodeInternal[] ConvertDeallocateCursorStatement(DeallocateCursorStatement deallocateCursor)
+        {
+            return new[] { new DeallocateCursorNode { CursorName = deallocateCursor.Cursor.Name.Value } };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertCloseCursorStatement(CloseCursorStatement closeCursor)
+        {
+            return new[] { new CloseCursorNode { CursorName = closeCursor.Cursor.Name.Value } };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertFetchCursorStatement(FetchCursorStatement fetchCursor)
+        {
+            if (fetchCursor.IntoVariables == null)
+                return new[] { new FetchCursorNode { CursorName = fetchCursor.Cursor.Name.Value } };
+            else
+                return new[] { new FetchCursorIntoNode { CursorName = fetchCursor.Cursor.Name.Value, Variables = fetchCursor.IntoVariables } };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertOpenCursorStatement(OpenCursorStatement openCursor)
+        {
+            return new[] { new OpenCursorNode { CursorName = openCursor.Cursor.Name.Value } };
+        }
+
         private IRootExecutionPlanNodeInternal[] ConvertCreateTableStatement(CreateTableStatement createTable)
         {
             return new[] { CreateTableNode.FromStatement(createTable) };
@@ -619,19 +650,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Only drop temporary tables for now
                 if (table.DatabaseIdentifier != null)
                 {
-                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Database name"));
+                    errors.Add(Sql4CdsError.NotSupported(table, "Database name"));
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
                 else if (table.SchemaIdentifier != null)
                 {
-                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Schema name"));
+                    errors.Add(Sql4CdsError.NotSupported(table, "Schema name"));
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
                 else if (!table.BaseIdentifier.Value.StartsWith("#"))
                 {
-                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Non-temporary table"));
+                    errors.Add(Sql4CdsError.NotSupported(table, "Non-temporary table"));
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
@@ -720,7 +751,7 @@ namespace MarkMpn.Sql4Cds.Engine
             switch (type)
             {
                 case CursorOptionKind.Static:
-                    return StaticCursorNode.FromQuery(_nodeContext, select);
+                    return new[] { StaticCursorNode.FromQuery(_nodeContext, select) };
 
                 default:
                     throw new NotImplementedException();

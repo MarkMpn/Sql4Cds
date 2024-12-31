@@ -103,12 +103,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Generates a unique name for an expression
         /// </summary>
         /// <returns>The name to use for the expression</returns>
-        public string GetExpressionName()
+        public string GetExpressionName(string prefix = "Expr")
         {
             if (_parentContext != null)
                 return _parentContext.GetExpressionName();
 
-            return $"Expr{++_expressionCounter}";
+            return $"{prefix}{++_expressionCounter}";
         }
 
         /// <summary>
@@ -166,6 +166,7 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(session, options, parameterTypes, log)
         {
             ParameterValues = parameterValues;
+            Cursors = new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -179,6 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(parentContext, parentContext.ParameterTypes)
         {
             ParameterValues = parameterValues;
+            Cursors = new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -194,6 +196,9 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(parentContext, parameterTypes)
         {
             ParameterValues = parameterValues;
+            Cursors = new LayeredDictionary<string, CursorBaseNode>(
+                parentContext.Cursors,
+                new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase));
         }
 
         /// <summary>
@@ -205,6 +210,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns or sets the current error
         /// </summary>
         public Sql4CdsError Error { get; set; }
+
+        /// <summary>
+        /// The local cursors that are currently allocated
+        /// </summary>
+        public IDictionary<string, CursorBaseNode> Cursors { get; }
     }
 
     /// <summary>

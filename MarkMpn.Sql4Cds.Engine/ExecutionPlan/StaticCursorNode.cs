@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data;
 using System.Linq;
 using System.Text;
@@ -10,26 +11,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class StaticCursorNode : CursorBaseNode
     {
+        [Browsable(false)]
+        public DataTable TempTable { get; set; }
+
         public override object Clone()
         {
             throw new NotImplementedException();
         }
 
-        public static IRootExecutionPlanNodeInternal[] FromQuery(NodeCompilationContext context, IRootExecutionPlanNodeInternal query)
+        public static StaticCursorNode FromQuery(NodeCompilationContext context, IRootExecutionPlanNodeInternal query)
         {
-            var nodes = new List<IRootExecutionPlanNodeInternal>();
-
             // Cache the results of the query in a temporary table, indexed by the row number
             var tempTable = new DataTable("#" + Guid.NewGuid().ToString("N"));
-            tempTable.PrimaryKey = new[] { tempTable.Columns.Add("RowNumber", typeof(int)) };
+            tempTable.PrimaryKey = new[] { tempTable.Columns.Add("RowNumber", typeof(long)) };
 
             // Track how the fetch query should name each of the columns
             List<SelectColumn> columns;
 
             INodeSchema schema;
+            IDataExecutionPlanNodeInternal sourceNode;
 
             if (query is SelectNode select)
             {
+                sourceNode = select.Source;
                 schema = select.Source.GetSchema(context);
                 columns = select.ColumnSet;
 
@@ -42,6 +46,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else if (query is SqlNode sql)
             {
+                // TODO: Make SqlNode implement IDataExecutionPlanNodeInternal and refactor BaseDmlNode accordingly
+                throw new NotImplementedException();
+                //sourceNode = sql;
+
                 // SQL schema can have repeated or blank column names, so create new ones based on simple column indexes
                 var sqlSchema = sql.GetSchema(context);
                 columns = new List<SelectColumn>();
@@ -61,14 +69,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedException();
             }
 
-            // Define the temporary table
-            nodes.Add(new CreateTableNode { TableDefinition = tempTable });
+            // Define the temporary table in the current context so we can continue building the rest of the query
+            context.Session.TempDb.Tables.Add(tempTable.Clone());
 
-            // TODO: Requires new operators for calculating the row number
+            // Add the operators to calculate the row number and set up the insert statement
+            var segmentColumn = context.GetExpressionName("Segment");
+            var rowNumberColumn = context.GetExpressionName("RowNumber");
             var populationQuery = new InsertNode
             {
                 LogicalName = tempTable.TableName,
+                Source = new SequenceProjectNode
+                {
+                    Source = new SegmentNode
+                    {
+                        Source = sourceNode,
+                        GroupBy = new List<string>(),
+                        SegmentColumn = segmentColumn
+                    },
+                    SegmentColumn = segmentColumn,
+                    DefinedValues =
+                    {
+                        [rowNumberColumn] = new Aggregate
+                        {
+                            AggregateType = AggregateType.RowNumber
+                        }
+                    }
+                },
+                Accessors = new List<AttributeAccessor>()
             };
+
+            // Set up the accessors to populate the temporary table
+            populationQuery.Accessors.Add(new AttributeAccessor
+            {
+                TargetAttribute = tempTable.PrimaryKey[0].ColumnName,
+                Accessor = eec => eec.Entity[rowNumberColumn],
+                SourceAttributes = new[] { rowNumberColumn }
+            });
 
             // Fetch query filters the results from the temporary table by the row number
             var rowNumberVariable = $"@{context.GetExpressionName()}";
@@ -105,11 +141,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var cursor = new StaticCursorNode
             {
                 PopulationQuery = populationQuery,
-                FetchQuery = fetchQuery
+                FetchQuery = fetchQuery,
+                TempTable = tempTable
             };
-            nodes.Add(cursor);
 
-            return nodes.ToArray();
+            return cursor;
         }
     }
 }

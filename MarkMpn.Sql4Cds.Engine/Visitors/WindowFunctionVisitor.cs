@@ -121,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     WindowFunctions.Add(node);
                 }
             }
-            else
+            else if (node.OverClause != null)
             {
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.OverClauseNotSupported(node));
             }
