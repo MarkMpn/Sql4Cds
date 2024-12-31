@@ -2840,6 +2840,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IDataExecutionPlanNodeInternal ConvertWindowFunctions(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, QuerySpecification querySpec, NodeCompilationContext context, INodeSchema outerSchema, Dictionary<string, string> outerReferences, INodeSchema nonAggregateSchema, List<FunctionCall> windowFunctions)
         {
+            if (windowFunctions.Count == 0)
+                return source;
+
             var calculationRewrites = new Dictionary<ScalarExpression, ScalarExpression>();
             NotSupportedQueryFragmentException exception = null;
             var computeScalar = new ComputeScalarNode
