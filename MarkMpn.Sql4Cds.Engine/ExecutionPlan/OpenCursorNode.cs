@@ -1,34 +1,35 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using System.Collections.Generic;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class OpenCursorNode : BaseNode, IRootExecutionPlanNodeInternal
+    class OpenCursorNode : BaseCursorNode, IDmlQueryExecutionPlanNode
     {
-        public string Sql { get; set; }
-        public int Index { get; set; }
-        public int Length { get; set; }
-        public int LineNumber { get; set; }
-        public override int ExecutionCount => 0;
+        private CursorDeclarationBaseNode _cursor;
 
-        public override TimeSpan Duration => TimeSpan.Zero;
-
-        public string CursorName { get; set; }
-
-        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
+        public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
+            _cursor = GetCursor(context);
+
+            var populationQuery = _cursor.Open(context);
+
+            if (populationQuery != null)
+            {
+                populationQuery.Execute(context, out recordsAffected, out message);
+            }
+            else
+            {
+                recordsAffected = 0;
+                message = null;
+            }
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            return Enumerable.Empty<IExecutionPlanNode>();
+            if (_cursor?.PopulationQuery != null)
+                yield return _cursor.PopulationQuery;
         }
 
-        public object Clone()
+        public override object Clone()
         {
             return new OpenCursorNode
             {
@@ -38,11 +39,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 CursorName = CursorName
             };
-        }
-
-        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
-        {
-            return new[] { this };
         }
     }
 }

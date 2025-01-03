@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,14 +10,62 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class StaticCursorNode : CursorBaseNode
+    class StaticCursorNode : CursorDeclarationBaseNode
     {
         [Browsable(false)]
         public DataTable TempTable { get; set; }
 
+        [Browsable(false)]
+        public string RowNumberVariable { get; set; }
+
+        public override IDmlQueryExecutionPlanNode Open(NodeExecutionContext context)
+        {
+            // Create the temp table
+            if (!context.Session.TempDb.Tables.Contains(TempTable.TableName))
+                context.Session.TempDb.Tables.Add(TempTable.Clone());
+
+            // Add the row number variable
+            context.ParameterTypes[RowNumberVariable] = DataTypeHelpers.BigInt;
+            context.ParameterValues[RowNumberVariable] = (SqlInt64)0;
+
+            return base.Open(context);
+        }
+
+        public override IDataReaderExecutionPlanNode Fetch(NodeExecutionContext context)
+        {
+            // Increment the row number
+            context.ParameterValues[RowNumberVariable] = (SqlInt64)context.ParameterValues[RowNumberVariable] + 1;
+
+            return base.Fetch(context);
+        }
+
+        public override void Close(NodeExecutionContext context)
+        {
+            base.Close(context);
+
+            // Remove the temp table
+            context.Session.TempDb.Tables.Remove(TempTable.TableName);
+
+            // Remove the row number variable
+            context.ParameterTypes.Remove(RowNumberVariable);
+            context.ParameterValues.Remove(RowNumberVariable);
+        }
+
         public override object Clone()
         {
-            throw new NotImplementedException();
+            return new StaticCursorNode
+            {
+                CursorName = CursorName,
+                TempTable = TempTable.Clone(),
+                RowNumberVariable = RowNumberVariable,
+                PopulationQuery = (IDmlQueryExecutionPlanNode)PopulationQuery.Clone(),
+                FetchQuery = (IDataReaderExecutionPlanNode)FetchQuery.Clone(),
+                Index = Index,
+                Length = Length,
+                LineNumber = LineNumber,
+                Scope = Scope,
+                Sql = Sql
+            };
         }
 
         public static StaticCursorNode FromQuery(NodeCompilationContext context, IRootExecutionPlanNodeInternal query)
@@ -77,6 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rowNumberColumn = context.GetExpressionName("RowNumber");
             var populationQuery = new InsertNode
             {
+                DataSource = context.Options.PrimaryDataSource,
                 LogicalName = tempTable.TableName,
                 Source = new SequenceProjectNode
                 {
@@ -142,7 +192,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 PopulationQuery = populationQuery,
                 FetchQuery = fetchQuery,
-                TempTable = tempTable
+                TempTable = tempTable,
+                RowNumberVariable = rowNumberVariable
             };
 
             return cursor;

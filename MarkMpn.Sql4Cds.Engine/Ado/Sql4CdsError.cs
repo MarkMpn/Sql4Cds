@@ -870,6 +870,16 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(2714, fragment, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
+        internal static Sql4CdsError DuplicateCursorName(string name)
+        {
+            return Create(16915, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError InvalidCursorName(string name)
+        {
+            return Create(16916, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

@@ -186,7 +186,7 @@ namespace MarkMpn.Sql4Cds.Engine
             DateFormat = DateFormat.mdy;
             _variables = new SessionContextVariables(this);
             TempDb = new DataSet();
-            Cursors = new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase);
+            Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
 
             GlobalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
             {
@@ -221,9 +221,9 @@ namespace MarkMpn.Sql4Cds.Engine
             TempDb = clone.TempDb.Clone();
             GlobalVariableTypes = clone.GlobalVariableTypes;
             GlobalVariableValues = clone.GlobalVariableValues;
-            Cursors = new LayeredDictionary<string, CursorBaseNode>(
+            Cursors = new LayeredDictionary<string, CursorDeclarationBaseNode>(
                 clone.Cursors,
-                new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase));
+                new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase));
         }
 
         private void GetServerDetails()
@@ -261,6 +261,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// The global cursors that are currently allocated
         /// </summary>
-        public IDictionary<string, CursorBaseNode> Cursors { get; }
+        public IDictionary<string, CursorDeclarationBaseNode> Cursors { get; }
     }
 }

@@ -7,7 +7,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    abstract class CursorBaseNode : BaseNode, IRootExecutionPlanNodeInternal
+    abstract class BaseCursorNode : BaseNode, IRootExecutionPlanNodeInternal
     {
         public string Sql { get; set; }
         public int Index { get; set; }
@@ -17,34 +17,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => TimeSpan.Zero;
 
+        public string CursorName { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            if (PopulationQuery != null)
-                yield return PopulationQuery;
-
-            if (FetchQuery != null)
-                yield return FetchQuery;
+            return Enumerable.Empty<IExecutionPlanNode>();
         }
-
-        public IExecutionPlanNodeInternal PopulationQuery { get; set; }
-
-        public IDataReaderExecutionPlanNode FetchQuery { get; set; }
-
-        public abstract object Clone();
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            if (PopulationQuery is IDataExecutionPlanNodeInternal population)
-                PopulationQuery = population.FoldQuery(context, hints);
-
-            if (FetchQuery is IDataExecutionPlanNodeInternal fetch)
-                FetchQuery = (IDataReaderExecutionPlanNode)fetch.FoldQuery(context, hints);
-
             return new[] { this };
         }
+
+        protected CursorDeclarationBaseNode GetCursor(NodeExecutionContext context)
+        {
+            if (!context.Cursors.TryGetValue(CursorName, out var cursor) &&
+                !context.Session.Cursors.TryGetValue(CursorName, out cursor))
+                throw new QueryExecutionException(Sql4CdsError.InvalidCursorName(CursorName));
+
+            return cursor;
+        }
+
+        public abstract object Clone();
     }
 }

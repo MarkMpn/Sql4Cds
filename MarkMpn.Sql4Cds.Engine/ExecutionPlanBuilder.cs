@@ -740,22 +740,35 @@ namespace MarkMpn.Sql4Cds.Engine
             var select = ConvertSelectStatement(declareCursor.CursorDefinition.Select);
 
             // Create the appropriate type of cursor
-            var type = CursorOptionKind.Static;
+            var type = GetCursorOption(options, cursorType);
 
-            foreach (var t in cursorType)
-            {
-                if (options.ContainsKey(t))
-                    type = t;
-            }
+            CursorDeclarationBaseNode cursor;
 
             switch (type)
             {
                 case CursorOptionKind.Static:
-                    return new[] { StaticCursorNode.FromQuery(_nodeContext, select) };
+                    cursor = StaticCursorNode.FromQuery(_nodeContext, select);
+                    break;
 
                 default:
                     throw new NotImplementedException();
             }
+
+            cursor.CursorName = declareCursor.Name.Value;
+            cursor.Scope = GetCursorOption(options, localOrGlobal);
+
+            return new[] { cursor };
+        }
+
+        private CursorOptionKind GetCursorOption(Dictionary<CursorOptionKind, CursorOption> options, CursorOptionKind[] allowedOptions)
+        {
+            foreach (var option in allowedOptions)
+            {
+                if (options.ContainsKey(option))
+                    return option;
+            }
+
+            return allowedOptions[0];
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)

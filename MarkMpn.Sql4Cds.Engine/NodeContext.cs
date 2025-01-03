@@ -166,7 +166,7 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(session, options, parameterTypes, log)
         {
             ParameterValues = parameterValues;
-            Cursors = new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase);
+            Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -180,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(parentContext, parentContext.ParameterTypes)
         {
             ParameterValues = parameterValues;
-            Cursors = new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase);
+            Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -196,9 +196,9 @@ namespace MarkMpn.Sql4Cds.Engine
             : base(parentContext, parameterTypes)
         {
             ParameterValues = parameterValues;
-            Cursors = new LayeredDictionary<string, CursorBaseNode>(
+            Cursors = new LayeredDictionary<string, CursorDeclarationBaseNode>(
                 parentContext.Cursors,
-                new Dictionary<string, CursorBaseNode>(StringComparer.OrdinalIgnoreCase));
+                new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase));
         }
 
         /// <summary>
@@ -214,7 +214,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// The local cursors that are currently allocated
         /// </summary>
-        public IDictionary<string, CursorBaseNode> Cursors { get; }
+        public IDictionary<string, CursorDeclarationBaseNode> Cursors { get; }
     }
 
     /// <summary>

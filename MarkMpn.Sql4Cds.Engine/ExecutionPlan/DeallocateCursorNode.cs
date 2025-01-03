@@ -1,34 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
-
-namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
+﻿namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class DeallocateCursorNode : BaseNode, IRootExecutionPlanNodeInternal
+    class DeallocateCursorNode : BaseCursorNode, IDmlQueryExecutionPlanNode
     {
-        public string Sql { get; set; }
-        public int Index { get; set; }
-        public int Length { get; set; }
-        public int LineNumber { get; set; }
-        public override int ExecutionCount => 0;
-
-        public override TimeSpan Duration => TimeSpan.Zero;
-
-        public string CursorName { get; set; }
-
-        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
+        public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
+            var cursor = GetCursor(context);
+
+            if (context.Cursors.TryGetValue(CursorName, out var cursorDeclaration) && cursorDeclaration == cursor)
+                context.Cursors.Remove(CursorName);
+            else if (context.Session.Cursors.TryGetValue(CursorName, out cursorDeclaration) && cursorDeclaration == cursor)
+                context.Session.Cursors.Remove(CursorName);
+            else
+                throw new QueryExecutionException(Sql4CdsError.InvalidCursorName(CursorName));
+
+            recordsAffected = 0;
+            message = null;
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
-        {
-            return Enumerable.Empty<IExecutionPlanNode>();
-        }
-
-        public object Clone()
+        public override object Clone()
         {
             return new DeallocateCursorNode
             {
@@ -38,11 +27,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 CursorName = CursorName
             };
-        }
-
-        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
-        {
-            return new[] { this };
         }
     }
 }
