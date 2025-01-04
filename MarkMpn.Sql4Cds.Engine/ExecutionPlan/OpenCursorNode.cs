@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -8,18 +9,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
-            _cursor = GetCursor(context);
-
-            var populationQuery = _cursor.Open(context);
-
-            if (populationQuery != null)
+            try
             {
-                populationQuery.Execute(context, out recordsAffected, out message);
-            }
-            else
-            {
-                recordsAffected = 0;
+                _cursor = GetCursor(context);
+
+                var populationQuery = _cursor.Open(context);
+
+                if (populationQuery != null)
+                    populationQuery.Execute(context, out _, out _);
+
+                recordsAffected = -1;
                 message = null;
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
             }
         }
 

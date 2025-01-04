@@ -11,12 +11,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
-            var cursor = GetCursor(context);
+            try
+            {
+                var cursor = GetCursor(context);
 
-            cursor.Close(context);
+                cursor.Close(context);
 
-            recordsAffected = 0;
-            message = null;
+                recordsAffected = 0;
+                message = null;
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
+            }
         }
 
         public override object Clone()

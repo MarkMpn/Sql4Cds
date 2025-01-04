@@ -55,26 +55,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
-            // Make sure a cursor with this name doesn't already exist in the selected scope
-            IDictionary<string, CursorDeclarationBaseNode> cursors;
+            try
+            {
+                // Make sure a cursor with this name doesn't already exist in the selected scope
+                IDictionary<string, CursorDeclarationBaseNode> cursors;
 
-            if (Scope == CursorOptionKind.Global)
-                cursors = context.Session.Cursors;
-            else
-                cursors = context.Cursors;
+                if (Scope == CursorOptionKind.Global)
+                    cursors = context.Session.Cursors;
+                else
+                    cursors = context.Cursors;
 
-            if (cursors.ContainsKey(CursorName))
-                throw new QueryExecutionException(Sql4CdsError.DuplicateCursorName(CursorName));
+                if (cursors.ContainsKey(CursorName))
+                    throw new QueryExecutionException(Sql4CdsError.DuplicateCursorName(CursorName));
 
-            // Store a copy of this cursor in the session so it can be referenced by later FETCH statements
-            cursors[CursorName] = (CursorDeclarationBaseNode)Clone();
+                // Store a copy of this cursor in the session so it can be referenced by later FETCH statements
+                cursors[CursorName] = (CursorDeclarationBaseNode)Clone();
 
-            // Remove the population and fetch queries from this clone so they doesn't appear in the execution plan
-            recordsAffected = -1;
-            message = null;
+                // Remove the population and fetch queries from this clone so they doesn't appear in the execution plan
+                recordsAffected = -1;
+                message = null;
 
-            PopulationQuery = null;
-            FetchQuery = null;
+                PopulationQuery = null;
+                FetchQuery = null;
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
+            }
         }
 
         public virtual IDmlQueryExecutionPlanNode Open(NodeExecutionContext context)

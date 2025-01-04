@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 
@@ -10,11 +11,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public DbDataReader Execute(NodeExecutionContext context, CommandBehavior behavior)
         {
-            _cursor = GetCursor(context);
+            try
+            {
+                _cursor = GetCursor(context);
 
-            var fetchQuery = _cursor.Fetch(context);
+                var fetchQuery = _cursor.Fetch(context);
 
-            return fetchQuery.Execute(context, behavior);
+                return fetchQuery.Execute(context, behavior);
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
+            }
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
