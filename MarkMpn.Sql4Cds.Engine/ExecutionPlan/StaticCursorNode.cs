@@ -152,9 +152,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             populationQuery.Accessors.Add(new AttributeAccessor
             {
                 TargetAttribute = tempTable.PrimaryKey[0].ColumnName,
-                Accessor = eec => eec.Entity[rowNumberColumn],
+                Accessor = eec => (long)(SqlInt64)eec.Entity[rowNumberColumn],
                 SourceAttributes = new[] { rowNumberColumn }
             });
+
+            foreach (var col in columns)
+            {
+                populationQuery.Accessors.Add(new AttributeAccessor
+                {
+                    TargetAttribute = col.SourceColumn,
+                    Accessor = eec => eec.Entity[col.OutputColumn],
+                    SourceAttributes = new[] { col.OutputColumn }
+                });
+            }
 
             // Fetch query filters the results from the temporary table by the row number
             var rowNumberVariable = $"@{context.GetExpressionName()}";
