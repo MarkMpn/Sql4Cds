@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             tempTable.PrimaryKey = new[] { tempTable.Columns.Add("RowNumber", typeof(long)) };
 
             // Track how the fetch query should name each of the columns
-            List<SelectColumn> columns;
+            var columns = new List<SelectColumn>();
 
             INodeSchema schema;
             IDataExecutionPlanNodeInternal sourceNode;
@@ -84,13 +84,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 sourceNode = select.Source;
                 schema = select.Source.GetSchema(context);
-                columns = select.ColumnSet;
 
                 foreach (var column in select.ColumnSet)
                 {
                     var sourceCol = schema.Schema[column.SourceColumn];
-                    var dataCol = tempTable.Columns.Add(column.SourceColumn, sourceCol.Type.ToNetType(out _));
+                    var colName = $"Col{tempTable.Columns.Count}";
+                    var dataCol = tempTable.Columns.Add(colName, sourceCol.Type.ToNetType(out _));
                     dataCol.AllowDBNull = sourceCol.IsNullable;
+                    columns.Add(new SelectColumn { SourceColumn = colName, OutputColumn = column.OutputColumn });
                 }
             }
             else if (query is SqlNode sql)
@@ -196,7 +197,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
 
             foreach (var col in columns)
-                fetchQuery.ColumnSet.Add(col);
+                fetchQuery.ColumnSet.Add(new SelectColumn { SourceColumn = tempTable.TableName + "." + col.SourceColumn, OutputColumn = col.OutputColumn });
 
             var cursor = new StaticCursorNode
             {
