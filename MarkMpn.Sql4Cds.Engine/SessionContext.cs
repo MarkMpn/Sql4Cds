@@ -150,12 +150,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
             public bool Remove(string key)
             {
-                throw new NotImplementedException();
+                return false;
             }
 
             public bool Remove(KeyValuePair<string, INullable> item)
             {
-                throw new NotImplementedException();
+                return false;
             }
 
             public bool TryGetValue(string key, out INullable value)
