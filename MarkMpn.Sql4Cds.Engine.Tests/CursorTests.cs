@@ -92,12 +92,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 DECLARE @name nvarchar(100)
                 FETCH NEXT FROM MyCursor INTO @name
 
+                FETCH NEXT FROM MyCursor
+
                 CLOSE MyCursor;
                 DEALLOCATE MyCursor;";
 
             var plans = planBuilder.Build(query, null, out _);
 
-            Assert.AreEqual(6, plans.Length);
+            Assert.AreEqual(7, plans.Length);
+
+            AssertNode<StaticCursorNode>(plans[0]);
+            AssertNode<OpenCursorNode>(plans[1]);
+            AssertNode<DeclareVariablesNode>(plans[2]);
+            AssertNode<FetchCursorIntoNode>(plans[3]);
+            AssertNode<FetchCursorNode>(plans[4]);
+            AssertNode<CloseCursorNode>(plans[5]);
+            AssertNode<DeallocateCursorNode>(plans[6]);
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
