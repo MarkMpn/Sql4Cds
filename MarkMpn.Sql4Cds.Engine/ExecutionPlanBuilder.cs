@@ -623,7 +623,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNodeInternal[] ConvertFetchCursorStatement(FetchCursorStatement fetchCursor)
         {
-            if (fetchCursor.IntoVariables == null)
+            if (fetchCursor.IntoVariables == null || fetchCursor.IntoVariables.Count == 0)
                 return new[] { new FetchCursorNode { CursorName = fetchCursor.Cursor.Name.Value } };
             else
                 return new[] { new FetchCursorIntoNode { CursorName = fetchCursor.Cursor.Name.Value, Variables = fetchCursor.IntoVariables } };
