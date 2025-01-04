@@ -19,12 +19,14 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly LayeredDictionary<string, DataTypeReference> _parameterTypes;
         private readonly LayeredDictionary<string, INullable> _parameterValues;
         private readonly Stack<Sql4CdsError> _errorDetails;
+        private readonly NodeExecutionContext _context;
         private Dictionary<string, int> _labelIndexes;
         private int _recordsAffected;
         private int _instructionPointer;
         private IDataReaderExecutionPlanNode _readerQuery;
         private DbDataReader _reader;
         private bool _error;
+        private IRootExecutionPlanNode _logNode;
         private int _rows;
         private int _resultSetsReturned;
         private bool _closed;
@@ -49,8 +51,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _errorDetails = new Stack<Sql4CdsError>();
 
+            _context = new NodeExecutionContext(_connection.Session, _options, _parameterTypes, _parameterValues, OnInfoMessage);
+
             if (!NextResult())
                 Close();
+        }
+
+        private void OnInfoMessage(Sql4CdsError error)
+        {
+            _connection.OnInfoMessage(_logNode, error);
         }
 
         internal IDictionary<string, INullable> ParameterValues => _parameterValues;
@@ -71,17 +80,17 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private bool ExecuteWithExceptionHandling(LayeredDictionary<string, DataTypeReference> parameterTypes, LayeredDictionary<string, INullable> parameterValues)
+        private bool ExecuteWithExceptionHandling()
         {
             while (true)
             {
                 try
                 {
-                    return Execute(parameterTypes, parameterValues);
+                    return Execute();
                 }
                 catch (Sql4CdsException ex)
                 {
-                    parameterValues["@@ERROR"] = (SqlInt32)ex.Number;
+                    _parameterValues["@@ERROR"] = (SqlInt32)ex.Number;
 
                     // If we are in a TRY block, store the exception information in the context and move to the CATCH block
                     var caught = false;
@@ -105,11 +114,9 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private bool Execute(LayeredDictionary<string, DataTypeReference> parameterTypes, LayeredDictionary<string, INullable> parameterValues)
+        private bool Execute()
         {
-            IRootExecutionPlanNode logNode = null;
-            var context = new NodeExecutionContext(_connection.Session, _options, parameterTypes, parameterValues, msg => _connection.OnInfoMessage(logNode, msg));
-            context.Error = _errorDetails.FirstOrDefault();
+            _context.Error = _errorDetails.FirstOrDefault();
 
             try
             {
@@ -129,14 +136,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         _labelIndexes = null;
                     }
 
-                    logNode = node;
+                    _logNode = node;
 
                     if (node is IDataReaderExecutionPlanNode dataSetNode)
                     {
                         if (_resultSetsReturned == 0 || (!_behavior.HasFlag(CommandBehavior.SingleResult) && !_behavior.HasFlag(CommandBehavior.SingleRow)))
                         {
                             _readerQuery = (IDataReaderExecutionPlanNode)dataSetNode.Clone();
-                            _reader = _readerQuery.Execute(context, _behavior);
+                            _reader = _readerQuery.Execute(_context, _behavior);
                             _resultSetsReturned++;
                             _rows = 0;
                             _instructionPointer++;
@@ -151,10 +158,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     else if (node is IDmlQueryExecutionPlanNode dmlNode)
                     {
                         dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
-                        dmlNode.Execute(context, out var recordsAffected, out var message);
+                        dmlNode.Execute(_context, out var recordsAffected, out var message);
 
                         _command.OnStatementCompleted(dmlNode, recordsAffected, message);
-                        parameterValues["@@ERROR"] = (SqlInt32)0;
+                        _parameterValues["@@ERROR"] = (SqlInt32)0;
 
                         if (recordsAffected != -1)
                         {
@@ -167,7 +174,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else if (node is IGoToNode cond)
                     {
                         cond = (IGoToNode)cond.Clone();
-                        var label = cond.Execute(context);
+                        var label = cond.Execute(_context);
 
                         if (cond.GetSources().Any())
                             _command.OnStatementCompleted(cond, -1, null);
@@ -205,7 +212,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 catchDepth++;
                             }
 
-                            context.Error = _errorDetails.FirstOrDefault();
+                            _context.Error = _errorDetails.FirstOrDefault();
                         }
                     }
                     else if (node is GotoLabelNode)
@@ -243,7 +250,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         // Remove error information from context
                         _errorDetails.Pop();
-                        context.Error = _errorDetails.FirstOrDefault();
+                        _context.Error = _errorDetails.FirstOrDefault();
                     }
                     else
                     {
@@ -284,7 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new Sql4CdsException(ex.Message, ex);
 
                     foreach (var err in sqlEx.Errors)
-                        context.Log(err);
+                        _context.Log(err);
                 }
                 else
                 {
@@ -548,7 +555,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override bool NextResult()
         {
-            return ExecuteWithExceptionHandling(_parameterTypes, _parameterValues);
+            return ExecuteWithExceptionHandling();
         }
 
         public override bool Read()
