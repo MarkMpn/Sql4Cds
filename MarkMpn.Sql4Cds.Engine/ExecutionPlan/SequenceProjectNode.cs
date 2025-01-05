@@ -132,5 +132,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return clone;
         }
+
+        public override string ToString()
+        {
+            return "Sequence Project\r\n(Compute Scalar)";
+        }
     }
 }
