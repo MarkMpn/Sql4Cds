@@ -193,6 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 ["@@IDENTITY"] = DataTypeHelpers.EntityReference,
                 ["@@ROWCOUNT"] = DataTypeHelpers.Int,
                 ["@@ERROR"] = DataTypeHelpers.Int,
+                ["@@FETCH_STATUS"] = DataTypeHelpers.Int,
             };
 
             GlobalVariableValues = new LayeredDictionary<string, INullable>(
@@ -201,6 +202,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ["@@IDENTITY"] = SqlEntityReference.Null,
                     ["@@ROWCOUNT"] = (SqlInt32)0,
                     ["@@ERROR"] = (SqlInt32)0,
+                    ["@@FETCH_STATUS"] = (SqlInt32)0,
                 },
                 _variables);
 

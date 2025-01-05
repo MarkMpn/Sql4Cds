@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -112,6 +113,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (!_isOpen)
                 throw new QueryExecutionException(Sql4CdsError.CursorNotOpen());
+
+            // Reset the @@FETCH_STATUS variable
+            context.ParameterValues["@@FETCH_STATUS"] = (SqlInt32)(-1);
 
             return FetchQuery;
         }

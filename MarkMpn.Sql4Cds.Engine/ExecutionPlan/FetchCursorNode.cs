@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var fetchQuery = _cursor.Fetch(context);
 
-                return fetchQuery.Execute(context, behavior);
+                return new FetchStatusDataReader(fetchQuery.Execute(context, behavior), context);
             }
             catch (QueryExecutionException ex)
             {
