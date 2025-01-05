@@ -94,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public virtual IDmlQueryExecutionPlanNode Open(NodeExecutionContext context)
         {
             if (_isOpen)
-                throw new QueryExecutionException("Cursor is already open");
+                throw new QueryExecutionException(Sql4CdsError.CursorAlreadyOpen());
 
             _isOpen = true;
             return PopulationQuery;
@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public virtual void Close(NodeExecutionContext context)
         {
             if (!_isOpen)
-                throw new QueryExecutionException("Cursor is already closed");
+                throw new QueryExecutionException(Sql4CdsError.CursorNotOpen());
 
             _isOpen = false;
         }
@@ -111,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public virtual IDataReaderExecutionPlanNode Fetch(NodeExecutionContext context)
         {
             if (!_isOpen)
-                throw new QueryExecutionException("Cursor is closed");
+                throw new QueryExecutionException(Sql4CdsError.CursorNotOpen());
 
             return FetchQuery;
         }

@@ -880,6 +880,16 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(16916, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
+        internal static Sql4CdsError CursorAlreadyOpen()
+        {
+            return Create(16905, null);
+        }
+
+        internal static Sql4CdsError CursorNotOpen()
+        {
+            return Create(16917, null);
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)
