@@ -174,8 +174,8 @@
     <EmbeddedResource Include="Images\StringSplitNode.ico" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Images\SegmentNode.ico" />
-    <Content Include="Images\SequenceProjectNode.ico" />
+    <EmbeddedResource Include="Images\SegmentNode.ico" />
+    <EmbeddedResource Include="Images\SequenceProjectNode.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
