@@ -43,5 +43,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         public abstract object Clone();
+
+        public override string ToString()
+        {
+            return base.ToString().ToUpperInvariant();
+        }
     }
 }

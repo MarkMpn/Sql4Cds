@@ -167,7 +167,11 @@ namespace MarkMpn.Sql4Cds.Controls
                         }
                         else
                         {
-                            using (var fallbackStream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images.FallbackNode.ico"))
+                            var fallback = "Images.FallbackNode.ico";
+
+                                fallback = "Images.CursorFallbackNode.ico";
+
+                            using (var fallbackStream = GetType().Assembly.GetManifestResourceStream(GetType(), fallback))
                             {
                                 image = Bitmap.FromStream(fallbackStream);
                             }
