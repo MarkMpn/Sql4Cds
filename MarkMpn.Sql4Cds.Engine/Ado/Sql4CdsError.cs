@@ -890,6 +890,16 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(16917, null);
         }
 
+        internal static Sql4CdsError CursorVariableCountMismatch()
+        {
+            return Create(16924, null);
+        }
+
+        internal static Sql4CdsError CursorTypeClash(DataTypeReference fromType, DataTypeReference toType)
+        {
+            return Create(16922, null, GetTypeName(fromType), GetTypeName(toType));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

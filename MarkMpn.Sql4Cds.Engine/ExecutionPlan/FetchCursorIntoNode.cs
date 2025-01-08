@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,61 +10,77 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class FetchCursorIntoNode : BaseNode, ISingleSourceExecutionPlanNode, IDmlQueryExecutionPlanNode
+    class FetchCursorIntoNode : BaseCursorNode, IDmlQueryExecutionPlanNode
     {
-        public override int ExecutionCount => throw new NotImplementedException();
-
-        public override TimeSpan Duration => throw new NotImplementedException();
-
-        public string Sql { get; set; }
-
-        public int Index { get; set; }
-
-        public int Length { get; set; }
-
-        public int LineNumber { get; set; }
-
-        public IDataExecutionPlanNodeInternal Source { get; set; }
-
-        public string CursorName { get; set; }
+        private CursorDeclarationBaseNode _cursor;
 
         public IList<VariableReference> Variables { get; set; }
 
-        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
-        {
-            if (Source != null)
-                Source.AddRequiredColumns(context, requiredColumns);
-        }
-
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
-            throw new NotImplementedException();
-        }
+            recordsAffected = -1;
+            message = null;
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
-        {
-            Source = Source?.FoldQuery(context, hints);
+            try
+            {
+                _cursor = GetCursor(context);
 
-            return new[] { this };
+                var fetchQuery = _cursor.Fetch(context);
+
+                using (var reader = new FetchStatusDataReader(fetchQuery.Execute(context, CommandBehavior.Default), context))
+                {
+                    if (reader.Read())
+                    {
+                        if (reader.FieldCount != Variables.Count)
+                            throw new QueryExecutionException(Sql4CdsError.CursorVariableCountMismatch());
+
+                        var eec = new ExpressionExecutionContext(context);
+
+                        for (var i = 0; i < Variables.Count; i++)
+                        {
+                            var sourceType = reader.GetProviderSpecificFieldType(i).ToSqlType(context.PrimaryDataSource);
+                            var targetType = context.ParameterTypes[Variables[i].Name];
+
+                            if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
+                                throw new QueryExecutionException(Sql4CdsError.CursorTypeClash(sourceType, targetType));
+
+                            var conversion = SqlTypeConverter.GetConversion(sourceType, targetType);
+                            var value = (INullable)reader.GetProviderSpecificValue(i);
+                            value = conversion(value, eec);
+                            context.ParameterValues[Variables[i].Name] = value;
+                        }
+                    }
+                }
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
+            }
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            if (Source != null)
-                yield return Source;
+            if (_cursor?.FetchQuery != null)
+                yield return _cursor.FetchQuery;
         }
 
-        public object Clone()
+        public override object Clone()
         {
             return new FetchCursorIntoNode
             {
+                CursorName = CursorName,
                 Index = Index,
                 Length = Length,
                 LineNumber = LineNumber,
                 Sql = Sql,
-                CursorName = CursorName,
-                Variables = Variables?.Select(v => v.Clone()).Cast<VariableReference>().ToList(),
-                Source = (IDataExecutionPlanNodeInternal)Source?.Clone()
+                Variables = Variables,
             };
         }
     }
