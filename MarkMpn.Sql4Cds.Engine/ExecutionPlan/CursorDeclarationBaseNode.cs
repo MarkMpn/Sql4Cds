@@ -30,6 +30,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
+            if (PopulationQuery != null)
+                PopulationQuery.AddRequiredColumns(context, new List<string>());
+
+            if (FetchQuery != null)
+                FetchQuery.AddRequiredColumns(context, new List<string>());
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

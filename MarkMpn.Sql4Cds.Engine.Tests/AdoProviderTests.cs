@@ -2979,5 +2979,43 @@ SELECT CAST(@i / 1000.0 as VARCHAR(7))";
                 }
             }
         }
+
+        [TestMethod]
+        public void CursorLoop()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('Data8')";
+                cmd.ExecuteNonQuery();
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('Data9')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = @"
+DECLARE MyCursor CURSOR FOR SELECT name FROM account
+OPEN MyCursor
+
+DECLARE @name nvarchar(100)
+FETCH NEXT FROM MyCursor INTO @name
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    PRINT @name
+    FETCH NEXT FROM MyCursor INTO @name
+END
+
+CLOSE MyCursor
+DEALLOCATE MyCursor";
+
+                var messages = new List<string>();
+                con.InfoMessage += (_, msg) => messages.Add(msg.Message.Message);
+
+                cmd.ExecuteNonQuery();
+
+                Assert.AreEqual(2, messages.Count);
+                Assert.AreEqual("Data8", messages[0]);
+                Assert.AreEqual("Data9", messages[1]);
+            }
+        }
     }
 }
