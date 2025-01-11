@@ -900,6 +900,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(16922, null, GetTypeName(fromType), GetTypeName(toType));
         }
 
+        internal static Sql4CdsError InvalidParameterValue(TSqlFragment fragment, string subject, string parameter)
+        {
+            return Create(16902, fragment, (SqlInt32)subject.Length, Collation.USEnglish.ToSqlString(subject), (SqlInt32)parameter.Length, Collation.USEnglish.ToSqlString(parameter));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

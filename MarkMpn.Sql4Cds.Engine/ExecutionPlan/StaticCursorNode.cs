@@ -12,6 +12,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class StaticCursorNode : CursorDeclarationBaseNode
     {
+        private SqlInt64 _rowNumber;
+
         [Browsable(false)]
         public DataTable TempTable { get; set; }
 
@@ -24,19 +26,59 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!context.Session.TempDb.Tables.Contains(TempTable.TableName))
                 context.Session.TempDb.Tables.Add(TempTable.Clone());
 
-            // Add the row number variable
-            context.ParameterTypes[RowNumberVariable] = DataTypeHelpers.BigInt;
-            context.ParameterValues[RowNumberVariable] = (SqlInt64)0;
+            // Position the cursor before the first row
+            _rowNumber = 0;
 
             return base.Open(context);
         }
 
-        public override IDataReaderExecutionPlanNode Fetch(NodeExecutionContext context)
+        public override IDataReaderExecutionPlanNode Fetch(NodeExecutionContext context, FetchOrientation orientation, Func<ExpressionExecutionContext, object> rowOffset)
         {
             // Increment the row number
-            context.ParameterValues[RowNumberVariable] = (SqlInt64)context.ParameterValues[RowNumberVariable] + 1;
+            switch (orientation)
+            {
+                case FetchOrientation.Next:
+                    _rowNumber += 1;
+                    break;
 
-            return base.Fetch(context);
+                case FetchOrientation.Prior:
+                    if (_rowNumber > 0)
+                        _rowNumber -= 1;
+                    break;
+
+                case FetchOrientation.First:
+                    _rowNumber = 1;
+                    break;
+
+                case FetchOrientation.Last:
+                    _rowNumber = context.Session.TempDb.Tables[TempTable.TableName].Rows.Count;
+                    break;
+
+                case FetchOrientation.Absolute:
+                    _rowNumber = (SqlInt32)rowOffset(new ExpressionExecutionContext(context));
+
+                    if (_rowNumber < 0)
+                        _rowNumber = context.Session.TempDb.Tables[TempTable.TableName].Rows.Count + _rowNumber;
+
+                    if (_rowNumber < 0)
+                        _rowNumber = 0;
+                    break;
+
+                case FetchOrientation.Relative:
+                    _rowNumber += (SqlInt32)rowOffset(new ExpressionExecutionContext(context));
+
+                    if (_rowNumber < 0)
+                        _rowNumber = 0;
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Invalid fetch orientation '{orientation}'");
+            }
+
+            context.ParameterTypes[RowNumberVariable] = DataTypeHelpers.BigInt;
+            context.ParameterValues[RowNumberVariable] = _rowNumber;
+
+            return base.Fetch(context, orientation, rowOffset);
         }
 
         public override void Close(NodeExecutionContext context)

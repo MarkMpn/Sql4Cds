@@ -114,7 +114,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _isOpen = false;
         }
 
-        public virtual IDataReaderExecutionPlanNode Fetch(NodeExecutionContext context)
+        public virtual IDataReaderExecutionPlanNode Fetch(NodeExecutionContext context, FetchOrientation orientation, Func<ExpressionExecutionContext,object> rowOffset)
         {
             if (!_isOpen)
                 throw new QueryExecutionException(Sql4CdsError.CursorNotOpen());

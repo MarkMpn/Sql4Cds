@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Enumerable.Empty<IExecutionPlanNode>();
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        public virtual IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return new[] { this };
         }

@@ -13,8 +13,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     class FetchCursorIntoNode : BaseCursorNode, IDmlQueryExecutionPlanNode
     {
         private CursorDeclarationBaseNode _cursor;
+        private Func<ExpressionExecutionContext, object> _rowOffset;
 
         public IList<VariableReference> Variables { get; set; }
+
+        public FetchOrientation Orientation { get; set; }
+
+        public ScalarExpression RowOffset { get; set; }
+
+        public override IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            if (RowOffset != null)
+            {
+                var ecc = new ExpressionCompilationContext(context, null, null);
+                _rowOffset = RowOffset.Compile(ecc);
+            }
+
+            return base.FoldQuery(context, hints);
+        }
 
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
@@ -25,7 +41,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 _cursor = GetCursor(context);
 
-                var fetchQuery = _cursor.Fetch(context);
+                var fetchQuery = _cursor.Fetch(context, Orientation, _rowOffset);
 
                 using (var reader = new FetchStatusDataReader(fetchQuery.Execute(context, CommandBehavior.Default), context))
                 {
@@ -81,6 +97,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LineNumber = LineNumber,
                 Sql = Sql,
                 Variables = Variables,
+                Orientation = Orientation,
+                RowOffset = RowOffset,
+                _rowOffset = _rowOffset,
             };
         }
     }

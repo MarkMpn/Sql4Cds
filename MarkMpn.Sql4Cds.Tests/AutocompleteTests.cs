@@ -116,7 +116,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "@@ERROR", "@@IDENTITY", "@@ROWCOUNT", "@@SERVERNAME", "@@VERSION", "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "parentcustomeridtype", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "@@ERROR", "@@FETCH_STATUS", "@@IDENTITY", "@@ROWCOUNT", "@@SERVERNAME", "@@VERSION", "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "parentcustomeridtype", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
@@ -145,7 +145,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = sql1 + "\r\n" + sql2;
             var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "@@ERROR", "@@IDENTITY", "@@ROWCOUNT", "@@SERVERNAME", "@@VERSION", "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "parentcustomeridtype", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "@@ERROR", "@@FETCH_STATUS", "@@IDENTITY", "@@ROWCOUNT", "@@SERVERNAME", "@@VERSION", "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "parentcustomeridtype", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
@@ -154,7 +154,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = "SELECT count( FROM account";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("(")).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "@@ERROR", "@@IDENTITY", "@@ROWCOUNT", "@@SERVERNAME", "@@VERSION", "account", "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "@@ERROR", "@@FETCH_STATUS", "@@IDENTITY", "@@ROWCOUNT", "@@SERVERNAME", "@@VERSION", "account", "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]

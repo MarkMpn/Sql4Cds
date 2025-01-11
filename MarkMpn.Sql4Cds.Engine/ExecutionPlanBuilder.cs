@@ -623,10 +623,26 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNodeInternal[] ConvertFetchCursorStatement(FetchCursorStatement fetchCursor)
         {
+            if (fetchCursor.FetchType?.RowOffset != null)
+            {
+                // Validate the row offset
+                var ecc = new ExpressionCompilationContext(_nodeContext, null, null);
+                fetchCursor.FetchType.RowOffset.GetType(ecc, out var rowOffsetType);
+
+                if (!rowOffsetType.IsSameAs(DataTypeHelpers.TinyInt) &&
+                    !rowOffsetType.IsSameAs(DataTypeHelpers.SmallInt) &&
+                    !rowOffsetType.IsSameAs(DataTypeHelpers.Int))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameterValue(fetchCursor.FetchType.RowOffset, "FETCH", "rownumber-type"));
+
+                // Use a consistent int type
+                if (!rowOffsetType.IsSameAs(DataTypeHelpers.Int))
+                    fetchCursor.FetchType.RowOffset = new ConvertCall { Parameter = fetchCursor.FetchType.RowOffset, DataType = DataTypeHelpers.Int };
+            }
+
             if (fetchCursor.IntoVariables == null || fetchCursor.IntoVariables.Count == 0)
-                return new[] { new FetchCursorNode { CursorName = fetchCursor.Cursor.Name.Value } };
+                return new[] { new FetchCursorNode { CursorName = fetchCursor.Cursor.Name.Value, Orientation = fetchCursor.FetchType?.Orientation ?? FetchOrientation.Next, RowOffset = fetchCursor.FetchType?.RowOffset } };
             else
-                return new[] { new FetchCursorIntoNode { CursorName = fetchCursor.Cursor.Name.Value, Variables = fetchCursor.IntoVariables } };
+                return new[] { new FetchCursorIntoNode { CursorName = fetchCursor.Cursor.Name.Value, Variables = fetchCursor.IntoVariables, Orientation = fetchCursor.FetchType?.Orientation ?? FetchOrientation.Next, RowOffset = fetchCursor.FetchType?.RowOffset } };
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertOpenCursorStatement(OpenCursorStatement openCursor)
