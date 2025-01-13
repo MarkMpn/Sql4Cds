@@ -2636,6 +2636,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
 
                 var partitionCols = new List<string>();
+                var orderCols = windowFunction.FunctionName.Value.Equals("RANK", StringComparison.OrdinalIgnoreCase) || windowFunction.FunctionName.Value.Equals("DENSE_RANK", StringComparison.OrdinalIgnoreCase) ? new List<string>() : null;
 
                 if (windowFunction.OverClause.Partitions != null)
                 {
@@ -2656,7 +2657,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 SortOrder = SortOrder.Ascending
                             });
 
-                            partitionCols.Add(((ColumnReferenceExpression)partitionExpr).GetColumnName());
+                            partitionCols.Add(calculated);
                         }
                         catch (NotSupportedQueryFragmentException ex)
                         {
@@ -2675,6 +2676,26 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             if (sortExpr is IntegerLiteral)
                                 throw new NotSupportedQueryFragmentException(Sql4CdsError.WindowFunctionCannotUseOrderByIndex(sortExpr));
+
+                            if (orderCols != null)
+                            {
+                                // If we need to segment by the order columns as well, make sure it's a column reference
+                                var calculated = ComputeScalarExpression(sortExpr, hints, querySpec, computeScalar, nonAggregateSchema, context, ref source);
+                                sort.Source = source;
+                                calculationRewrites[sortExpr] = calculated.ToColumnReference();
+
+                                sort.Sorts.Add(new ExpressionWithSortOrder
+                                {
+                                    Expression = calculated.ToColumnReference(),
+                                    SortOrder = order.SortOrder
+                                });
+
+                                orderCols.Add(calculated);
+                            }
+                            else
+                            {
+                                sort.Sorts.Add(order);
+                            }
                         }
                         catch (NotSupportedQueryFragmentException ex)
                         {
@@ -2710,6 +2731,36 @@ namespace MarkMpn.Sql4Cds.Engine
                                 [functionCol] = new Aggregate
                                 {
                                     AggregateType = AggregateType.RowNumber,
+                                    ReturnType = DataTypeHelpers.BigInt
+                                }
+                            }
+                        };
+                        break;
+
+                    case "RANK":
+                    case "DENSE_RANK":
+                        if (windowFunction.Parameters.Count != 0)
+                            exception = NotSupportedQueryFragmentException.Combine(exception, Sql4CdsError.FunctionTakesExactlyXArguments(windowFunction, 0));
+
+                        // Segment by ordering columns too
+                        var segmentCol2 = context.GetExpressionName();
+                        var segment2 = new SegmentNode
+                        {
+                            Source = segment,
+                            SegmentColumn = segmentCol2,
+                            GroupBy = orderCols
+                        };
+
+                        result = new SequenceProjectNode
+                        {
+                            Source = segment2,
+                            SegmentColumn = segmentCol,
+                            SegmentColumn2 = segmentCol2,
+                            DefinedValues =
+                            {
+                                [functionCol] = new Aggregate
+                                {
+                                    AggregateType = windowFunction.FunctionName.Value.Equals("RANK", StringComparison.OrdinalIgnoreCase) ? AggregateType.Rank : AggregateType.DenseRank,
                                     ReturnType = DataTypeHelpers.BigInt
                                 }
                             }
