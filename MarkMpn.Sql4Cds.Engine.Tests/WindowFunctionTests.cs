@@ -188,7 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DenseRank()
         {
-            // https://learn.microsoft.com/en-us/sql/t-sql/functions/rank-transact-sql?view=sql-server-ver16#a-ranking-rows-within-a-partition
+            // https://learn.microsoft.com/en-us/sql/t-sql/functions/dense-rank-transact-sql?view=sql-server-ver16#a-ranking-rows-within-a-partition
             using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
