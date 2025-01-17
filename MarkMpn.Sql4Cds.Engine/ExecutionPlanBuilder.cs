@@ -2767,6 +2767,116 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                         break;
 
+                    case "AVG":
+                    case "COUNT":
+                    case "MAX":
+                    case "MIN":
+                    case "SUM":
+                        {
+                            var converted = new Aggregate();
+
+                            if (windowFunction.Parameters.Count > 0)
+                                converted.SqlExpression = windowFunction.Parameters[0].Clone();
+
+                            switch (windowFunction.FunctionName.Value.ToUpper())
+                            {
+                                case "AVG":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    converted.AggregateType = AggregateType.Average;
+                                    break;
+
+                                case "COUNT":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    if ((converted.SqlExpression is ColumnReferenceExpression countCol && countCol.ColumnType == ColumnType.Wildcard) || (converted.SqlExpression is Literal && !(converted.SqlExpression is NullLiteral)))
+                                        converted.AggregateType = AggregateType.CountStar;
+                                    else
+                                        converted.AggregateType = AggregateType.Count;
+                                    break;
+
+                                case "MAX":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    converted.AggregateType = AggregateType.Max;
+                                    break;
+
+                                case "MIN":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    converted.AggregateType = AggregateType.Min;
+                                    break;
+
+                                case "SUM":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    if (converted.SqlExpression is IntegerLiteral sumLiteral && sumLiteral.Value == "1")
+                                        converted.AggregateType = AggregateType.CountStar;
+                                    else
+                                        converted.AggregateType = AggregateType.Sum;
+                                    break;
+
+                                default:
+                                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(windowFunction, windowFunction.FunctionName.Value));
+                            }
+
+                            // Validate the aggregate expression
+                            if (converted.AggregateType == AggregateType.CountStar)
+                            {
+                                converted.SqlExpression = null;
+                            }
+                            else
+                            {
+                                var schema = source.GetSchema(context);
+                                converted.SqlExpression.GetType(GetExpressionContext(schema, context), out var exprType);
+                            }
+
+                            // Create the execution plan - lazy table spool with the segment column set to produce one row per segment
+                            // fed into a nested loop. That loop calls another loop which combines the aggregate with the individual
+                            // row values
+                            var spoolProducer = new TableSpoolNode
+                            {
+                                Source = segment,
+                                SpoolType = SpoolType.Lazy,
+                                SegmentColumn = segmentCol
+                            };
+
+                            var spoolConsumerAggregate = new TableSpoolNode
+                            {
+                                Producer = spoolProducer
+                            };
+                            var aggregate = new StreamAggregateNode
+                            {
+                                Source = spoolConsumerAggregate,
+                                Aggregates =
+                                {
+                                    [functionCol] = converted
+                                }
+                            };
+                            var spoolConsumer = new TableSpoolNode
+                            {
+                                Producer = spoolProducer
+                            };
+                            var loop1 = new NestedLoopNode
+                            {
+                                LeftSource = aggregate,
+                                RightSource = spoolConsumer
+                            };
+                            var loop2 = new NestedLoopNode
+                            {
+                                LeftSource = spoolProducer,
+                                RightSource = loop1
+                            };
+
+                            result = loop2;
+                        }
+                        break;
+
                     default:
                         exception = NotSupportedQueryFragmentException.Combine(exception, Sql4CdsError.NotSupported(windowFunction));
                         break;
