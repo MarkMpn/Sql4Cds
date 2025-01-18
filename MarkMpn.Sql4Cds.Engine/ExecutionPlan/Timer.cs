@@ -26,18 +26,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private class TimedRegion : IDisposable
         {
-            private Timer _timer;
-            private DateTime _startTime;
+            private readonly Timer _timer;
+            private readonly DateTime _startTime;
 
             public TimedRegion(Timer timer)
             {
                 _timer = timer;
-                _startTime = DateTime.Now;
+                _startTime = DateTime.UtcNow;
             }
 
             public void Dispose()
             {
-                _timer._duration += DateTime.Now - _startTime;
+                _timer._duration += DateTime.UtcNow - _startTime;
             }
         }
     }
