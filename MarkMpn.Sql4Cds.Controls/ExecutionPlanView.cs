@@ -271,6 +271,7 @@ namespace MarkMpn.Sql4Cds.Controls
                     cost = 1;
 
                 text += "\r\nCost: " + cost.ToString("P0");
+                text += "\r\n" + (nodeTime / 1000).ToString("N3") + "s";
             }
 
             return text;
