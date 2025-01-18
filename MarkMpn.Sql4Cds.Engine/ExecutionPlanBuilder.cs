@@ -2848,7 +2848,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             var spoolConsumerAggregate = new TableSpoolNode
                             {
-                                Producer = spoolProducer
+                                Producer = spoolProducer,
+                                SpoolType = spoolProducer.SpoolType
                             };
                             var aggregate = new StreamAggregateNode
                             {
@@ -2860,7 +2861,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             };
                             var spoolConsumer = new TableSpoolNode
                             {
-                                Producer = spoolProducer
+                                Producer = spoolProducer,
+                                SpoolType = spoolProducer.SpoolType
                             };
                             var loop1 = new NestedLoopNode
                             {
