@@ -24,6 +24,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         protected class AggregateFunctionState
         {
+            public Aggregate AggregateDefintion { get; set; }
+
             public AggregateFunction AggregateFunction { get; set; }
 
             public object State { get; set; }

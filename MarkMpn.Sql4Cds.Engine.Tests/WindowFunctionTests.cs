@@ -361,5 +361,183 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void RollingAverage()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"INSERT INTO account (name, turnover, employees) VALUES
+('Paint - Blue', 4, 35),
+('Paint - Silver', 3, 49),
+('Paint - Yellow', 4, 25),
+('Paint - Blue', 3, 49),
+('Paint - Red', 4, 24),
+('Paint - Red', 3, 41),
+('Paint - Black', 4, 14),
+('Paint - Yellow', 3, 30),
+('Paint - Silver', 4, 12),
+('Paint - Black', 3, 17)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name, turnover, employees, AVG(employees) OVER (PARTITION BY turnover ORDER BY name ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS avg FROM account";
+                cmd.CommandTimeout = 0;
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Black", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(17, reader["employees"]);
+                    Assert.AreEqual(17, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Blue", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(49, reader["employees"]);
+                    Assert.AreEqual(33, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Red", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(41, reader["employees"]);
+                    Assert.AreEqual(45, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Silver", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(49, reader["employees"]);
+                    Assert.AreEqual(45, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Yellow", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(30, reader["employees"]);
+                    Assert.AreEqual(39, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Black", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(14, reader["employees"]);
+                    Assert.AreEqual(14, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Blue", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(35, reader["employees"]);
+                    Assert.AreEqual(24, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Red", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(24, reader["employees"]);
+                    Assert.AreEqual(29, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Silver", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(12, reader["employees"]);
+                    Assert.AreEqual(18, reader["avg"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Yellow", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(25, reader["employees"]);
+                    Assert.AreEqual(18, reader["avg"]);
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void CumulativeSum()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"INSERT INTO account (name, turnover, employees) VALUES
+('Paint - Blue', 4, 35),
+('Paint - Silver', 3, 49),
+('Paint - Yellow', 4, 25),
+('Paint - Blue', 3, 49),
+('Paint - Red', 4, 24),
+('Paint - Red', 3, 41),
+('Paint - Black', 4, 14),
+('Paint - Yellow', 3, 30),
+('Paint - Silver', 4, 12),
+('Paint - Black', 3, 17)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name, turnover, employees, SUM(employees) OVER (PARTITION BY turnover ORDER BY name ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum FROM account";
+                cmd.CommandTimeout = 0;
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Black", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(17, reader["employees"]);
+                    Assert.AreEqual(17, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Blue", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(49, reader["employees"]);
+                    Assert.AreEqual(66, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Red", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(41, reader["employees"]);
+                    Assert.AreEqual(107, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Silver", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(49, reader["employees"]);
+                    Assert.AreEqual(156, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Yellow", reader["name"]);
+                    Assert.AreEqual(3m, reader["turnover"]);
+                    Assert.AreEqual(30, reader["employees"]);
+                    Assert.AreEqual(186, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Black", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(14, reader["employees"]);
+                    Assert.AreEqual(14, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Blue", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(35, reader["employees"]);
+                    Assert.AreEqual(49, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Red", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(24, reader["employees"]);
+                    Assert.AreEqual(73, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Silver", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(12, reader["employees"]);
+                    Assert.AreEqual(85, reader["sum"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Paint - Yellow", reader["name"]);
+                    Assert.AreEqual(4m, reader["turnover"]);
+                    Assert.AreEqual(25, reader["employees"]);
+                    Assert.AreEqual(110, reader["sum"]);
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }
