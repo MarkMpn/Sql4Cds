@@ -4347,17 +4347,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
-        public void WindowFunctionsNotSupported()
-        {
-            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
-
-            var query = "SELECT COUNT(accountid) OVER(PARTITION BY accountid) AS test FROM account";
-
-            planBuilder.Build(query, null, out _);
-        }
-
-        [TestMethod]
         public void DeclareVariableSetLiteralSelect()
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);

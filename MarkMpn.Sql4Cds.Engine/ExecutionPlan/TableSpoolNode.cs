@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -85,8 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public TableSpoolNode() { }
 
-        private Entity[] _eagerSpool;
-        private CachedList<Entity> _lazyCache;
+        private IEnumerable<Entity> _workTable;
 
         /// <summary>
         /// The data source to cache
@@ -97,6 +97,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Table Spool")]
         [DisplayName("Spool Type")]
         public SpoolType SpoolType { get; set; }
+
+        /// <summary>
+        /// The segment column to use for partitioning the data
+        /// </summary>
+        /// <remarks>
+        /// If this is set, the node will spool all the data from a single segment and output a single empty row per segment.
+        /// </remarks>
+        [Category("Table Spool")]
+        [DisplayName("Segment Column")]
+        [Description("The segment column to use for partitioning the data")]
+        public string SegmentColumn { get; set; }
 
         /// <summary>
         /// Indicates if this spool is in place only for performance reasons
@@ -117,30 +128,62 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         internal int GetCount(NodeExecutionContext context)
         {
-            if (_eagerSpool == null)
-                _eagerSpool = Source.Execute(context).ToArray();
+            if (_workTable == null)
+                _workTable = Source.Execute(context).ToArray();
 
-            return _eagerSpool.Length;
+            return ((Entity[])_workTable).Length;
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             if (Producer != null)
-                return Producer.GetWorkTable();
-
-            if (SpoolType == SpoolType.Eager)
             {
-                if (_eagerSpool == null)
-                    _eagerSpool = Source.Execute(context).ToArray();
+                foreach (var entity in Producer.GetWorkTable())
+                    yield return entity;
+            }
+            else if (SpoolType == SpoolType.Eager)
+            {
+                if (_workTable == null)
+                    _workTable = Source.Execute(context).ToArray();
 
-                return _eagerSpool;
+                foreach (var entity in _workTable)
+                    yield return entity;
+            }
+            else if (SegmentColumn == null)
+            {
+                if (_workTable == null)
+                    _workTable = new CachedList<Entity>(Source.Execute(context));
+
+                foreach (var entity in _workTable)
+                    yield return entity;
             }
             else
             {
-                if (_lazyCache == null)
-                    _lazyCache = new CachedList<Entity>(Source.Execute(context));
+                foreach (var entity in Source.Execute(context))
+                {
+                    var isSegmentStart = ((SqlBoolean)entity[SegmentColumn]).Value;
 
-                return _lazyCache;
+                    if (isSegmentStart && _workTable != null)
+                    {
+                        // We've spooled all the data for the previous segment, so output an empty row
+                        yield return new Entity();
+                    }
+
+                    if (isSegmentStart)
+                    {
+                        // We're at the start of a new segment, so clear the work table
+                        _workTable = new List<Entity>();
+                    }
+
+                    // Add this row to the work table
+                    ((List<Entity>)_workTable).Add(entity);
+                }
+
+                if (_workTable != null)
+                {
+                    // Output an empty row for the last segment
+                    yield return new Entity();
+                }
             }
         }
 
@@ -152,7 +195,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            return (Source ?? Producer).GetSchema(context);
+            if (SegmentColumn != null)
+            {
+                // When being used for a window aggregate, we only need to output an empty row for each segment
+                // rather than the actual data
+                return new NodeSchema(null, null, null, null);
+            }
+
+            if (Source != null)
+                return Source.GetSchema(context);
+
+            return Producer.GetWorkTableSchema(context);
+        }
+
+        public INodeSchema GetWorkTableSchema(NodeCompilationContext context)
+        {
+            return Source.GetSchema(context);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
@@ -175,6 +233,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             Source?.AddRequiredColumns(context, requiredColumns);
+
+            if (Producer != null && !IsSourceOf(Producer))
+                Producer.AddRequiredColumns(context, requiredColumns);
+        }
+
+        private bool IsSourceOf(IExecutionPlanNode producer)
+        {
+            return IsSourceOf(this, producer);
+        }
+
+        private static bool IsSourceOf(IExecutionPlanNode node, IExecutionPlanNode producer)
+        {
+            if (node == producer)
+                return true;
+
+            foreach (var source in producer.GetSources())
+            {
+                if (IsSourceOf(node, source))
+                    return true;
+            }
+
+            return false;
         }
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
@@ -187,7 +267,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IEnumerable<Entity> GetWorkTable()
         {
-            return (IEnumerable<Entity>)_eagerSpool ?? _lazyCache;
+            return _workTable;
         }
 
         public override string ToString()
@@ -200,7 +280,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var clone = new TableSpoolNode
             {
                 Producer = Producer?.LastClone,
-                SpoolType = SpoolType
+                SpoolType = SpoolType,
+                SegmentColumn = SegmentColumn,
             };
 
             LastClone = clone;

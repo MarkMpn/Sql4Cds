@@ -156,6 +156,8 @@ namespace MarkMpn.Sql4Cds.Controls
                         imageName = "IndexSpoolNode";
                     else if (imageName == "OpenJsonNode" || imageName == "SystemFunctionNode")
                         imageName = "ExecuteMessageNode";
+                    else if (imageName == "WindowSpoolNode")
+                        imageName = "TableSpoolNode";
 
                     using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + imageName + ".ico"))
                     {
@@ -271,6 +273,7 @@ namespace MarkMpn.Sql4Cds.Controls
                     cost = 1;
 
                 text += "\r\nCost: " + cost.ToString("P0");
+                text += "\r\n" + (nodeTime / 1000).ToString("N3") + "s";
             }
 
             return text;

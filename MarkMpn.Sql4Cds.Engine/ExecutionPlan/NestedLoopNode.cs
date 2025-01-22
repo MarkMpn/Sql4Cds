@@ -253,7 +253,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return compute;
             }
 
-            if (RightSource is TableSpoolNode spool && LeftSource.EstimateRowsOut(context).Value <= 1)
+            if (RightSource is TableSpoolNode spool && spool.Producer == null && LeftSource.EstimateRowsOut(context).Value <= 1)
             {
                 RightSource = spool.Source;
                 RightSource.Parent = this;

@@ -110,6 +110,7 @@
     <Compile Include="StubOptions.cs" />
     <Compile Include="StubMessageCache.cs" />
     <Compile Include="StubTableSizeCache.cs" />
+    <Compile Include="WindowFunctionTests.cs" />
     <Compile Include="TempTableTests.cs" />
   </ItemGroup>
   <ItemGroup>

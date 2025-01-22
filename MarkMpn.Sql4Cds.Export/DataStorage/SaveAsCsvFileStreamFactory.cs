@@ -27,16 +27,6 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
         #endregion
 
         /// <summary>
-        /// File names are not meant to be created with this factory.
-        /// </summary>
-        /// <exception cref="NotImplementedException">Thrown all times</exception>
-        [Obsolete]
-        public string CreateFile()
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
         /// Returns a new service buffer reader for reading results back in from the temporary buffer files, file share is ReadWrite to allow concurrent reads/writes to the file.
         /// </summary>
         /// <param name="fileName">Path to the temp buffer file</param>
