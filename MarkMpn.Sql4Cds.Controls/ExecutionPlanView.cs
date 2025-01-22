@@ -156,6 +156,8 @@ namespace MarkMpn.Sql4Cds.Controls
                         imageName = "IndexSpoolNode";
                     else if (imageName == "OpenJsonNode" || imageName == "SystemFunctionNode")
                         imageName = "ExecuteMessageNode";
+                    else if (imageName == "WindowSpoolNode")
+                        imageName = "TableSpoolNode";
 
                     using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + imageName + ".ico"))
                     {
