@@ -13,8 +13,6 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
     /// </summary>
     public interface IFileStreamFactory
     {
-        string CreateFile();
-
         IFileStreamReader GetReader(string fileName);
 
         IFileStreamWriter GetWriter(string fileName, IReadOnlyList<DbColumnWrapper> columns = null);

@@ -541,7 +541,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                 if (error is QueryParseException parseException)
                 {
-                    var length = Regex.Match(qry.Substring(parseException.Error.Offset), "\\b").Index;
+                    var length = Regex.Match(qry.Substring(parseException.Error.Offset), "\\b", RegexOptions.None, TimeSpan.FromSeconds(1)).Index;
 
                     await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
                     {
