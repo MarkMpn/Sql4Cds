@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             var doc = _doc.GetContent(request.TextDocument.Uri.ToString());
             var lines = doc.Split('\n');
             var pos = lines.Take(request.Position.Line).Sum(line => line.Length + 1) + request.Position.Character;
-            var wordEnd = new Regex("\\b").Match(doc, pos + 1);
+            var wordEnd = new Regex("\\b", RegexOptions.None, TimeSpan.FromSeconds(1)).Match(doc, pos + 1);
 
             if (!wordEnd.Success)
                 return null;
@@ -135,7 +135,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     if (depth == 0)
                     {
                         // Find method name
-                        var wordLength = new Regex("\\b").Match(new string(doc.Substring(0, i).Reverse().ToArray()), 1).Index;
+                        var wordLength = new Regex("\\b", RegexOptions.None, TimeSpan.FromSeconds(1)).Match(new string(doc.Substring(0, i).Reverse().ToArray()), 1).Index;
                         var wordStart = i - wordLength;
                         var functionName = doc.Substring(wordStart, wordLength);
                         var con = _con.GetConnection(request.TextDocument.Uri.ToString());

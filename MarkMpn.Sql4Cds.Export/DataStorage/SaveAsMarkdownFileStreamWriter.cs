@@ -21,7 +21,7 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
     public partial class SaveAsMarkdownFileStreamWriter : SaveAsStreamWriter
     {
         private const string Delimiter = "|";
-        private static Regex _newLineRegex = new Regex("(\\r\\n|\\n|\\r)", RegexOptions.Compiled);
+        private static Regex _newLineRegex = new Regex("(\\r\\n|\\n|\\r)", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
         private static Regex GetNewLineRegex() => _newLineRegex;
 

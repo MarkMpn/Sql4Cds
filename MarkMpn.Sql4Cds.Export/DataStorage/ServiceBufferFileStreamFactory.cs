@@ -16,15 +16,6 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
     public class ServiceBufferFileStreamFactory : IFileStreamFactory
     {
         /// <summary>
-        ///  Creates a new temporary file
-        /// </summary>
-        /// <returns>The name of the temporary file</returns>
-        public string CreateFile()
-        {
-            return Path.GetTempFileName();
-        }
-
-        /// <summary>
         /// Creates a new <see cref="ServiceBufferFileStreamReader"/> for reading values back from
         /// an SSMS formatted buffer file, file share is ReadWrite to allow concurrent reads/writes to the file.
         /// </summary>
