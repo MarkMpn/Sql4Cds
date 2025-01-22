@@ -29,14 +29,6 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
         }
 
         /// <inheritdoc />
-        /// <exception cref="InvalidOperationException">Throw at all times.</exception>
-        [Obsolete("Not implemented for export factories.")]
-        public string CreateFile()
-        {
-            throw new InvalidOperationException("CreateFile not implemented for export factories");
-        }
-
-        /// <inheritdoc />
         /// <remarks>
         /// Returns an instance of the <see cref="ServiceBufferFileStreamreader"/>.
         /// </remarks>
