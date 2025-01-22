@@ -233,7 +233,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             Source?.AddRequiredColumns(context, requiredColumns);
-            Producer?.AddRequiredColumns(context, requiredColumns);
+
+            if (Producer != null && !IsSourceOf(Producer))
+                Producer.AddRequiredColumns(context, requiredColumns);
+        }
+
+        private bool IsSourceOf(IExecutionPlanNode producer)
+        {
+            return IsSourceOf(this, producer);
+        }
+
+        private static bool IsSourceOf(IExecutionPlanNode node, IExecutionPlanNode producer)
+        {
+            if (node == producer)
+                return true;
+
+            foreach (var source in producer.GetSources())
+            {
+                if (IsSourceOf(node, source))
+                    return true;
+            }
+
+            return false;
         }
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
