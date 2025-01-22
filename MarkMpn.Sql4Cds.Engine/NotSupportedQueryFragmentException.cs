@@ -100,5 +100,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new NotSupportedQueryFragmentException(combined.Errors.Concat(additional.Errors).ToArray(), additional);
         }
+
+        internal static NotSupportedQueryFragmentException Combine(NotSupportedQueryFragmentException combined, Sql4CdsError additional)
+        {
+            if (combined == null && additional == null)
+                return null;
+
+            if (combined == null)
+                return new NotSupportedQueryFragmentException(additional);
+
+            if (additional == null)
+                return combined;
+
+            return new NotSupportedQueryFragmentException(combined.Errors.Concat(new[] { additional }).ToArray(), combined);
+        }
     }
 }

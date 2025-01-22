@@ -688,11 +688,6 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(134, declaration, (SqlInt32)declaration.VariableName.Value.Length, Collation.USEnglish.ToSqlString(declaration.VariableName.Value));
         }
 
-        internal static Sql4CdsError UnsupportedStatement(TSqlFragment statement, string name)
-        {
-            return Create(40517, statement, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
-        }
-
         internal static Sql4CdsError InvalidSelectVariableAssignment(SelectElement element)
         {
             return Create(141, element);
@@ -815,6 +810,46 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError InvalidDateFormat(TSqlFragment fragment, string format)
         {
             return Create(2741, fragment, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
+        }
+
+        internal static Sql4CdsError OverClauseRequiresOrderBy(FunctionCall func)
+        {
+            return Create(4112, func, (SqlInt32)func.FunctionName.Value.Length, Collation.USEnglish.ToSqlString(func.FunctionName.Value));
+        }
+
+        internal static Sql4CdsError WindowFrameNotSupported(FunctionCall func)
+        {
+            return Create(10752, func, (SqlInt32)func.FunctionName.Value.Length, Collation.USEnglish.ToSqlString(func.FunctionName.Value));
+        }
+
+        internal static Sql4CdsError OverClauseNotSupported(FunctionCall func)
+        {
+            return Create(4113, func, (SqlInt32)func.FunctionName.Value.Length, Collation.USEnglish.ToSqlString(func.FunctionName.Value));
+        }
+
+        internal static Sql4CdsError OverClauseRequired(FunctionCall func)
+        {
+            return Create(10753, func, (SqlInt32)func.FunctionName.Value.Length, Collation.USEnglish.ToSqlString(func.FunctionName.Value));
+        }
+
+        internal static Sql4CdsError DistinctNotSupportedWithOver(FunctionCall func)
+        {
+            return Create(10759, func);
+        }
+
+        internal static Sql4CdsError WindowFunctionNotInSelectOrOrderBy(FunctionCall func)
+        {
+            return Create(4108, func);
+        }
+
+        internal static Sql4CdsError WindowFunctionCannotUseOrderByIndex(TSqlFragment fragment)
+        {
+            return Create(5308, fragment);
+        }
+
+        internal static Sql4CdsError FunctionTakesExactlyXArguments(FunctionCall func, int expectedArguments)
+        {
+            return Create(4114, func, (SqlInt32)func.FunctionName.Value.Length, Collation.USEnglish.ToSqlString(func.FunctionName.Value), (SqlInt32)expectedArguments);
         }
 
         internal static Sql4CdsError InvalidEntityReferenceType(TSqlFragment fragment, string actual, string required)
