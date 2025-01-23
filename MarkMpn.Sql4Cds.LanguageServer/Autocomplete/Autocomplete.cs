@@ -924,7 +924,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             list.Add(new VariableAutocompleteItem("@@FETCH_STATUS", currentWord.Length));
 
             // Find any other variable declarations in the preceding SQL
-            var regex = new System.Text.RegularExpressions.Regex(@"\bdeclare\s+(@[a-z0-9_]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var regex = new System.Text.RegularExpressions.Regex(@"\bdeclare\s+(@[a-z0-9_]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             var matches = regex.Matches(text);
 
             foreach (System.Text.RegularExpressions.Match match in matches)
@@ -944,7 +944,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
         private bool TryParseTableName(string input, out string instanceName, out string schemaName, out string tableName, out int parts, out int lastPartLength)
         {
-            var identifierRegex = new System.Text.RegularExpressions.Regex("(\\[(([^\\]])|(\\]\\]))*\\]?)|(([^\\[.])+)|(\\.)");
+            var identifierRegex = new System.Text.RegularExpressions.Regex("(\\[(([^\\]])|(\\]\\]))*\\]?)|(([^\\[.])+)|(\\.)", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
             var matches = identifierRegex.Matches(input);
             var identifiers = new List<string>();
             var lastBlank = false;
@@ -1271,7 +1271,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 return id.ToSql();
             }
 
-            private static readonly System.Text.RegularExpressions.Regex LegalIdentifier = new System.Text.RegularExpressions.Regex(@"^[\p{L}_@#][\p{L}\p{Nd}@$#_]*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+            private static readonly System.Text.RegularExpressions.Regex LegalIdentifier = new System.Text.RegularExpressions.Regex(@"^[\p{L}_@#][\p{L}\p{Nd}@$#_]*$", System.Text.RegularExpressions.RegexOptions.Compiled, TimeSpan.FromSeconds(1));
             private static readonly string[] ReservedWords = new[]
             {
                 "ADD",

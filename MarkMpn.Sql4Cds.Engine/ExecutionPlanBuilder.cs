@@ -2889,6 +2889,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
 
                 var partitionCols = new List<string>();
+                var orderCols = windowFunction.FunctionName.Value.Equals("RANK", StringComparison.OrdinalIgnoreCase) || windowFunction.FunctionName.Value.Equals("DENSE_RANK", StringComparison.OrdinalIgnoreCase) ? new List<string>() : null;
 
                 if (windowFunction.OverClause.Partitions != null)
                 {
@@ -2909,7 +2910,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 SortOrder = SortOrder.Ascending
                             });
 
-                            partitionCols.Add(((ColumnReferenceExpression)partitionExpr).GetColumnName());
+                            partitionCols.Add(calculated);
                         }
                         catch (NotSupportedQueryFragmentException ex)
                         {
@@ -2928,6 +2929,26 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             if (sortExpr is IntegerLiteral)
                                 throw new NotSupportedQueryFragmentException(Sql4CdsError.WindowFunctionCannotUseOrderByIndex(sortExpr));
+
+                            if (orderCols != null)
+                            {
+                                // If we need to segment by the order columns as well, make sure it's a column reference
+                                var calculated = ComputeScalarExpression(sortExpr, hints, querySpec, computeScalar, nonAggregateSchema, context, ref source);
+                                sort.Source = source;
+                                calculationRewrites[sortExpr] = calculated.ToColumnReference();
+
+                                sort.Sorts.Add(new ExpressionWithSortOrder
+                                {
+                                    Expression = calculated.ToColumnReference(),
+                                    SortOrder = order.SortOrder
+                                });
+
+                                orderCols.Add(calculated);
+                            }
+                            else
+                            {
+                                sort.Sorts.Add(order);
+                            }
                         }
                         catch (NotSupportedQueryFragmentException ex)
                         {
@@ -2967,6 +2988,260 @@ namespace MarkMpn.Sql4Cds.Engine
                                 }
                             }
                         };
+                        break;
+
+                    case "RANK":
+                    case "DENSE_RANK":
+                        if (windowFunction.Parameters.Count != 0)
+                            exception = NotSupportedQueryFragmentException.Combine(exception, Sql4CdsError.FunctionTakesExactlyXArguments(windowFunction, 0));
+
+                        // Segment by ordering columns too
+                        var segmentCol2 = context.GetExpressionName();
+                        var segment2 = new SegmentNode
+                        {
+                            Source = segment,
+                            SegmentColumn = segmentCol2,
+                            GroupBy = orderCols
+                        };
+
+                        result = new SequenceProjectNode
+                        {
+                            Source = segment2,
+                            SegmentColumn = segmentCol,
+                            SegmentColumn2 = segmentCol2,
+                            DefinedValues =
+                            {
+                                [functionCol] = new Aggregate
+                                {
+                                    AggregateType = windowFunction.FunctionName.Value.Equals("RANK", StringComparison.OrdinalIgnoreCase) ? AggregateType.Rank : AggregateType.DenseRank,
+                                    ReturnType = DataTypeHelpers.BigInt
+                                }
+                            }
+                        };
+                        break;
+
+                    case "AVG":
+                    case "COUNT":
+                    case "MAX":
+                    case "MIN":
+                    case "SUM":
+                        {
+                            var converted = new Aggregate();
+
+                            if (windowFunction.Parameters.Count > 0)
+                                converted.SqlExpression = windowFunction.Parameters[0].Clone();
+
+                            switch (windowFunction.FunctionName.Value.ToUpper())
+                            {
+                                case "AVG":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    converted.AggregateType = AggregateType.Average;
+                                    break;
+
+                                case "COUNT":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    if ((converted.SqlExpression is ColumnReferenceExpression countCol && countCol.ColumnType == ColumnType.Wildcard) || (converted.SqlExpression is Literal && !(converted.SqlExpression is NullLiteral)))
+                                        converted.AggregateType = AggregateType.CountStar;
+                                    else
+                                        converted.AggregateType = AggregateType.Count;
+                                    break;
+
+                                case "MAX":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    converted.AggregateType = AggregateType.Max;
+                                    break;
+
+                                case "MIN":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    converted.AggregateType = AggregateType.Min;
+                                    break;
+
+                                case "SUM":
+                                    if (windowFunction.Parameters.Count != 1)
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(windowFunction.FunctionName, 1));
+
+                                    if (converted.SqlExpression is IntegerLiteral sumLiteral && sumLiteral.Value == "1")
+                                        converted.AggregateType = AggregateType.CountStar;
+                                    else
+                                        converted.AggregateType = AggregateType.Sum;
+                                    break;
+
+                                default:
+                                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(windowFunction, windowFunction.FunctionName.Value));
+                            }
+
+                            // Validate the aggregate expression
+                            if (converted.AggregateType == AggregateType.CountStar)
+                            {
+                                converted.SqlExpression = null;
+                            }
+                            else
+                            {
+                                var schema = source.GetSchema(context);
+                                converted.SqlExpression.GetType(GetExpressionContext(schema, context), out var exprType);
+                            }
+
+                            // If this is a framed window aggregation (with ROWS or RANGE clause) we need to create a different
+                            // execution plan.
+                            if (windowFunction.OverClause.WindowFrameClause != null)
+                            {
+                                // Compute the row number, then calculate the minimum and maximum row number for each window frame.
+                                // Pass the results into a window spool, then into a stream aggregate
+                                // https://sqlserverfast.com/blog/hugo/2023/11/plansplaining-part-23-t-sql-tuesday-168-window-functions/
+                                // TODO: Other special cases
+                                // https://sqlserverfast.com/blog/hugo/2023/11/plansplaining-part-24-windows-on-the-fast-track/
+                                // https://sqlserverfast.com/blog/hugo/2023/12/plansplaining-part-25-windows-without-upper-bound/
+                                if (windowFunction.OverClause.WindowFrameClause.Top.WindowDelimiterType == WindowDelimiterType.UnboundedFollowing)
+                                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(windowFunction.OverClause.WindowFrameClause.Top));
+                                // https://sqlserverfast.com/blog/hugo/2023/12/plansplaining-part-26-windows-with-a-ranged-frame/
+                                if (windowFunction.OverClause.WindowFrameClause.WindowFrameType != WindowFrameType.Rows)
+                                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(windowFunction.OverClause.WindowFrameClause));
+
+                                var rowNumberCol = context.GetExpressionName();
+
+                                var rowNumber = new SequenceProjectNode
+                                {
+                                    Source = segment,
+                                    SegmentColumn = segmentCol,
+                                    DefinedValues =
+                                    {
+                                        [rowNumberCol] = new Aggregate
+                                        {
+                                            AggregateType = AggregateType.RowNumber,
+                                            ReturnType = DataTypeHelpers.BigInt
+                                        }
+                                    }
+                                };
+
+                                var topRowNumberCol = context.GetExpressionName();
+                                var bottomRowNumberCol = context.GetExpressionName();
+
+                                var topBottomCalculate = new ComputeScalarNode
+                                {
+                                    Source = rowNumber
+                                };
+
+                                switch (windowFunction.OverClause.WindowFrameClause.Top.WindowDelimiterType)
+                                {
+                                    case WindowDelimiterType.UnboundedPreceding:
+                                        topBottomCalculate.Columns[topRowNumberCol] = new ConvertCall { Parameter = new IntegerLiteral { Value = "1" }, DataType = DataTypeHelpers.BigInt };
+                                        break;
+
+                                    case WindowDelimiterType.ValuePreceding:
+                                        topBottomCalculate.Columns[topRowNumberCol] = new BinaryExpression
+                                        {
+                                            FirstExpression = rowNumberCol.ToColumnReference(),
+                                            BinaryExpressionType = BinaryExpressionType.Subtract,
+                                            SecondExpression = windowFunction.OverClause.WindowFrameClause.Top.OffsetValue
+                                        };
+                                        break;
+
+                                    case WindowDelimiterType.CurrentRow:
+                                        topBottomCalculate.Columns[topRowNumberCol] = rowNumberCol.ToColumnReference();
+                                        break;
+
+                                    default:
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(windowFunction.OverClause.WindowFrameClause.Top));
+                                }
+
+                                switch (windowFunction.OverClause.WindowFrameClause.Bottom.WindowDelimiterType)
+                                {
+                                    case WindowDelimiterType.ValueFollowing:
+                                        topBottomCalculate.Columns[bottomRowNumberCol] = new BinaryExpression
+                                        {
+                                            FirstExpression = rowNumberCol.ToColumnReference(),
+                                            BinaryExpressionType = BinaryExpressionType.Add,
+                                            SecondExpression = windowFunction.OverClause.WindowFrameClause.Bottom.OffsetValue
+                                        };
+                                        break;
+
+                                    case WindowDelimiterType.CurrentRow:
+                                        topBottomCalculate.Columns[bottomRowNumberCol] = rowNumberCol.ToColumnReference();
+                                        break;
+
+                                    default:
+                                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(windowFunction.OverClause.WindowFrameClause.Bottom));
+                                }
+
+                                var windowCountCol = context.GetExpressionName();
+
+                                var spool = new WindowSpoolNode
+                                {
+                                    Source = topBottomCalculate,
+                                    SegmentColumn = segmentCol,
+                                    WindowCountColumn = windowCountCol,
+                                    RowNumberColumn = rowNumberCol,
+                                    TopRowNumberColumn = topRowNumberCol,
+                                    BottomRowNumberColumn = bottomRowNumberCol,
+                                };
+
+                                // Stream aggregate will automatically add FIRST aggregates for all the required columns
+                                // to output the non-aggregated values from each record.
+                                var aggregate = new StreamAggregateNode
+                                {
+                                    Source = spool,
+                                    GroupBy = { windowCountCol.ToColumnReference() },
+                                    Aggregates =
+                                    {
+                                        [functionCol] = converted
+                                    }
+                                };
+
+                                result = aggregate;
+                            }
+                            else
+                            {
+                                // Create the frameless execution plan - lazy table spool with the segment column set to produce one row per segment
+                                // fed into a nested loop. That loop calls another loop which combines the aggregate with the individual
+                                // row values
+                                // https://sqlserverfast.com/blog/hugo/2018/06/plansplaining-part-6-aggregates-with-over/
+                                var spoolProducer = new TableSpoolNode
+                                {
+                                    Source = segment,
+                                    SpoolType = SpoolType.Lazy,
+                                    SegmentColumn = segmentCol
+                                };
+
+                                var spoolConsumerAggregate = new TableSpoolNode
+                                {
+                                    Producer = spoolProducer,
+                                    SpoolType = spoolProducer.SpoolType
+                                };
+                                var aggregate = new StreamAggregateNode
+                                {
+                                    Source = spoolConsumerAggregate,
+                                    Aggregates =
+                                    {
+                                        [functionCol] = converted
+                                    }
+                                };
+                                var spoolConsumer = new TableSpoolNode
+                                {
+                                    Producer = spoolProducer,
+                                    SpoolType = spoolProducer.SpoolType
+                                };
+                                var loop1 = new NestedLoopNode
+                                {
+                                    LeftSource = aggregate,
+                                    RightSource = spoolConsumer
+                                };
+                                var loop2 = new NestedLoopNode
+                                {
+                                    LeftSource = spoolProducer,
+                                    RightSource = loop1
+                                };
+
+                                result = loop2;
+                            }
+                        }
                         break;
 
                     default:

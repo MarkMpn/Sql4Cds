@@ -21,7 +21,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         Average,
         First,
         StringAgg,
-        RowNumber
+        RowNumber,
+        Rank,
+        DenseRank
     }
 
     /// <summary>
@@ -751,6 +753,87 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override object GetValue(object state)
         {
             return (SqlInt64)((State)state).RowNumber;
+        }
+
+        public override object Reset()
+        {
+            return new State();
+        }
+    }
+
+    class Rank : AggregateFunction
+    {
+        public override DataTypeReference Type => throw new NotImplementedException();
+
+        class State
+        {
+            public long Rank { get; set; }
+
+            public long RowsInRank { get; set; }
+        }
+
+        public Rank(Func<object> selector) : base(selector)
+        {
+        }
+
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
+        {
+            var s = (State)state;
+
+            if (((SqlBoolean)value).Value)
+            {
+                s.Rank += s.RowsInRank;
+                s.RowsInRank = 0;
+            }
+
+            s.RowsInRank++;
+        }
+
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
+        {
+            throw new InvalidOperationException();
+        }
+
+        public override object GetValue(object state)
+        {
+            return (SqlInt64)((State)state).Rank + 1;
+        }
+
+        public override object Reset()
+        {
+            return new State();
+        }
+    }
+
+    class DenseRank : AggregateFunction
+    {
+        public override DataTypeReference Type => throw new NotImplementedException();
+
+        class State
+        {
+            public long Rank { get; set; }
+        }
+
+        public DenseRank(Func<object> selector) : base(selector)
+        {
+        }
+
+        protected override void Update(object value, ExpressionExecutionContext context, object state)
+        {
+            var s = (State)state;
+
+            if (((SqlBoolean)value).Value)
+                s.Rank++;
+        }
+
+        protected override void UpdatePartition(object value, ExpressionExecutionContext context, object state)
+        {
+            throw new InvalidOperationException();
+        }
+
+        public override object GetValue(object state)
+        {
+            return (SqlInt64)((State)state).Rank;
         }
 
         public override object Reset()

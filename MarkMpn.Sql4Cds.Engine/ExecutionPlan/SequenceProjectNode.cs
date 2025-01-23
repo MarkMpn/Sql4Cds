@@ -29,6 +29,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Sequence Project")]
         public string SegmentColumn { get; set; }
 
+        [Category("Sequence Project")]
+        public string SegmentColumn2 { get; set; }
+
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
@@ -76,6 +79,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
+            var schema = Source.GetSchema(context);
+            var ecc = new ExpressionCompilationContext(context, schema, null);
+            var eec = new ExpressionExecutionContext(ecc);
             var values = new Dictionary<string, AggregateFunctionState>();
 
             foreach (var calc in DefinedValues)
@@ -88,16 +94,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         state.AggregateFunction = new RowNumber();
                         break;
 
+                    case AggregateType.Rank:
+                        state.AggregateFunction = new Rank(() => eec.Entity[SegmentColumn2]);
+                        break;
+
+                    case AggregateType.DenseRank:
+                        state.AggregateFunction = new DenseRank(() => eec.Entity[SegmentColumn2]);
+                        break;
+
                     default:
                         throw new QueryExecutionException("Unknown aggregate type");
                 }
 
                 values[calc.Key] = state;
             }
-
-            var schema = Source.GetSchema(context);
-            var ecc = new ExpressionCompilationContext(context, schema, null);
-            var eec = new ExpressionExecutionContext(ecc);
 
             foreach (var entity in Source.Execute(context))
             {
@@ -124,7 +134,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var clone = new SequenceProjectNode
             {
                 Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
-                SegmentColumn = SegmentColumn
+                SegmentColumn = SegmentColumn,
+                SegmentColumn2 = SegmentColumn2
             };
 
             foreach (var calc in DefinedValues)

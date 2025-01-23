@@ -2,10 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
-using System.Data.SqlTypes;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -115,10 +112,92 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public static CreateTableNode FromStatement(CreateTableStatement createTable)
         {
-            // Check for a whole range of CREATE TABLE options we don't support
             var errors = new List<Sql4CdsError>();
             var suggestions = new HashSet<string>();
 
+            CheckNotSupportedFeatures(createTable, errors, suggestions);
+
+            // Build the corresponding DataTable
+            var table = new DataTable(createTable.SchemaObjectName.BaseIdentifier.Value);
+
+            foreach (var col in createTable.Definition.ColumnDefinitions)
+            {
+                var dataCol = table.Columns.Add(col.ColumnIdentifier.Value);
+                dataCol.DataType = col.DataType.ToNetType(out var sqlType);
+                dataCol.AllowDBNull = !col.Constraints.Any(c => c is NullableConstraintDefinition n && !n.Nullable);
+                dataCol.MaxLength = sqlType.SqlDataTypeOption.IsStringType() ? sqlType.GetSize() : dataCol.MaxLength;
+
+                CheckNotSupportedFeatures(col, errors, suggestions);
+            }
+
+            if (errors.Count > 0)
+                throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
+
+            // Create a hidden primary key column
+            var pk = table.Columns.Add($"PK_{Guid.NewGuid():N}");
+            pk.DataType = typeof(long);
+            pk.AutoIncrement = true;
+            table.PrimaryKey = new[] { pk };
+
+            return new CreateTableNode
+            {
+                TableDefinition = table
+            };
+        }
+
+        private static void CheckNotSupportedFeatures(Microsoft.SqlServer.TransactSql.ScriptDom.ColumnDefinition col, List<Sql4CdsError> errors, HashSet<string> suggestions)
+        {
+            foreach (var constraint in col.Constraints)
+            {
+                if (constraint is NullableConstraintDefinition nullable)
+                    continue;
+                
+                errors.Add(Sql4CdsError.NotSupported(constraint));
+            }
+
+            if (col.IdentityOptions != null)
+                errors.Add(Sql4CdsError.NotSupported(col.IdentityOptions));
+
+            if (col.Collation != null)
+                errors.Add(Sql4CdsError.NotSupported(col.Collation));
+
+            if (col.ComputedColumnExpression != null)
+                errors.Add(Sql4CdsError.NotSupported(col.ComputedColumnExpression));
+
+            if (col.DefaultConstraint != null)
+                errors.Add(Sql4CdsError.NotSupported(col.DefaultConstraint));
+
+            if (col.Encryption != null)
+                errors.Add(Sql4CdsError.NotSupported(col.Encryption));
+
+            if (col.GeneratedAlways != null)
+                errors.Add(Sql4CdsError.NotSupported(col, "GENERATED ALWAYS"));
+
+            if (col.Index != null)
+                errors.Add(Sql4CdsError.NotSupported(col.Index));
+
+            if (col.IsHidden)
+                errors.Add(Sql4CdsError.NotSupported(col, "ADD HIDDEN"));
+
+            if (col.IsMasked)
+                errors.Add(Sql4CdsError.NotSupported(col, "ADD MASKED"));
+
+            if (col.IsPersisted)
+                errors.Add(Sql4CdsError.NotSupported(col, "PERSISTED"));
+
+            if (col.IsRowGuidCol)
+                errors.Add(Sql4CdsError.NotSupported(col, "ROWGUIDCOL"));
+
+            if (col.MaskingFunction != null)
+                errors.Add(Sql4CdsError.NotSupported(col.MaskingFunction));
+
+            if (col.StorageOptions != null)
+                errors.Add(Sql4CdsError.NotSupported(col.StorageOptions));
+        }
+
+        private static void CheckNotSupportedFeatures(CreateTableStatement createTable, List<Sql4CdsError> errors, HashSet<string> suggestions)
+        {
+            // Check for a whole range of CREATE TABLE options we don't support
             if (createTable.AsEdge)
                 errors.Add(Sql4CdsError.NotSupported(createTable, "AS EDGE"));
 
@@ -165,33 +244,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 errors.Add(Sql4CdsError.NotSupported(createTable, "Non-temporary table"));
                 suggestions.Add("Only temporary tables are supported");
             }
-
-            // Build the corresponding DataTable
-            var table = new DataTable(createTable.SchemaObjectName.BaseIdentifier.Value);
-
-            foreach (var col in createTable.Definition.ColumnDefinitions)
-            {
-                var dataCol = table.Columns.Add(col.ColumnIdentifier.Value);
-                dataCol.DataType = col.DataType.ToNetType(out var sqlType);
-                dataCol.AllowDBNull = !col.Constraints.Any(c => c is NullableConstraintDefinition n && !n.Nullable);
-                dataCol.MaxLength = sqlType.SqlDataTypeOption.IsStringType() ? sqlType.GetSize() : dataCol.MaxLength;
-                
-                // TODO: More validation
-            }
-
-            // Create a hidden primary key column
-            var pk = table.Columns.Add($"PK_{Guid.NewGuid():N}");
-            pk.DataType = typeof(long);
-            pk.AutoIncrement = true;
-            table.PrimaryKey = new[] { pk };
-
-            if (errors.Count > 0)
-                throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
-
-            return new CreateTableNode
-            {
-                TableDefinition = table
-            };
         }
     }
 }

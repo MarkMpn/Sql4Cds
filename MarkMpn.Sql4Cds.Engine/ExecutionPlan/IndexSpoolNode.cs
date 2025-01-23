@@ -401,6 +401,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(context);
         }
 
+        public INodeSchema GetWorkTableSchema(NodeCompilationContext context)
+        {
+            return Source.GetSchema(context);
+        }
+
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return Source;

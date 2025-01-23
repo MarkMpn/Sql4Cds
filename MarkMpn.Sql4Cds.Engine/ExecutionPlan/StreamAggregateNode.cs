@@ -11,6 +11,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class StreamAggregateNode : BaseAggregateNode
     {
+        private bool _fullWindowSchema = true;
+
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
+        {
+            if (Source is WindowSpoolNode)
+            {
+                // If this is part of a window frame plan, add the FIRST functions to get the required scalar values
+                var schema = Source.GetSchema(context);
+
+                foreach (var col in requiredColumns)
+                {
+                    if (!schema.ContainsColumn(col, out var normalized))
+                        continue;
+
+                    Aggregates.Add(normalized, new Aggregate
+                    {
+                        AggregateType = AggregateType.First,
+                        SqlExpression = normalized.ToColumnReference()
+                    });
+                }
+            }
+
+            base.AddRequiredColumns(context, requiredColumns);
+        }
+
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(context, hints);
@@ -18,16 +43,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
+        public override void FinishedFolding()
+        {
+            _fullWindowSchema = false;
+
+            base.FinishedFolding();
+        }
+
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
             var schema = base.GetSchema(context);
-            var groupByCols = GetGroupingColumns(schema);
 
-            return new NodeSchema(
-                primaryKey: schema.PrimaryKey,
-                schema: schema.Schema,
-                aliases: schema.Aliases,
-                sortOrder: groupByCols);
+            if (Source is WindowSpoolNode)
+            {
+                // If this is part of a window frame plan, all the columns from the source are potentially available
+                // while still building the plan. Only at the end do we limit the available columns and create the implicit
+                // FIRST functions. The original primary key and sort order still applies
+                var sourceSchema = Source.GetSchema(context);
+                var cols = schema.Schema;
+
+                if (_fullWindowSchema)
+                {
+                    var fullCols = new ColumnList();
+
+                    foreach (var col in sourceSchema.Schema)
+                        fullCols.Add(col);
+
+                    foreach (var col in schema.Schema)
+                    {
+                        if (!fullCols.ContainsKey(col.Key))
+                            fullCols.Add(col);
+                    }
+
+                    cols = fullCols;
+                }
+
+                return new NodeSchema(
+                    primaryKey: sourceSchema.PrimaryKey,
+                    schema: cols,
+                    aliases: schema.Aliases,
+                    sortOrder: sourceSchema.SortOrder);
+            }
+            else
+            {
+                var groupByCols = GetGroupingColumns(schema);
+
+                return new NodeSchema(
+                    primaryKey: schema.PrimaryKey,
+                    schema: schema.Schema,
+                    aliases: schema.Aliases,
+                    sortOrder: groupByCols);
+            }
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
@@ -38,6 +104,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var expressionExecutionContext = new ExpressionExecutionContext(context);
 
             var isScalarAggregate = IsScalarAggregate;
+            var isWindowAggregate = Source is WindowSpoolNode;
 
             InitializeAggregates(expressionCompilationContext);
             Entity currentGroup = null;
@@ -47,10 +114,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var entity in Source.Execute(context))
             {
+                var startNewGroup = currentGroup == null;
+
                 if (!isScalarAggregate || currentGroup != null)
                 {
-                    var startNewGroup = currentGroup == null;
-
                     if (currentGroup != null && !comparer.Equals(currentGroup, entity))
                     {
                         // We've reached the end of the previous group - return that row now
@@ -76,8 +143,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 expressionExecutionContext.Entity = entity;
 
+                // If this is part of a window frame plan, do not aggregate the first row in each group except
+                // for the FIRST functions we created implicitly.
                 foreach (var func in states.Values)
-                    func.AggregateFunction.NextRecord(func.State, expressionExecutionContext);
+                {
+                    if (!isWindowAggregate || !startNewGroup || func.AggregateFunction is First)
+                        func.AggregateFunction.NextRecord(func.State, expressionExecutionContext);
+                }
             }
 
             if (states != null)
