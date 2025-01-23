@@ -61,7 +61,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private bool ConfirmInsert(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if ((e.Count > Settings.Instance.InsertWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
+            if ((e.Count > Settings.Instance.InsertWarnThreshold || e.BypassCustomPluginExecution) && e.Metadata != null && !_suppressWarnings)
             {
                 var msg = $"Insert will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
@@ -83,7 +83,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private bool ConfirmUpdate(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if ((e.Count > Settings.Instance.UpdateWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
+            if ((e.Count > Settings.Instance.UpdateWarnThreshold || e.BypassCustomPluginExecution) && e.Metadata != null && !_suppressWarnings)
             {
                 var msg = $"Update will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private bool ConfirmDelete(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if ((e.Count > Settings.Instance.DeleteWarnThreshold || e.BypassCustomPluginExecution) && !_suppressWarnings)
+            if ((e.Count > Settings.Instance.DeleteWarnThreshold || e.BypassCustomPluginExecution) && e.Metadata != null && !_suppressWarnings)
             {
                 var msg = $"Delete will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
                 if (e.BypassCustomPluginExecution)

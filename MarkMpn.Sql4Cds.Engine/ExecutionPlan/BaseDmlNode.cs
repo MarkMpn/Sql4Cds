@@ -347,8 +347,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Work out the fields that we should use as the primary key for these records.
             var dataSource = context.Session.DataSources[DataSource];
-            var targetMetadata = dataSource.Metadata[logicalName];
-            var keyAttributes = EntityReader.GetPrimaryKeyFields(targetMetadata, out _);
+            var dataTable = context.Session.TempDb.Tables[logicalName];
+            var targetMetadata = dataTable == null ? dataSource.Metadata[logicalName] : null;
+            var keyAttributes = EntityReader.GetPrimaryKeyFields(targetMetadata, dataTable, out _);
 
             var requiredColumns = accessors.SelectMany(a => a.SourceAttributes).Distinct().ToArray();
 
@@ -723,7 +724,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
 
                             Interlocked.Decrement(ref _threadCount);
-                            ShowProgress(options, operationNames, meta);
+                            ShowProgress(options, operationNames, meta, null);
 
                             if (threadLocalState.Service != dataSource.Connection && threadLocalState.Service is IDisposable disposableClient)
                                 disposableClient.Dispose();
@@ -766,6 +767,111 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             recordsAffected = _successCount;
             message = $"({_successCount:N0} {GetDisplayName(_successCount, meta)} {operationNames.CompletedLowercase})";
+            context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)_successCount;
+        }
+
+        protected void ExecuteTableOperation(NodeExecutionContext context, List<Entity> entities, DataTable dataTable, Func<Entity, bool> tableAction, OperationNames operationNames, out int recordsAffected, out string message)
+        {
+            _entityCount = entities.Count;
+            _inProgressCount = 0;
+            _successCount = 0;
+            _errorCount = 0;
+            _threadCount = 0;
+            _batchExecutionCount = 0;
+
+            var threadCountHistory = new List<int>();
+            var rpmHistory = new List<int>();
+            var batchSizeHistory = new List<float>();
+            var completed = new CancellationTokenSource();
+
+            // Set up one background thread to monitor the performance for debugging
+            var performanceMonitor = Task.Factory.StartNew(async () =>
+            {
+                var lastSuccess = 0;
+                var lastBatchCount = 0;
+
+                while (!completed.Token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMinutes(1), completed.Token);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        break;
+                    }
+
+                    threadCountHistory.Add(_maxThreadCount);
+                    var prevSuccess = Interlocked.Exchange(ref lastSuccess, _successCount);
+                    var prevBatchCount = Interlocked.Exchange(ref lastBatchCount, _batchExecutionCount);
+                    var recordCount = lastSuccess - prevSuccess;
+                    var batchCount = lastBatchCount - prevBatchCount;
+                    rpmHistory.Add(recordCount);
+                    if (batchCount == 0)
+                        batchSizeHistory.Add(0);
+                    else
+                        batchSizeHistory.Add((float)recordCount / batchCount);
+                    _maxThreadCount = _threadCount;
+                    lastSuccess = _successCount;
+                }
+
+                threadCountHistory.Add(_maxThreadCount);
+                var finalRecordCount = _successCount - lastSuccess;
+                var finalBatchCount = _batchExecutionCount - lastBatchCount;
+                rpmHistory.Add(finalRecordCount);
+                if (finalBatchCount == 0)
+                    batchSizeHistory.Add(0);
+                else
+                    batchSizeHistory.Add((float)finalRecordCount / finalBatchCount);
+            });
+
+            try
+            {
+                _threadCount = 1;
+                _maxThreadCount = 1;
+
+                foreach (var entity in entities)
+                {
+                    context.Options.CancellationToken.ThrowIfCancellationRequested();
+
+                    Interlocked.Increment(ref _inProgressCount);
+                    tableAction(entity);
+                    Interlocked.Increment(ref _successCount);
+                    ShowProgress(context.Options, operationNames, null, dataTable);
+                }
+            }
+            catch (Exception ex)
+            {
+                var originalEx = ex;
+
+                if (ex is AggregateException agg)
+                {
+                    if (agg.InnerExceptions.Count == 1)
+                        ex = agg.InnerException;
+                    else if (agg.InnerExceptions.All(inner => inner is OperationCanceledException))
+                        ex = agg.InnerExceptions[0];
+                }
+
+                if (_successCount > 0)
+                    context.Log(new Sql4CdsError(1, 0, $"{_successCount:N0} {dataTable.TableName} {operationNames.CompletedLowercase}"));
+
+                if (ex == originalEx)
+                    throw;
+                else
+                    throw ex;
+            }
+            finally
+            {
+                completed.Cancel();
+                performanceMonitor.ConfigureAwait(false).GetAwaiter().GetResult();
+
+                _threadCountHistory = threadCountHistory.ToArray();
+                _rpmHistory = rpmHistory.ToArray();
+                _batchSizeHistory = batchSizeHistory.ToArray();
+            }
+
+            recordsAffected = _successCount;
+            message = $"({_successCount:N0} {dataTable.TableName} {operationNames.CompletedLowercase})";
             context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)_successCount;
         }
 
@@ -814,7 +920,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 try
                 {
-                    ShowProgress(options, operationNames, meta);
+                    ShowProgress(options, operationNames, meta, null);
                     var response = dataSource.Execute(org, req);
                     Interlocked.Increment(ref _successCount);
 
@@ -844,13 +950,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
                         if (Interlocked.Increment(ref _pausedThreadCount) == 1)
                             Interlocked.Increment(ref _serviceProtectionLimitHits);
-                        ShowProgress(options, operationNames, meta);
+                        ShowProgress(options, operationNames, meta, null);
 
                         loopState.RequestReduceThreadCount();
                         await Task.Delay(retryDelay, options.CancellationToken);
                         Interlocked.Decrement(ref _pausedThreadCount);
                         _delayedUntil.TryRemove(threadState, out _);
-                        ShowProgress(options, operationNames, meta); 
+                        ShowProgress(options, operationNames, meta, null); 
                         _retryQueue.Enqueue(req);
                         return false;
                     }
@@ -880,13 +986,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        private void ShowProgress(IQueryExecutionOptions options, OperationNames operationNames, EntityMetadata meta)
+        private void ShowProgress(IQueryExecutionOptions options, OperationNames operationNames, EntityMetadata meta, DataTable dataTable)
         {
             var progress = (double)_inProgressCount / _entityCount;
             var threadCountMessage = _threadCount < 2 ? "" : $" ({_threadCount:N0} threads)";
             var operationName = operationNames.InProgressUppercase;
 
-            var delayedUntilValues = _delayedUntil.Values.ToArray();
+            var delayedUntilValues = _delayedUntil?.Values.ToArray() ?? Array.Empty<DateTime>();
             if (delayedUntilValues.Length > 0 && delayedUntilValues.Length == _threadCount)
             {
                 operationName = operationNames.CompletedUppercase;
@@ -897,10 +1003,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 threadCountMessage += $" ({delayedUntilValues.Length:N0} threads paused until {delayedUntilValues.Min().ToShortTimeString()} due to service protection limits)";
             }
 
+            var displayName = meta != null ? GetDisplayName(0, meta) : dataTable.TableName;
+
             if (_successCount + _errorCount + 1 >= _inProgressCount)
-                options.Progress(progress, $"{operationName} {GetDisplayName(0, meta)} {_inProgressCount:N0} of {_entityCount:N0}{threadCountMessage}...");
+                options.Progress(progress, $"{operationName} {displayName} {_inProgressCount:N0} of {_entityCount:N0}{threadCountMessage}...");
             else
-                options.Progress(progress, $"{operationName} {GetDisplayName(0, meta)} {_successCount + _errorCount + 1:N0} - {_inProgressCount:N0} of {_entityCount:N0}{threadCountMessage}...");
+                options.Progress(progress, $"{operationName} {displayName} {_successCount + _errorCount + 1:N0} - {_inProgressCount:N0} of {_entityCount:N0}{threadCountMessage}...");
         }
 
         private async Task<bool> ProcessBatch(ExecuteMultipleRequest req, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, NodeExecutionContext context, Action<OrganizationResponse> responseHandler, ParallelThreadState threadState, ParallelLoopState loopState)
@@ -911,7 +1019,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 try
                 {
-                    ShowProgress(options, operationNames, meta);
+                    ShowProgress(options, operationNames, meta, null);
                     var resp = ExecuteMultiple(dataSource, org, meta, req);
 
                     loopState.IncrementSuccessfulExecution();
@@ -1016,13 +1124,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     _delayedUntil[threadState] = DateTime.Now.Add(retryDelay);
                     if (Interlocked.Increment(ref _pausedThreadCount) == 1)
                         Interlocked.Increment(ref _serviceProtectionLimitHits);
-                    ShowProgress(options, operationNames, meta);
+                    ShowProgress(options, operationNames, meta, null);
 
                     loopState.RequestReduceThreadCount();
                     await Task.Delay(retryDelay, options.CancellationToken);
                     Interlocked.Decrement(ref _pausedThreadCount);
                     _delayedUntil.TryRemove(threadState, out _);
-                    ShowProgress(options, operationNames, meta);
+                    ShowProgress(options, operationNames, meta, null);
                     _retryQueue.Enqueue(req);
                     return false;
                 }

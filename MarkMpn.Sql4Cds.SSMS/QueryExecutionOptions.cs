@@ -48,7 +48,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         private void ConfirmInsert(object sender, ConfirmDmlStatementEventArgs e)
         {
-            ConfirmInsert(e.Count, e.Metadata);
+            if (e.Metadata != null)
+                ConfirmInsert(e.Count, e.Metadata);
         }
 
         private void ConfirmInsert(int count, EntityMetadata meta)
@@ -61,7 +62,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         private void ConfirmDelete(object sender, ConfirmDmlStatementEventArgs e)
         {
-            ConfirmDelete(e.Count, e.Metadata);
+            if (e.Metadata != null)
+                ConfirmDelete(e.Count, e.Metadata);
         }
 
         private void ConfirmDelete(int count, EntityMetadata meta)
@@ -74,7 +76,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         private void ConfirmUpdate(object sender, ConfirmDmlStatementEventArgs e)
         {
-            ConfirmUpdate(e.Count, e.Metadata);
+            if (e.Metadata != null)
+                ConfirmUpdate(e.Count, e.Metadata);
         }
 
         private void ConfirmUpdate(int count, EntityMetadata meta)

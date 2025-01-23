@@ -8,6 +8,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using System.Data;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -182,6 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine
             DataSources = dataSources;
             DateFormat = DateFormat.mdy;
             _variables = new SessionContextVariables(this);
+            TempDb = new DataSet();
 
             GlobalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
             {
@@ -201,6 +204,21 @@ namespace MarkMpn.Sql4Cds.Engine
 
             GetServerDetails();
             _options.PrimaryDataSourceChanged += (_, __) => GetServerDetails();
+        }
+
+        /// <summary>
+        /// Copies an existing session context with a new temporary database
+        /// </summary>
+        /// <param name="clone"></param>
+        public SessionContext(SessionContext clone)
+        {
+            _options = clone._options;
+            DataSources = clone.DataSources;
+            DateFormat = clone.DateFormat;
+            _variables = clone._variables;
+            TempDb = clone.TempDb.Clone();
+            GlobalVariableTypes = clone.GlobalVariableTypes;
+            GlobalVariableValues = clone.GlobalVariableValues;
         }
 
         private void GetServerDetails()
@@ -223,11 +241,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the types of the global variables
         /// </summary>
-        internal Dictionary<string, DataTypeReference> GlobalVariableTypes { get; }
+        public Dictionary<string, DataTypeReference> GlobalVariableTypes { get; }
 
         /// <summary>
         /// Returns the values of the global variables
         /// </summary>
-        internal IDictionary<string, INullable> GlobalVariableValues { get; }
+        public IDictionary<string, INullable> GlobalVariableValues { get; }
+
+        /// <summary>
+        /// Returns a dataset holding the tables in the temporary database
+        /// </summary>
+        public DataSet TempDb { get; }
     }
 }

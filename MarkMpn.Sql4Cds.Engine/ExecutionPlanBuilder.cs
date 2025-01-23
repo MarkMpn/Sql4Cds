@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlTypes;
 using System.Globalization;
 using System.IO;
@@ -24,7 +25,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public ExecutionPlanBuilder(SessionContext session, IQueryExecutionOptions options)
         {
-            Session = session;
+            // Clone the session so any changes we make to the tempdb while building the query aren't
+            // exposed when we come to run the query
+            Session = new SessionContext(session);
             Options = options;
 
             if (!Session.DataSources.ContainsKey(Options.PrimaryDataSource))
@@ -557,6 +560,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = ConvertRaiseErrorStatement(raiserror);
             else if (statement is SetCommandStatement setCommand)
                 plans = ConvertSetCommandStatement(setCommand);
+            else if (statement is CreateTableStatement createTable)
+                plans = ConvertCreateTableStatement(createTable);
+            else if (statement is DropTableStatement dropTable)
+                plans = ConvertDropTableStatement(dropTable);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(statement, statement.GetType().Name.Replace("Statement", "").ToUpperInvariant()));
 
@@ -581,6 +588,69 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return output.ToArray();
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertCreateTableStatement(CreateTableStatement createTable)
+        {
+            var converted = CreateTableNode.FromStatement(createTable);
+
+            // Create the table now in the local copy of the tempdb to allow converting later statements
+            Session.TempDb.Tables.Add(converted.TableDefinition.Clone());
+
+            return new[] { converted };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertDropTableStatement(DropTableStatement dropTable)
+        {
+            var nodes = new List<IRootExecutionPlanNodeInternal>();
+            var errors = new List<Sql4CdsError>();
+            var suggestions = new HashSet<string>();
+
+            foreach (var table in dropTable.Objects)
+            {
+                // Only drop temporary tables for now
+                if (table.DatabaseIdentifier != null)
+                {
+                    errors.Add(Sql4CdsError.NotSupported(table, "Database name"));
+                    suggestions.Add("Only temporary tables are supported");
+                    continue;
+                }
+                else if (table.SchemaIdentifier != null)
+                {
+                    errors.Add(Sql4CdsError.NotSupported(table, "Schema name"));
+                    suggestions.Add("Only temporary tables are supported");
+                    continue;
+                }
+                else if (!table.BaseIdentifier.Value.StartsWith("#"))
+                {
+                    errors.Add(Sql4CdsError.NotSupported(table, "Non-temporary table"));
+                    suggestions.Add("Only temporary tables are supported");
+                    continue;
+                }
+                else if (!Session.TempDb.Tables.Contains(table.BaseIdentifier.Value))
+                {
+                    if (!dropTable.IsIfExists)
+                    {
+                        errors.Add(Sql4CdsError.InvalidObjectName(table));
+                        suggestions.Add("Check the table name is correct");
+                    }
+
+                    continue;
+                }
+
+                nodes.Add(new DropTableNode
+                {
+                    TableName = table.BaseIdentifier.Value
+                });
+
+                // Remove the table now in the local copy of the tempdb for validating later statements
+                Session.TempDb.Tables.Remove(table.BaseIdentifier.Value);
+            }
+
+            if (errors.Count > 0)
+                throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
+
+            return nodes.ToArray();
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)
@@ -1401,23 +1471,39 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Validate the entity name
             var logicalName = target.SchemaObject.BaseIdentifier.Value;
-            EntityMetadata metadata;
+            EntityReader reader;
 
-            try
+            if (target.SchemaObject.DatabaseIdentifier == null && target.SchemaObject.SchemaIdentifier == null && logicalName.StartsWith("#"))
             {
-                metadata = dataSource.Metadata[logicalName];
-            }
-            catch (FaultException ex)
-            {
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
-            }
+                var table = Session.TempDb.Tables[logicalName];
 
-            var reader = new EntityReader(metadata, _nodeContext, dataSource, insertStatement, target, source);
+                if (table == null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject));
+
+                reader = new EntityReader(table, _nodeContext, dataSource, insertStatement, target, source);
+                logicalName = table.TableName;
+            }
+            else
+            {
+                EntityMetadata metadata;
+
+                try
+                {
+                    metadata = dataSource.Metadata[logicalName];
+                }
+                catch (FaultException ex)
+                {
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
+                }
+
+                reader = new EntityReader(metadata, _nodeContext, dataSource, insertStatement, target, source);
+                logicalName = metadata.LogicalName;
+            }
 
             var node = new InsertNode
             {
                 DataSource = dataSource.Name,
-                LogicalName = metadata.LogicalName,
+                LogicalName = logicalName,
                 Source = reader.Source,
                 Accessors = reader.ValidateInsertColumnMapping(targetColumns, sourceColumns)
             };
@@ -1503,21 +1589,35 @@ namespace MarkMpn.Sql4Cds.Engine
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
 
-            EntityMetadata targetMetadata;
+            EntityMetadata targetMetadata = null;
+            DataTable targetTable = null;
 
-            try
+            if (deleteTarget.Target.SchemaObject.DatabaseIdentifier == null && deleteTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
             {
-                targetMetadata = dataSource.Metadata[targetLogicalName];
+                targetTable = Session.TempDb.Tables[targetLogicalName];
+
+                if (targetTable == null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject));
+
+                targetLogicalName = targetTable.TableName;
             }
-            catch (FaultException ex)
+            else
             {
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
+                try
+                {
+                    targetMetadata = dataSource.Metadata[targetLogicalName];
+                    targetLogicalName = targetMetadata.LogicalName;
+                }
+                catch (FaultException ex)
+                {
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
+                }
             }
 
-            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, out _);
+            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, targetTable, out _);
             var columnMappings = primaryKeyFields.ToDictionary(f => f);
 
-            if (targetMetadata.LogicalName == "principalobjectaccess")
+            if (targetLogicalName == "principalobjectaccess")
             {
                 // principalid and objectid are polymorphic lookups, for compatibility with TDS Endpoint
                 // make sure we include the type values as well
@@ -1651,7 +1751,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
-                if (targetMetadata.LogicalName == "principalobjectaccess" && columnMapping.Key == "objecttypecode")
+                if (targetLogicalName == "principalobjectaccess" && columnMapping.Key == "objecttypecode")
                 {
                     // In case any of the records are for an activity, include the activitytypecode by joining to the activitypointer table
                     expression = new CoalesceExpression
@@ -1748,11 +1848,13 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add DELETE
             var deleteNode = new DeleteNode
             {
-                LogicalName = targetMetadata.LogicalName,
+                LogicalName = targetLogicalName,
                 DataSource = dataSource.Name
             };
 
-            var reader = new EntityReader(targetMetadata, _nodeContext, dataSource, statement, target, source);
+            var reader = targetMetadata != null
+                ? new EntityReader(targetMetadata, _nodeContext, dataSource, statement, target, source)
+                : new EntityReader(targetTable, _nodeContext, dataSource, statement, target, source);
             deleteNode.Source = reader.Source;
             deleteNode.PrimaryIdAccessors = reader.ValidateDeleteColumnMapping(columnMappings);
 
@@ -1812,15 +1914,29 @@ namespace MarkMpn.Sql4Cds.Engine
             var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
             var targetLogicalName = updateTarget.TargetEntityName;
 
-            EntityMetadata targetMetadata;
+            DataTable dataTable = null;
+            EntityMetadata targetMetadata = null;
 
-            try
+            if (updateTarget.Target.SchemaObject.DatabaseIdentifier == null && updateTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
             {
-                targetMetadata = dataSource.Metadata[targetLogicalName];
+                dataTable = Session.TempDb.Tables[targetLogicalName];
+
+                if (dataTable == null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject));
+
+                targetLogicalName = dataTable.TableName;
             }
-            catch (FaultException ex)
+            else
             {
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject), ex);
+                try
+                {
+                    targetMetadata = dataSource.Metadata[targetLogicalName];
+                    targetLogicalName = targetMetadata.LogicalName;
+                }
+                catch (FaultException ex)
+                {
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject), ex);
+                }
             }
 
             var primaryKeyMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1828,7 +1944,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var existingValueMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var existingAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, out var isIntersect);
+            var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, dataTable, out var isIntersect);
 
             if (!isIntersect)
             {
@@ -1862,7 +1978,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     existingAttributes.Add(primaryKey);
             }
 
-            var useStateTransitions = !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
+            var useStateTransitions = targetMetadata != null && !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
             var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
             var minimalUpdates = hints != null && hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("MINIMAL_UPDATES", StringComparison.OrdinalIgnoreCase)));
 
@@ -2056,10 +2172,13 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var reader = new EntityReader(targetMetadata, _nodeContext, dataSource, updateStatement, target, source);
+            var reader = targetMetadata != null
+                ? new EntityReader(targetMetadata, _nodeContext, dataSource, updateStatement, target, source)
+                : new EntityReader(dataTable, _nodeContext, dataSource, updateStatement, target, source);
+
             var updateNode = new UpdateNode
             {
-                LogicalName = targetMetadata.LogicalName,
+                LogicalName = targetLogicalName,
                 DataSource = dataSource.Name,
                 PrimaryIdAccessors = reader.ValidateUpdatePrimaryKeyColumnMapping(primaryKeyMappings),
                 NewValueAccessors = reader.ValidateUpdateNewValueColumnMapping(newValueMappings),
@@ -4770,6 +4889,16 @@ namespace MarkMpn.Sql4Cds.Engine
                     !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase) &&
                     !(table.SchemaObject.SchemaIdentifier.Value.Equals("bin", StringComparison.OrdinalIgnoreCase) && dataSource.Metadata.RecycleBinEntities != null))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
+
+                if (entityName.StartsWith("#") && String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value))
+                {
+                    var dataTable = Session.TempDb.Tables[entityName];
+
+                    if (dataTable == null)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
+
+                    return new TableScanNode { TableName = dataTable.TableName };
+                }
 
                 // Validate the entity name
                 EntityMetadata meta;
