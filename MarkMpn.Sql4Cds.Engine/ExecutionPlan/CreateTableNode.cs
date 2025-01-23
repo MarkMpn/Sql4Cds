@@ -2,10 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
-using System.Data.SqlTypes;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -115,56 +112,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public static CreateTableNode FromStatement(CreateTableStatement createTable)
         {
-            // Check for a whole range of CREATE TABLE options we don't support
             var errors = new List<Sql4CdsError>();
             var suggestions = new HashSet<string>();
 
-            if (createTable.AsEdge)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "AS EDGE"));
-
-            if (createTable.AsFileTable)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "AS FILETABLE"));
-
-            if (createTable.AsNode)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "AS NODE"));
-
-            if (createTable.CtasColumns != null && createTable.CtasColumns.Count > 0)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "CREATE TABLE AS SELECT"));
-
-            if (createTable.FederationScheme != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "FEDERATED"));
-
-            if (createTable.FileStreamOn != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "FILESTREAM_ON"));
-
-            if (createTable.OnFileGroupOrPartitionScheme != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "ON FILEGROUP"));
-
-            if (createTable.SelectStatement != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "CREATE TABLE AS SELECT"));
-
-            if (createTable.TextImageOn != null)
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "TEXTIMAGE_ON"));
-
-            foreach (var option in createTable.Options)
-                errors.Add(Sql4CdsError.UnsupportedStatement(option, option.ToNormalizedSql()));
-
-            // We can create tables in tempdb. Don't try to create tables in Dataverse itself for now.
-            if (createTable.SchemaObjectName.DatabaseIdentifier != null)
-            {
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Database name"));
-                suggestions.Add("Only temporary tables are supported");
-            }
-            else if (createTable.SchemaObjectName.SchemaIdentifier != null)
-            {
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Schema name"));
-                suggestions.Add("Only temporary tables are supported");
-            }
-            else if (!createTable.SchemaObjectName.BaseIdentifier.Value.StartsWith("#"))
-            {
-                errors.Add(Sql4CdsError.UnsupportedStatement(createTable, "Non-temporary table"));
-                suggestions.Add("Only temporary tables are supported");
-            }
+            CheckNotSupportedFeatures(createTable, errors, suggestions);
 
             // Build the corresponding DataTable
             var table = new DataTable(createTable.SchemaObjectName.BaseIdentifier.Value);
@@ -175,9 +126,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 dataCol.DataType = col.DataType.ToNetType(out var sqlType);
                 dataCol.AllowDBNull = !col.Constraints.Any(c => c is NullableConstraintDefinition n && !n.Nullable);
                 dataCol.MaxLength = sqlType.SqlDataTypeOption.IsStringType() ? sqlType.GetSize() : dataCol.MaxLength;
-                
-                // TODO: More validation
+
+                CheckNotSupportedFeatures(col, errors, suggestions);
             }
+
+            if (errors.Count > 0)
+                throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
 
             // Create a hidden primary key column
             var pk = table.Columns.Add($"PK_{Guid.NewGuid():N}");
@@ -185,13 +139,111 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             pk.AutoIncrement = true;
             table.PrimaryKey = new[] { pk };
 
-            if (errors.Count > 0)
-                throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
-
             return new CreateTableNode
             {
                 TableDefinition = table
             };
+        }
+
+        private static void CheckNotSupportedFeatures(Microsoft.SqlServer.TransactSql.ScriptDom.ColumnDefinition col, List<Sql4CdsError> errors, HashSet<string> suggestions)
+        {
+            foreach (var constraint in col.Constraints)
+            {
+                if (constraint is NullableConstraintDefinition nullable)
+                    continue;
+                
+                errors.Add(Sql4CdsError.NotSupported(constraint));
+            }
+
+            if (col.IdentityOptions != null)
+                errors.Add(Sql4CdsError.NotSupported(col.IdentityOptions));
+
+            if (col.Collation != null)
+                errors.Add(Sql4CdsError.NotSupported(col.Collation));
+
+            if (col.ComputedColumnExpression != null)
+                errors.Add(Sql4CdsError.NotSupported(col.ComputedColumnExpression));
+
+            if (col.DefaultConstraint != null)
+                errors.Add(Sql4CdsError.NotSupported(col.DefaultConstraint));
+
+            if (col.Encryption != null)
+                errors.Add(Sql4CdsError.NotSupported(col.Encryption));
+
+            if (col.GeneratedAlways != null)
+                errors.Add(Sql4CdsError.NotSupported(col, "GENERATED ALWAYS"));
+
+            if (col.Index != null)
+                errors.Add(Sql4CdsError.NotSupported(col.Index));
+
+            if (col.IsHidden)
+                errors.Add(Sql4CdsError.NotSupported(col, "ADD HIDDEN"));
+
+            if (col.IsMasked)
+                errors.Add(Sql4CdsError.NotSupported(col, "ADD MASKED"));
+
+            if (col.IsPersisted)
+                errors.Add(Sql4CdsError.NotSupported(col, "PERSISTED"));
+
+            if (col.IsRowGuidCol)
+                errors.Add(Sql4CdsError.NotSupported(col, "ROWGUIDCOL"));
+
+            if (col.MaskingFunction != null)
+                errors.Add(Sql4CdsError.NotSupported(col.MaskingFunction));
+
+            if (col.StorageOptions != null)
+                errors.Add(Sql4CdsError.NotSupported(col.StorageOptions));
+        }
+
+        private static void CheckNotSupportedFeatures(CreateTableStatement createTable, List<Sql4CdsError> errors, HashSet<string> suggestions)
+        {
+            // Check for a whole range of CREATE TABLE options we don't support
+            if (createTable.AsEdge)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "AS EDGE"));
+
+            if (createTable.AsFileTable)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "AS FILETABLE"));
+
+            if (createTable.AsNode)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "AS NODE"));
+
+            if (createTable.CtasColumns != null && createTable.CtasColumns.Count > 0)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "CREATE TABLE AS SELECT"));
+
+            if (createTable.FederationScheme != null)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "FEDERATED"));
+
+            if (createTable.FileStreamOn != null)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "FILESTREAM_ON"));
+
+            if (createTable.OnFileGroupOrPartitionScheme != null)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "ON FILEGROUP"));
+
+            if (createTable.SelectStatement != null)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "CREATE TABLE AS SELECT"));
+
+            if (createTable.TextImageOn != null)
+                errors.Add(Sql4CdsError.NotSupported(createTable, "TEXTIMAGE_ON"));
+
+            foreach (var option in createTable.Options)
+                errors.Add(Sql4CdsError.NotSupported(option, option.ToNormalizedSql()));
+
+            // We can create tables in tempdb. Don't try to create tables in Dataverse itself for now.
+            if (createTable.SchemaObjectName.DatabaseIdentifier != null)
+            {
+                errors.Add(Sql4CdsError.NotSupported(createTable, "Database name"));
+                suggestions.Add("Only temporary tables are supported");
+            }
+            else if (createTable.SchemaObjectName.SchemaIdentifier != null)
+            {
+                errors.Add(Sql4CdsError.NotSupported(createTable, "Schema name"));
+                suggestions.Add("Only temporary tables are supported");
+            }
+            else if (!createTable.SchemaObjectName.BaseIdentifier.Value.StartsWith("#"))
+            {
+                errors.Add(Sql4CdsError.NotSupported(createTable, "Non-temporary table"));
+                suggestions.Add("Only temporary tables are supported");
+            }
         }
     }
 }

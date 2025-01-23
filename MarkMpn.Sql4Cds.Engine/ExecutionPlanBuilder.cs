@@ -611,19 +611,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Only drop temporary tables for now
                 if (table.DatabaseIdentifier != null)
                 {
-                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Database name"));
+                    errors.Add(Sql4CdsError.NotSupported(table, "Database name"));
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
                 else if (table.SchemaIdentifier != null)
                 {
-                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Schema name"));
+                    errors.Add(Sql4CdsError.NotSupported(table, "Schema name"));
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
                 else if (!table.BaseIdentifier.Value.StartsWith("#"))
                 {
-                    errors.Add(Sql4CdsError.UnsupportedStatement(table, "Non-temporary table"));
+                    errors.Add(Sql4CdsError.NotSupported(table, "Non-temporary table"));
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
