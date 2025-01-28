@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException(Sql4CdsError.CursorAlreadyOpen());
 
             _isOpen = true;
-            return PopulationQuery;
+            return (IDmlQueryExecutionPlanNode)PopulationQuery.Clone();
         }
 
         public virtual void Close(NodeExecutionContext context)
@@ -122,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Reset the @@FETCH_STATUS variable
             context.ParameterValues["@@FETCH_STATUS"] = (SqlInt32)(-1);
 
-            return FetchQuery;
+            return (IDataReaderExecutionPlanNode)FetchQuery.Clone();
         }
     }
 }

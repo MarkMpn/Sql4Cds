@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,13 +10,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     abstract class BaseCursorNode : BaseNode, IRootExecutionPlanNodeInternal
     {
-        public string Sql { get; set; }
-        public int Index { get; set; }
-        public int Length { get; set; }
-        public int LineNumber { get; set; }
-        public override int ExecutionCount => 0;
+        private int _executionCount;
+        private readonly Timer _timer = new Timer();
 
-        public override TimeSpan Duration => TimeSpan.Zero;
+        [Browsable(false)]
+        public string Sql { get; set; }
+
+        [Browsable(false)]
+        public int Index { get; set; }
+
+        [Browsable(false)]
+        public int Length { get; set; }
+
+        [Browsable(false)]
+        public int LineNumber { get; set; }
+
+        public override TimeSpan Duration => _timer.Duration;
+
+        public override int ExecutionCount => _executionCount;
 
         public string CursorName { get; set; }
 
@@ -40,6 +52,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException(Sql4CdsError.InvalidCursorName(CursorName));
 
             return cursor;
+        }
+
+        protected void Execute(Action action)
+        {
+            Execute<object>(() => { action(); return null; });
+        }
+
+        protected T Execute<T>(Func<T> action)
+        {
+            _executionCount++;
+
+            using (_timer.Run())
+            {
+                try
+                {
+                    return action();
+                }
+                catch (QueryExecutionException ex)
+                {
+                    if (ex.Node == null)
+                        ex.Node = this;
+
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
+                }
+            }
         }
 
         public abstract object Clone();

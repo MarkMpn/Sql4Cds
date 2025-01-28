@@ -5,39 +5,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class OpenCursorNode : BaseCursorNode, IDmlQueryExecutionPlanNode
     {
-        private CursorDeclarationBaseNode _cursor;
+        private IDmlQueryExecutionPlanNode _populationQuery;
 
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
-            try
+            Execute(() =>
             {
-                _cursor = GetCursor(context);
+                var cursor = GetCursor(context);
 
-                var populationQuery = _cursor.Open(context);
+                _populationQuery = cursor.Open(context);
 
-                if (populationQuery != null)
-                    populationQuery.Execute(context, out _, out _);
+                if (_populationQuery != null)
+                    _populationQuery.Execute(context, out _, out _);
 
-                recordsAffected = -1;
-                message = null;
-            }
-            catch (QueryExecutionException ex)
-            {
-                if (ex.Node == null)
-                    ex.Node = this;
+            });
 
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
-            }
+            recordsAffected = -1;
+            message = null;
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            if (_cursor?.PopulationQuery != null)
-                yield return _cursor.PopulationQuery;
+            if (_populationQuery != null)
+                yield return _populationQuery;
         }
 
         public override object Clone()

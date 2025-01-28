@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class FetchCursorIntoNode : BaseCursorNode, IDmlQueryExecutionPlanNode
     {
-        private CursorDeclarationBaseNode _cursor;
+        private IDataReaderExecutionPlanNode _fetchQuery;
         private Func<ExpressionExecutionContext, object> _rowOffset;
 
         public IList<VariableReference> Variables { get; set; }
@@ -37,13 +37,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             recordsAffected = -1;
             message = null;
 
-            try
+            Execute(() =>
             {
-                _cursor = GetCursor(context);
+                var cursor = GetCursor(context);
 
-                var fetchQuery = _cursor.Fetch(context, Orientation, _rowOffset);
+                _fetchQuery = cursor.Fetch(context, Orientation, _rowOffset);
 
-                using (var reader = new FetchStatusDataReader(fetchQuery.Execute(context, CommandBehavior.Default), context))
+                using (var reader = new FetchStatusDataReader(_fetchQuery.Execute(context, CommandBehavior.Default), context, null))
                 {
                     if (reader.Read())
                     {
@@ -67,24 +67,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
                 }
-            }
-            catch (QueryExecutionException ex)
-            {
-                if (ex.Node == null)
-                    ex.Node = this;
-
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
-            }
+            });
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            if (_cursor?.FetchQuery != null)
-                yield return _cursor.FetchQuery;
+            if (_fetchQuery != null)
+                yield return _fetchQuery;
         }
 
         public override object Clone()

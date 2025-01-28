@@ -17,11 +17,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private readonly DbDataReader _reader;
         private readonly NodeExecutionContext _context;
+        private readonly IDisposable _timer;
 
-        public FetchStatusDataReader(DbDataReader reader, NodeExecutionContext context)
+        public FetchStatusDataReader(DbDataReader reader, NodeExecutionContext context, IDisposable timer)
         {
             _reader = reader;
             _context = context;
+            _timer = timer;
         }
 
         public override object this[int ordinal] => _reader[ordinal];
@@ -167,6 +169,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void Close()
         {
             _reader.Close();
+            _timer?.Dispose();
         }
 
         protected override void Dispose(bool disposing)

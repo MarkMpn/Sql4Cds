@@ -6,7 +6,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         public void Execute(NodeExecutionContext context, out int recordsAffected, out string message)
         {
-            try
+            Execute(() =>
             {
                 var cursor = GetCursor(context);
 
@@ -16,21 +16,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     context.Session.Cursors.Remove(CursorName);
                 else
                     throw new QueryExecutionException(Sql4CdsError.InvalidCursorName(CursorName));
+            });
 
-                recordsAffected = 0;
-                message = null;
-            }
-            catch (QueryExecutionException ex)
-            {
-                if (ex.Node == null)
-                    ex.Node = this;
-
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
-            }
+            recordsAffected = 0;
+            message = null;
         }
 
         public override object Clone()

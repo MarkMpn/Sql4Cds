@@ -8,12 +8,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class FetchCursorNode : BaseCursorNode, IDataReaderExecutionPlanNode
     {
-        private CursorDeclarationBaseNode _cursor;
+        private IDataReaderExecutionPlanNode _fetchQuery;
         private Func<ExpressionExecutionContext, object> _rowOffset;
+        private readonly Timer _timer = new Timer();
 
         public FetchOrientation Orientation { get; set; }
 
         public ScalarExpression RowOffset { get; set; }
+
+        public override TimeSpan Duration => base.Duration + _timer.Duration;
 
         public override IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
@@ -28,31 +31,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public DbDataReader Execute(NodeExecutionContext context, CommandBehavior behavior)
         {
-            try
+            var reader = Execute(() =>
             {
-                _cursor = GetCursor(context);
+                var cursor = GetCursor(context);
 
-                var fetchQuery = _cursor.Fetch(context, Orientation, _rowOffset);
+                _fetchQuery = cursor.Fetch(context, Orientation, _rowOffset);
 
-                return new FetchStatusDataReader(fetchQuery.Execute(context, behavior), context);
-            }
-            catch (QueryExecutionException ex)
-            {
-                if (ex.Node == null)
-                    ex.Node = this;
+                return _fetchQuery.Execute(context, behavior);
+            });
 
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new QueryExecutionException(Sql4CdsError.InternalError(ex.Message), ex) { Node = this };
-            }
+            return new FetchStatusDataReader(reader, context, _timer.Run());
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            if (_cursor?.FetchQuery != null)
-                yield return _cursor.FetchQuery;
+            if (_fetchQuery != null)
+                yield return _fetchQuery;
         }
 
         public override object Clone()
