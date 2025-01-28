@@ -116,20 +116,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var tempTable = new DataTable("#" + Guid.NewGuid().ToString("N"));
             tempTable.PrimaryKey = new[] { tempTable.Columns.Add("RowNumber", typeof(long)) };
 
-            // Track how the fetch query should name each of the columns
+            // Track how the fetch query should name each of the columns. We'll create a temporary table with simple
+            // automatic column names Col0 ... ColN, and then use the output column names from the query to map to these
             var columns = new List<SelectColumn>();
 
-            INodeSchema schema;
             IDataExecutionPlanNodeInternal sourceNode;
 
             if (query is SelectNode select)
             {
                 sourceNode = select.Source;
-                schema = select.Source.GetSchema(context);
+                var sourceSchema = select.Source.GetSchema(context);
 
+                // Use the output column selection from the SELECT node to determine the columns in the cursor,
+                // and the corresponding schema from the source node to determine the data types
                 foreach (var column in select.ColumnSet)
                 {
-                    var sourceCol = schema.Schema[column.SourceColumn];
+                    var sourceCol = sourceSchema.Schema[column.SourceColumn];
                     var colName = $"Col{tempTable.Columns.Count}";
                     var dataCol = tempTable.Columns.Add(colName, sourceCol.Type.ToNetType(out _));
                     dataCol.AllowDBNull = sourceCol.IsNullable;
@@ -138,19 +140,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else if (query is SqlNode sql)
             {
-                // TODO: Make SqlNode implement IDataExecutionPlanNodeInternal and refactor BaseDmlNode accordingly
-                throw new NotImplementedException();
-                //sourceNode = sql;
-
-                // SQL schema can have repeated or blank column names, so create new ones based on simple column indexes
+                sourceNode = sql;
                 var sqlSchema = sql.GetSchema(context);
-                columns = new List<SelectColumn>();
-                var index = 0;
 
+                // The SQL node determines both the column names and data types
                 foreach (var column in sqlSchema.Schema)
                 {
                     var sourceCol = column.Value;
-                    var colName = $"Col{index++}";
+                    var colName = $"Col{tempTable.Columns.Count}";
                     var dataCol = tempTable.Columns.Add(colName, sourceCol.Type.ToNetType(out _));
                     dataCol.AllowDBNull = sourceCol.IsNullable;
                     columns.Add(new SelectColumn { SourceColumn = colName, OutputColumn = column.Key });

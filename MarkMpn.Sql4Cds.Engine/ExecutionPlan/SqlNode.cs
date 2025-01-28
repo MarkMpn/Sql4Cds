@@ -11,7 +11,7 @@ using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk.Metadata;
-
+using Microsoft.Xrm.Sdk;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Executes SQL using the TDS endpoint
     /// </summary>
-    class SqlNode : BaseNode, IDataReaderExecutionPlanNode
+    class SqlNode : BaseDataNode, IDataReaderExecutionPlanNode
     {
         private readonly Timer _timer = new Timer();
         private int _executionCount;
@@ -188,9 +188,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return sql;
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        IRootExecutionPlanNodeInternal[] IRootExecutionPlanNodeInternal.FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return new[] { this };
+        }
+
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            return this;
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -198,7 +203,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
-        internal IExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns, string[] keyAttributes)
+        internal IDataExecutionPlanNodeInternal FoldDmlSource(NodeCompilationContext context, IList<OptimizerHint> hints, string logicalName, string[] requiredColumns, string[] keyAttributes)
         {
             if (!(SelectStatement?.QueryExpression is QuerySpecification querySpec))
                 return this;
@@ -334,7 +339,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        public INodeSchema GetSchema(NodeCompilationContext context)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
+        {
+            if (_schema != null)
+                return _schema;
+
+            // Get the ADO.NET schema from the data reader
+            // Parameter values need non-null value for compatibility with TDS Endpoint
+            var parameterValues = context.ParameterTypes.ToDictionary(p => p.Key, p => _sampleValues[p.Value.ToNetType(out _)]);
+            using (var reader = Execute(new NodeExecutionContext(context, parameterValues), CommandBehavior.SchemaOnly))
+            {
+                return GetSchema(reader, context);
+            }
+        }
+
+        private INodeSchema GetSchema(IDataReader reader, NodeCompilationContext context)
         {
             if (_schema != null)
                 return _schema;
@@ -345,15 +364,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var querySpec = (script.Batches[0].Statements[0] as SelectStatement).QueryExpression as QuerySpecification;
 
-            // Get the ADO.NET schema from the data reader
-            // Parameter values need non-null value for compatibility with TDS Endpoint
-            var parameterValues = context.ParameterTypes.ToDictionary(p => p.Key, p => _sampleValues[p.Value.ToNetType(out _)]);
-            using (var reader = Execute(new NodeExecutionContext(context, parameterValues), CommandBehavior.SchemaOnly))
-            {
-                var schemaTable = reader.GetSchemaTable();
-                _schema = SchemaConverter.ConvertSchema(schemaTable, context.Session.DataSources[DataSource], querySpec);
-                return _schema;
-            }
+            var schemaTable = reader.GetSchemaTable();
+            _schema = SchemaConverter.ConvertSchema(schemaTable, context.Session.DataSources[DataSource], querySpec);
+            return _schema;
         }
 
         public override string ToString()
@@ -361,7 +374,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return "TDS Endpoint";
         }
 
-        public object Clone()
+        public override object Clone()
         {
             return new SqlNode
             {
@@ -374,6 +387,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SelectStatement = SelectStatement,
                 _schema = _schema
             };
+        }
+
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
+        {
+            return new RowCountEstimate(1000);
+        }
+
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
+        {
+            var dataReader = Execute(context, CommandBehavior.Default);
+            var schema = GetSchema(dataReader, context);
+
+            while (dataReader.Read())
+            {
+                var entity = new Entity();
+                var colIndex = 0;
+
+                foreach (var col in schema.Schema)
+                {
+                    var value = dataReader.GetProviderSpecificValue(colIndex++);
+
+                    if (value is DateTime dt)
+                    {
+                        if (col.Value.Type.IsSameAs(DataTypeHelpers.Date))
+                            value = new SqlDate(dt);
+                        else
+                            value = new SqlDateTime2(dt);
+                    }
+                    else if (value is DateTimeOffset dto)
+                    {
+                        value = new SqlDateTimeOffset(dto);
+                    }
+                    else if (value is TimeSpan ts)
+                    {
+                        value = new SqlTime(ts);
+                    }
+                    else if (value is DBNull)
+                    {
+                        value = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
+                    }
+
+                    entity[col.Key] = value;
+                }
+
+                yield return entity;
+            }
         }
     }
 }

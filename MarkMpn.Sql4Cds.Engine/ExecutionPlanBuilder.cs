@@ -1301,7 +1301,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                node.Source = source;
+                node.Source = (IDataExecutionPlanNodeInternal)source;
                 node.Variables.Add(new VariableAssignment { VariableName = set.Variable.Name, SourceColumn = "Value" });
             }
 
@@ -1407,7 +1407,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type != typeof(SqlString) && type != typeof(SqlEntityReference) && type != typeof(SqlGuid))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTypeForStatement(impersonate.ExecuteContext.Principal, "Execute As"));
 
-            IExecutionPlanNodeInternal source;
+            IDataExecutionPlanNodeInternal source;
 
             // Create a SELECT query to find the user ID
             var selectStatement = new SelectStatement
@@ -1489,7 +1489,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                source = select;
+                source = (IDataExecutionPlanNodeInternal)select;
             }
 
             return new ExecuteAsNode

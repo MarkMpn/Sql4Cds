@@ -25,7 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// A base class for execution plan nodes that implement a DML operation
     /// </summary>
-    abstract class BaseDmlNode : BaseNode, IDmlQueryExecutionPlanNode
+    abstract class BaseDmlNode : BaseNode, IDmlQueryExecutionPlanNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// Temporarily applies global settings to improve the performance of parallel operations
@@ -146,7 +146,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int LineNumber { get; set; }
 
         [Browsable(false)]
-        public IExecutionPlanNodeInternal Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
         /// <summary>
         /// The instance that this node will be executed against
@@ -260,10 +260,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             context.ResetGlobalCalculations();
 
-            if (Source is IDataExecutionPlanNodeInternal dataNode)
-                Source = dataNode.FoldQuery(context, hints);
-            else if (Source is IDataReaderExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(context, hints).Single();
+            Source = Source.FoldQuery(context, hints);
 
             MaxDOP = GetMaxDOP(context, hints);
             BatchSize = GetBatchSize(context, hints);
@@ -395,68 +392,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The entities to perform the DML operation on</returns>
         protected List<Entity> GetDmlSourceEntities(NodeExecutionContext context, out INodeSchema schema)
         {
-            List<Entity> entities;
-
-            if (Source is IDataExecutionPlanNodeInternal dataSource)
-            {
-                schema = dataSource.GetSchema(context);
-                entities = dataSource.Execute(context).ToList();
-            }
-            else if (Source is IDataReaderExecutionPlanNode dataSetSource)
-            {
-                var dataReader = dataSetSource.Execute(context, CommandBehavior.Default);
-
-                if (Source is SqlNode sql)
-                {
-                    schema = sql.GetSchema(context);
-                }
-                else
-                {
-                    var schemaTable = dataReader.GetSchemaTable();
-                    schema = SchemaConverter.ConvertSchema(schemaTable, context.PrimaryDataSource);
-                }
-
-                entities = new List<Entity>();
-
-                while (dataReader.Read())
-                {
-                    var entity = new Entity();
-                    var colIndex = 0;
-
-                    foreach (var col in schema.Schema)
-                    {
-                        var value = dataReader.GetProviderSpecificValue(colIndex++);
-
-                        if (value is DateTime dt)
-                        {
-                            if (col.Value.Type.IsSameAs(DataTypeHelpers.Date))
-                                value = new SqlDate(dt);
-                            else
-                                value = new SqlDateTime2(dt);
-                        }
-                        else if (value is DateTimeOffset dto)
-                        {
-                            value = new SqlDateTimeOffset(dto);
-                        }
-                        else if (value is TimeSpan ts)
-                        {
-                            value = new SqlTime(ts);
-                        }
-                        else if (value is DBNull)
-                        {
-                            value = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
-                        }
-
-                        entity[col.Key] = value;
-                    }
-
-                    entities.Add(entity);
-                }
-            }
-            else
-            {
-                throw new QueryExecutionException("Unexpected data source") { Node = this };
-            }
+            schema = Source.GetSchema(context);
+            var entities = Source.Execute(context).ToList();
 
             return entities;
         }

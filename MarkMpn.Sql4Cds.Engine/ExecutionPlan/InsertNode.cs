@@ -480,7 +480,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
                 IgnoreDuplicateKey = IgnoreDuplicateKey,
-                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 Accessors = Accessors,
                 Sql = Sql,
                 LineNumber = LineNumber,
