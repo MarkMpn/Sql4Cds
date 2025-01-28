@@ -171,6 +171,7 @@ namespace MarkMpn.Sql4Cds.Controls
                         {
                             var fallback = "Images.FallbackNode.ico";
 
+                            if (imageName.Contains("Cursor"))
                                 fallback = "Images.CursorFallbackNode.ico";
 
                             using (var fallbackStream = GetType().Assembly.GetManifestResourceStream(GetType(), fallback))
