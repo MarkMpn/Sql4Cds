@@ -938,7 +938,10 @@ namespace MarkMpn.Sql4Cds.XTB
                 tabControl.SelectedTab = fetchXmlTabPage;
             }
 
-            AddMessage(-1, -1, $"Completion time: {DateTimeOffset.Now:O}", MessageType.Info);
+            if (!tabControl.TabPages.Contains(resultsTabPage) && String.IsNullOrEmpty(((Scintilla)messagesTabPage.Controls[0]).Text))
+                AddMessage(-1, -1, "Commands completed successfully.", MessageType.Info);
+
+            AddMessage(-1, -1, $"\r\nCompletion time: {DateTimeOffset.Now:O}", MessageType.Info);
 
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
@@ -1018,8 +1021,6 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private void AddMessage(int index, int length, string message, MessageType messageType)
         {
-            message = message.Trim();
-
             if (_params.Result != null)
                 _params.Result.Add(JsonConvert.SerializeObject(new { messageType, message }));
 
@@ -1027,7 +1028,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var line = scintilla.Lines.Count - 1;
             var stylingStart = scintilla.Text.Length;
             scintilla.ReadOnly = false;
-            scintilla.AppendText(message + (messageType == MessageType.ErrorPrefix ? "\r\n" : "\r\n\r\n"));
+            scintilla.AppendText(message + "\r\n");
             scintilla.StartStyling(stylingStart);
             scintilla.SetStyling(message.Length, messageType == MessageType.Info ? 2 : 1);
             scintilla.ReadOnly = true;
@@ -1123,7 +1124,9 @@ namespace MarkMpn.Sql4Cds.XTB
                         Execute(() => ShowResult(stmt.Statement, args, null, null, null));
 
                         if (stmt.Message != null)
-                            Execute(() => ShowResult(stmt.Statement, args, null, stmt.Message, null));
+                            Execute(() => ShowResult(stmt.Statement, args, null, "\r\n" + stmt.Message, null));
+                        else if (stmt.RecordsAffected != -1)
+                            Execute(() => ShowResult(stmt.Statement, args, null, $"\r\n({stmt.RecordsAffected} {(stmt.RecordsAffected == 1 ? "row" : "rows")} affected)", null));
 
                         if (stmt.Statement is IImpersonateRevertExecutionPlanNode)
                             Execute(() => SyncUsername());
