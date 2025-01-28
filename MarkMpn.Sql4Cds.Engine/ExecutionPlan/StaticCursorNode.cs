@@ -118,7 +118,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Track how the fetch query should name each of the columns. We'll create a temporary table with simple
             // automatic column names Col0 ... ColN, and then use the output column names from the query to map to these
-            var columns = new List<SelectColumn>();
+            var populationColumns = new List<SelectColumn>();
+            var fetchColumns = new List<SelectColumn>();
 
             IDataExecutionPlanNodeInternal sourceNode;
 
@@ -135,7 +136,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var colName = $"Col{tempTable.Columns.Count}";
                     var dataCol = tempTable.Columns.Add(colName, sourceCol.Type.ToNetType(out _));
                     dataCol.AllowDBNull = sourceCol.IsNullable;
-                    columns.Add(new SelectColumn { SourceColumn = colName, OutputColumn = column.OutputColumn });
+                    populationColumns.Add(new SelectColumn { SourceColumn = column.SourceColumn, OutputColumn = colName });
+                    fetchColumns.Add(new SelectColumn { SourceColumn = colName, OutputColumn = column.OutputColumn });
                 }
             }
             else if (query is SqlNode sql)
@@ -150,7 +152,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var colName = $"Col{tempTable.Columns.Count}";
                     var dataCol = tempTable.Columns.Add(colName, sourceCol.Type.ToNetType(out _));
                     dataCol.AllowDBNull = sourceCol.IsNullable;
-                    columns.Add(new SelectColumn { SourceColumn = colName, OutputColumn = column.Key });
+                    populationColumns.Add(new SelectColumn { SourceColumn = column.Key, OutputColumn = colName });
+                    fetchColumns.Add(new SelectColumn { SourceColumn = colName, OutputColumn = column.Key });
                 }
             }
             else
@@ -196,13 +199,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SourceAttributes = new[] { rowNumberColumn }
             });
 
-            foreach (var col in columns)
+            foreach (var col in populationColumns)
             {
                 populationQuery.Accessors.Add(new AttributeAccessor
                 {
-                    TargetAttribute = col.SourceColumn,
-                    Accessor = eec => eec.Entity[col.OutputColumn],
-                    SourceAttributes = new[] { col.OutputColumn }
+                    TargetAttribute = col.OutputColumn,
+                    Accessor = eec => eec.Entity[col.SourceColumn],
+                    SourceAttributes = new[] { col.SourceColumn }
                 });
             }
 
@@ -235,7 +238,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             };
 
-            foreach (var col in columns)
+            foreach (var col in fetchColumns)
                 fetchQuery.ColumnSet.Add(new SelectColumn { SourceColumn = tempTable.TableName + "." + col.SourceColumn, OutputColumn = col.OutputColumn });
 
             var cursor = new StaticCursorNode
