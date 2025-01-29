@@ -1616,6 +1616,22 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 reader = new EntityReader(table, _nodeContext, dataSource, insertStatement, target, source);
                 logicalName = table.TableName;
+
+                if (targetColumns.Count == 0)
+                {
+                    // Support INSERT without listed column names for temp tables - they often have a limited number of columns
+                    // and can be inserted into easily.
+                    var tableScan = new TableScanNode { TableName = logicalName };
+                    var tableSchema = tableScan.GetSchema(_nodeContext);
+
+                    foreach (var col in tableSchema.Schema)
+                    {
+                        if (!col.Value.IsVisible)
+                            continue;
+
+                        targetColumns.Add(col.Key.SplitMultiPartIdentifier().Last().ToColumnReference());
+                    }
+                }
             }
             else
             {
@@ -1632,6 +1648,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 reader = new EntityReader(metadata, _nodeContext, dataSource, insertStatement, target, source);
                 logicalName = metadata.LogicalName;
+
+                // Do not support INSERT without listed column names for Dataverse entities - they tend to have lots of columns
+                // some of which are not valid for insert so the implicit mapping of columns is not obvious and could lead to
+                // mistakes.
             }
 
             var node = new InsertNode
