@@ -24,6 +24,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public CursorOptionKind Scope { get; set; }
 
+        public CursorOptionKind Direction { get; set; }
+
         public IDmlQueryExecutionPlanNode PopulationQuery { get; set; }
 
         public IDataReaderExecutionPlanNode FetchQuery { get; set; }
@@ -118,6 +120,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (!_isOpen)
                 throw new QueryExecutionException(Sql4CdsError.CursorNotOpen());
+
+            if (orientation != FetchOrientation.Next && Direction == CursorOptionKind.ForwardOnly)
+                throw new QueryExecutionException(Sql4CdsError.CursorFetchTypeNotSupportedWithForwardOnly(orientation));
 
             // Reset the @@FETCH_STATUS variable
             context.ParameterValues["@@FETCH_STATUS"] = (SqlInt32)(-1);

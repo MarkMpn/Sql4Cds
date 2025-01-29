@@ -738,6 +738,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 CursorOptionKind.Local,
                 CursorOptionKind.Global,
                 CursorOptionKind.ForwardOnly,
+                CursorOptionKind.Scroll,
                 CursorOptionKind.Static,
                 CursorOptionKind.ReadOnly,
                 CursorOptionKind.Insensitive,
@@ -772,11 +773,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
             cursor.CursorName = declareCursor.Name.Value;
             cursor.Scope = GetCursorOption(options, localOrGlobal);
+            cursor.Direction = GetCursorOption(options, fowardOnlyOrScroll, cursor.Direction);
 
             return new[] { cursor };
         }
 
         private CursorOptionKind GetCursorOption(Dictionary<CursorOptionKind, CursorOption> options, CursorOptionKind[] allowedOptions)
+        {
+            return GetCursorOption(options, allowedOptions, allowedOptions[0]);
+        }
+
+        private CursorOptionKind GetCursorOption(Dictionary<CursorOptionKind, CursorOption> options, CursorOptionKind[] allowedOptions, CursorOptionKind defaultValue)
         {
             foreach (var option in allowedOptions)
             {
@@ -784,7 +791,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     return option;
             }
 
-            return allowedOptions[0];
+            return defaultValue;
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)

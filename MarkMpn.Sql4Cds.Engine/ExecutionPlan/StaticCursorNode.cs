@@ -98,6 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new StaticCursorNode
             {
                 CursorName = CursorName,
+                Direction = Direction,
                 TempTable = TempTable.Clone(),
                 RowNumberVariable = RowNumberVariable,
                 PopulationQuery = (IDmlQueryExecutionPlanNode)PopulationQuery.Clone(),
@@ -246,7 +247,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PopulationQuery = populationQuery,
                 FetchQuery = fetchQuery,
                 TempTable = tempTable,
-                RowNumberVariable = rowNumberVariable
+                RowNumberVariable = rowNumberVariable,
+                Direction = CursorOptionKind.Scroll
             };
 
             return cursor;

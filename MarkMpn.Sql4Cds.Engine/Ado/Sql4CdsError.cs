@@ -905,6 +905,12 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(16902, fragment, (SqlInt32)subject.Length, Collation.USEnglish.ToSqlString(subject), (SqlInt32)parameter.Length, Collation.USEnglish.ToSqlString(parameter));
         }
 
+        internal static Sql4CdsError CursorFetchTypeNotSupportedWithForwardOnly(FetchOrientation orientation)
+        {
+            var text = orientation.ToString().ToLowerInvariant();
+            return Create(16911, null, "fetch", text);
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)
