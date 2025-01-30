@@ -54,5 +54,28 @@ DROP TABLE #TempTable";
                 }
             }
         }
+
+        [TestMethod]
+        public void InsertWithoutColumns()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+CREATE TABLE #TempTable (Id INT, Name NVARCHAR(100))
+INSERT INTO #TempTable VALUES (1, 'Hello'), (2, 'World')
+SELECT * FROM #TempTable
+DROP TABLE #TempTable";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Hello", reader["Name"]);
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("World", reader["Name"]);
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

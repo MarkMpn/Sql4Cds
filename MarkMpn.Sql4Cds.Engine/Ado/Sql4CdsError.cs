@@ -852,6 +852,14 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(4114, func, (SqlInt32)func.FunctionName.Value.Length, Collation.USEnglish.ToSqlString(func.FunctionName.Value), (SqlInt32)expectedArguments);
         }
 
+        internal static Sql4CdsError ConflictingCursorOption(CursorOption firstOption, CursorOption secondOption)
+        {
+            var firstOptionText = firstOption.ToNormalizedSql().Trim();
+            var secondOptionText = secondOption.ToNormalizedSql().Trim();
+
+            return Create(1048, secondOption, firstOptionText, secondOptionText);
+        }
+
         internal static Sql4CdsError InvalidEntityReferenceType(TSqlFragment fragment, string actual, string required)
         {
             return new Sql4CdsError(16, 50001, $"Cannot convert entity reference from {actual} to {required}", fragment);
@@ -860,6 +868,47 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError DuplicateObjectName(TSqlFragment fragment, string name)
         {
             return Create(2714, fragment, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError DuplicateCursorName(string name)
+        {
+            return Create(16915, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError InvalidCursorName(string name)
+        {
+            return Create(16916, null, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError CursorAlreadyOpen()
+        {
+            return Create(16905, null);
+        }
+
+        internal static Sql4CdsError CursorNotOpen()
+        {
+            return Create(16917, null);
+        }
+
+        internal static Sql4CdsError CursorVariableCountMismatch()
+        {
+            return Create(16924, null);
+        }
+
+        internal static Sql4CdsError CursorTypeClash(DataTypeReference fromType, DataTypeReference toType)
+        {
+            return Create(16922, null, GetTypeName(fromType), GetTypeName(toType));
+        }
+
+        internal static Sql4CdsError InvalidParameterValue(TSqlFragment fragment, string subject, string parameter)
+        {
+            return Create(16902, fragment, (SqlInt32)subject.Length, Collation.USEnglish.ToSqlString(subject), (SqlInt32)parameter.Length, Collation.USEnglish.ToSqlString(parameter));
+        }
+
+        internal static Sql4CdsError CursorFetchTypeNotSupportedWithForwardOnly(FetchOrientation orientation)
+        {
+            var text = orientation.ToString().ToLowerInvariant();
+            return Create(16911, null, "fetch", text);
         }
 
         private static string GetTypeName(DataTypeReference type)

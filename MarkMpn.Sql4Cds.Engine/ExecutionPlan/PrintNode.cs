@@ -61,8 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var value = (SqlString)_expression(new ExpressionExecutionContext(context));
 
-                if (!value.IsNull)
-                    context.Log(new Sql4CdsError(0, LineNumber, 0, null, null, 0, value.Value, null));
+                context.Log(new Sql4CdsError(0, LineNumber, 0, null, null, 0, value.IsNull ? "" : value.Value, null));
             }
         }
 

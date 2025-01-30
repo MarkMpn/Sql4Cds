@@ -815,7 +815,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 StateTransitions = StateTransitions,
                 UseLegacyUpdateMessages = UseLegacyUpdateMessages,
                 MinimalUpdates = MinimalUpdates,
-                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
 

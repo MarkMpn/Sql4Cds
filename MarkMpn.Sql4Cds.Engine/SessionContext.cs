@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.Data;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -149,12 +150,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
             public bool Remove(string key)
             {
-                throw new NotImplementedException();
+                return false;
             }
 
             public bool Remove(KeyValuePair<string, INullable> item)
             {
-                throw new NotImplementedException();
+                return false;
             }
 
             public bool TryGetValue(string key, out INullable value)
@@ -185,12 +186,14 @@ namespace MarkMpn.Sql4Cds.Engine
             DateFormat = DateFormat.mdy;
             _variables = new SessionContextVariables(this);
             TempDb = new DataSet();
+            Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
 
             GlobalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
             {
                 ["@@IDENTITY"] = DataTypeHelpers.EntityReference,
                 ["@@ROWCOUNT"] = DataTypeHelpers.Int,
                 ["@@ERROR"] = DataTypeHelpers.Int,
+                ["@@FETCH_STATUS"] = DataTypeHelpers.Int,
             };
 
             GlobalVariableValues = new LayeredDictionary<string, INullable>(
@@ -199,6 +202,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ["@@IDENTITY"] = SqlEntityReference.Null,
                     ["@@ROWCOUNT"] = (SqlInt32)0,
                     ["@@ERROR"] = (SqlInt32)0,
+                    ["@@FETCH_STATUS"] = (SqlInt32)0,
                 },
                 _variables);
 
@@ -219,6 +223,9 @@ namespace MarkMpn.Sql4Cds.Engine
             TempDb = clone.TempDb.Clone();
             GlobalVariableTypes = clone.GlobalVariableTypes;
             GlobalVariableValues = clone.GlobalVariableValues;
+            Cursors = new LayeredDictionary<string, CursorDeclarationBaseNode>(
+                clone.Cursors,
+                new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase));
         }
 
         private void GetServerDetails()
@@ -252,5 +259,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns a dataset holding the tables in the temporary database
         /// </summary>
         public DataSet TempDb { get; }
+
+        /// <summary>
+        /// The global cursors that are currently allocated
+        /// </summary>
+        public IDictionary<string, CursorDeclarationBaseNode> Cursors { get; }
     }
 }

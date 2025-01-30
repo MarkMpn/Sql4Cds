@@ -153,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     _columnRenaming = aliasCols;
             }
 
-            Source = source;
+            Source = (IDataExecutionPlanNodeInternal)source;
         }
 
         /// <summary>
@@ -178,7 +178,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The source node that will provide the data to populate the entities from
         /// </summary>
-        public IExecutionPlanNodeInternal Source { get; }
+        public IDataExecutionPlanNodeInternal Source { get; }
 
         /// <summary>
         /// Returns the primary key fields that need to be present in the data source

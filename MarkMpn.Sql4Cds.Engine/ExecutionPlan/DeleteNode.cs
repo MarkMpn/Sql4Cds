@@ -391,7 +391,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
                 PrimaryIdAccessors = PrimaryIdAccessors,
-                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
 

@@ -514,5 +514,17 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // REVERT is not supported
             IsCompatible = false;
         }
+
+        public override void Visit(DeclareCursorStatement node)
+        {
+            // Cursors are not supported
+            IsCompatible = false;
+        }
+
+        public override void Visit(CursorStatement node)
+        {
+            // Cursors are not supported
+            IsCompatible = false;
+        }
     }
 }

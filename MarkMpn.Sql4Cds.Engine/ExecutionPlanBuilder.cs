@@ -564,6 +564,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = ConvertCreateTableStatement(createTable);
             else if (statement is DropTableStatement dropTable)
                 plans = ConvertDropTableStatement(dropTable);
+            else if (statement is DeclareCursorStatement declareCursor)
+                plans = ConvertDeclareCursorStatement(declareCursor);
+            else if (statement is OpenCursorStatement openCursor)
+                plans = ConvertOpenCursorStatement(openCursor);
+            else if (statement is FetchCursorStatement fetchCursor)
+                plans = ConvertFetchCursorStatement(fetchCursor);
+            else if (statement is CloseCursorStatement closeCursor)
+                plans = ConvertCloseCursorStatement(closeCursor);
+            else if (statement is DeallocateCursorStatement deallocateCursor)
+                plans = ConvertDeallocateCursorStatement(deallocateCursor);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(statement, statement.GetType().Name.Replace("Statement", "").ToUpperInvariant()));
 
@@ -585,19 +595,64 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 output.AddRange(optimized);
+
+                if (plan is CreateTableNode createTable)
+                {
+                    // Create the table now in the local copy of the tempdb to allow converting later statements
+                    Session.TempDb.Tables.Add(createTable.TableDefinition.Clone());
+                }
+                else if (plan is DropTableNode dropTable)
+                {
+                    // Remove the table now in the local copy of the tempdb for validating later statements
+                    Session.TempDb.Tables.Remove(dropTable.TableName);
+                }
             }
 
             return output.ToArray();
         }
 
+        private IRootExecutionPlanNodeInternal[] ConvertDeallocateCursorStatement(DeallocateCursorStatement deallocateCursor)
+        {
+            return new[] { new DeallocateCursorNode { CursorName = deallocateCursor.Cursor.Name.Value } };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertCloseCursorStatement(CloseCursorStatement closeCursor)
+        {
+            return new[] { new CloseCursorNode { CursorName = closeCursor.Cursor.Name.Value } };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertFetchCursorStatement(FetchCursorStatement fetchCursor)
+        {
+            if (fetchCursor.FetchType?.RowOffset != null)
+            {
+                // Validate the row offset
+                var ecc = new ExpressionCompilationContext(_nodeContext, null, null);
+                fetchCursor.FetchType.RowOffset.GetType(ecc, out var rowOffsetType);
+
+                if (!rowOffsetType.IsSameAs(DataTypeHelpers.TinyInt) &&
+                    !rowOffsetType.IsSameAs(DataTypeHelpers.SmallInt) &&
+                    !rowOffsetType.IsSameAs(DataTypeHelpers.Int))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidParameterValue(fetchCursor.FetchType.RowOffset, "FETCH", "rownumber-type"));
+
+                // Use a consistent int type
+                if (!rowOffsetType.IsSameAs(DataTypeHelpers.Int))
+                    fetchCursor.FetchType.RowOffset = new ConvertCall { Parameter = fetchCursor.FetchType.RowOffset, DataType = DataTypeHelpers.Int };
+            }
+
+            if (fetchCursor.IntoVariables == null || fetchCursor.IntoVariables.Count == 0)
+                return new[] { new FetchCursorNode { CursorName = fetchCursor.Cursor.Name.Value, Orientation = fetchCursor.FetchType?.Orientation ?? FetchOrientation.Next, RowOffset = fetchCursor.FetchType?.RowOffset } };
+            else
+                return new[] { new FetchCursorIntoNode { CursorName = fetchCursor.Cursor.Name.Value, Variables = fetchCursor.IntoVariables, Orientation = fetchCursor.FetchType?.Orientation ?? FetchOrientation.Next, RowOffset = fetchCursor.FetchType?.RowOffset } };
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertOpenCursorStatement(OpenCursorStatement openCursor)
+        {
+            return new[] { new OpenCursorNode { CursorName = openCursor.Cursor.Name.Value } };
+        }
+
         private IRootExecutionPlanNodeInternal[] ConvertCreateTableStatement(CreateTableStatement createTable)
         {
-            var converted = CreateTableNode.FromStatement(createTable);
-
-            // Create the table now in the local copy of the tempdb to allow converting later statements
-            Session.TempDb.Tables.Add(converted.TableDefinition.Clone());
-
-            return new[] { converted };
+            return new[] { CreateTableNode.FromStatement(createTable) };
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertDropTableStatement(DropTableStatement dropTable)
@@ -642,15 +697,101 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     TableName = table.BaseIdentifier.Value
                 });
-
-                // Remove the table now in the local copy of the tempdb for validating later statements
-                Session.TempDb.Tables.Remove(table.BaseIdentifier.Value);
             }
 
             if (errors.Count > 0)
                 throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = String.Join(Environment.NewLine, suggestions) };
 
             return nodes.ToArray();
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertDeclareCursorStatement(DeclareCursorStatement declareCursor)
+        {
+            // Validate the combination of cursor options
+            var options = declareCursor.CursorDefinition.Options.ToDictionary(o => o.OptionKind);
+            var errors = new List<Sql4CdsError>();
+
+            var localOrGlobal = new[] { CursorOptionKind.Local, CursorOptionKind.Global };
+            var fowardOnlyOrScroll = new[] { CursorOptionKind.ForwardOnly, CursorOptionKind.Scroll };
+            var cursorType = new[] { CursorOptionKind.Static, CursorOptionKind.Keyset, CursorOptionKind.Dynamic, CursorOptionKind.FastForward };
+            var lockType = new[] { CursorOptionKind.ReadOnly, CursorOptionKind.ScrollLocks, CursorOptionKind.Optimistic };
+
+            var exclusiveOptions = new[]
+            {
+                localOrGlobal,
+                fowardOnlyOrScroll,
+                cursorType,
+                lockType,
+            };
+
+            foreach (var exclusiveSet in exclusiveOptions)
+            {
+                var matchingOptions = declareCursor.CursorDefinition.Options.Where(o => exclusiveSet.Contains(o.OptionKind)).ToList();
+
+                for (var i = 1; i < matchingOptions.Count; i++)
+                    errors.Add(Sql4CdsError.ConflictingCursorOption(matchingOptions[0], matchingOptions[i]));
+            }
+
+            // We don't support all cursor options for now
+            var supportedOptions = new[]
+            {
+                CursorOptionKind.Local,
+                CursorOptionKind.Global,
+                CursorOptionKind.ForwardOnly,
+                CursorOptionKind.Scroll,
+                CursorOptionKind.Static,
+                CursorOptionKind.ReadOnly,
+                CursorOptionKind.Insensitive,
+            };
+
+            foreach (var option in declareCursor.CursorDefinition.Options)
+            {
+                if (!supportedOptions.Contains(option.OptionKind))
+                    errors.Add(Sql4CdsError.NotSupported(option, option.ToNormalizedSql().Trim()));
+            }
+
+            if (errors.Count > 0)
+                throw new NotSupportedQueryFragmentException(errors.ToArray(), null);
+
+            // Convert the query as normal
+            var select = ConvertSelectStatement(declareCursor.CursorDefinition.Select);
+
+            // Create the appropriate type of cursor
+            var type = GetCursorOption(options, cursorType);
+
+            CursorDeclarationBaseNode cursor;
+
+            switch (type)
+            {
+                case CursorOptionKind.Static:
+                    cursor = StaticCursorNode.FromQuery(_nodeContext, select);
+                    break;
+
+                default:
+                    throw new NotImplementedException();
+            }
+
+            cursor.CursorName = declareCursor.Name.Value;
+            cursor.Scope = GetCursorOption(options, localOrGlobal);
+            cursor.Direction = GetCursorOption(options, fowardOnlyOrScroll, cursor.Direction);
+
+            return new[] { cursor };
+        }
+
+        private CursorOptionKind GetCursorOption(Dictionary<CursorOptionKind, CursorOption> options, CursorOptionKind[] allowedOptions)
+        {
+            return GetCursorOption(options, allowedOptions, allowedOptions[0]);
+        }
+
+        private CursorOptionKind GetCursorOption(Dictionary<CursorOptionKind, CursorOption> options, CursorOptionKind[] allowedOptions, CursorOptionKind defaultValue)
+        {
+            foreach (var option in allowedOptions)
+            {
+                if (options.ContainsKey(option))
+                    return option;
+            }
+
+            return defaultValue;
         }
 
         private IDmlQueryExecutionPlanNode[] ConvertSetCommandStatement(SetCommandStatement setCommand)
@@ -1167,7 +1308,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                node.Source = source;
+                node.Source = (IDataExecutionPlanNodeInternal)source;
                 node.Variables.Add(new VariableAssignment { VariableName = set.Variable.Name, SourceColumn = "Value" });
             }
 
@@ -1273,7 +1414,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type != typeof(SqlString) && type != typeof(SqlEntityReference) && type != typeof(SqlGuid))
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidTypeForStatement(impersonate.ExecuteContext.Principal, "Execute As"));
 
-            IExecutionPlanNodeInternal source;
+            IDataExecutionPlanNodeInternal source;
 
             // Create a SELECT query to find the user ID
             var selectStatement = new SelectStatement
@@ -1355,7 +1496,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                source = select;
+                source = (IDataExecutionPlanNodeInternal)select;
             }
 
             return new ExecuteAsNode
@@ -1482,6 +1623,22 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 reader = new EntityReader(table, _nodeContext, dataSource, insertStatement, target, source);
                 logicalName = table.TableName;
+
+                if (targetColumns.Count == 0)
+                {
+                    // Support INSERT without listed column names for temp tables - they often have a limited number of columns
+                    // and can be inserted into easily.
+                    var tableScan = new TableScanNode { TableName = logicalName };
+                    var tableSchema = tableScan.GetSchema(_nodeContext);
+
+                    foreach (var col in tableSchema.Schema)
+                    {
+                        if (!col.Value.IsVisible)
+                            continue;
+
+                        targetColumns.Add(col.Key.SplitMultiPartIdentifier().Last().ToColumnReference());
+                    }
+                }
             }
             else
             {
@@ -1498,6 +1655,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 reader = new EntityReader(metadata, _nodeContext, dataSource, insertStatement, target, source);
                 logicalName = metadata.LogicalName;
+
+                // Do not support INSERT without listed column names for Dataverse entities - they tend to have lots of columns
+                // some of which are not valid for insert so the implicit mapping of columns is not obvious and could lead to
+                // mistakes.
             }
 
             var node = new InsertNode

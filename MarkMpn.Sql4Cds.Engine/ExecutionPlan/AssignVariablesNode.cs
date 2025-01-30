@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Index = Index,
                 Length = Length,
                 MaxDOP = MaxDOP,
-                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
 
