@@ -51,7 +51,10 @@ namespace MarkMpn.Sql4Cds.XTB
                         IsMatchingWhitespace(tokens[dstIndex + whitespaceCount], fragment.ScriptTokenStream[srcIndex - whitespaceCount - 1]))
                         whitespaceCount++;
 
-                    dstIndex += CopyComment(fragment.ScriptTokenStream, srcIndex, tokens, dstIndex + whitespaceCount);
+                    dstIndex += CopyComment(fragment.ScriptTokenStream, ref srcIndex, tokens, dstIndex + whitespaceCount);
+
+                    // Move back one so this is pointing to the last inserted token
+                    dstIndex--;
                 }
                 else
                 {
@@ -87,7 +90,7 @@ namespace MarkMpn.Sql4Cds.XTB
             return false;
         }
 
-        private static int CopyComment(IList<TSqlParserToken> src, int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
+        private static int CopyComment(IList<TSqlParserToken> src, ref int srcIndex, IList<TSqlParserToken> dst, int dstIndex)
         {
             var insertedTokenCount = 0;
 
@@ -118,7 +121,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var trailingSrcIndex = srcIndex + 1;
             var trailingDstIndex = dstIndex + 1;
 
-            while (trailingSrcIndex < src.Count && src[trailingSrcIndex].TokenType == TSqlTokenType.WhiteSpace)
+            while (trailingSrcIndex < src.Count && (src[trailingSrcIndex].TokenType == TSqlTokenType.WhiteSpace || src[trailingSrcIndex].TokenType == TSqlTokenType.SingleLineComment || src[trailingSrcIndex].TokenType == TSqlTokenType.MultilineComment))
             {
                 if (trailingDstIndex < dst.Count && IsMatchingWhitespace(dst[trailingDstIndex], src[trailingSrcIndex]))
                     break;
@@ -128,9 +131,20 @@ namespace MarkMpn.Sql4Cds.XTB
                 else
                     dst.Insert(trailingDstIndex, src[trailingSrcIndex]);
 
+                srcIndex = trailingSrcIndex;
                 trailingSrcIndex++;
                 trailingDstIndex++;
                 insertedTokenCount++;
+            }
+
+            if (dst[trailingDstIndex - 1].TokenType == TSqlTokenType.WhiteSpace)
+            {
+                // There might be some whitespace in the generated version straight after the whitespace we've just re-inserted - remove it
+                while (trailingDstIndex < dst.Count && dst[trailingDstIndex].TokenType == TSqlTokenType.WhiteSpace)
+                {
+                    dst.RemoveAt(trailingDstIndex);
+                    insertedTokenCount--;
+                }
             }
 
             return insertedTokenCount;

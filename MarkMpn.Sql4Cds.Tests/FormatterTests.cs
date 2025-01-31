@@ -146,8 +146,28 @@ FROM businessunit as b";
 
             var expected = @"SELECT
 	-- b.name,
-	 b.*
+	b.*
 FROM   businessunit AS b;";
+
+            Assert.AreEqual(expected, Formatter.Format(original));
+        }
+
+        [TestMethod]
+        public void Issue622()
+        {
+            var original = @"SELECT
+	-- b.name,
+	-- b.name,
+	b.name
+FROM businessunit AS b
+WHERE b.name = ''";
+
+            var expected = @"SELECT
+	-- b.name,
+	-- b.name,
+	b.name
+FROM   businessunit AS b
+WHERE  b.name = '';";
 
             Assert.AreEqual(expected, Formatter.Format(original));
         }
