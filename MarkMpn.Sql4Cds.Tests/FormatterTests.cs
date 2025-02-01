@@ -51,6 +51,7 @@ insert into tbl (col) values ('foo')";
             var expected = @"SELECT *
 FROM   tbl;
 -- comment here
+
 INSERT  INTO tbl (col)
 VALUES          ('foo');";
             Assert.AreEqual(expected, Formatter.Format(original));
