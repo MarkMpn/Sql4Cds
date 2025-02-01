@@ -73,13 +73,6 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (!tscbConnection.Items.Contains(detail))
                     tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
             }
-            else if (actionName == "ConnectObjectExplorer")
-            {
-                _objectExplorer.AddConnection(detail);
-
-                if (!tscbConnection.Items.Contains(detail))
-                    tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
-            }
             else if (actionName == "ConnectObjectExplorerAndChangeConnection")
             {
                 _objectExplorer.AddConnection(detail);
@@ -93,7 +86,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     tscbConnection.Text = detail.ConnectionName;
                 }
             }
-            else if (String.IsNullOrEmpty(actionName))
+            else if (actionName == "ConnectObjectExplorer" || actionName == "AdditionalOrganization" || String.IsNullOrEmpty(actionName))
             {
                 _objectExplorer.AddConnection(detail);
 
@@ -271,7 +264,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql)
         {
-            var query = new SqlQueryControl(con, _dataSources, _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
+            var query = new SqlQueryControl(this, con, _dataSources, _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;

@@ -89,5 +89,7 @@ namespace MarkMpn.Sql4Cds.XTB
         public string Filename { get; set; }
 
         public string Query { get; set; }
+
+        public Guid? Connection { get; set; }
     }
 }
