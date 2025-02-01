@@ -2176,7 +2176,7 @@ namespace MarkMpn.Sql4Cds.XTB
         public override TabContent GetSessionDetails()
         {
             var details = base.GetSessionDetails();
-            details.Connection = Connection?.ConnectionId;
+            details.Connection = Settings.Instance.RememberSessionConnections ? Connection?.ConnectionId : null;
             return details;
         }
     }

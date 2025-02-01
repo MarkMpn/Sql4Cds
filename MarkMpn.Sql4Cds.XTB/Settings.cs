@@ -80,6 +80,8 @@ namespace MarkMpn.Sql4Cds.XTB
         public bool AllowCopilotSelectQueries { get; set; }
 
         public string AssistantVersion { get; set; }
+
+        public bool RememberSessionConnections { get; set; } = true;
     }
 
     public class TabContent

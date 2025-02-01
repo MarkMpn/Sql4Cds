@@ -46,6 +46,7 @@ namespace MarkMpn.Sql4Cds.XTB
             maxDopUpDown.Value = settings.MaxDegreeOfPaallelism;
             autoSizeColumnsCheckBox.Checked = settings.AutoSizeColumns;
             rememberSessionCheckbox.Checked = settings.RememberSession;
+            rememberSessionConnectionsCheckBox.Checked = settings.RememberSessionConnections;
             localDateFormatCheckbox.Checked = settings.LocalFormatDates;
             simpleSqlRadioButton.Checked = !settings.UseNativeSqlConversion;
             nativeSqlRadioButton.Checked = settings.UseNativeSqlConversion;
@@ -131,6 +132,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.MaxDegreeOfPaallelism = (int) maxDopUpDown.Value;
                 _settings.AutoSizeColumns = autoSizeColumnsCheckBox.Checked;
                 _settings.RememberSession = rememberSessionCheckbox.Checked;
+                _settings.RememberSessionConnections = rememberSessionConnectionsCheckBox.Checked;
                 _settings.LocalFormatDates = localDateFormatCheckbox.Checked;
                 _settings.UseNativeSqlConversion = nativeSqlRadioButton.Checked;
                 _settings.FetchXml2SqlOptions = _fetchXml2SqlOptions;
@@ -230,6 +232,11 @@ namespace MarkMpn.Sql4Cds.XTB
                     _assistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
                 }
             }
+        }
+
+        private void rememberSessionCheckbox_CheckedChanged(object sender, EventArgs e)
+        {
+            rememberSessionConnectionsCheckBox.Enabled = rememberSessionCheckbox.Checked;
         }
     }
 }
