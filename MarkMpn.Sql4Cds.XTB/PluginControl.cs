@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -15,7 +14,6 @@ using Microsoft.Xrm.Sdk;
 using WeifenLuo.WinFormsUI.Docking;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -32,6 +30,7 @@ namespace MarkMpn.Sql4Cds.XTB
             InitializeComponent();
             _plugin = plugin;
             dockPanel.Theme = new VS2015LightTheme();
+            dockPanel.ShowDocumentIcon = true;
 
             // Loads or creates the settings for the plugin
             if (!SettingsManager.Instance.TryLoad(_plugin.GetType(), out Settings settings))
