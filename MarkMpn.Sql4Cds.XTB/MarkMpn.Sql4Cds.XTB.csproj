@@ -75,6 +75,7 @@
       <DependentUpon>CreateCopilotAssistantForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Formatter.cs" />
+    <Compile Include="IconColorizer.cs" />
     <Compile Include="MarkdownExtensions.cs" />
     <Compile Include="MessageBoxExt.cs" />
     <Compile Include="Properties\Resources.Designer.cs">

@@ -54,14 +54,14 @@
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.clipboardToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.executeToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.deleteToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.insertToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.updateToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.deleteToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem5 = new System.Windows.Forms.ToolStripSeparator();
+            this.executeToToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem3 = new System.Windows.Forms.ToolStripMenuItem();
             this.functionContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripMenuItem();
             this.procedureContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.tsqlContextMenuStrip.SuspendLayout();
             this.serverContextMenuStrip.SuspendLayout();
@@ -79,10 +79,10 @@
             this.treeView.ImageIndex = 0;
             this.treeView.ImageList = this.imageList;
             this.treeView.Location = new System.Drawing.Point(0, 25);
-            this.treeView.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.treeView.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.treeView.Name = "treeView";
             this.treeView.SelectedImageIndex = 0;
-            this.treeView.Size = new System.Drawing.Size(379, 296);
+            this.treeView.Size = new System.Drawing.Size(284, 236);
             this.treeView.TabIndex = 1;
             this.treeView.BeforeExpand += new System.Windows.Forms.TreeViewCancelEventHandler(this.treeView_BeforeExpand);
             this.treeView.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.treeView_AfterSelect);
@@ -197,7 +197,7 @@
             this.tsbDisconnect});
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
-            this.toolStrip1.Size = new System.Drawing.Size(379, 25);
+            this.toolStrip1.Size = new System.Drawing.Size(284, 25);
             this.toolStrip1.TabIndex = 2;
             this.toolStrip1.Text = "toolStrip1";
             // 
@@ -255,7 +255,7 @@
             this.toolStripMenuItem5,
             this.executeToToolStripMenuItem});
             this.scriptAsTypeContextMenuStrip.Name = "tableContextMenuStrip";
-            this.scriptAsTypeContextMenuStrip.OwnerItem = this.toolStripMenuItem4;
+            this.scriptAsTypeContextMenuStrip.OwnerItem = this.toolStripMenuItem3;
             this.scriptAsTypeContextMenuStrip.Size = new System.Drawing.Size(137, 120);
             // 
             // selectToToolStripMenuItem
@@ -274,7 +274,7 @@
             this.fileToolStripMenuItem,
             this.clipboardToolStripMenuItem});
             this.scriptAsTargetsContextMenuStrip.Name = "scriptTableAsTargetsContextMenuStrip";
-            this.scriptAsTargetsContextMenuStrip.OwnerItem = this.deleteToToolStripMenuItem;
+            this.scriptAsTargetsContextMenuStrip.OwnerItem = this.executeToToolStripMenuItem;
             this.scriptAsTargetsContextMenuStrip.Size = new System.Drawing.Size(215, 76);
             // 
             // newQueryEditorWindowToolStripMenuItem
@@ -306,13 +306,13 @@
             this.clipboardToolStripMenuItem.Text = "Clipboard";
             this.clipboardToolStripMenuItem.Click += new System.EventHandler(this.clipboardToolStripMenuItem_Click);
             // 
-            // executeToToolStripMenuItem
+            // deleteToToolStripMenuItem
             // 
-            this.executeToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
-            this.executeToToolStripMenuItem.Name = "executeToToolStripMenuItem";
-            this.executeToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
-            this.executeToToolStripMenuItem.Text = "EXECUTE To";
-            this.executeToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            this.deleteToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.deleteToToolStripMenuItem.Name = "deleteToToolStripMenuItem";
+            this.deleteToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.deleteToToolStripMenuItem.Text = "DELETE To";
+            this.deleteToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
             // 
             // insertToToolStripMenuItem
             // 
@@ -330,18 +330,25 @@
             this.updateToToolStripMenuItem.Text = "UPDATE To";
             this.updateToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
             // 
-            // deleteToToolStripMenuItem
-            // 
-            this.deleteToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
-            this.deleteToToolStripMenuItem.Name = "deleteToToolStripMenuItem";
-            this.deleteToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
-            this.deleteToToolStripMenuItem.Text = "DELETE To";
-            this.deleteToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
-            // 
             // toolStripMenuItem5
             // 
             this.toolStripMenuItem5.Name = "toolStripMenuItem5";
             this.toolStripMenuItem5.Size = new System.Drawing.Size(133, 6);
+            // 
+            // executeToToolStripMenuItem
+            // 
+            this.executeToToolStripMenuItem.DropDown = this.scriptAsTargetsContextMenuStrip;
+            this.executeToToolStripMenuItem.Name = "executeToToolStripMenuItem";
+            this.executeToToolStripMenuItem.Size = new System.Drawing.Size(136, 22);
+            this.executeToToolStripMenuItem.Text = "EXECUTE To";
+            this.executeToToolStripMenuItem.DropDownOpening += new System.EventHandler(this.scriptTableAsTargetsContextMenuStripOpening);
+            // 
+            // toolStripMenuItem4
+            // 
+            this.toolStripMenuItem4.DropDown = this.scriptAsTypeContextMenuStrip;
+            this.toolStripMenuItem4.Name = "toolStripMenuItem4";
+            this.toolStripMenuItem4.Size = new System.Drawing.Size(168, 22);
+            this.toolStripMenuItem4.Text = "Script Function as";
             // 
             // toolStripMenuItem3
             // 
@@ -358,30 +365,22 @@
             this.functionContextMenuStrip.Size = new System.Drawing.Size(169, 26);
             this.functionContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.functionContextMenuStrip_Opening);
             // 
-            // toolStripMenuItem4
-            // 
-            this.toolStripMenuItem4.DropDown = this.scriptAsTypeContextMenuStrip;
-            this.toolStripMenuItem4.Name = "toolStripMenuItem4";
-            this.toolStripMenuItem4.Size = new System.Drawing.Size(168, 22);
-            this.toolStripMenuItem4.Text = "Script Function as";
-            // 
             // procedureContextMenuStrip
             // 
             this.procedureContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripMenuItem3});
             this.procedureContextMenuStrip.Name = "tableContextMenuStrip";
-            this.procedureContextMenuStrip.Size = new System.Drawing.Size(213, 48);
+            this.procedureContextMenuStrip.Size = new System.Drawing.Size(213, 26);
             this.procedureContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.procedureContextMenuStrip_Opening);
             // 
             // ObjectExplorer
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(379, 321);
+            this.ClientSize = new System.Drawing.Size(284, 261);
             this.Controls.Add(this.treeView);
             this.Controls.Add(this.toolStrip1);
             this.HideOnClose = true;
-            this.Margin = new System.Windows.Forms.Padding(4);
             this.Name = "ObjectExplorer";
             this.Text = "Object Explorer";
             this.tsqlContextMenuStrip.ResumeLayout(false);
