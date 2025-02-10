@@ -347,7 +347,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Get the ADO.NET schema from the data reader
             // Parameter values need non-null value for compatibility with TDS Endpoint
             var parameterValues = context.ParameterTypes.ToDictionary(p => p.Key, p => _sampleValues[p.Value.ToNetType(out _)]);
-            using (var reader = Execute(new NodeExecutionContext(context, parameterValues), CommandBehavior.SchemaOnly))
+            using (var reader = Execute(context.CreateExecutionContext(parameterValues), CommandBehavior.SchemaOnly))
             {
                 return GetSchema(reader, context);
             }
