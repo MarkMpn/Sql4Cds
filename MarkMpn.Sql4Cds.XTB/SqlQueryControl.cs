@@ -35,6 +35,8 @@ using Microsoft.Xrm.Tooling.Connector;
 using Newtonsoft.Json;
 using ScintillaNET;
 using xrmtb.XrmToolBox.Controls.Controls;
+using XrmToolBox.Controls;
+using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -114,6 +116,7 @@ namespace MarkMpn.Sql4Cds.XTB
         }
 
         private ConnectionDetail _con;
+        private readonly PluginControl _pluginControl;
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
         private readonly Action<string> _log;
@@ -148,7 +151,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
+        public SqlQueryControl(PluginControl pluginControl, ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
 
@@ -163,6 +166,7 @@ namespace MarkMpn.Sql4Cds.XTB
             DataSources = dataSources;
             _editor = CreateSqlEditor();
             _autocomplete = CreateAutocomplete();
+            _pluginControl = pluginControl;
             _ai = ai;
             _log = log;
             _properties = properties;
@@ -180,7 +184,6 @@ namespace MarkMpn.Sql4Cds.XTB
 
             splitContainer.Panel1.Controls.Add(_editor);
             splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
-            Icon = _sqlIcon;
 
             // Show/hide the copilot panel
             copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
@@ -276,6 +279,31 @@ namespace MarkMpn.Sql4Cds.XTB
 
             SyncUsername();
             SyncTitle();
+            SyncIcon();
+        }
+
+        private void SyncIcon()
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(SyncIcon));
+                return;
+            }
+
+            Icon = GetIcon();
+        }
+        
+        private Icon GetIcon()
+        {
+            if (Connection?.EnvironmentHighlightingInfo?.Color == null)
+                return _sqlIcon;
+
+            return IconColorizer.ApplyEnvironmentHighlightColor(
+                _sqlIcon,
+                Connection.EnvironmentHighlightingInfo.Color.Value,
+                referenceColorPoint: new Point(1, 11),
+                bounds: new Rectangle(1, 9, 5, 6)
+                );
         }
 
         private void Connect()
@@ -2117,6 +2145,63 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (_copilotWebView != null)
                     _copilotWebView.Visible = false;
             }
+        }
+
+        public override void RestoreSessionDetails(TabContent tab)
+        {
+            if (!String.IsNullOrEmpty(tab.Filename))
+                Open(tab.Filename);
+
+            base.RestoreSessionDetails(tab);
+
+            if (tab.Connection != null && tab.Connection != Connection?.ConnectionId)
+            {
+                // Check if we already have the requested connection as a data source
+                var existingConnection = DataSources.Values.OfType<XtbDataSource>().SingleOrDefault(ds => ds.ConnectionDetail.ConnectionId == tab.Connection);
+
+                if (existingConnection != null)
+                {
+                    ChangeConnection(existingConnection.ConnectionDetail);
+                    return;
+                }
+
+                // We don't already have this connection - connect to it and add it to the object explorer
+                var savedConnection = ConnectionManager.Instance.ConnectionsList.Connections.SingleOrDefault(c => c.ConnectionId == tab.Connection);
+
+                if (savedConnection != null)
+                {
+                    var connectionParameterInfoType = System.Type.GetType("XrmToolBox.ConnectionParameterInfo, XrmToolBox");
+                    var connectionParameterInfo = Activator.CreateInstance(connectionParameterInfoType);
+                    Control connControl;
+
+                    if (!savedConnection.UseOnline)
+                        connControl = new ConnectingControl { Anchor = AnchorStyles.None };
+                    else
+                        connControl = new ConnectingCdsControl { Anchor = AnchorStyles.None };
+
+                    connControl.Left = Width / 2 - connControl.Width / 2;
+                    connControl.Top = Height / 2 - connControl.Height / 2;
+                    Controls.Add(connControl);
+                    connControl.BringToFront();
+
+                    connectionParameterInfoType.GetProperty("ConnControl").SetValue(connectionParameterInfo, connControl);
+                    connectionParameterInfoType.GetProperty("ConnectionParmater").SetValue(connectionParameterInfo, new RequestConnectionEventArgs
+                    {
+                        ActionName = "AdditionalOrganization",
+                        Control = _pluginControl
+                    });
+                    ConnectionManager.Instance.ConnectToServer(new List<ConnectionDetail>(new[] { savedConnection }), connectionParameterInfo);
+                    _pluginControl.UpdateConnection(savedConnection.GetCrmServiceClient(), savedConnection, "ConnectObjectExplorer", null);
+                    ChangeConnection(savedConnection);
+                }
+            }
+        }
+
+        public override TabContent GetSessionDetails()
+        {
+            var details = base.GetSessionDetails();
+            details.Connection = Settings.Instance.RememberSessionConnections ? Connection?.ConnectionId : null;
+            return details;
         }
     }
 }

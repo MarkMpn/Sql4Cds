@@ -94,6 +94,7 @@
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
             this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.label25 = new System.Windows.Forms.Label();
             this.createAssistantbutton = new System.Windows.Forms.Button();
             this.label24 = new System.Windows.Forms.Label();
             this.allowCopilotSelectQueriesCheckBox = new System.Windows.Forms.CheckBox();
@@ -103,7 +104,7 @@
             this.label22 = new System.Windows.Forms.Label();
             this.openAiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
-            this.label25 = new System.Windows.Forms.Label();
+            this.rememberSessionConnectionsCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -694,6 +695,7 @@
             // 
             // tabPage3
             // 
+            this.tabPage3.Controls.Add(this.rememberSessionConnectionsCheckBox);
             this.tabPage3.Controls.Add(this.label20);
             this.tabPage3.Controls.Add(this.fontSizeNumericUpDown);
             this.tabPage3.Controls.Add(this.label19);
@@ -715,15 +717,15 @@
             // label20
             // 
             this.label20.AutoSize = true;
-            this.label20.Location = new System.Drawing.Point(259, 152);
+            this.label20.Location = new System.Drawing.Point(259, 175);
             this.label20.Name = "label20";
             this.label20.Size = new System.Drawing.Size(16, 13);
-            this.label20.TabIndex = 9;
+            this.label20.TabIndex = 10;
             this.label20.Text = "pt";
             // 
             // fontSizeNumericUpDown
             // 
-            this.fontSizeNumericUpDown.Location = new System.Drawing.Point(215, 150);
+            this.fontSizeNumericUpDown.Location = new System.Drawing.Point(215, 173);
             this.fontSizeNumericUpDown.Minimum = new decimal(new int[] {
             1,
             0,
@@ -731,7 +733,7 @@
             0});
             this.fontSizeNumericUpDown.Name = "fontSizeNumericUpDown";
             this.fontSizeNumericUpDown.Size = new System.Drawing.Size(38, 20);
-            this.fontSizeNumericUpDown.TabIndex = 8;
+            this.fontSizeNumericUpDown.TabIndex = 9;
             this.fontSizeNumericUpDown.Value = new decimal(new int[] {
             10,
             0,
@@ -741,10 +743,10 @@
             // label19
             // 
             this.label19.AutoSize = true;
-            this.label19.Location = new System.Drawing.Point(212, 134);
+            this.label19.Location = new System.Drawing.Point(212, 157);
             this.label19.Name = "label19";
             this.label19.Size = new System.Drawing.Size(51, 13);
-            this.label19.TabIndex = 7;
+            this.label19.TabIndex = 8;
             this.label19.Text = "Font Size";
             // 
             // fontComboBox
@@ -753,27 +755,27 @@
             this.fontComboBox.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
             this.fontComboBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.fontComboBox.FormattingEnabled = true;
-            this.fontComboBox.Location = new System.Drawing.Point(9, 149);
+            this.fontComboBox.Location = new System.Drawing.Point(9, 172);
             this.fontComboBox.Name = "fontComboBox";
             this.fontComboBox.Size = new System.Drawing.Size(200, 21);
-            this.fontComboBox.TabIndex = 6;
+            this.fontComboBox.TabIndex = 7;
             this.fontComboBox.DrawItem += new System.Windows.Forms.DrawItemEventHandler(this.fontComboBox_DrawItem);
             // 
             // label18
             // 
             this.label18.AutoSize = true;
-            this.label18.Location = new System.Drawing.Point(6, 133);
+            this.label18.Location = new System.Drawing.Point(6, 156);
             this.label18.Name = "label18";
             this.label18.Size = new System.Drawing.Size(58, 13);
-            this.label18.TabIndex = 5;
+            this.label18.TabIndex = 6;
             this.label18.Text = "Editor Font";
             // 
             // resetToolWindowsButton
             // 
-            this.resetToolWindowsButton.Location = new System.Drawing.Point(6, 98);
+            this.resetToolWindowsButton.Location = new System.Drawing.Point(6, 121);
             this.resetToolWindowsButton.Name = "resetToolWindowsButton";
             this.resetToolWindowsButton.Size = new System.Drawing.Size(119, 23);
-            this.resetToolWindowsButton.TabIndex = 4;
+            this.resetToolWindowsButton.TabIndex = 5;
             this.resetToolWindowsButton.Text = "Reset Tool Windows";
             this.resetToolWindowsButton.UseVisualStyleBackColor = true;
             this.resetToolWindowsButton.Click += new System.EventHandler(this.resetToolWindowsButton_Click);
@@ -781,10 +783,10 @@
             // localDateFormatCheckbox
             // 
             this.localDateFormatCheckbox.AutoSize = true;
-            this.localDateFormatCheckbox.Location = new System.Drawing.Point(6, 75);
+            this.localDateFormatCheckbox.Location = new System.Drawing.Point(6, 98);
             this.localDateFormatCheckbox.Name = "localDateFormatCheckbox";
             this.localDateFormatCheckbox.Size = new System.Drawing.Size(203, 17);
-            this.localDateFormatCheckbox.TabIndex = 3;
+            this.localDateFormatCheckbox.TabIndex = 4;
             this.localDateFormatCheckbox.Text = "Show date/time values in local format";
             this.localDateFormatCheckbox.UseVisualStyleBackColor = true;
             // 
@@ -797,6 +799,7 @@
             this.rememberSessionCheckbox.TabIndex = 2;
             this.rememberSessionCheckbox.Text = "Remember session details";
             this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
+            this.rememberSessionCheckbox.CheckedChanged += new System.EventHandler(this.rememberSessionCheckbox_CheckedChanged);
             // 
             // tabPage4
             // 
@@ -899,6 +902,15 @@
             this.tabPage5.Text = "Copilot";
             this.tabPage5.UseVisualStyleBackColor = true;
             // 
+            // label25
+            // 
+            this.label25.Location = new System.Drawing.Point(5, 49);
+            this.label25.Name = "label25";
+            this.label25.Size = new System.Drawing.Size(399, 41);
+            this.label25.TabIndex = 9;
+            this.label25.Text = "Leave blank when using OpenAI.\r\nFor Azure OpenAI, enter the endpoint of your reso" +
+    "urce, e.g. https://my-copilot.openai.azure.com/";
+            // 
             // createAssistantbutton
             // 
             this.createAssistantbutton.Location = new System.Drawing.Point(329, 161);
@@ -979,18 +991,20 @@
             this.label21.Location = new System.Drawing.Point(4, 11);
             this.label21.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label21.Name = "label21";
-            this.label21.Size = new System.Drawing.Size(91, 13);
+            this.label21.Size = new System.Drawing.Size(121, 13);
             this.label21.TabIndex = 0;
             this.label21.Text = "Azure Open AI Endpoint";
             // 
-            // label25
+            // rememberSessionConnectionsCheckBox
             // 
-            this.label25.Location = new System.Drawing.Point(5, 49);
-            this.label25.Name = "label25";
-            this.label25.Size = new System.Drawing.Size(399, 41);
-            this.label25.TabIndex = 9;
-            this.label25.Text = "Leave blank when using OpenAI.\r\nFor Azure OpenAI, enter the end" +
-    "point of your resource, e.g. https://my-copilot.openai.azure.com/";
+            this.rememberSessionConnectionsCheckBox.AutoSize = true;
+            this.rememberSessionConnectionsCheckBox.Enabled = false;
+            this.rememberSessionConnectionsCheckBox.Location = new System.Drawing.Point(24, 75);
+            this.rememberSessionConnectionsCheckBox.Name = "rememberSessionConnectionsCheckBox";
+            this.rememberSessionConnectionsCheckBox.Size = new System.Drawing.Size(148, 17);
+            this.rememberSessionConnectionsCheckBox.TabIndex = 3;
+            this.rememberSessionConnectionsCheckBox.Text = "Remember session details";
+            this.rememberSessionConnectionsCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
@@ -1121,5 +1135,6 @@
         private System.Windows.Forms.CheckBox allowCopilotSelectQueriesCheckBox;
         private System.Windows.Forms.Button createAssistantbutton;
         private System.Windows.Forms.Label label25;
+        private System.Windows.Forms.CheckBox rememberSessionConnectionsCheckBox;
     }
 }
