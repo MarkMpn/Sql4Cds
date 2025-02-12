@@ -77,11 +77,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     localParameterTypes[param.Key] = param.Value;
             }
 
-            // Add in standard global variables
-            var parameterTypes = new LayeredDictionary<string, DataTypeReference>(Session.GlobalVariableTypes, localParameterTypes);
-
-            _staticContext = new ExpressionCompilationContext(Session, Options, parameterTypes, null, null);
-            _nodeContext = new NodeCompilationContext(Session, Options, parameterTypes, Log);
+            _staticContext = new ExpressionCompilationContext(Session, Options, localParameterTypes, null, null);
+            _nodeContext = new NodeCompilationContext(Session, Options, localParameterTypes, Log);
 
             var queries = new List<IRootExecutionPlanNodeInternal>();
 
@@ -131,7 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
             script.Accept(new ExplicitCollationVisitor());
-            var optimizer = new ExecutionPlanOptimizer(Session, Options, parameterTypes, !EstimatedPlanOnly, _nodeContext.Log);
+            var optimizer = new ExecutionPlanOptimizer(Session, Options, localParameterTypes, !EstimatedPlanOnly, _nodeContext.Log);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)

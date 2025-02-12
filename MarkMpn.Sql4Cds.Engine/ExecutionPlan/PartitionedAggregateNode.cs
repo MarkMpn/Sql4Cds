@@ -45,6 +45,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private BlockingCollection<Partition> _queue;
         private int _pendingPartitions;
         private object _lock;
+        private int _threadCount;
 
         /// <summary>
         /// The maximum degree of parallelism to apply to this operation
@@ -125,12 +126,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ["@PartitionEnd"] = DataTypeHelpers.DateTime
             };
 
-            if (context.ParameterTypes != null)
-            {
-                foreach (var kvp in context.ParameterTypes)
-                    partitionParameterTypes[kvp.Key] = kvp.Value;
-            }
-
             // Split recursively, add up values below & above split value if query returns successfully, or re-split on error
             // Range is > MinValue AND <= MaxValue, so start from just before first record to ensure the first record is counted
             var fullRange = new Partition
@@ -170,18 +165,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     new ParallelOptions { MaxDegreeOfParallelism = maxDop, CancellationToken = context.Options.CancellationToken },
                     () =>
                     {
-                        var ds = new Dictionary<string, DataSource>
-                        {
-                            [fetchXmlNode.DataSource] = new DataSource
-                            {
-                                Connection = svc?.Clone() ?? org,
-                                Metadata = context.Session.DataSources[fetchXmlNode.DataSource].Metadata,
-                                Name = fetchXmlNode.DataSource,
-                                TableSizeCache = context.Session.DataSources[fetchXmlNode.DataSource].TableSizeCache,
-                                MessageCache = context.Session.DataSources[fetchXmlNode.DataSource].MessageCache
-                            }
-                        };
-
                         var fetch = new FetchXmlScan
                         {
                             Alias = fetchXmlNode.Alias,
@@ -196,14 +179,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             ["@PartitionEnd"] = maxKey
                         };
 
-                        if (context.ParameterValues != null)
-                        {
-                            foreach (var kvp in context.ParameterValues)
-                                partitionParameterValues[kvp.Key] = kvp.Value;
-                        }
+                        var partitionContext = context.CreateChildContext(partitionParameterTypes, partitionParameterValues);
 
-                        var partitionContext = new NodeExecutionContext(context, context.ParameterTypes, partitionParameterValues);
+                        // Use a clone of the service client for each thread
+                        if (svc != null)
+                            partitionContext = partitionContext.CreateClonedSession(fetchXmlNode.DataSource);
 
+                        Interlocked.Increment(ref _threadCount);
+                        LogStatus(meta, context);
                         return new { Context = partitionContext, Fetch = fetch };
                     },
                     (partition, loopState, index, threadLocalState) =>
@@ -216,10 +199,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             lock (_lock)
                             {
                                 _progress += partition.Percentage;
-                                ProgressMessage = $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...";
-
-                                context.Options.Progress(0, ProgressMessage);
                             }
+
+                            LogStatus(meta, context);
 
                             if (Interlocked.Decrement(ref _pendingPartitions) == 0)
                                 _queue.CompleteAdding();
@@ -257,6 +239,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             fetchXmlNode.MergeStatsFrom(threadLocalState.Fetch);
                         }
+
+                        Interlocked.Decrement(ref _threadCount);
+                        LogStatus(meta, context);
                     });
             }
             catch (AggregateException aggEx)
@@ -276,6 +261,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 yield return result;
             }
+        }
+
+        private void LogStatus(EntityMetadata meta, NodeExecutionContext context)
+        {
+            var threadCountMessage = _threadCount < 2 ? "" : $" ({_threadCount:N0} threads)";
+            ProgressMessage = $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0}){threadCountMessage}...";
+            context.Options.Progress(0, ProgressMessage);
         }
 
         private void SplitPartition(Partition partition)

@@ -2033,7 +2033,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             keyFilter = null;
 
             var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
-            var expressionExecutionContext = new ExpressionExecutionContext(new NodeExecutionContext(context, null));
+            var expressionExecutionContext = new ExpressionExecutionContext(expressionCompilationContext);
 
             if (criteria is BooleanBinaryExpression binary)
             {
