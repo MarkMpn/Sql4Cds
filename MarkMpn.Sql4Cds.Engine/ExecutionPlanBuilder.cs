@@ -2538,6 +2538,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.SetOperationWithDifferentColumnCounts(binary));
 
             IDataExecutionPlanNodeInternal node;
+            List<SelectColumn> columns;
 
             if (binary.BinaryQueryExpressionType == BinaryQueryExpressionType.Union)
             {
@@ -2545,19 +2546,28 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (concat == null)
                 {
+                    columns = new List<SelectColumn>();
                     concat = new ConcatenateNode();
 
                     concat.Sources.Add(left.Source);
 
                     foreach (var col in left.ColumnSet)
                     {
+                        var colName = context.GetExpressionName();
+
                         concat.ColumnSet.Add(new ConcatenateColumn
                         {
-                            OutputColumn = context.GetExpressionName(),
+                            OutputColumn = colName,
                             SourceColumns = { col.SourceColumn },
                             SourceExpressions = { col.SourceExpression }
                         });
+
+                        columns.Add(new SelectColumn { SourceColumn = colName, OutputColumn = col.OutputColumn });
                     }
+                }
+                else
+                {
+                    columns = left.ColumnSet;
                 }
 
                 concat.Sources.Add(right.Source);
@@ -2610,6 +2620,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     ((HashJoinNode)node).LeftAttributes.Add(leftCol.SourceColumn.ToColumnReference());
                     ((HashJoinNode)node).RightAttributes.Add(rightCol.SourceColumn.ToColumnReference());
                 }
+
+                columns = left.ColumnSet;
             }
 
             // Aliases to be used for sorting are:
@@ -2636,7 +2648,6 @@ namespace MarkMpn.Sql4Cds.Engine
                         aliases.Add(left.ColumnSet[i].OutputColumn, aliasedCols);
                     }
 
-                    //aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
                     aliasedCols.Add(combinedSchema.Schema.Skip(i).First().Key);
                 }
 
@@ -2655,7 +2666,6 @@ namespace MarkMpn.Sql4Cds.Engine
                             aliases.Add(sourceColName, aliasedCols);
                         }
 
-                        //aliasedCols.Add(concat.ColumnSet[i].OutputColumn);
                         aliasedCols.Add(combinedSchema.Schema.Skip(i).First().Key);
                     }
                 }
@@ -2665,7 +2675,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, binary.OffsetClause, context);
 
             var select = new SelectNode { Source = node, LogicalSourceSchema = combinedSchema };
-            select.ColumnSet.AddRange(combinedSchema.Schema.Select((col, i) => new SelectColumn { SourceColumn = col.Key, SourceExpression = col.Key.ToColumnReference(), OutputColumn = left.ColumnSet[i].OutputColumn }));
+            select.ColumnSet.AddRange(columns);
 
             if (binary.ForClause is XmlForClause forXml)
                 ConvertForXmlClause(select, forXml, context);

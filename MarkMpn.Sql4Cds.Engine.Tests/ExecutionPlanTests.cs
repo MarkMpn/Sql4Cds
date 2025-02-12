@@ -9135,5 +9135,41 @@ WHERE statecode = 0
   </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void Except()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT logicalname AS l FROM metadata.entity
+EXCEPT
+SELECT logicalname FROM metadata.attribute";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("l", select.ColumnSet.Single().OutputColumn);
+            Assert.AreEqual("entity.logicalname", select.ColumnSet.Single().SourceColumn);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            Assert.AreEqual("entity.logicalname", join.LeftAttribute.ToSql());
+            Assert.AreEqual("attribute.logicalname", join.RightAttribute.ToSql());
+            Assert.IsTrue(join.SemiJoin);
+            Assert.AreEqual(BooleanComparisonType.IsNotDistinctFrom, join.ComparisonType);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.AntiJoin);
+            var distinct1 = AssertNode<DistinctNode>(join.LeftSource);
+            Assert.AreEqual("entity.logicalname", distinct1.Columns.Single());
+            var metadata1 = AssertNode<MetadataQueryNode>(distinct1.Source);
+            Assert.AreEqual("entity", metadata1.EntityAlias);
+            Assert.AreEqual(MetadataSource.Entity, metadata1.MetadataSource);
+            var distinct2 = AssertNode<DistinctNode>(join.RightSource);
+            Assert.AreEqual("attribute.logicalname", distinct2.Columns.Single());
+            var metadata2 = AssertNode<MetadataQueryNode>(distinct2.Source);
+            Assert.AreEqual("attribute", metadata2.AttributeAlias);
+            Assert.AreEqual(MetadataSource.Attribute, metadata2.MetadataSource);
+        }
     }
 }
