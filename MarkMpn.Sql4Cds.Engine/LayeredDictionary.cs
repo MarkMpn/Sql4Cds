@@ -20,6 +20,8 @@ namespace MarkMpn.Sql4Cds.Engine
             _fallback = inner.Last();
         }
 
+        public IDictionary<TKey, TValue>[] Inner => _inner;
+
         public TValue this[TKey key]
         {
             get
@@ -130,6 +132,30 @@ namespace MarkMpn.Sql4Cds.Engine
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+    }
+
+    static class LayeredDictionaryExtensions
+    {
+        /// <summary>
+        /// Removes a dictionary from a <see cref="LayeredDictionary{TKey, TValue}"/>, returning the new dictionary
+        /// </summary>
+        /// <typeparam name="TKey"></typeparam>
+        /// <typeparam name="TValue"></typeparam>
+        /// <param name="dict"></param>
+        /// <param name="remove"></param>
+        /// <returns></returns>
+        public static IDictionary<TKey, TValue> Unlayer<TKey,TValue>(this IDictionary<TKey, TValue> dict, IDictionary<TKey, TValue> remove)
+        {
+            if (!(dict is LayeredDictionary<TKey, TValue> layered))
+            {
+                if (dict == remove)
+                    return null;
+
+                return dict;
+            }
+
+            return new LayeredDictionary<TKey, TValue>(layered.Inner.Select(d => d.Unlayer(remove)).Where(d => d != null).ToArray());
         }
     }
 }
