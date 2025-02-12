@@ -1241,5 +1241,102 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var schema = fetch.GetSchema(new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null));
             Assert.IsNull(schema.PrimaryKey);
         }
+
+        class ContextCapturingNode : BaseDataNode
+        {
+            public NodeExecutionContext Context { get; private set; }
+
+            public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
+            {
+            }
+
+            public override object Clone()
+            {
+                return new ContextCapturingNode();
+            }
+
+            public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+            {
+                return this;
+            }
+
+            public override INodeSchema GetSchema(NodeCompilationContext context)
+            {
+                return new NodeSchema(null, null, null, null);
+            }
+
+            public override IEnumerable<IExecutionPlanNode> GetSources()
+            {
+                return Enumerable.Empty<IExecutionPlanNode>();
+            }
+
+            protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
+            {
+                return new RowCountEstimate(0);
+            }
+
+            protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
+            {
+                Context = context;
+                return Enumerable.Empty<Entity>();
+            }
+        }
+
+        [TestMethod]
+        public void NestedLoopPassesThroughVariableS()
+        {
+            var outer = new ConstantScanNode
+            {
+                Values =
+                {
+                    new Dictionary<string, ScalarExpression>
+                    {
+                        ["key1"] = new IntegerLiteral { Value = "1" },
+                        ["firstname"] = new StringLiteral { Value = "Mark" }
+                    },
+                    new Dictionary<string, ScalarExpression>
+                    {
+                        ["key1"] = new IntegerLiteral { Value = "2" },
+                        ["firstname"] = new StringLiteral { Value = "Joe" }
+                    }
+                },
+                Schema =
+                {
+                    ["key1"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                    ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
+                },
+                Alias = "f"
+            };
+
+            var inner = new ContextCapturingNode();
+
+            var loop = new NestedLoopNode
+            {
+                LeftSource = outer,
+                RightSource = inner,
+                OuterReferences = new Dictionary<string, string>
+                {
+                    ["f.key1"] = "@Expr1",
+                    ["f.firstname"] = "@Expr2"
+                }
+            };
+
+            var session = new SessionContext(_localDataSources, new StubOptions());
+            var paramTypes = new Dictionary<string, DataTypeReference>
+            {
+                ["@Param1"] = DataTypeHelpers.Int
+            };
+            var paramValues = new Dictionary<string, INullable>
+            {
+                ["@Param1"] = (SqlInt32)1
+            };
+            var context = new NodeExecutionContext(session, new StubOptions(), paramTypes, paramValues, null);
+
+            foreach (var entity in loop.Execute(context))
+                ;
+
+            Assert.AreEqual(session.GlobalVariableTypes.Count + paramTypes.Count + loop.OuterReferences.Count, inner.Context.ParameterTypes.Count);
+            Assert.AreEqual(session.GlobalVariableValues.Count + paramValues.Count + loop.OuterReferences.Count, inner.Context.ParameterValues.Count);
+        }
     }
 }

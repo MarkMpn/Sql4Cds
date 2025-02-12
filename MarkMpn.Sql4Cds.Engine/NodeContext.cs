@@ -5,6 +5,11 @@ using System.Text;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -19,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Creates a new <see cref="NodeCompilationContext"/>
         /// </summary>
-        /// <param name="dataSources">The data sources that are available to the query</param>
+        /// <param name="session">The data sources that are available to the query</param>
         /// <param name="options">The options that the query will be executed with</param>
         /// <param name="parameterTypes">The names and types of the parameters that are available to the query</param>
         /// <param name="log">A callback function to log messages</param>
@@ -31,6 +36,15 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             Session = session;
             Options = options;
+
+            // Add in standard global variables
+            if (parameterTypes != null)
+                parameterTypes = new LayeredDictionary<string, DataTypeReference>(Session.GlobalVariableTypes, parameterTypes);
+            else if (Session != null)
+                parameterTypes = Session.GlobalVariableTypes;
+            else
+                parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+
             ParameterTypes = parameterTypes;
             GlobalCalculations = new NestedLoopNode
             {
@@ -124,6 +138,23 @@ namespace MarkMpn.Sql4Cds.Engine
             return new NodeCompilationContext(this, additionalParameters);
         }
 
+        /// <summary>
+        /// Creates a new <see cref="NodeExecutionContext"/> based on this context
+        /// </summary>
+        /// <param name="parameterValues">The values for any parameters in this context</param>
+        /// <returns></returns>
+        public NodeExecutionContext CreateExecutionContext(IDictionary<string, INullable> parameterValues)
+        {
+            if (parameterValues == null)
+                parameterValues = new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase);
+
+            parameterValues = new LayeredDictionary<string, INullable>(
+                Session.GlobalVariableValues,
+                parameterValues);
+
+            return new NodeExecutionContext(Session, Options, ParameterTypes, parameterValues, Log);
+        }
+
         internal void ResetGlobalCalculations()
         {
             GlobalCalculations.OuterReferences.Clear();
@@ -165,21 +196,9 @@ namespace MarkMpn.Sql4Cds.Engine
             Action<Sql4CdsError> log)
             : base(session, options, parameterTypes, log)
         {
-            ParameterValues = parameterValues;
-            Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// Creates a new <see cref="NodeExecutionContext"/> based on a <see cref="NodeCompilationContext"/>
-        /// </summary>
-        /// <param name="parentContext">The <see cref="NodeCompilationContext"/> to inherit settings from</param>
-        /// <param name="parameterValues">The values to use for any parameters</param>
-        public NodeExecutionContext(
-            NodeCompilationContext parentContext,
-            IDictionary<string, INullable> parameterValues)
-            : base(parentContext, parentContext.ParameterTypes)
-        {
-            ParameterValues = parameterValues;
+            ParameterValues = new LayeredDictionary<string, INullable>(
+                session.GlobalVariableValues,
+                parameterValues);
             Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -189,13 +208,15 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="parentContext">The <see cref="NodeExecutionContext"/> to inherit settings from</param>
         /// <param name="parameterTypes">The names and types of the parameters that are available to the subquery</param>
         /// <param name="parameterValues">The current value of each parameter</param>
-        public NodeExecutionContext(
+        protected NodeExecutionContext(
             NodeExecutionContext parentContext,
             IDictionary<string, DataTypeReference> parameterTypes,
             IDictionary<string, INullable> parameterValues)
             : base(parentContext, parameterTypes)
         {
-            ParameterValues = parameterValues;
+            ParameterValues = new LayeredDictionary<string, INullable>(
+                parentContext.ParameterValues,
+                parameterValues);
             Cursors = new LayeredDictionary<string, CursorDeclarationBaseNode>(
                 parentContext.Cursors,
                 new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase));
@@ -215,6 +236,58 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The local cursors that are currently allocated
         /// </summary>
         public IDictionary<string, CursorDeclarationBaseNode> Cursors { get; }
+
+        /// <summary>
+        /// Creates a new <see cref="NodeExecutionContext"/> as a child of this context
+        /// </summary>
+        /// <param name="additionalParameterTypes">The types of any additional parameters to add to the context</param>
+        /// <param name="additionalParameterValues">The values of any additional parameters to add to the context</param>
+        /// <returns></returns>
+        public NodeExecutionContext CreateChildContext(IDictionary<string, DataTypeReference> additionalParameterTypes, IDictionary<string, INullable> additionalParameterValues)
+        {
+            if (additionalParameterTypes == null)
+                additionalParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+
+            if (additionalParameterValues == null)
+                additionalParameterValues = new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase);
+
+            return new NodeExecutionContext(this, additionalParameterTypes, additionalParameterValues);
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NodeExecutionContext"/> with a cloned version of the connection to a particular data source
+        /// </summary>
+        /// <param name="dataSource">The name of the data source to create a cloned connection to</param>
+        /// <returns></returns>
+        public NodeExecutionContext CreateClonedSession(string dataSource)
+        {
+            var ds = Session.DataSources[dataSource];
+
+#if NETCOREAPP
+            var svc = (ServiceClient)ds.Connection;
+#else
+            var svc = (CrmServiceClient)ds.Connection;
+#endif
+
+            svc = svc.Clone();
+
+            var session = new SessionContext(
+                new Dictionary<string, DataSource>(Session.DataSources),
+                Options);
+
+            session.DataSources[dataSource] = new DataSource(
+                svc,
+                ds.Metadata,
+                ds.TableSizeCache,
+                ds.MessageCache);
+
+            return new NodeExecutionContext(
+                session,
+                Options,
+                ParameterTypes.Unlayer(Session.GlobalVariableTypes),
+                ParameterValues.Unlayer(Session.GlobalVariableValues),
+                Log);
+        }
     }
 
     /// <summary>
@@ -306,7 +379,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// representing each row as it is processed.
         /// </remarks>
         public ExpressionExecutionContext(NodeExecutionContext nodeContext)
-            : base(nodeContext, nodeContext.ParameterValues)
+            : base(nodeContext, null, null)
         {
             Entity = null;
             Error = nodeContext.Error;
@@ -325,7 +398,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// representing each row as it is processed.
         /// </remarks>
         public ExpressionExecutionContext(ExpressionCompilationContext compilationContext)
-            : base(compilationContext, null)
+            : base(compilationContext.CreateExecutionContext(null), null, null)
         {
             Entity = null;
         }

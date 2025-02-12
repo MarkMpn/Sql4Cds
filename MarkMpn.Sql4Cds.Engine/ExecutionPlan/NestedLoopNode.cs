@@ -52,30 +52,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // 1. Avoid the overhead if the left source is empty
                     // 2. Schema returned from FetchXmlScan changes on first execution
                     leftSchema = LeftSource.GetSchema(context);
-                    innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
-                    if (OuterReferences != null)
-                    {
-                        if (context.ParameterTypes == null)
-                            innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
-                        else
-                            innerParameterTypes = new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
-
-                        foreach (var kvp in OuterReferences)
-                            innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
-                    }
-
-                    rightCompilationContext = new NodeCompilationContext(context.Session, context.Options, innerParameterTypes, context.Log);
+                    innerParameterTypes = GetInnerParameterTypes(leftSchema);
+                    rightCompilationContext = context.CreateChildContext(innerParameterTypes);
                 }
 
-                var innerParameters = context.ParameterValues;
+                var innerParameters = new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase);
 
                 if (OuterReferences != null)
                 {
-                    if (innerParameters == null)
-                        innerParameters = new Dictionary<string, INullable>();
-                    else
-                        innerParameters = new Dictionary<string, INullable>(innerParameters);
-
                     foreach (var kvp in OuterReferences)
                     {
                         left.Attributes.TryGetValue(kvp.Key, out var outerValue);
@@ -85,7 +69,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var hasRight = false;
 
-                foreach (var right in RightSource.Execute(new NodeExecutionContext(context, innerParameterTypes, innerParameters)))
+                foreach (var right in RightSource.Execute(context.CreateChildContext(innerParameterTypes, innerParameters)))
                 {
                     if (rightSchema == null)
                     {
@@ -132,17 +116,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private IDictionary<string, DataTypeReference> GetInnerParameterTypes(INodeSchema leftSchema, IDictionary<string, DataTypeReference> parameterTypes)
+        private IDictionary<string, DataTypeReference> GetInnerParameterTypes(INodeSchema leftSchema)
         {
-            var innerParameterTypes = parameterTypes;
+            var innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
 
             if (OuterReferences != null)
             {
-                if (parameterTypes == null)
-                    innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
-                else
-                    innerParameterTypes = new Dictionary<string, DataTypeReference>(parameterTypes, StringComparer.OrdinalIgnoreCase);
-
                 foreach (var kvp in OuterReferences)
                     innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
             }
@@ -182,8 +161,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             LeftSource = LeftSource.FoldQuery(context, hints);
             LeftSource.Parent = this;
 
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
-            var innerContext = new NodeCompilationContext(context.Session, context.Options, innerParameterTypes, context.Log);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema);
+            var innerContext = context.CreateChildContext(innerParameterTypes);
             var rightSchema = RightSource.GetSchema(innerContext);
             RightSource = RightSource.FoldQuery(innerContext, hints);
             RightSource.Parent = this;
@@ -328,8 +307,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Concat((IEnumerable<string>) OuterReferences?.Keys ?? Enumerable.Empty<string>())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
-            var innerContext = new NodeCompilationContext(context.Session, context.Options, innerParameterTypes, context.Log);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema);
+            var innerContext = context.CreateChildContext(innerParameterTypes);
             var rightSchema = RightSource.GetSchema(innerContext);
             var rightColumns = requiredColumns.Where(col => OutputRightSchema)
                 .Concat(criteriaCols)
@@ -345,8 +324,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override INodeSchema GetRightSchema(NodeCompilationContext context)
         {
             var leftSchema = LeftSource.GetSchema(context);
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
-            var innerContext = new NodeCompilationContext(context.Session, context.Options, innerParameterTypes, context.Log);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema);
+            var innerContext = context.CreateChildContext(innerParameterTypes);
             return RightSource.GetSchema(innerContext);
         }
 
@@ -355,8 +334,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftEstimate = LeftSource.EstimateRowsOut(context);
             ParseEstimate(leftEstimate, out var leftMin, out var leftMax, out var leftIsRange);
             var leftSchema = LeftSource.GetSchema(context);
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
-            var innerContext = new NodeCompilationContext(context.Session, context.Options, innerParameterTypes, context.Log);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema);
+            var innerContext = context.CreateChildContext(innerParameterTypes);
 
             var rightEstimate = RightSource.EstimateRowsOut(innerContext);
             ParseEstimate(rightEstimate, out var rightMin, out var rightMax, out var rightIsRange);
