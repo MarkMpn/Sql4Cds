@@ -67,7 +67,7 @@ namespace MarkMpn.Sql4Cds.XTB
             return DisplayName + (Modified ? " *" : "");
         }
 
-        public TabContent GetSessionDetails()
+        public virtual TabContent GetSessionDetails()
         {
             return new TabContent
             {
@@ -77,12 +77,9 @@ namespace MarkMpn.Sql4Cds.XTB
             };
         }
 
-        public void RestoreSessionDetails(TabContent tab)
+        public virtual void RestoreSessionDetails(TabContent tab)
         {
-            if (!String.IsNullOrEmpty(tab.Filename) && this is ISaveableDocumentWindow saveable)
-                saveable.Open(tab.Filename);
-            else
-                Filename = tab.Filename;
+            Filename = tab.Filename;
 
             if (tab.Query != null)
                 Content = tab.Query;

@@ -159,6 +159,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
         public void AddConnection(ConnectionDetail con)
         {
+            if (treeView.Nodes.Cast<TreeNode>().Any(n => n.Tag == con))
+                return;
+
             var svc = con.ServiceClient;
 
             EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
@@ -166,7 +169,23 @@ namespace MarkMpn.Sql4Cds.XTB
             var conNode = treeView.Nodes.Add(con.ConnectionName);
             conNode.Tag = con;
             conNode.ContextMenuStrip = serverContextMenuStrip;
-            SetIcon(conNode, "Environment");
+
+            // If we have an environment highlight color, create a colorized version of the icon
+            var iconKey = "Environment";
+
+            if (con.EnvironmentHighlightingInfo?.Color != null)
+            {
+                iconKey = con.EnvironmentHighlightingInfo.ColorString;
+
+                if (!treeView.ImageList.Images.ContainsKey(iconKey))
+                {
+                    var icon = new Bitmap(treeView.ImageList.Images["Environment"]);
+                    IconColorizer.ApplyEnvironmentHighlightColor(icon, con.EnvironmentHighlightingInfo.Color.Value, new Point(7, 4), new Rectangle(0, 0, 16, 16));
+                    treeView.ImageList.Images.Add(iconKey, icon);
+                }
+            }
+
+            SetIcon(conNode, iconKey);
 
             AddConnectionChildNodes(con, svc, conNode);
         }

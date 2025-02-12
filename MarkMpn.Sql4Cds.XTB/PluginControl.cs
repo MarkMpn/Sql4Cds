@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -15,7 +14,6 @@ using Microsoft.Xrm.Sdk;
 using WeifenLuo.WinFormsUI.Docking;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -32,6 +30,7 @@ namespace MarkMpn.Sql4Cds.XTB
             InitializeComponent();
             _plugin = plugin;
             dockPanel.Theme = new VS2015LightTheme();
+            dockPanel.ShowDocumentIcon = true;
 
             // Loads or creates the settings for the plugin
             if (!SettingsManager.Instance.TryLoad(_plugin.GetType(), out Settings settings))
@@ -73,13 +72,6 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (!tscbConnection.Items.Contains(detail))
                     tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
             }
-            else if (actionName == "ConnectObjectExplorer")
-            {
-                _objectExplorer.AddConnection(detail);
-
-                if (!tscbConnection.Items.Contains(detail))
-                    tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
-            }
             else if (actionName == "ConnectObjectExplorerAndChangeConnection")
             {
                 _objectExplorer.AddConnection(detail);
@@ -93,7 +85,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     tscbConnection.Text = detail.ConnectionName;
                 }
             }
-            else if (String.IsNullOrEmpty(actionName))
+            else if (actionName == "ConnectObjectExplorer" || actionName == "AdditionalOrganization" || String.IsNullOrEmpty(actionName))
             {
                 _objectExplorer.AddConnection(detail);
 
@@ -271,7 +263,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql)
         {
-            var query = new SqlQueryControl(con, _dataSources, _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
+            var query = new SqlQueryControl(this, con, _dataSources, _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
