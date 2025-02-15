@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data;
 using System.Data.SqlTypes;
 using System.Linq;
@@ -12,7 +13,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class TableScanNode : BaseDataNode
     {
+        [Category("Table Scan")]
+        [Description("The name of the table to scan")]
         public string TableName { get; set; }
+
+        [Category("Table Scan")]
+        [Description("The alias to use for the table")]
+        public string Alias { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -33,6 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var cols = new ColumnList();
             var primaryKey = table.PrimaryKey.Length == 1 ? table.PrimaryKey[0].ColumnName : null;
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            var alias = Alias.EscapeIdentifier();
 
             foreach (DataColumn col in table.Columns)
             {
@@ -48,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     colDefinition = colDefinition.Invisible();
 
                 var baseColName = col.ColumnName.EscapeIdentifier();
-                var qualifiedColName = table.TableName.EscapeIdentifier() + "." + baseColName;
+                var qualifiedColName = alias + "." + baseColName;
                 cols.Add(qualifiedColName, colDefinition);
 
                 if (!aliases.TryGetValue(baseColName, out var a))
@@ -89,6 +97,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (table == null)
                 throw new QueryExecutionException(Sql4CdsError.InvalidObjectName(new Identifier { Value = TableName }));
 
+            var alias = Alias.EscapeIdentifier();
+
             foreach (DataRow row in table.Rows)
             {
                 var entity = new Entity();
@@ -96,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (DataColumn col in table.Columns)
                 {
                     var value = row[col];
-                    var colName = table.TableName.EscapeIdentifier() + "." + col.ColumnName.EscapeIdentifier();
+                    var colName = alias + "." + col.ColumnName.EscapeIdentifier();
 
                     if (value == DBNull.Value)
                         entity[colName] = SqlTypeConverter.GetNullValue(col.DataType);
@@ -114,7 +124,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return new TableScanNode
             {
-                TableName = TableName
+                TableName = TableName,
+                Alias = Alias
             };
         }
 

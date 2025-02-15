@@ -77,5 +77,30 @@ DROP TABLE #TempTable";
                 }
             }
         }
+
+        [TestMethod]
+        public void SelectWithAlias()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+CREATE TABLE #TempTable (Id INT, Name NVARCHAR(100))
+INSERT INTO #TempTable VALUES (1, 'Hello'), (2, 'World')
+SELECT t.Id AS a, t.Name as b FROM #TempTable AS t
+DROP TABLE #TempTable";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader["a"]);
+                    Assert.AreEqual("Hello", reader["b"]);
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2, reader["a"]);
+                    Assert.AreEqual("World", reader["b"]);
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }
