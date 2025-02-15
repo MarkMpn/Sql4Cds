@@ -218,7 +218,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     Source = new TableScanNode
                     {
-                        TableName = tempTable.TableName
+                        TableName = tempTable.TableName,
+                        Alias = tempTable.TableName
                     },
                     Filter = new BooleanComparisonExpression
                     {

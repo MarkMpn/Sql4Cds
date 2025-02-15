@@ -1625,7 +1625,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Support INSERT without listed column names for temp tables - they often have a limited number of columns
                     // and can be inserted into easily.
-                    var tableScan = new TableScanNode { TableName = logicalName };
+                    var tableScan = new TableScanNode { TableName = logicalName, Alias = logicalName };
                     var tableSchema = tableScan.GetSchema(_nodeContext);
 
                     foreach (var col in tableSchema.Schema)
@@ -5061,7 +5061,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (dataTable == null)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(table.SchemaObject));
 
-                    return new TableScanNode { TableName = dataTable.TableName };
+                    return new TableScanNode
+                    {
+                        TableName = dataTable.TableName,
+                        Alias = table.Alias?.Value ?? dataTable.TableName
+                    };
                 }
 
                 // Validate the entity name
