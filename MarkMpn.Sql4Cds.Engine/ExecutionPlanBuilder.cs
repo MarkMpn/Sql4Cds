@@ -2925,69 +2925,65 @@ namespace MarkMpn.Sql4Cds.Engine
                 var partitionCols = new List<string>();
                 var orderCols = windowFunction.FunctionName.Value.Equals("RANK", StringComparison.OrdinalIgnoreCase) || windowFunction.FunctionName.Value.Equals("DENSE_RANK", StringComparison.OrdinalIgnoreCase) ? new List<string>() : null;
 
-                if (windowFunction.OverClause.Partitions != null)
+                foreach (var partition in windowFunction.OverClause.Partitions)
                 {
-                    foreach (var partition in windowFunction.OverClause.Partitions)
+                    var partitionExpr = partition;
+
+                    try
                     {
-                        var partitionExpr = partition;
+                        var sortSource = sort.Source;
+                        var calculated = ComputeScalarExpression(partitionExpr, hints, querySpec, computeScalar, nonAggregateSchema, context, ref sortSource);
+                        sort.Source = sortSource;
+                        calculationRewrites[partitionExpr] = calculated.ToColumnReference();
+                        partitionExpr = calculated.ToColumnReference();
 
-                        try
+                        sort.Sorts.Add(new ExpressionWithSortOrder
                         {
-                            var calculated = ComputeScalarExpression(partitionExpr, hints, querySpec, computeScalar, nonAggregateSchema, context, ref source);
-                            sort.Source = source;
-                            calculationRewrites[partitionExpr] = calculated.ToColumnReference();
-                            partitionExpr = calculated.ToColumnReference();
+                            Expression = partitionExpr,
+                            SortOrder = SortOrder.Ascending
+                        });
 
-                            sort.Sorts.Add(new ExpressionWithSortOrder
-                            {
-                                Expression = partitionExpr,
-                                SortOrder = SortOrder.Ascending
-                            });
-
-                            partitionCols.Add(calculated);
-                        }
-                        catch (NotSupportedQueryFragmentException ex)
-                        {
-                            exception = NotSupportedQueryFragmentException.Combine(exception, ex);
-                        }
+                        partitionCols.Add(calculated);
+                    }
+                    catch (NotSupportedQueryFragmentException ex)
+                    {
+                        exception = NotSupportedQueryFragmentException.Combine(exception, ex);
                     }
                 }
 
-                if (windowFunction.OverClause.OrderByClause != null)
+                foreach (var order in windowFunction.OverClause.OrderByClause?.OrderByElements ?? Array.Empty<ExpressionWithSortOrder>())
                 {
-                    foreach (var order in windowFunction.OverClause.OrderByClause.OrderByElements)
+                    var sortExpr = order.Expression;
+
+                    try
                     {
-                        var sortExpr = order.Expression;
+                        if (sortExpr is IntegerLiteral)
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.WindowFunctionCannotUseOrderByIndex(sortExpr));
 
-                        try
+                        if (orderCols != null)
                         {
-                            if (sortExpr is IntegerLiteral)
-                                throw new NotSupportedQueryFragmentException(Sql4CdsError.WindowFunctionCannotUseOrderByIndex(sortExpr));
+                            // If we need to segment by the order columns as well, make sure it's a column reference
+                            var sortSource = sort.Source;
+                            var calculated = ComputeScalarExpression(sortExpr, hints, querySpec, computeScalar, nonAggregateSchema, context, ref sortSource);
+                            sort.Source = sortSource;
+                            calculationRewrites[sortExpr] = calculated.ToColumnReference();
 
-                            if (orderCols != null)
+                            sort.Sorts.Add(new ExpressionWithSortOrder
                             {
-                                // If we need to segment by the order columns as well, make sure it's a column reference
-                                var calculated = ComputeScalarExpression(sortExpr, hints, querySpec, computeScalar, nonAggregateSchema, context, ref source);
-                                sort.Source = source;
-                                calculationRewrites[sortExpr] = calculated.ToColumnReference();
+                                Expression = calculated.ToColumnReference(),
+                                SortOrder = order.SortOrder
+                            });
 
-                                sort.Sorts.Add(new ExpressionWithSortOrder
-                                {
-                                    Expression = calculated.ToColumnReference(),
-                                    SortOrder = order.SortOrder
-                                });
-
-                                orderCols.Add(calculated);
-                            }
-                            else
-                            {
-                                sort.Sorts.Add(order);
-                            }
+                            orderCols.Add(calculated);
                         }
-                        catch (NotSupportedQueryFragmentException ex)
+                        else
                         {
-                            exception = NotSupportedQueryFragmentException.Combine(exception, ex);
+                            sort.Sorts.Add(order);
                         }
+                    }
+                    catch (NotSupportedQueryFragmentException ex)
+                    {
+                        exception = NotSupportedQueryFragmentException.Combine(exception, ex);
                     }
                 }
 
