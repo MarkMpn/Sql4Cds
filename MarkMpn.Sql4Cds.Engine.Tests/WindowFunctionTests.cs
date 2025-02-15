@@ -97,6 +97,47 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void MultipleRowNumber()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"INSERT INTO account (name, employees) VALUES
+('Data9', 30),
+('Data8', 10),
+('Data8', 20)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name, employees, ROW_NUMBER() OVER (ORDER BY employees) AS rownum1, ROW_NUMBER() OVER (PARTITION BY name ORDER BY employees) AS rownum2 FROM account";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Data8", reader["name"]);
+                    Assert.AreEqual(10, reader["employees"]);
+                    Assert.AreEqual(1L, reader["rownum1"]);
+                    Assert.AreEqual(1L, reader["rownum2"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Data8", reader["name"]);
+                    Assert.AreEqual(20, reader["employees"]);
+                    Assert.AreEqual(2L, reader["rownum1"]);
+                    Assert.AreEqual(2L, reader["rownum2"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Data9", reader["name"]);
+                    Assert.AreEqual(30, reader["employees"]);
+                    Assert.AreEqual(3L, reader["rownum1"]);
+                    Assert.AreEqual(1L, reader["rownum2"]);
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
         public void Rank()
         {
             // https://learn.microsoft.com/en-us/sql/t-sql/functions/rank-transact-sql?view=sql-server-ver16#a-ranking-rows-within-a-partition
