@@ -87,6 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public TableSpoolNode() { }
 
         private IEnumerable<Entity> _workTable;
+        private HashSet<string> _addedColumns;
 
         /// <summary>
         /// The data source to cache
@@ -232,7 +233,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            Source?.AddRequiredColumns(context, requiredColumns);
+            // Track which columns we have already passed to the source - we could be called multiple times
+            // by each consumer.
+            if (_addedColumns == null)
+                _addedColumns = new HashSet<string>();
+
+            var sourceRequiredColumns = requiredColumns
+                .Except(_addedColumns)
+                .ToList();
+
+            Source?.AddRequiredColumns(context, sourceRequiredColumns);
+
+            foreach (var col in sourceRequiredColumns)
+                _addedColumns.Add(col);
 
             if (Producer != null && !IsSourceOf(Producer))
                 Producer.AddRequiredColumns(context, requiredColumns);

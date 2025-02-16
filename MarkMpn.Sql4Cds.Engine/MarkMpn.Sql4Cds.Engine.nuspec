@@ -11,8 +11,14 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Improved performance with large numbers of filter conditions
-Fixed use of IN with a single variable
+    <releaseNotes>New SQL support
+* Window functions
+* Temporary tables
+* Cursors
+
+Bug fixes
+* Fixed "An item with the same key has already been added" error when using multiple nested loops
+* Fixed "Index was out of range" error when using `INTERSECT` or `EXCEPT`
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

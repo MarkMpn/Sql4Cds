@@ -478,6 +478,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(8711, fragment);
         }
 
+        internal static Sql4CdsError WindowFrameRequiresOrderBy(WindowFrameClause fragment)
+        {
+            return Create(10756, fragment);
+        }
+
         internal static Sql4CdsError InvalidWithinGroupClause(Identifier identifier)
         {
             return Create(10757, identifier, (SqlInt32)identifier.Value.Length, Collation.USEnglish.ToSqlString(identifier.Value));
