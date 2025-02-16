@@ -106,6 +106,10 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 // DISTINCT isn't supported with the OVER clause
                 if (node.UniqueRowFilter == UniqueRowFilter.Distinct)
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.DistinctNotSupportedWithOver(node));
+
+                // ROWS/RANGE requires an ORDER BY clause
+                if (node.OverClause.WindowFrameClause != null && node.OverClause.OrderByClause == null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.WindowFrameRequiresOrderBy(node.OverClause.WindowFrameClause));
             }
             else if (_analyticFunctions.Contains(node.FunctionName.Value))
             {
