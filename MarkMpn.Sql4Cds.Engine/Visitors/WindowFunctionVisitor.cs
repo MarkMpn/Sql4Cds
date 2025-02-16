@@ -40,7 +40,6 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 "MIN",
                 "STDEV",
                 "STDEVP",
-                "STRING_AGG",
                 "SUM",
                 "VAR",
                 "VARP"
