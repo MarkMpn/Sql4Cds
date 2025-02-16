@@ -69,9 +69,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             if (_rankingFunctions.Contains(node.FunctionName.Value))
             {
-                // This is a ranking function - we must have an OVER clause
+                // This is a ranking function - we must have an OVER clause with an ORDER BY clause
                 if (node.OverClause == null)
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.OverClauseRequired(node));
+
+                if (node.OverClause.OrderByClause == null)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.OverClauseRequiresOrderBy(node));
 
                 // Ranking functions don't support the ROWS/RANGE window frame definition
                 if (node.OverClause.WindowFrameClause != null)
