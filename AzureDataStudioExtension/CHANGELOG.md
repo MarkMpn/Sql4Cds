@@ -1,5 +1,16 @@
 # Change Log
 
+## [v9.6.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.6.0) - 2025-02-17
+
+New SQL support
+* Window functions
+* Temporary tables
+* Cursors
+
+Bug fixes
+* Fixed "An item with the same key has already been added" error when using multiple nested loops
+* Fixed "Index was out of range" error when using `INTERSECT` or `EXCEPT`
+
 ## [v9.5.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.5.1) - 2024-12-12
 
 Fixed packaging to include all required files
@@ -35,6 +46,7 @@ Improved SQL to Fetch XML conversion of datetime filters
 Fixed use of case-insensitive table names in INSERT statements
 
 ## [v9.4.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.4.0) - 2024-11-06
+
 New SQL support
 * `NEWID` function
 * `DATETRUNC` function
@@ -61,6 +73,7 @@ Bug fixes
 * Fixed use of alias in filters when converting from Fetch XML to SQL
 
 ## [v9.3.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.3.0) - 2024-08-26
+
 New SQL support
 * `STRING_SPLIT` function
 * `metadata.alternate_key` table to query entity key metadata
