@@ -47,19 +47,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     {
                         try
                         {
-                            var nt = new XmlNamespaceManager(new NameTable());
-                            nt.AddNamespace("sql", "https://markcarrington.dev/sql-4-cds");
-                            var compiled = XPath2Expression.Compile(xquery.Value, nt);
-                            compiled.ExpressionTree.TraverseSubtree(n =>
-                            {
-                                // FuncNode doesn't expose the details of the function it's bound to, so assume it's sql:column
-                                // so long as it's got one literal string parameter.
-                                if (n is FuncNode f &&
-                                    f.Count == 1 &&
-                                    f[0] is ValueNode v &&
-                                    v.Content is string col)
-                                    Columns.Add(col.ToColumnReference());
-                            });
+                            var compiled = XPath2ExpressionContext.Compile(xquery.Value);
+                            var visitor = new XPathColumnCollectingVisitor(node);
+                            compiled.ExpressionTree.Accept(visitor);
+
+                            foreach (var col in visitor.Columns)
+                                Columns.Add(col.ToColumnReference());
                         }
                         catch
                         {

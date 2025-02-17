@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
+    [TestClass]
     public class XmlTests : FakeXrmEasyTestsBase
     {
         [TestMethod]
@@ -160,6 +161,50 @@ SELECT 2 + 2
 FOR XML PATH";
                 var actual = cmd.ExecuteScalar();
                 Assert.AreEqual("<row>4</row>", actual);
+            }
+        }
+
+        [TestMethod]
+        public void CannotUseDynamicColumnName()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+SELECT CAST('' AS XML).value('sql:column(sql:column(""name""))', 'VARBINARY(MAX)')
+FROM account";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(2225, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ReferenceColumnInOuterApply()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('SGVsbG8gd29ybGQh')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = @"
+SELECT x.base64
+FROM   account a
+       OUTER APPLY (
+              SELECT CONVERT(VARCHAR(MAX), CAST('' AS XML).value('xs:base64Binary(sql:column(""name""))', 'VARBINARY(MAX)')) AS base64
+         ) x";
+
+                var reader = cmd.ExecuteReader();
+                Assert.IsTrue(reader.Read());
+                Assert.AreEqual("Hello world!", reader["base64"]);
             }
         }
     }

@@ -3,6 +3,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Wmhelp.XPath2.AST;
 
 namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
@@ -22,7 +23,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     /// </remarks>
     class RewriteVisitor : RewriteVisitorBase
     {
-        private readonly IDictionary<string, ScalarExpression> _mappings;
+        private readonly Dictionary<string, ScalarExpression> _mappings;
+        private readonly Dictionary<string, string> _xpathMappings;
 
         public RewriteVisitor(IDictionary<ScalarExpression,string> rewrites)
         {
@@ -31,6 +33,14 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 .ToDictionary(
                     g => g.Key,
                     g => (ScalarExpression) g.First().Value.ToColumnReference(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            _xpathMappings = rewrites
+                .Where(kvp => kvp.Key is ColumnReferenceExpression)
+                .GroupBy(kvp => kvp.Key.ToNormalizedSql(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => $"sql:column(\"{g.Key}\")",
+                    g => $"sql:column(\"{g.First().Value}\")",
                     StringComparer.OrdinalIgnoreCase);
         }
 
@@ -41,6 +51,16 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 .ToDictionary(
                     g => g.Key,
                     g => g.First().Value,
+                    StringComparer.OrdinalIgnoreCase);
+
+            _xpathMappings = rewrites
+                .Where(kvp => kvp.Key is ColumnReferenceExpression && (kvp.Value is ColumnReferenceExpression || kvp.Value is VariableReference))
+                .GroupBy(kvp => kvp.Key.ToNormalizedSql(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => $"sql:column(\"{g.Key}\")",
+                    g => g.First().Value is ColumnReferenceExpression col
+                        ? $"sql:column(\"{col.GetColumnName()}\")"
+                        : $"sql:variable(\"{((VariableReference)g.First().Value).Name}\")",
                     StringComparer.OrdinalIgnoreCase);
         }
 
@@ -63,6 +83,20 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         protected override BooleanExpression ReplaceExpression(BooleanExpression expression)
         {
             return expression;
+        }
+
+        public override void ExplicitVisit(FunctionCall node)
+        {
+            base.ExplicitVisit(node);
+
+            if (node.CallTarget == null ||
+                node.Parameters.Count != 2 ||
+                !(node.Parameters[0] is StringLiteral literal) ||
+                _xpathMappings.Count == 0)
+                return;
+
+            foreach (var mapping in _xpathMappings)
+                literal.Value = literal.Value.Replace(mapping.Key, mapping.Value);
         }
     }
 }

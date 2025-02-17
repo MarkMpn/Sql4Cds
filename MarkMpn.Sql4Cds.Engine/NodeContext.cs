@@ -196,9 +196,13 @@ namespace MarkMpn.Sql4Cds.Engine
             Action<Sql4CdsError> log)
             : base(session, options, parameterTypes, log)
         {
-            ParameterValues = new LayeredDictionary<string, INullable>(
-                session.GlobalVariableValues,
-                parameterValues);
+            if (parameterValues == null)
+                ParameterValues = session.GlobalVariableValues;
+            else
+                ParameterValues = new LayeredDictionary<string, INullable>(
+                    session.GlobalVariableValues,
+                    parameterValues);
+
             Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -214,9 +218,13 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, INullable> parameterValues)
             : base(parentContext, parameterTypes)
         {
-            ParameterValues = new LayeredDictionary<string, INullable>(
-                parentContext.ParameterValues,
-                parameterValues);
+            if (parameterValues == null)
+                ParameterValues = parentContext.ParameterValues;
+            else
+                ParameterValues = new LayeredDictionary<string, INullable>(
+                    parentContext.ParameterValues,
+                    parameterValues);
+
             Cursors = new LayeredDictionary<string, CursorDeclarationBaseNode>(
                 parentContext.Cursors,
                 new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase));
