@@ -77,7 +77,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
             Session = parentContext.Session;
             Options = parentContext.Options;
-            ParameterTypes = new LayeredDictionary<string, DataTypeReference>(parentContext.ParameterTypes, parameterTypes);
+
+            if (parameterTypes != null)
+                ParameterTypes = new LayeredDictionary<string, DataTypeReference>(parentContext.ParameterTypes, parameterTypes);
+            else
+                ParameterTypes = parentContext.ParameterTypes;
+
             GlobalCalculations = parentContext.GlobalCalculations;
             Log = parentContext.Log;
             _parentContext = parentContext;
@@ -148,11 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (parameterValues == null)
                 parameterValues = new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase);
 
-            parameterValues = new LayeredDictionary<string, INullable>(
-                Session.GlobalVariableValues,
-                parameterValues);
-
-            return new NodeExecutionContext(Session, Options, ParameterTypes, parameterValues, Log);
+            return new NodeExecutionContext(Session, Options, ParameterTypes.Unlayer(Session.GlobalVariableTypes), parameterValues, Log);
         }
 
         internal void ResetGlobalCalculations()
@@ -196,9 +197,13 @@ namespace MarkMpn.Sql4Cds.Engine
             Action<Sql4CdsError> log)
             : base(session, options, parameterTypes, log)
         {
-            ParameterValues = new LayeredDictionary<string, INullable>(
-                session.GlobalVariableValues,
-                parameterValues);
+            if (parameterValues == null)
+                ParameterValues = session.GlobalVariableValues;
+            else
+                ParameterValues = new LayeredDictionary<string, INullable>(
+                    session.GlobalVariableValues,
+                    parameterValues);
+
             Cursors = new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -214,9 +219,13 @@ namespace MarkMpn.Sql4Cds.Engine
             IDictionary<string, INullable> parameterValues)
             : base(parentContext, parameterTypes)
         {
-            ParameterValues = new LayeredDictionary<string, INullable>(
-                parentContext.ParameterValues,
-                parameterValues);
+            if (parameterValues == null)
+                ParameterValues = parentContext.ParameterValues;
+            else
+                ParameterValues = new LayeredDictionary<string, INullable>(
+                    parentContext.ParameterValues,
+                    parameterValues);
+
             Cursors = new LayeredDictionary<string, CursorDeclarationBaseNode>(
                 parentContext.Cursors,
                 new Dictionary<string, CursorDeclarationBaseNode>(StringComparer.OrdinalIgnoreCase));
@@ -325,7 +334,7 @@ namespace MarkMpn.Sql4Cds.Engine
             NodeCompilationContext nodeContext,
             INodeSchema schema,
             INodeSchema nonAggregateSchema)
-            : base(nodeContext.Session, nodeContext.Options, nodeContext.ParameterTypes, nodeContext.Log)
+            : base(nodeContext.Session, nodeContext.Options, nodeContext.ParameterTypes.Unlayer(nodeContext.Session.GlobalVariableTypes), nodeContext.Log)
         {
             Schema = schema;
             NonAggregateSchema = nonAggregateSchema;

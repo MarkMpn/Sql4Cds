@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -104,7 +105,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var expressionExecutionContext = new ExpressionExecutionContext(context);
 
             var isScalarAggregate = IsScalarAggregate;
-            var isWindowAggregate = Source is WindowSpoolNode;
+            var isWindowAggregate = false;
+            var isFastTrackWindowAggregate = false;
+            var fastTrackResetCol = string.Empty;
+
+            if (Source is WindowSpoolNode windowSpool)
+            {
+                isWindowAggregate = true;
+                isFastTrackWindowAggregate = windowSpool.UseFastTrackOptimization;
+                fastTrackResetCol = windowSpool.SegmentColumn;
+            }
 
             InitializeAggregates(expressionCompilationContext);
             Entity currentGroup = null;
@@ -136,8 +146,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (startNewGroup)
                     {
+                        var resetFastTrack = isFastTrackWindowAggregate && (currentGroup == null || entity.GetAttributeValue<SqlBoolean>(fastTrackResetCol).Value);
                         currentGroup = entity;
-                        states = ResetAggregates(aggregates);
+
+                        if (!isFastTrackWindowAggregate || resetFastTrack)
+                        {
+                            // Most aggregates - reset the state on each new group
+                            states = ResetAggregates(aggregates);
+                        }
+                        else if (isFastTrackWindowAggregate)
+                        {
+                            // Window aggregates using fast track optimization - only reset the FIRST functions
+                            // and keep other aggregates going until we hit the next partition
+                            foreach (var func in states.Values)
+                            {
+                                if (func.AggregateFunction is First)
+                                    func.State = func.AggregateFunction.Reset();
+                            }
+                        }
                     }
                 }
 

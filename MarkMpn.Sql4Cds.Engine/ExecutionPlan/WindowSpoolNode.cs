@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
@@ -19,17 +20,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public long TopRowNumber { get; set; }
         }
 
+        [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
+        [Category("Window Spool")]
+        [Description("The name of the column to store the window number in")]
         public string WindowCountColumn { get; set; }
 
+        [Category("Window Spool")]
+        [Description("The name of the column to store the segment flag in")]
         public string SegmentColumn { get; set; }
 
+        [Category("Window Spool")]
+        [Description("The name of the column to store the row number in")]
         public string RowNumberColumn { get; set; }
 
+        [Category("Window Spool")]
+        [Description("The name of the column to store the bottom row number for the window in")]
         public string BottomRowNumberColumn { get; set; }
 
+        [Category("Window Spool")]
+        [Description("The name of the column to store the top row number for the window in")]
         public string TopRowNumberColumn { get; set; }
+
+        [Category("Window Spool")]
+        [Description("Indicates whether the fast track optimization should be used")]
+        public bool UseFastTrackOptimization { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -96,7 +112,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         windowRow.Row[WindowCountColumn] = windowCount;
                         yield return windowRow.Row;
 
-                        for (var i = Math.Max(0, windowRow.TopRowNumber - windowRowOffset); i <= Math.Min(windowRow.BottomRowNumber - windowRowOffset, windowFrame.Count - 1); i++)
+                        var topRow = Math.Max(0, windowRow.TopRowNumber - windowRowOffset);
+                        var bottomRow = Math.Min(windowRow.BottomRowNumber - windowRowOffset, windowFrame.Count - 1);
+
+                        // If we're using the fast track optimization we only need to output the additional row for this window,
+                        // which will be the bottom row
+                        if (UseFastTrackOptimization)
+                            topRow = bottomRow;
+
+                        for (var i = topRow; i <= bottomRow; i++)
                         {
                             windowFrame[(int)i].Row[WindowCountColumn] = windowCount;
                             yield return windowFrame[(int)i].Row;
@@ -126,7 +150,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 windowRow.Row[WindowCountColumn] = windowCount;
                 yield return windowRow.Row;
 
-                for (var i = Math.Max(0, windowRow.TopRowNumber - windowRowOffset); i <= Math.Min(windowRow.BottomRowNumber - windowRowOffset, windowFrame.Count - 1); i++)
+                var topRow = Math.Max(0, windowRow.TopRowNumber - windowRowOffset);
+                var bottomRow = Math.Min(windowRow.BottomRowNumber - windowRowOffset, windowFrame.Count - 1);
+
+                // If we're using the fast track optimization we only need to output the additional row for this window,
+                // which will be the bottom row
+                if (UseFastTrackOptimization)
+                    topRow = bottomRow;
+
+                for (var i = topRow; i <= bottomRow; i++)
                 {
                     windowFrame[(int)i].Row[WindowCountColumn] = windowCount;
                     yield return windowFrame[(int)i].Row;
@@ -143,7 +175,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SegmentColumn = SegmentColumn,
                 RowNumberColumn = RowNumberColumn,
                 BottomRowNumberColumn = BottomRowNumberColumn,
-                TopRowNumberColumn = TopRowNumberColumn
+                TopRowNumberColumn = TopRowNumberColumn,
+                UseFastTrackOptimization = UseFastTrackOptimization
             };
         }
     }

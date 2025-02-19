@@ -40,12 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine
             _recordsAffected = -1;
 
             _parameterTypes = new LayeredDictionary<string, DataTypeReference>(
-                _connection.Session.GlobalVariableTypes,
                 ((Sql4CdsParameterCollection)command.Parameters).GetParameterTypes(),
                 new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase));
 
             _parameterValues = new LayeredDictionary<string, INullable>(
-                _connection.Session.GlobalVariableValues,
                 ((Sql4CdsParameterCollection)command.Parameters).GetParameterValues(),
                 new Dictionary<string, INullable>(StringComparer.OrdinalIgnoreCase));
 
@@ -90,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 catch (Sql4CdsException ex)
                 {
-                    _parameterValues["@@ERROR"] = (SqlInt32)ex.Number;
+                    _connection.Session.GlobalVariableValues["@@ERROR"] = (SqlInt32)ex.Number;
 
                     // If we are in a TRY block, store the exception information in the context and move to the CATCH block
                     var caught = false;
@@ -161,7 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         dmlNode.Execute(_context, out var recordsAffected, out var message);
 
                         _command.OnStatementCompleted(dmlNode, recordsAffected, message);
-                        _parameterValues["@@ERROR"] = (SqlInt32)0;
+                        _connection.Session.GlobalVariableValues["@@ERROR"] = (SqlInt32)0;
 
                         if (recordsAffected != -1)
                         {
@@ -588,7 +586,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     rethrow = false;
                 }
 
-                ParameterValues["@@ERROR"] = (SqlInt32)sqlErr.Number;
+                _connection.Session.GlobalVariableValues["@@ERROR"] = (SqlInt32)sqlErr.Number;
                 SetErrorLineNumbers(sqlErr, _readerQuery);
                 _readerQuery = null;
 
@@ -605,7 +603,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else
             {
                 _command.OnStatementCompleted(_readerQuery, _rows, $"({_rows} {(_rows == 1 ? "row" : "rows")} affected)");
-                ParameterValues["@@ERROR"] = (SqlInt32)0;
+                _connection.Session.GlobalVariableValues["@@ERROR"] = (SqlInt32)0;
 
                 _reader.Close();
                 _reader = null;

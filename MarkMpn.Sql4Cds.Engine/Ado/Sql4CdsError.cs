@@ -916,6 +916,21 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(16911, null, "fetch", text);
         }
 
+        internal static Sql4CdsError XQueryStringLiteralRequired(FunctionCall func)
+        {
+            return Create(2225, func, $"XQuery [{func.FunctionName.Value.ToLowerInvariant()}()]: ");
+        }
+
+        internal static Sql4CdsError XQueryNotEnoughArguments(FunctionCall func, string name)
+        {
+            return Create(2236, func, Collation.USEnglish.ToSqlString($"XQuery [{func.FunctionName.Value.ToLowerInvariant()}()]: "), (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
+        internal static Sql4CdsError XQueryTooManyArguments(FunctionCall func, string name)
+        {
+            return Create(2238, func, Collation.USEnglish.ToSqlString($"XQuery [{func.FunctionName.Value.ToLowerInvariant()}()]: "), (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

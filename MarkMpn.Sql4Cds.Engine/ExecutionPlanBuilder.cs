@@ -3126,8 +3126,9 @@ namespace MarkMpn.Sql4Cds.Engine
                                 // Compute the row number, then calculate the minimum and maximum row number for each window frame.
                                 // Pass the results into a window spool, then into a stream aggregate
                                 // https://sqlserverfast.com/blog/hugo/2023/11/plansplaining-part-23-t-sql-tuesday-168-window-functions/
-                                // TODO: Other special cases
+                                // Enable fast track optimisation if we are using ROWS UNBOUNDED PRECEDING
                                 // https://sqlserverfast.com/blog/hugo/2023/11/plansplaining-part-24-windows-on-the-fast-track/
+                                // TODO: Other special cases
                                 // https://sqlserverfast.com/blog/hugo/2023/12/plansplaining-part-25-windows-without-upper-bound/
                                 if (windowFunction.OverClause.WindowFrameClause.Top.WindowDelimiterType == WindowDelimiterType.UnboundedFollowing)
                                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(windowFunction.OverClause.WindowFrameClause.Top));
@@ -3211,6 +3212,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     RowNumberColumn = rowNumberCol,
                                     TopRowNumberColumn = topRowNumberCol,
                                     BottomRowNumberColumn = bottomRowNumberCol,
+                                    UseFastTrackOptimization = windowFunction.OverClause.WindowFrameClause.Top.WindowDelimiterType == WindowDelimiterType.UnboundedPreceding
                                 };
 
                                 // Stream aggregate will automatically add FIRST aggregates for all the required columns

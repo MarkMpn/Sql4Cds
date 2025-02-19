@@ -13,6 +13,10 @@ using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Wmhelp.XPath2;
+using System.Xml;
+using System.Numerics;
+
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -1290,7 +1294,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     cacheKey += $"(XPATH:{xpathLiteral.Value})";
 
                     if (createExpression)
-                        paramExpressions[i] = Expression.Constant(XPath2Expression.Compile(xpathLiteral.Value, XPath2ExpressionContext.XmlNamespaceManager));
+                    {
+                        var xpath = XPath2ExpressionContext.Compile(xpathLiteral.Value);
+
+                        // Check all column references are using string literals
+                        xpath.ExpressionTree.Accept(new XPathColumnCollectingVisitor(func));
+
+                        paramExpressions[i] = Expression.Constant(xpath);
+                    }
 
                     continue;
                 }

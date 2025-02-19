@@ -1,5 +1,7 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -16,8 +18,40 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public LayeredDictionary(params IDictionary<TKey, TValue>[] inner)
         {
+            if (inner == null)
+                throw new ArgumentNullException(nameof(inner));
+
+            ValidateLayeredDictionary(inner);
+
             _inner = inner;
             _fallback = inner.Last();
+        }
+
+        [Conditional("DEBUG")]
+        private void ValidateLayeredDictionary(IDictionary<TKey, TValue>[] inner)
+        {
+            var dictionaries = new HashSet<IDictionary<TKey, TValue>>();
+
+            foreach (var dict in inner)
+            {
+                if (dict == null)
+                    throw new ArgumentException("Inner dictionaries cannot be null", nameof(inner));
+
+                ValidateUniqueDictionaries(dictionaries, dict);
+            }
+        }
+
+        [Conditional("DEBUG")]
+        private void ValidateUniqueDictionaries(HashSet<IDictionary<TKey, TValue>> dictionaries, IDictionary<TKey, TValue> dict)
+        {
+            if (!dictionaries.Add(dict))
+                throw new ArgumentException("Inner dictionaries must be unique", nameof(dict));
+
+            if (dict is LayeredDictionary<TKey, TValue> layered)
+            {
+                foreach (var innerDict in layered.Inner)
+                    ValidateUniqueDictionaries(dictionaries, innerDict);
+            }
         }
 
         public IDictionary<TKey, TValue>[] Inner => _inner;
