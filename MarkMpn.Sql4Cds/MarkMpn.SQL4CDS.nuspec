@@ -35,6 +35,7 @@ User experience
 Bug fixes
 * Fixed "An item with the same key has already been added" error when using multiple nested loops
 * Fixed "Index was out of range" error when using `INTERSECT` or `EXCEPT`
+* Fixed "The specified key does not exist in the dictionary" error when using XML query functions in an `OUTER APPLY`
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

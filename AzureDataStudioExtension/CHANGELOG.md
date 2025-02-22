@@ -1,6 +1,6 @@
 # Change Log
 
-## [v9.6.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.6.0) - 2025-02-17
+## [v9.6.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.6.0) - 2025-02-22
 
 New SQL support
 * Window functions
@@ -10,6 +10,7 @@ New SQL support
 Bug fixes
 * Fixed "An item with the same key has already been added" error when using multiple nested loops
 * Fixed "Index was out of range" error when using `INTERSECT` or `EXCEPT`
+* Fixed "The specified key does not exist in the dictionary" error when using XML query functions in an `OUTER APPLY`
 
 ## [v9.5.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.5.1) - 2024-12-12
 
