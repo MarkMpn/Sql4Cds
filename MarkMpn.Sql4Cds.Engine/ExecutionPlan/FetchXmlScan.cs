@@ -2402,6 +2402,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var attributes = items.OfType<FetchAttributeType>().ToList();
 
+            // https://github.com/MarkMpn/Sql4Cds/issues/646
+            // If we've included audit.changedata then we need audit.objectid as well
+            if (entityName == "audit" && attributes.Any(a => a.name == "changedata") && !attributes.Any(a => a.name == "objectid"))
+            {
+                var objectId = new FetchAttributeType { name = "objectid" };
+                attributes.Add(objectId);
+                items = items.Concat(new object[] { objectId }).ToArray();
+            }
+
             // If we've included audit.objectid then we need audit.objecttypecode as well
             if (entityName == "audit" && attributes.Any(a => a.name == "objectid") && !attributes.Any(a => a.name == "objecttypecode"))
             {
