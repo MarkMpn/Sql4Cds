@@ -1003,7 +1003,7 @@
             this.rememberSessionConnectionsCheckBox.Name = "rememberSessionConnectionsCheckBox";
             this.rememberSessionConnectionsCheckBox.Size = new System.Drawing.Size(148, 17);
             this.rememberSessionConnectionsCheckBox.TabIndex = 3;
-            this.rememberSessionConnectionsCheckBox.Text = "Remember session details";
+            this.rememberSessionConnectionsCheckBox.Text = "Reopen sessions with the original connection";
             this.rememberSessionConnectionsCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
