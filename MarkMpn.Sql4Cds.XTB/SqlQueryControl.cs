@@ -2168,7 +2168,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 // We don't already have this connection - connect to it and add it to the object explorer
                 var savedConnection = ConnectionManager.Instance.ConnectionsList.Connections.SingleOrDefault(c => c.ConnectionId == tab.Connection);
 
-                if (savedConnection != null)
+                if (savedConnection != null && !savedConnection.IsFromSdkLoginCtrl)
                 {
                     var connectionParameterInfoType = System.Type.GetType("XrmToolBox.ConnectionParameterInfo, XrmToolBox");
                     var connectionParameterInfo = Activator.CreateInstance(connectionParameterInfoType);
