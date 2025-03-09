@@ -472,6 +472,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     errors.Add(Sql4CdsError.InvalidColumnName(col));
                     continue;
                 }
+                else if (operation == DmlOperationDetails.Insert && attr.IsPrimaryId == true)
+                {
+                    // When writing a primary key, treat is as a raw guid instead of an EntityReference
+                    colName = attr.LogicalName;
+                    targetType = DataTypeHelpers.UniqueIdentifier;
+                    targetClrType = typeof(Guid?);
+                }
                 else
                 {
                     colName = attr.LogicalName;
@@ -764,10 +771,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var pidAccessor =  lookupMapping.Value.Pid?.Accessor;
 
                 // If we're creating an elastic lookup for a fixed type, we still need to know the type
-                if (pidAccessor != null && typeAccessor == null)
+                if (typeAccessor == null && attr is LookupAttributeMetadata lookupAttr)
                 {
-                    var lookupAttr = (LookupAttributeMetadata)attr;
-
                     if (lookupAttr.Targets.Length != 1)
                         throw new NotSupportedException();
 
