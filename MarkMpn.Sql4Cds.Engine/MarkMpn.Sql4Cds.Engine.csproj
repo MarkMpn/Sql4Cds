@@ -4,7 +4,7 @@
     <TargetFrameworks>net8.0;net462</TargetFrameworks>
     <AssemblyName>MarkMpn.Sql4Cds.Engine</AssemblyName>
     <RootNamespace>MarkMpn.Sql4Cds.Engine</RootNamespace>
-    <Copyright>Copyright © 2020 - 2024 Mark Carrington</Copyright>
+    <Copyright>Copyright © 2020 - 2025 Mark Carrington</Copyright>
     <SignAssembly>True</SignAssembly>
     <AssemblyOriginatorKeyFile>Key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
