@@ -1170,11 +1170,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         (nullFilterRemovable || !rightFetch.Entity.GetLinkEntities().Any(link => link.linktype == "inner")) &&
                         rightFetch.FetchXml.top == null)
                     {
-                        // Replace the filter on the defined value name with a filter on the primary key column
-                        nullFilter.Expression = attribute.ToColumnReference();
-
-                        rightFetch.RemoveSorts();
-
                         linkToAdd = new FetchLinkEntityType
                         {
                             name = rightFetch.Entity.name,
@@ -1183,6 +1178,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             to = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value,
                             Items = rightFetch.Entity.Items
                         };
+
+                        if (!CanAddLink(linkToAdd))
+                            break;
+
+                        // Replace the filter on the defined value name with a filter on the primary key column
+                        nullFilter.Expression = attribute.ToColumnReference();
+
+                        linkToAdd.RemoveSorts();
 
                         if (nullFilterRemovable)
                         {
@@ -1214,11 +1217,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         rightFetch.FetchXml.top == null)
                     {
                         // Remove the filter and replace with an "in" link-entity
-                        Filter = Filter.RemoveCondition(nullFilter);
-                        foldedFilters = true;
-
-                        rightFetch.RemoveSorts();
-
                         linkToAdd = new FetchLinkEntityType
                         {
                             name = rightFetch.Entity.name,
@@ -1227,6 +1225,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             linktype = "in",
                             Items = rightFetch.Entity.Items
                         };
+
+                        if (!CanAddLink(linkToAdd))
+                            break;
+
+                        Filter = Filter.RemoveCondition(nullFilter);
+                        foldedFilters = true;
+
+                        linkToAdd.RemoveSorts();
+
                         semiJoin = true;
                     }
                     // We can use an "any" join type - check that's supported
@@ -1269,11 +1276,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (rightFetch.Entity.GetLinkEntities().Any(l => l.linktype == "inner"))
                             break;
 
-                        // Replace the filter on the defined value name with a filter on the primary key column
-                        nullFilter.Expression = (rightFetch.Alias + "." + context.Session.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute).ToColumnReference();
-
-                        rightFetch.RemoveSorts();
-
                         linkToAdd = new FetchLinkEntityType
                         {
                             name = rightFetch.Entity.name,
@@ -1283,6 +1285,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             linktype = "outer",
                             Items = rightFetch.Entity.Items
                         };
+
+                        if (!CanAddLink(linkToAdd))
+                            break;
+
+                        // Replace the filter on the defined value name with a filter on the primary key column
+                        nullFilter.Expression = (rightFetch.Alias + "." + context.Session.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute).ToColumnReference();
+
+                        linkToAdd.RemoveSorts(true);
 
                         if (nullFilterRemovable)
                         {
@@ -1351,9 +1361,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         notNullFilterRemovable)
                     {
                         // Remove the filter and replace with an "exists" link-entity
-                        Filter = Filter.RemoveCondition(notNullFilter);
-                        foldedFilters = true;
-
                         linkToAdd = new FetchLinkEntityType
                         {
                             name = rightFetch.Entity.name,
@@ -1362,6 +1369,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             linktype = "exists",
                             Items = rightFetch.Entity.Items
                         };
+
+                        if (!CanAddLink(linkToAdd))
+                            break;
+
+                        Filter = Filter.RemoveCondition(notNullFilter);
+                        foldedFilters = true;
+
                         semiJoin = true;
                     }
                     else if (context.Session.DataSources[rightFetch.DataSource].JoinOperatorsAvailable.Contains(JoinOperator.Any) && notNullFilter.IsNot ||
@@ -1406,10 +1420,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (linkToAdd != null)
                 {
-                    // Can't add the link if it's got any filter conditions with an entityname
-                    if (linkToAdd.GetConditions().Any(c => !String.IsNullOrEmpty(c.entityname)))
-                        break;
-
                     // Remove any attributes from the new linkentity
                     var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
                     tempEntity.RemoveAttributes();
@@ -1453,6 +1463,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return foldedFilters;
+        }
+
+        private static bool CanAddLink(FetchLinkEntityType linkToAdd)
+        {
+            // Can't add the link if it's got any filter conditions with an entityname
+            if (linkToAdd.GetConditions().Any(c => !String.IsNullOrEmpty(c.entityname)))
+                return false;
+
+            return true;
         }
 
         private bool FoldTableSpoolToIndexSpool(NodeCompilationContext context, IList<OptimizerHint> hints)
