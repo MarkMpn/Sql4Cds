@@ -830,7 +830,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var partitionIdAttribute = items?.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == "partitionid");
                             var alias = partitionIdAttribute?.alias ?? "partitionid";
                             var colName = parts[0] + "." + alias;
-                            var partitionId = entity.GetAttributeValue<string>(colName);
+                            var partitionId = GetString(entity, colName);
                             sqlValue = new SqlEntityReference(DataSource, dataSource.Metadata[logicalName], guid, partitionId);
                         }
                         else if (logicalName == "activitypointer")
@@ -840,7 +840,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var activityTypeCodeAttribute = items?.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == "activitytypecode");
                             var alias = activityTypeCodeAttribute?.alias ?? "activitytypecode";
                             var colName = parts[0] + "." + alias;
-                            var activityTypeCode = entity.GetAttributeValue<string>(colName);
+                            var activityTypeCode = GetString(entity, colName);
                             sqlValue = new SqlEntityReference(DataSource, activityTypeCode ?? logicalName, guid);
                         }
                         else
@@ -882,6 +882,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var pagingField in _pagingFields)
                     _lastPageValues.Add((INullable)entity[pagingField.Value]);
             }
+        }
+
+        private string GetString(Entity entity, string colName)
+        {
+            if (!entity.TryGetAttributeValue<object>(colName, out var value))
+                return null;
+
+            if (value is string str)
+                return str;
+
+            var sqlStr = (SqlString)value;
+
+            if (sqlStr.IsNull)
+                return null;
+
+            return sqlStr.Value;
         }
 
         private void PrefixAliasedScalarAttributes(Entity entity, object[] items, string alias)
