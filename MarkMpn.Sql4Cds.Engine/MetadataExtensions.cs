@@ -41,6 +41,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The metadata of the underlying attribute, or <see langword="null"/> if no virtual attribute is found</returns>
         public static AttributeMetadata FindBaseAttributeFromVirtualAttribute(this EntityMetadata entity, string virtualAttributeLogicalName, out string suffix)
         {
+            if (entity.Attributes.Any(a => a.LogicalName.Equals(virtualAttributeLogicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null))
+            {
+                suffix = null;
+                return null;
+            }
+
             var matchingSuffix = VirtualLookupAttributeSuffixes.SingleOrDefault(s => virtualAttributeLogicalName.EndsWith(s, StringComparison.OrdinalIgnoreCase));
             suffix = matchingSuffix;
 
