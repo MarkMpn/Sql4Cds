@@ -197,7 +197,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            return new RowCountEstimate(Sources.Sum(s => s.EstimateRowsOut(context).Value));
+            var estimate = 0;
+            var minimum = 0;
+            var maximum = 0;
+            var exact = true;
+
+            foreach (var source in Sources)
+            {
+                var sourceEstimate = source.EstimateRowsOut(context);
+
+                estimate = AddUpToMaxValue(estimate, sourceEstimate.Value);
+
+                if (exact && sourceEstimate is RowCountEstimateDefiniteRange range)
+                {
+                    minimum = AddUpToMaxValue(minimum, range.Minimum);
+                    maximum = AddUpToMaxValue(maximum, range.Maximum);
+                }
+                else
+                {
+                    exact = false;
+                }
+            }
+
+            if (exact)
+                return new RowCountEstimateDefiniteRange(minimum, maximum);
+
+            return new RowCountEstimate(estimate);
+        }
+
+        private int AddUpToMaxValue(int x, int y)
+        {
+            // Avoid overflow error when adding large row count estimates
+            var maxAddition = Int32.MaxValue - x;
+
+            if (y > maxAddition)
+                return Int32.MaxValue;
+
+            return x + y;
         }
 
         public override object Clone()
@@ -211,7 +247,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 clone.Sources.Add(sourceClone);
             }
 
-            clone.ColumnSet.AddRange(ColumnSet);
+            foreach (var col in ColumnSet)
+            {
+                var colClone = new ConcatenateColumn();
+                colClone.OutputColumn = col.OutputColumn;
+                colClone.SourceColumns.AddRange(col.SourceColumns);
+                colClone.SourceExpressions.AddRange(col.SourceExpressions);
+                clone.ColumnSet.Add(colClone);
+            }
 
             return clone;
         }

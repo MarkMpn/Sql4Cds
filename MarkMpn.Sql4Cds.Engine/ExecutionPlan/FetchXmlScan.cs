@@ -639,13 +639,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public void RemoveSorts()
         {
             // Remove any existing sorts
-            if (Entity.Items != null)
-            {
-                Entity.Items = Entity.Items.Where(i => !(i is FetchOrderType)).ToArray();
-
-                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
-                    linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
-            }
+            Entity.RemoveSorts();
         }
 
         public void RemoveAttributes()
@@ -836,7 +830,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var partitionIdAttribute = items?.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == "partitionid");
                             var alias = partitionIdAttribute?.alias ?? "partitionid";
                             var colName = parts[0] + "." + alias;
-                            var partitionId = entity.GetAttributeValue<string>(colName);
+                            var partitionId = GetString(entity, colName);
                             sqlValue = new SqlEntityReference(DataSource, dataSource.Metadata[logicalName], guid, partitionId);
                         }
                         else if (logicalName == "activitypointer")
@@ -846,7 +840,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var activityTypeCodeAttribute = items?.OfType<FetchAttributeType>().SingleOrDefault(a => a.name == "activitytypecode");
                             var alias = activityTypeCodeAttribute?.alias ?? "activitytypecode";
                             var colName = parts[0] + "." + alias;
-                            var activityTypeCode = entity.GetAttributeValue<string>(colName);
+                            var activityTypeCode = GetString(entity, colName);
                             sqlValue = new SqlEntityReference(DataSource, activityTypeCode ?? logicalName, guid);
                         }
                         else
@@ -888,6 +882,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var pagingField in _pagingFields)
                     _lastPageValues.Add((INullable)entity[pagingField.Value]);
             }
+        }
+
+        private string GetString(Entity entity, string colName)
+        {
+            if (!entity.TryGetAttributeValue<object>(colName, out var value))
+                return null;
+
+            if (value is string str)
+                return str;
+
+            var sqlStr = (SqlString)value;
+
+            if (sqlStr.IsNull)
+                return null;
+
+            return sqlStr.Value;
         }
 
         private void PrefixAliasedScalarAttributes(Entity entity, object[] items, string alias)
@@ -2401,6 +2411,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return items;
 
             var attributes = items.OfType<FetchAttributeType>().ToList();
+
+            // https://github.com/MarkMpn/Sql4Cds/issues/646
+            // If we've included audit.changedata then we need audit.objectid as well
+            if (entityName == "audit" && attributes.Any(a => a.name == "changedata") && !attributes.Any(a => a.name == "objectid"))
+            {
+                var objectId = new FetchAttributeType { name = "objectid" };
+                attributes.Add(objectId);
+                items = items.Concat(new object[] { objectId }).ToArray();
+            }
 
             // If we've included audit.objectid then we need audit.objecttypecode as well
             if (entityName == "audit" && attributes.Any(a => a.name == "objectid") && !attributes.Any(a => a.name == "objecttypecode"))

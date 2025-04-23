@@ -101,6 +101,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [DataRow("1996 april 15", true)]
         [DataRow("1996 15 apr", true)]
         [DataRow("1996 15 april", true)]
+        [DataRow("15  apr  1996", true)]
+        [DataRow("15-APR-1996", true)]
+        [DataRow("15/ APR/  1996", true)]
+        [DataRow("15-APR/ 1996", true)]
         public void AlphaFormat(string input, bool includesDay)
         {
             Assert.IsTrue(SqlDateParsing.TryParse(input, DateFormat.mdy, out SqlDateTime actual));

@@ -919,6 +919,11 @@ in
                             }
                             break;
 
+                        case DialogResult.No:
+                            foreach (var doc in unsavedDocuments.OfType<DocumentWindowBase>())
+                                doc.Modified = false;
+                            break;
+
                         case DialogResult.Cancel:
                             return false;
                     }

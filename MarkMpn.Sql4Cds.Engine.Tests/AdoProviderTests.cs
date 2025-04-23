@@ -2886,5 +2886,32 @@ DEALLOCATE MyCursor";
                 Assert.AreEqual("Data8", messages[1]);
             }
         }
+
+        [TestMethod]
+        public void InsertIdFromSelect()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/643
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"INSERT INTO contact (contactid, firstname, lastname) VALUES ('218ae23d-48ee-ef11-be20-7c1e5258ff38', 'Mark', 'Carrington')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "INSERT INTO account (accountid, name) SELECT contactid, firstname FROM contact WHERE lastname = 'Carrington'";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT accountid, name FROM account WHERE name = 'Mark'";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(new Guid("218ae23d-48ee-ef11-be20-7c1e5258ff38"), reader.GetGuid(0));
+                    Assert.AreEqual("Mark", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

@@ -9171,5 +9171,39 @@ SELECT logicalname FROM metadata.attribute";
             Assert.AreEqual("attribute", metadata2.AttributeAlias);
             Assert.AreEqual(MetadataSource.Attribute, metadata2.MetadataSource);
         }
+
+        [TestMethod]
+        public void InSubqueryMergeSemiJoin()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/649
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT a.name,
+       u.domainname
+FROM   account AS a
+       INNER JOIN
+       systemuser AS u
+       ON a.ownerid = u.systemuserid
+WHERE  a.parentaccountid IN (SELECT _a.accountid
+                             FROM account AS _a
+                                  INNER JOIN contact AS _c
+                                  ON _a.primarycontactid = _c.contactid
+                             WHERE _a.name = 'Data8' OR _c.firstname = 'Mark')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.SemiJoin);
+            Assert.AreEqual(1, join.DefinedValues.Count);
+            var sort1 = AssertNode<SortNode>(join.LeftSource);
+            var fetch1 = AssertNode<FetchXmlScan>(sort1.Source);
+            var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+        }
     }
 }

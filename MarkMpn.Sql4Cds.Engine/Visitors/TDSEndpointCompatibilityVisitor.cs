@@ -526,5 +526,17 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Cursors are not supported
             IsCompatible = false;
         }
+
+        public override void Visit(CreateTableStatement node)
+        {
+            // CREATE TABLE is not supported
+            IsCompatible = false;
+        }
+
+        public override void Visit(DropTableStatement node)
+        {
+            // DROP TABLE is not supported
+            IsCompatible = false;
+        }
     }
 }

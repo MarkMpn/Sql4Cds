@@ -4,6 +4,7 @@ using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Crm.Sdk.Messages;
 
@@ -1078,7 +1079,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 "dd [yy]yy mon",
                 "[dd] yyyy mon",
                 "yyyy mon [dd]",
-                "yyyy [dd] mon"
+                "yyyy [dd] mon",
             };
 
             var isoFormatStrings = new[]
@@ -1098,8 +1099,35 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!DateTime.TryParseExact(value.Value.Trim(), allFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
             {
-                date = SqlDateTime.Null;
-                return false;
+                // Undocumented formats but work in SQL Server for datetime only, not datetimeoffset or other modern types
+                // https://github.com/MarkMpn/Sql4Cds/issues/657
+                var undocumentedAlphaSeparatorsddmm = new[] { "/", "-" };
+                var undocumentedAlphaSeparatorsmmyy = new[] { "/", "-", "," };
+
+                var undocumentedAlphaFormatStrings = undocumentedAlphaSeparatorsddmm
+                    .SelectMany(ddmm => undocumentedAlphaSeparatorsmmyy
+                        .SelectMany(mmyy => new[] {
+                        $"dd{ddmm}mon{mmyy}[yy]yy",
+                        $"yyyy{mmyy}mon{ddmm}dd",
+                        })
+                    )
+                    .SelectMany(f => SqlToNetFormatString(f))
+                    .ToArray();
+
+                if (!DateTime.TryParseExact(value.Value.Replace(" ", ""), undocumentedAlphaFormatStrings, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed))
+                {
+                    // Also try the alpha format strings again, but replace multiple spaces with a single space
+                    var alphaFormatStrings2 = undocumentedAlphaFormatStrings
+                        .Concat(alphaFormatStrings)
+                        .SelectMany(f => SqlToNetFormatString(f))
+                        .ToArray();
+
+                    if (!DateTime.TryParseExact(Regex.Replace(value.Value.Trim(), " +", " "), alphaFormatStrings2, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed))
+                    {
+                        date = SqlDateTime.Null;
+                        return false;
+                    }
+                }
             }
 
             date = parsed;

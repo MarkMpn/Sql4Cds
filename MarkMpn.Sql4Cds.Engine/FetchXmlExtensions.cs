@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -177,6 +178,31 @@ namespace MarkMpn.Sql4Cds.Engine
                 .Concat(filter.Items
                     .OfType<filter>()
                     .SelectMany(f => f.GetConditions()));
+        }
+
+        public static void RemoveSorts(this FetchEntityType entity)
+        {
+            if (entity.Items != null)
+            {
+                entity.Items = entity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+
+                foreach (var linkEntity in entity.GetLinkEntities())
+                    linkEntity.RemoveSorts();
+            }
+        }
+
+        public static void RemoveSorts(this FetchLinkEntityType linkEntity, bool recurse = false)
+        {
+            if (linkEntity.Items == null)
+                return;
+
+            linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+
+            if (recurse)
+            {
+                foreach (var child in GetLinkEntities(linkEntity.Items, false))
+                    linkEntity.RemoveSorts(true);
+            }
         }
     }
 }
