@@ -247,7 +247,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 clone.Sources.Add(sourceClone);
             }
 
-            clone.ColumnSet.AddRange(ColumnSet);
+            foreach (var col in ColumnSet)
+            {
+                var colClone = new ConcatenateColumn();
+                colClone.OutputColumn = col.OutputColumn;
+                colClone.SourceColumns.AddRange(col.SourceColumns);
+                colClone.SourceExpressions.AddRange(col.SourceExpressions);
+                clone.ColumnSet.Add(colClone);
+            }
 
             return clone;
         }
