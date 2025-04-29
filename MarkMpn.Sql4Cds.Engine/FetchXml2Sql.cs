@@ -2053,12 +2053,36 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedException($"Conversion of the {condition.@operator} FetchXML operator to SQL is not currently supported");
             }
 
-            var expression = new BooleanComparisonExpression
+            BooleanExpression expression = new BooleanComparisonExpression
             {
                 FirstExpression = field,
                 ComparisonType = type,
                 SecondExpression = value
             };
+
+            // Various "not" conditions allow nulls in FetchXML but don't in SQL, so need to add an explicit "or null" check
+            switch (condition.@operator)
+            {
+                case @operator.ne:
+                case @operator.neq:
+                case @operator.notin:
+                case @operator.notendwith:
+                case @operator.notlike:
+                case @operator.notbeginwith:
+                case @operator.notbetween:
+                case @operator.notcontainvalues:
+                case @operator.notunder:
+                    expression = new BooleanBinaryExpression
+                    {
+                        FirstExpression = expression,
+                        BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                        SecondExpression = new BooleanIsNullExpression
+                        {
+                            Expression = field
+                        }
+                    };
+                    break;
+            }
 
             return expression;
         }
