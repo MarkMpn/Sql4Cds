@@ -1,5 +1,21 @@
 # Change Log
 
+## [v9.6.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.6.1) - 2025-04-30
+
+Bug fixes
+* Fixed retrieving `audit.changedata` even when `audit.objectid`
+* Fixed inserting a primary key value from an existing lookup value
+* Fixed arithmetic overflow error when concatenating large data sets
+* Check links to be added for `IN`/`EXISTS` predicates are valid before adding them to the query
+* Added support for more alphanumeric datetime formats
+* Do not use TDS Endpoint for temporary tables
+* Fixed DML operations on `listmember`
+* Handle real attributes that have a `type` suffix from another attribute
+* Fixed retrieving activity and elastic table primary keys
+* Fixed cloning Concatenate nodes
+* Do not fold `TOP` clause to FetchXML for virtual tables
+* Improved null handling when converting "not" conditions from FetchXML to SQL
+
 ## [v9.6.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.6.0) - 2025-02-22
 
 New SQL support

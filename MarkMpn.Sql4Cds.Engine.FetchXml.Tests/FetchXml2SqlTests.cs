@@ -51,6 +51,26 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         }
 
         [TestMethod]
+        public void NeAllowsNull()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='firstname' operator='ne' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE (firstname <> 'Mark' OR firstname IS NULL)", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
         public void Joins()
         {
             var metadata = new AttributeMetadataCache(_service);

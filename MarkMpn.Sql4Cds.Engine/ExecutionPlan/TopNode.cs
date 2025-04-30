@@ -158,9 +158,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // so reduce the page size instead. This seems to be because the TOP gets applied to the list
                     // of audit records before the join is applied, so any records with no callinguserid are
                     // lost.
-                    if (fetchXml.Entity.name == "audit" &&
+                    // Other virtual providers also don't support this reliably - https://github.com/MarkMpn/Sql4Cds/issues/656
+                    if ((fetchXml.Entity.name == "audit" &&
                         fetchXml.Entity.GetLinkEntities().SingleOrDefault()?.to == "callinguserid" &&
-                        fetchXml.Entity.GetLinkEntities().SingleOrDefault()?.linktype == "inner")
+                        fetchXml.Entity.GetLinkEntities().SingleOrDefault()?.linktype == "inner") ||
+                        IsVirtualTable(context, fetchXml))
                     {
                         fetchXml.FetchXml.count = literal.Value;
                     }
@@ -185,6 +187,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        private bool IsVirtualTable(NodeCompilationContext context, FetchXmlScan fetchXml)
+        {
+            if (!context.Session.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                return false;
+
+            if (!dataSource.Metadata.TryGetValue(fetchXml.Entity.name, out var metadata))
+                return false;
+
+            if (metadata.DataProviderId == null || metadata.DataProviderId == DataProviders.ElasticDataProvider)
+                return false;
+
+            return true;
         }
 
         private void SetPageSize(NodeCompilationContext context, IList<OptimizerHint> hints, int top)
