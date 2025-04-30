@@ -35,6 +35,8 @@ Bug fixes
 * Handle real attributes that have a `type` suffix from another attribute
 * Fixed retrieving activity and elastic table primary keys
 * Fixed cloning Concatenate nodes
+* Do not fold `TOP` clause to FetchXML for virtual tables
+* Improved null handling when converting "not" conditions from FetchXML to SQL
 
 User Experience
 * Fixed showing the "Confirm Close" dialog individually for each tab after already selecting "No" on the same dialog for bulk closing tabs
