@@ -931,6 +931,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(2238, func, Collation.USEnglish.ToSqlString($"XQuery [{func.FunctionName.Value.ToLowerInvariant()}()]: "), (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
+        internal static Sql4CdsError ObjectDoesNotExist(string operation, string objectType, string objectName)
+        {
+            return Create(3701, null, Collation.USEnglish.ToSqlString(operation), Collation.USEnglish.ToSqlString(objectType), (SqlInt32)objectName.Length, Collation.USEnglish.ToSqlString(objectName));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

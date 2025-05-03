@@ -596,12 +596,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (plan is CreateTableNode createTable)
                 {
                     // Create the table now in the local copy of the tempdb to allow converting later statements
-                    Session.TempDb.Tables.Add(createTable.TableDefinition.Clone());
+                    if (!Session.TempDb.Tables.Contains(createTable.TableDefinition.TableName))
+                        Session.TempDb.Tables.Add(createTable.TableDefinition.Clone());
                 }
                 else if (plan is DropTableNode dropTable)
                 {
                     // Remove the table now in the local copy of the tempdb for validating later statements
-                    Session.TempDb.Tables.Remove(dropTable.TableName);
+                    if (Session.TempDb.Tables.Contains(dropTable.TableName))
+                        Session.TempDb.Tables.Remove(dropTable.TableName);
                 }
             }
 
@@ -679,20 +681,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
-                else if (!Session.TempDb.Tables.Contains(table.BaseIdentifier.Value))
-                {
-                    if (!dropTable.IsIfExists)
-                    {
-                        errors.Add(Sql4CdsError.InvalidObjectName(table));
-                        suggestions.Add("Check the table name is correct");
-                    }
-
-                    continue;
-                }
 
                 nodes.Add(new DropTableNode
                 {
-                    TableName = table.BaseIdentifier.Value
+                    TableName = table.BaseIdentifier.Value,
+                    IfExists = dropTable.IsIfExists
                 });
             }
 

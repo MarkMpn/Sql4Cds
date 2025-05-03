@@ -44,10 +44,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int LineNumber { get; set; }
 
         /// <summary>
-        /// The table that will be created
+        /// The table that will be dropped
         /// </summary>
         [Browsable(false)]
         public string TableName { get; set; }
+
+        /// <summary>
+        /// Indicates if this node should ignore tables that do not exist
+        /// </summary>
+        [Browsable(false)]
+        public bool IfExists { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -65,6 +71,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
+                if (!context.Session.TempDb.Tables.Contains(TableName))
+                {
+                    if (IfExists)
+                        return;
+
+                    throw new QueryExecutionException(Sql4CdsError.ObjectDoesNotExist("drop", "table", TableName));
+                }
+
                 context.Session.TempDb.Tables.Remove(TableName);
             }
             catch (QueryExecutionException ex)
@@ -97,7 +111,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Index = Index,
                 Length = Length,
                 LineNumber = LineNumber,
-                TableName = TableName
+                TableName = TableName,
+                IfExists = IfExists
             };
         }
 
