@@ -25,6 +25,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (select == null)
                 return;
 
+            //select.ExpandWildcardColumns(context);
+
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
             Alias = identifier.Value;
@@ -119,7 +121,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.Parent = this;
 
             SelectNode.FoldFetchXmlColumns(Source, ColumnSet, context);
-            SelectNode.ExpandWildcardColumns(Source, LogicalSourceSchema, ColumnSet, context);
 
             if (Source is FetchXmlScan fetchXml)
             {
@@ -212,6 +213,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (col.SourceColumn != null && !sourceCol.Key.StartsWith(col.SourceColumn + "."))
                             continue;
 
+                        if (!sourceCol.Value.IsWildcardable)
+                            continue;
+
                         var simpleName = sourceCol.Key.SplitMultiPartIdentifier().Last();
                         AddSchemaColumn(escapedAlias, simpleName, sourceCol.Key, schema, aliases, ref primaryKey, mappings, sourceSchema);
                     }
@@ -244,13 +248,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sortOrder: sortOrder);
         }
 
+        /// <summary>
+        /// Gets a dictionary of output column name to source column name
+        /// </summary>
+        /// <returns></returns>
+        public Dictionary<string, string> GetColumnMappings(NodeCompilationContext context)
+        {
+            var sourceSchema = new Lazy<INodeSchema>(() => Source.GetSchema(context));
+            var escapedAlias = Alias.EscapeIdentifier();
+
+            var aliasColumns = ColumnSet
+                .SelectMany(col => col.AllColumns ? sourceSchema.Value.Schema.Select(schemaCol => new SelectColumn { OutputColumn = schemaCol.Key.SplitMultiPartIdentifier().Last(), SourceColumn = schemaCol.Key.SplitMultiPartIdentifier().Last() }) : new[] { col })
+                .ToDictionary(col => escapedAlias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase);
+
+            return aliasColumns;
+        }
+
         private void AddSchemaColumn(string escapedAlias, string outputColumn, string sourceColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
         {
             if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
                 return;
 
             var mapped = $"{escapedAlias}.{outputColumn}";
-            schema[mapped] = sourceSchema.Schema[normalized].NotCalculated();
+            schema[mapped] = sourceSchema.Schema[normalized].NotCalculated().Wildcardable();
             mappings[normalized] = mapped;
 
             if (normalized == sourceSchema.PrimaryKey)

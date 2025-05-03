@@ -1113,7 +1113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private void MapColumn(string sourceColumn, string outputColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, List<string> sortOrder)
         {
             var src = schema[sourceColumn];
-            schema[outputColumn] = new ColumnDefinition(src.Type, src.IsNullable, src.IsCalculated);
+            schema[outputColumn] = new ColumnDefinition(src.Type, src.IsNullable, src.IsCalculated, isWildcardable: true);
 
             var simpleName = outputColumn.ToColumnReference().MultiPartIdentifier.Identifiers.Last().Value.EscapeIdentifier();
 
@@ -1482,9 +1482,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 type = DataTypeHelpers.NVarChar(Int32.MaxValue, sqlType.Collation, sqlType.CollationLabel);
 
             if (type != null)
-                schema[fullName] = new ColumnDefinition(type, !notNull, false, visible);
+                schema[fullName] = new ColumnDefinition(type, !notNull, false, visible, isWildcardable: visible);
             else
-                schema[fullName] = new LazyColumnDefinition(typeLoader, !notNull, false, visible);
+                schema[fullName] = new LazyColumnDefinition(typeLoader, !notNull, false, visible, isWildcardable: visible);
 
             if (simpleName == null)
                 return;

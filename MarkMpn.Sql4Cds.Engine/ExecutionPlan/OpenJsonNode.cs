@@ -109,9 +109,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     _jsonCollation = (jsonType as SqlDataTypeReferenceWithCollation)?.Collation ?? context.PrimaryDataSource.DefaultCollation;
                 }
 
-                columns.Add(PrefixWithAlias("key", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(4000, _keyCollation, CollationLabel.Implicit), false, false));
-                columns.Add(PrefixWithAlias("value", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(Int32.MaxValue, _jsonCollation, CollationLabel.Implicit), true, false));
-                columns.Add(PrefixWithAlias("type", aliases), new ColumnDefinition(DataTypeHelpers.Int, false, false));
+                columns.Add(PrefixWithAlias("key", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(4000, _keyCollation, CollationLabel.Implicit), false, false, isWildcardable: true));
+                columns.Add(PrefixWithAlias("value", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(Int32.MaxValue, _jsonCollation, CollationLabel.Implicit), true, false, isWildcardable: true));
+                columns.Add(PrefixWithAlias("type", aliases), new ColumnDefinition(DataTypeHelpers.Int, false, false, isWildcardable: true));
             }
             else
             {
@@ -148,7 +148,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    columns.Add(PrefixWithAlias(col.ColumnDefinition.ColumnIdentifier.Value, aliases), new ColumnDefinition(type, true, false));
+                    columns.Add(PrefixWithAlias(col.ColumnDefinition.ColumnIdentifier.Value, aliases), new ColumnDefinition(type, true, false, isWildcardable: true));
                 }
             }
 

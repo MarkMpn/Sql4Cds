@@ -60,8 +60,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return new NodeSchema(
                         schema: new ColumnList
                         {
-                            [PrefixWithAlias("name")] = new ColumnDefinition(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false),
-                            [PrefixWithAlias("description")] = new ColumnDefinition(DataTypeHelpers.NVarChar(1000, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false),
+                            [PrefixWithAlias("name")] = new ColumnDefinition(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false, isWildcardable: true),
+                            [PrefixWithAlias("description")] = new ColumnDefinition(DataTypeHelpers.NVarChar(1000, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false, isWildcardable: true),
                         },
                         aliases: null,
                         primaryKey: null,
@@ -71,11 +71,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return new NodeSchema(
                         schema: new ColumnList
                         {
-                            [PrefixWithAlias("message_id")] = new ColumnDefinition(DataTypeHelpers.Int, false, false),
-                            [PrefixWithAlias("language_id")] = new ColumnDefinition(DataTypeHelpers.SmallInt, false, false),
-                            [PrefixWithAlias("severity")] = new ColumnDefinition(DataTypeHelpers.TinyInt, false, false),
-                            [PrefixWithAlias("is_event_logged")] = new ColumnDefinition(DataTypeHelpers.Bit, false, false),
-                            [PrefixWithAlias("text")] = new ColumnDefinition(DataTypeHelpers.NVarChar(2048, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false)
+                            [PrefixWithAlias("message_id")] = new ColumnDefinition(DataTypeHelpers.Int, false, false, isWildcardable: true),
+                            [PrefixWithAlias("language_id")] = new ColumnDefinition(DataTypeHelpers.SmallInt, false, false, isWildcardable: true),
+                            [PrefixWithAlias("severity")] = new ColumnDefinition(DataTypeHelpers.TinyInt, false, false, isWildcardable: true),
+                            [PrefixWithAlias("is_event_logged")] = new ColumnDefinition(DataTypeHelpers.Bit, false, false, isWildcardable: true),
+                            [PrefixWithAlias("text")] = new ColumnDefinition(DataTypeHelpers.NVarChar(2048, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false, isWildcardable: true)
                         },
                         aliases: null,
                         primaryKey: null,

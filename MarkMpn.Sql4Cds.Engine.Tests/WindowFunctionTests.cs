@@ -580,5 +580,62 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void DeleteDuplicates()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+CREATE TABLE #x(
+id INT NOT NULL,
+s VARCHAR(100) NOT NULL
+)
+
+INSERT INTO #x (id, s) VALUES (1, 'a'), (2, 'a'), (3, 'a'), (4, 'b'), (5, 'b')
+
+SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY s ORDER BY id) AS r FROM #x) a
+WHERE r > 1
+
+DELETE a FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY s ORDER BY id) AS r FROM #x) a
+WHERE r > 1
+
+SELECT * FROM #x";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2, reader["id"]);
+                    Assert.AreEqual("a", reader["s"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3, reader["id"]);
+                    Assert.AreEqual("a", reader["s"]);
+                    Assert.AreEqual(3L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5, reader["id"]);
+                    Assert.AreEqual("b", reader["s"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader["id"]);
+                    Assert.AreEqual("a", reader["s"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(4, reader["id"]);
+                    Assert.AreEqual("b", reader["s"]);
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

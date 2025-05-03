@@ -250,12 +250,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void AddSchemaColumn(string name, DataTypeReference type)
         {
-            Schema[name] = new ColumnDefinition(type, true, false);
+            Schema[name] = new ColumnDefinition(type, true, false, isWildcardable: true);
         }
 
         private void AddSchemaColumn(string name, Func<DataTypeReference> typeLoader)
         {
-            Schema[name] = new LazyColumnDefinition(typeLoader, true, false);
+            Schema[name] = new LazyColumnDefinition(typeLoader, true, false, isWildcardable: true);
         }
 
         private string PrefixWithAlias(string columnName)

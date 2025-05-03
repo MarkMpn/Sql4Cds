@@ -1607,15 +1607,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Extract filters on this alias and rewrite them to the source columns
                     // Move these filters to within the alias node and re-fold them
                     var escapedAlias = alias.Alias.EscapeIdentifier();
+                    var aliasColumns = alias.GetColumnMappings(context);
 
-                    Filter = ExtractChildFilters(Filter, schema, colName => alias.ColumnSet.Any(col => (escapedAlias + "." + col.OutputColumn).Equals(colName, StringComparison.OrdinalIgnoreCase)), out var aliasFilter);
+                    Filter = ExtractChildFilters(Filter, schema, colName => aliasColumns.ContainsKey(colName), out var aliasFilter);
 
                     if (aliasFilter != null)
                     {
+                        var aliasColumnReplacements = alias.GetColumnMappings(context)
+                            .ToDictionary(kvp => (ScalarExpression)kvp.Key.ToColumnReference(), col => col.Value);
+
                         var aliasFilterNode = new FilterNode
                         {
                             Source = alias.Source,
-                            Filter = ReplaceColumnNames(aliasFilter, alias.ColumnSet.ToDictionary(col => (ScalarExpression)(escapedAlias + "." + col.OutputColumn).ToColumnReference(), col => col.SourceColumn))
+                            Filter = ReplaceColumnNames(aliasFilter, aliasColumnReplacements)
                         };
                         alias.Source = aliasFilterNode;
 
