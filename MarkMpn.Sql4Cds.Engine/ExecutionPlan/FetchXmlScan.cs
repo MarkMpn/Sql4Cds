@@ -92,10 +92,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private List<INullable> _lastPageValues;
         private bool _missingPagingCookie;
         private bool _isVirtualEntity;
+        private List<string> _lookupFieldsWithVirtualNameField;
+        private List<string> _lookupFieldsWithVirtualTypeField;
 
         public FetchXmlScan()
         {
             AllPages = true;
+
+            _lookupFieldsWithVirtualNameField = new List<string>();
+            _lookupFieldsWithVirtualTypeField = new List<string>();
         }
 
         /// <summary>
@@ -728,18 +733,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Expose the type and name of lookup values
-            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
+            foreach (var attr in _lookupFieldsWithVirtualNameField)
             {
-                var typeSuffix = AddSuffix(attribute.Key, "type");
-                var nameSuffix = AddSuffix(attribute.Key, "name");
+                if (entity.Attributes.TryGetValue(attr, out var value) && value is EntityReference er)
+                {
+                    var nameSuffix = AddSuffix(attr, "name");
+                    entity[nameSuffix] = er.Name;
+                }
+            }
 
-                // NOTE: pid for elastic lookup values is exposed as a separate column in the returned entity already
-
-                if (!entity.Contains(typeSuffix))
-                    entity[typeSuffix] = ((EntityReference)attribute.Value).LogicalName;
-
-                if (!entity.Contains(nameSuffix))
-                    entity[nameSuffix] = ((EntityReference)attribute.Value).Name;
+            foreach (var attr in _lookupFieldsWithVirtualTypeField)
+            {
+                if (entity.Attributes.TryGetValue(attr, out var value) && value is EntityReference er)
+                {
+                    var typeSuffix = AddSuffix(attr, "type");
+                    entity[typeSuffix] = er.LogicalName;
+                }
             }
 
             // Convert values to SQL types
@@ -1079,6 +1088,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = FetchXml.aggregate ? null : $"{Alias.EscapeIdentifier()}.{meta.PrimaryIdAttribute}";
             var sortOrder = new List<string>();
+            _lookupFieldsWithVirtualNameField.Clear();
+            _lookupFieldsWithVirtualTypeField.Clear();
 
             AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, entity.name, Alias.EscapeIdentifier(), entity.Items, true, false);
 
@@ -1466,7 +1477,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
+            {
+                if (virtualAttr.Suffix == "name")
+                    _lookupFieldsWithVirtualNameField.Add(fullName);
+
+                if (virtualAttr.Suffix == "type")
+                    _lookupFieldsWithVirtualTypeField.Add(fullName);
+
                 AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull);
+            }
         }
 
         private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull)
@@ -2799,6 +2818,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PartitionId = PartitionId,
                 PartitionIdVariable = PartitionIdVariable,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                _lookupFieldsWithVirtualNameField = _lookupFieldsWithVirtualNameField,
+                _lookupFieldsWithVirtualTypeField = _lookupFieldsWithVirtualTypeField,
             };
 
             // Custom properties are not serialized, so need to copy them manually

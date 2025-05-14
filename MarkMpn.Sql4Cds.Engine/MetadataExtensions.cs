@@ -66,11 +66,20 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>A sequence of virtual attributes that are based on this attribute</returns>
         public static IEnumerable<VirtualAttribute> GetVirtualAttributes(this AttributeMetadata attrMetadata, DataSource dataSource, bool writeable)
         {
+            if (attrMetadata.EntityLogicalName == null)
+                yield break;
+
+            var entity = dataSource.Metadata[attrMetadata.EntityLogicalName];
+            var suffixesInUse = entity.Attributes
+                .Where(a => a.LogicalName != attrMetadata.LogicalName && a.LogicalName.StartsWith(attrMetadata.LogicalName) && a.AttributeOf == null)
+                .Select(a => a.LogicalName.Substring(attrMetadata.LogicalName.Length).ToLowerInvariant())
+                .ToList();
+
             if (!writeable)
             {
-                if (attrMetadata is MultiSelectPicklistAttributeMetadata)
+                if (attrMetadata is MultiSelectPicklistAttributeMetadata && !suffixesInUse.Contains("name"))
                     yield return new VirtualAttribute("name", () => DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), null);
-                else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
+                else if ((attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata) && !suffixesInUse.Contains("name"))
                     yield return new VirtualAttribute("name", () => DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
             }
 
@@ -78,15 +87,15 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // solutioncomponent entity doesn't return the names of lookup values
                 // https://github.com/MarkMpn/Sql4Cds/issues/524
-                if (!writeable && attrMetadata.EntityLogicalName != "solutioncomponent")
+                if (!writeable && attrMetadata.EntityLogicalName != "solutioncomponent" && !suffixesInUse.Contains("name"))
                     yield return new VirtualAttribute("name", () => DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => (dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute) as StringAttributeMetadata)?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), null);
 
-                if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
+                if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList && !suffixesInUse.Contains("type"))
                     yield return new VirtualAttribute("type", () => DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), null);
 
                 // Check if there should be a pid virtual column without loading the target metadata
                 // The system metadata seems to consistently use the pid suffix for a virtual attribute
-                if (lookup.Targets != null && dataSource.Metadata[lookup.EntityLogicalName].Attributes.Any(pid => pid.AttributeOf == lookup.LogicalName && pid.LogicalName == lookup.LogicalName + "pid"))
+                if (lookup.Targets != null && entity.Attributes.Any(pid => pid.AttributeOf == lookup.LogicalName && pid.LogicalName == lookup.LogicalName + "pid") && !suffixesInUse.Contains("pid"))
                     yield return new VirtualAttribute("pid", () => DataTypeHelpers.NVarChar(100, dataSource.DefaultCollation, CollationLabel.Implicit), false);
             }
         }
