@@ -133,6 +133,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             IsWildcardable = isWildcardable;
         }
 
+        public string SourceServer => null;
+
+        public string SourceSchema => null;
+
+        public string SourceTable => null;
+
+        public string SourceColumn => null;
+
         public DataTypeReference Type { get; }
 
         public bool IsNullable { get; }
@@ -162,6 +170,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             IsWildcardable = isWildcardable;
         }
 
+        public string SourceServer => null;
+
+        public string SourceSchema => null;
+
+        public string SourceTable => null;
+
+        public string SourceColumn => null;
+
         public DataTypeReference Type => _type.Value;
 
         public bool IsNullable { get; }
@@ -190,6 +206,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IsNullable = nullable;
             }
 
+            public string SourceServer => _inner.SourceServer;
+
+            public string SourceSchema => _inner.SourceSchema;
+
+            public string SourceTable => _inner.SourceTable;
+
+            public string SourceColumn => _inner.SourceColumn;
+
             public DataTypeReference Type => _inner.Type;
 
             public bool IsNullable { get; }
@@ -199,6 +223,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public bool IsVisible => _inner.IsVisible;
 
             public bool IsWildcardable => _inner.IsWildcardable;
+
+            public override string ToString()
+            {
+                return $"{Type.ToSql()} {(IsNullable ? "NULL" : "NOT NULL")}";
+            }
         }
 
         class VisibleColumnDefinition : IColumnDefinition
@@ -211,6 +240,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IsVisible = visible;
             }
 
+            public string SourceServer => _inner.SourceServer;
+
+            public string SourceSchema => _inner.SourceSchema;
+
+            public string SourceTable => _inner.SourceTable;
+
+            public string SourceColumn => _inner.SourceColumn;
+
             public DataTypeReference Type => _inner.Type;
 
             public bool IsNullable => _inner.IsNullable;
@@ -220,6 +257,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public bool IsVisible { get; }
 
             public bool IsWildcardable => _inner.IsWildcardable;
+
+            public override string ToString()
+            {
+                return _inner.ToString();
+            }
         }
 
         class CalculatedColumnDefinition : IColumnDefinition
@@ -232,6 +274,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IsCalculated = calculated;
             }
 
+            public string SourceServer => _inner.SourceServer;
+
+            public string SourceSchema => _inner.SourceSchema;
+
+            public string SourceTable => _inner.SourceTable;
+
+            public string SourceColumn => _inner.SourceColumn;
+
             public DataTypeReference Type => _inner.Type;
 
             public bool IsNullable => _inner.IsNullable;
@@ -241,6 +291,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public bool IsVisible => _inner.IsVisible;
 
             public bool IsWildcardable => _inner.IsWildcardable;
+
+            public override string ToString()
+            {
+                return _inner.ToString();
+            }
         }
 
         class WildcardableColumnDefinition : IColumnDefinition
@@ -253,6 +308,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IsWildcardable = wildcardable;
             }
 
+            public string SourceServer => _inner.SourceServer;
+
+            public string SourceSchema => _inner.SourceSchema;
+
+            public string SourceTable => _inner.SourceTable;
+
+            public string SourceColumn => _inner.SourceColumn;
+
             public DataTypeReference Type => _inner.Type;
 
             public bool IsNullable => _inner.IsNullable;
@@ -262,6 +325,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public bool IsVisible => _inner.IsVisible;
 
             public bool IsWildcardable { get; }
+
+            public override string ToString()
+            {
+                return _inner.ToString();
+            }
+        }
+
+        class SourceColumnDefinition : IColumnDefinition
+        {
+            private readonly IColumnDefinition _inner;
+
+            public SourceColumnDefinition(IColumnDefinition inner, string server, string schema, string table, string column)
+            {
+                _inner = inner;
+                SourceServer = server;
+                SourceSchema = schema;
+                SourceTable = table;
+                SourceColumn = column;
+            }
+
+            public string SourceServer { get; }
+
+            public string SourceSchema { get; }
+
+            public string SourceTable { get; }
+
+            public string SourceColumn { get; }
+
+            public DataTypeReference Type => _inner.Type;
+
+            public bool IsNullable => _inner.IsNullable;
+
+            public bool IsCalculated => _inner.IsCalculated;
+
+            public bool IsVisible => _inner.IsVisible;
+
+            public bool IsWildcardable => _inner.IsWildcardable;
+
+            public override string ToString()
+            {
+                return _inner.ToString();
+            }
         }
 
         public static IColumnDefinition NotNull(this IColumnDefinition col)
@@ -292,6 +397,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public static IColumnDefinition Wildcardable(this IColumnDefinition col, bool isWildcardable = true)
         {
             return new WildcardableColumnDefinition(col, isWildcardable);
+        }
+
+        public static IColumnDefinition FromSource(this IColumnDefinition col, string server, string schema, string table, string column)
+        {
+            return new SourceColumnDefinition(col, server, schema, table, column);
         }
     }
 
@@ -341,6 +451,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     public interface IColumnDefinition
     {
+        /// <summary>
+        /// The name of the data source the column is being read from
+        /// </summary>
+        string SourceServer { get; }
+
+        /// <summary>
+        /// The name of the schema the column is being read from
+        /// </summary>
+        string SourceSchema { get; }
+
+        /// <summary>
+        /// The name of the table the column is being read from
+        /// </summary>
+        string SourceTable { get; }
+
+        /// <summary>
+        /// The name of the column the column is being read from
+        /// </summary>
+        string SourceColumn { get; }
+
         /// <summary>
         /// The data type of the column
         /// </summary>

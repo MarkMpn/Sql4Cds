@@ -55,6 +55,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (col.ColumnName == primaryKey)
                     colDefinition = colDefinition.Invisible().Wildcardable(false);
 
+                colDefinition = colDefinition.FromSource(null, null, table.TableName, col.ColumnName);
+
                 var baseColName = col.ColumnName.EscapeIdentifier();
                 var qualifiedColName = alias + "." + baseColName;
                 cols.Add(qualifiedColName, colDefinition);

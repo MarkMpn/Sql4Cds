@@ -435,6 +435,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Assert.AreEqual(1, schema.Rows.Count);
                     Assert.AreEqual("name", schema.Rows[0]["ColumnName"]);
                     Assert.AreEqual(typeof(string), schema.Rows[0]["DataType"]);
+                    Assert.AreEqual("name", schema.Rows[0]["BaseColumnName"]);
+                    Assert.AreEqual("account", schema.Rows[0]["BaseTableName"]);
+                    Assert.AreEqual("dbo", schema.Rows[0]["BaseSchemaName"]);
 
                     Assert.IsFalse(reader.Read());
                 }

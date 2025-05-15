@@ -1467,7 +1467,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var notNull = innerJoin && attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute;
 
             // Add the logical attribute
-            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, null, notNull);
+            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, null, notNull, entityMetadata.LogicalName, attrMetadata.LogicalName);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -1484,11 +1484,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (virtualAttr.Suffix == "type")
                     _lookupFieldsWithVirtualTypeField.Add(fullName);
 
-                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull);
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull, entityMetadata.LogicalName, attrMetadata.LogicalName + virtualAttr.Suffix);
             }
         }
 
-        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull)
+        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull, string table, string column)
         {
             var parts = fullName.SplitMultiPartIdentifier();
             var visible = true;
@@ -1500,10 +1500,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_isVirtualEntity && type is SqlDataTypeReferenceWithCollation sqlType && sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
                 type = DataTypeHelpers.NVarChar(Int32.MaxValue, sqlType.Collation, sqlType.CollationLabel);
 
+            IColumnDefinition schemaCol;
             if (type != null)
-                schema[fullName] = new ColumnDefinition(type, !notNull, false, visible, isWildcardable: visible);
+                schemaCol = new ColumnDefinition(type, !notNull, false, visible, isWildcardable: visible);
             else
-                schema[fullName] = new LazyColumnDefinition(typeLoader, !notNull, false, visible, isWildcardable: visible);
+                schemaCol = new LazyColumnDefinition(typeLoader, !notNull, false, visible, isWildcardable: visible);
+
+            schemaCol = schemaCol.FromSource(DataSource, "dbo", table, column);
+
+            schema[fullName] = schemaCol;
 
             if (simpleName == null)
                 return;
