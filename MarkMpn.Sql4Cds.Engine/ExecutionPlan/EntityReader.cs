@@ -472,7 +472,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     errors.Add(Sql4CdsError.InvalidColumnName(col));
                     continue;
                 }
-                else if (((operation == DmlOperationDetails.Insert && attr.IsPrimaryId == true) || isIntersect) && attr is LookupAttributeMetadata)
+                else if (((operation == DmlOperationDetails.Insert && attr.IsPrimaryId == true) || isIntersect) && attr.GetAttributeSqlType(_dataSource, true).IsEntityReference())
                 {
                     // When writing a primary key, treat is as a raw guid instead of an EntityReference
                     colName = attr.LogicalName;
