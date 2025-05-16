@@ -584,7 +584,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (sourceType == DataTypeHelpers.ImplicitIntForNullLiteral)
                     {
-                        accessor = Expression.Constant(null, targetClrType);
+                        if (typeof(INullable).IsAssignableFrom(targetClrType))
+                            accessor = Expression.Constant(SqlTypeConverter.GetNullValue(targetClrType), targetClrType);
+                        else
+                            accessor = Expression.Constant(null, targetClrType);
+
                         rawAccessor = Expression.Constant(SqlTypeConverter.GetNullValue(targetNetType));
                     }
                     else
