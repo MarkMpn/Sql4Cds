@@ -258,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var escapedAlias = Alias.EscapeIdentifier();
 
             var aliasColumns = ColumnSet
-                .SelectMany(col => col.AllColumns ? sourceSchema.Value.Schema.Select(schemaCol => new SelectColumn { OutputColumn = schemaCol.Key.SplitMultiPartIdentifier().Last(), SourceColumn = schemaCol.Key.SplitMultiPartIdentifier().Last() }) : new[] { col })
+                .SelectMany(col => col.AllColumns ? sourceSchema.Value.Schema.Where(schemaCol => schemaCol.Value.IsWildcardable).Select(schemaCol => new SelectColumn { OutputColumn = schemaCol.Key.SplitMultiPartIdentifier().Last(), SourceColumn = schemaCol.Key }) : new[] { col })
                 .ToDictionary(col => escapedAlias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase);
 
             return aliasColumns;
@@ -293,6 +293,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 foreach (var col in ColumnSet)
                 {
+                    if (col.SourceColumn == null)
+                        continue;
+
                     var mapped = $"{escapedAlias}.{col.OutputColumn.EscapeIdentifier()}";
                     entity[mapped] = entity[col.SourceColumn];
                 }

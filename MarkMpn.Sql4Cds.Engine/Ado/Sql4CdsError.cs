@@ -936,6 +936,21 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(3701, null, Collation.USEnglish.ToSqlString(operation), Collation.USEnglish.ToSqlString(objectType), (SqlInt32)objectName.Length, Collation.USEnglish.ToSqlString(objectName));
         }
 
+        internal static Sql4CdsError DerivedTableAffectsMultipleTables(QueryDerivedTable table)
+        {
+            return Create(4405, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
+        }
+
+        internal static Sql4CdsError DerivedTableContainsUnion(QueryDerivedTable table)
+        {
+            return Create(4417, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
+        }
+
+        internal static Sql4CdsError DerivedTableContainsAggregatesDistinctOrGroupBy(QueryDerivedTable table)
+        {
+            return Create(4418, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

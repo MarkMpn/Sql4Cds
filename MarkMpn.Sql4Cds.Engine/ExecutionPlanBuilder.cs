@@ -1726,29 +1726,50 @@ namespace MarkMpn.Sql4Cds.Engine
             var deleteTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
             queryExpression.FromClause.Accept(deleteTarget);
 
-            if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
-
             if (deleteTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
-            if (!Session.DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            DataSource dataSource;
 
-            ValidateDMLSchema(deleteTarget.Target, true);
+            if (deleteTarget.TargetSubquery == null)
+            {
+                if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
 
-            var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
-            var targetLogicalName = deleteTarget.TargetEntityName;
+                if (!Session.DataSources.TryGetValue(deleteTarget.TargetDataSource, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+
+                target = deleteTarget.Target;
+            }
+            else
+            {
+                // DELETE target is a subquery - check that subquery follows the rules of updateable views
+                var updateableViewValidator = new UpdateableViewValidatingVisitor(UpdateableViewModificationType.Delete);
+                deleteTarget.TargetSubquery.Accept(updateableViewValidator);
+
+                target = updateableViewValidator.Target;
+
+                var dataSourceName = target.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource.Name;
+                if (!Session.DataSources.TryGetValue(dataSourceName, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            }
+
+            ValidateDMLSchema(target, true);
+
+            var targetLogicalName = target.SchemaObject.BaseIdentifier.Value;
+            var targetSchema = target.SchemaObject.SchemaIdentifier?.Value;
+            var targetDatabase = target.SchemaObject.DatabaseIdentifier?.Value;
+            var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetSubquery?.Alias.Value ?? targetLogicalName;
 
             EntityMetadata targetMetadata = null;
             DataTable targetTable = null;
 
-            if (deleteTarget.Target.SchemaObject.DatabaseIdentifier == null && deleteTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
+            if (targetDatabase == null && targetSchema == null && targetLogicalName.StartsWith("#"))
             {
                 targetTable = Session.TempDb.Tables[targetLogicalName];
 
                 if (targetTable == null)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject));
 
                 targetLogicalName = targetTable.TableName;
             }
@@ -1761,7 +1782,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 catch (FaultException ex)
                 {
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
                 }
             }
 
@@ -1776,7 +1797,36 @@ namespace MarkMpn.Sql4Cds.Engine
                 columnMappings["objecttypecode"] = "objecttypecode";
             }
 
-            if (deleteTarget.TargetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
+            if (deleteTarget.TargetSubquery != null)
+            {
+                // Modify the subquery to include the required key values. They might already exist, but to simplify the
+                // query generation process add them again with a unique alias
+                var sourceAlias = target.Alias?.Value ?? targetLogicalName;
+
+                foreach (var col in columnMappings.Keys.ToArray())
+                {
+                    var colAlias = "PK_" + Guid.NewGuid().ToString("N");
+                    columnMappings[col] = colAlias;
+
+                    ((QuerySpecification)deleteTarget.TargetSubquery.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = sourceAlias },
+                                    new Identifier { Value = col }
+                                }
+                            }
+                        },
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = colAlias } }
+                    });
+                }
+            }
+
+            if (targetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
             {
                 // Deleting from the recycle bin needs to be translated to deleting the associated records from the deleteditemreference table
                 if (dataSource.Metadata.RecycleBinEntities == null || !dataSource.Metadata.RecycleBinEntities.Contains(targetLogicalName))
@@ -1983,11 +2033,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 queryExpression.SelectElements.Add(
-                new SelectScalarExpression
-                {
-                    Expression = expression,
-                    ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = columnMapping.Key } }
-                });
+                    new SelectScalarExpression
+                    {
+                        Expression = expression,
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = columnMapping.Key } }
+                    }
+                );
             }
 
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
@@ -2007,7 +2058,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 ? new EntityReader(targetMetadata, _nodeContext, dataSource, statement, target, source)
                 : new EntityReader(targetTable, _nodeContext, dataSource, statement, target, source);
             deleteNode.Source = reader.Source;
-            deleteNode.PrimaryIdAccessors = reader.ValidateDeleteColumnMapping(columnMappings);
+            deleteNode.PrimaryIdAccessors = reader.ValidateDeleteColumnMapping(columnMappings.ToDictionary(kvp => kvp.Key, kvp => kvp.Key));
 
             return deleteNode;
         }
