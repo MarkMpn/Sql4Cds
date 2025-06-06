@@ -510,12 +510,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // from the SQL formats in BaseDataNode.TranslateFetchXMLCriteriaWithVirtualAttributes
                 if (attrType.IsSameAs(DataTypeHelpers.DateTime))
                 {
+                    var defaultConversion = conversion;
                     conversion = (value, ctx) =>
                     {
                         if (value is SqlString str && DateTimeOffset.TryParseExact(str.Value, "yyyy-MM-ddTHH:mm:ss.FFFzzz", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
                             return new SqlDateTimeOffset(dt);
 
-                        return conversion(value, ctx);
+                        return defaultConversion(value, ctx);
                     };
                 }
 
