@@ -1283,7 +1283,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var fullName = $"{alias}.{attrMetadata.LogicalName.EscapeIdentifier()}";
                     var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName.EscapeIdentifier();
                     var attrType = attrMetadata.GetAttributeSqlType(dataSource, false);
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, meta, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, meta, attrMetadata, innerJoin, alias);
                 }
             }
 
@@ -1341,7 +1341,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (requireTablePrefix)
                         attrAlias = null;
 
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, meta, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, meta, attrMetadata, innerJoin, alias);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -1358,7 +1358,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName.EscapeIdentifier();
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, meta, attrMetadata, innerJoin);
+                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, meta, attrMetadata, innerJoin, alias);
                     }
                 }
 
@@ -1463,12 +1463,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullFilters(schema, aliases, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, EntityMetadata entityMetadata, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, EntityMetadata entityMetadata, AttributeMetadata attrMetadata, bool innerJoin, string alias)
         {
             var notNull = innerJoin && attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute;
 
             // Add the logical attribute
-            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, null, notNull, entityMetadata.LogicalName, attrMetadata.LogicalName);
+            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, null, notNull, entityMetadata.LogicalName, alias, attrMetadata.LogicalName);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -1485,11 +1485,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (virtualAttr.Suffix == "type")
                     _lookupFieldsWithVirtualTypeField.Add(fullName);
 
-                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull, entityMetadata.LogicalName, attrMetadata.LogicalName + virtualAttr.Suffix);
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull, entityMetadata.LogicalName, alias, attrMetadata.LogicalName + virtualAttr.Suffix);
             }
         }
 
-        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull, string table, string column)
+        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull, string table, string alias, string column)
         {
             var parts = fullName.SplitMultiPartIdentifier();
             var visible = true;
@@ -1507,7 +1507,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
                 schemaCol = new LazyColumnDefinition(typeLoader, !notNull, false, visible, isWildcardable: visible);
 
-            schemaCol = schemaCol.FromSource(DataSource, "dbo", table, column);
+            schemaCol = schemaCol.FromSource(DataSource, "dbo", table, alias, column);
 
             schema[fullName] = schemaCol;
 

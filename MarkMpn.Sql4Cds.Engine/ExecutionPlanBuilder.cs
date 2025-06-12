@@ -2093,38 +2093,112 @@ namespace MarkMpn.Sql4Cds.Engine
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
-                FromClause = update.FromClause ?? new FromClause { TableReferences = { target } },
-                WhereClause = update.WhereClause,
+                FromClause = update.FromClause.Clone()  ?? new FromClause { TableReferences = { target.Clone() } },
+                WhereClause = update.WhereClause?.Clone(),
                 UniqueRowFilter = UniqueRowFilter.Distinct,
-                TopRowFilter = update.TopRowFilter
+                TopRowFilter = update.TopRowFilter?.Clone()
             };
 
             var updateTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
             queryExpression.FromClause.Accept(updateTarget);
 
-            if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
-
             if (updateTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
-            if (!Session.DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            DataSource dataSource;
+            var columnRenamings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            ValidateDMLSchema(updateTarget.Target, false);
+            if (updateTarget.TargetSubquery == null)
+            {
+                if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
 
-            var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
-            var targetLogicalName = updateTarget.TargetEntityName;
+                if (!Session.DataSources.TryGetValue(updateTarget.TargetDataSource, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+
+                target = updateTarget.Target;
+            }
+            else
+            {
+                // UPDATE target is a subquery - check that subquery follows the rules of updateable views
+                var updateableViewValidator = new UpdateableViewValidatingVisitor(UpdateableViewModificationType.Update);
+                updateTarget.TargetSubquery.Accept(updateableViewValidator);
+
+                // Check that the columns being updated all come from the same table
+                var selectNode = ConvertSelectQuerySpec(queryExpression.Clone(), hints, null, null, _nodeContext);
+                var schema = selectNode.Source.GetSchema(_nodeContext);
+                target = null;
+
+                foreach (var set in update.SetClauses)
+                {
+                    if (!(set is AssignmentSetClause assignment))
+                        continue;
+
+                    if (assignment.Column == null)
+                        continue;
+
+                    var targetCol = assignment.Column.GetColumnName();
+
+                    if (!schema.ContainsColumn(targetCol, out targetCol))
+                        continue;
+
+                    var colDetails = schema.Schema[targetCol];
+
+                    var targetTable = new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = colDetails.SourceServer },
+                                new Identifier { Value = colDetails.SourceSchema },
+                                new Identifier { Value = colDetails.SourceTable },
+                            }
+                        },
+                        Alias = new Identifier { Value = colDetails.SourceAlias ?? colDetails.SourceTable }
+                    };
+
+                    if (target == null)
+                    {
+                        target = targetTable;
+                    }
+                    else
+                    {
+                        if (!target.Alias.Value.Equals(targetTable.Alias.Value, StringComparison.OrdinalIgnoreCase))
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(updateTarget.TargetSubquery));
+
+                        for (var i = 0; i < targetTable.SchemaObject.Identifiers.Count; i++)
+                        {
+                            if (!target.SchemaObject.Identifiers[i].Value.Equals(targetTable.SchemaObject.Identifiers[i].Value, StringComparison.OrdinalIgnoreCase))
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(updateTarget.TargetSubquery));
+                        }
+                    }
+
+                    // The subquery might expose the column as a different name - track the name mappings we're interested in
+                    columnRenamings[colDetails.SourceColumn] = targetCol.SplitMultiPartIdentifier().Last();
+                }
+
+                var dataSourceName = target.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource.Name;
+                if (!Session.DataSources.TryGetValue(dataSourceName, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            }
+
+            ValidateDMLSchema(target, false);
+
+            var targetLogicalName = target.SchemaObject.BaseIdentifier.Value;
+            var targetSchema = target.SchemaObject.SchemaIdentifier?.Value;
+            var targetDatabase = target.SchemaObject.DatabaseIdentifier?.Value;
+            var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetSubquery?.Alias.Value ?? targetLogicalName;
 
             DataTable dataTable = null;
             EntityMetadata targetMetadata = null;
 
-            if (updateTarget.Target.SchemaObject.DatabaseIdentifier == null && updateTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
+            if (targetDatabase == null && targetSchema == null && targetLogicalName.StartsWith("#"))
             {
                 dataTable = Session.TempDb.Tables[targetLogicalName];
 
                 if (dataTable == null)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject));
 
                 targetLogicalName = dataTable.TableName;
             }
@@ -2137,7 +2211,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 catch (FaultException ex)
                 {
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject), ex);
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
                 }
             }
 
@@ -2148,10 +2222,42 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, dataTable, out var isIntersect);
 
+            if (updateTarget.TargetSubquery != null)
+            {
+                // Modify the subquery to include the required key values. They might already exist, but to simplify the
+                // query generation process add them again with a unique alias
+                var sourceAlias = target.Alias.Value;
+
+                foreach (var col in primaryKeyFields)
+                {
+                    var colAlias = "PK_" + Guid.NewGuid().ToString("N");
+                    columnRenamings[col] = colAlias;
+
+                    ((QuerySpecification)updateTarget.TargetSubquery.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = sourceAlias },
+                                    new Identifier { Value = col }
+                                }
+                            }
+                        },
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = colAlias } }
+                    });
+                }
+            }
+
             if (!isIntersect)
             {
                 foreach (var primaryKey in primaryKeyFields)
                 {
+                    if (!columnRenamings.TryGetValue(primaryKey, out var sourceField))
+                        sourceField = primaryKey;
+
                     queryExpression.SelectElements.Add(new SelectScalarExpression
                     {
                         Expression = new ColumnReferenceExpression
@@ -2159,10 +2265,10 @@ namespace MarkMpn.Sql4Cds.Engine
                             MultiPartIdentifier = new MultiPartIdentifier
                             {
                                 Identifiers =
-                            {
-                                new Identifier { Value = targetAlias },
-                                new Identifier { Value = primaryKey }
-                            }
+                                {
+                                    new Identifier { Value = targetAlias },
+                                    new Identifier { Value = sourceField }
+                                }
                             }
                         },
                         ColumnName = new IdentifierOrValueExpression

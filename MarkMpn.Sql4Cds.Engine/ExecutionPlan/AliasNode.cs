@@ -256,10 +256,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var sourceSchema = new Lazy<INodeSchema>(() => Source.GetSchema(context));
             var escapedAlias = Alias.EscapeIdentifier();
+            var aliasColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            var aliasColumns = ColumnSet
-                .SelectMany(col => col.AllColumns ? sourceSchema.Value.Schema.Where(schemaCol => schemaCol.Value.IsWildcardable).Select(schemaCol => new SelectColumn { OutputColumn = schemaCol.Key.SplitMultiPartIdentifier().Last(), SourceColumn = schemaCol.Key }) : new[] { col })
-                .ToDictionary(col => escapedAlias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase);
+            foreach (var col in ColumnSet)
+            {
+                if (col.AllColumns)
+                {
+                    foreach (var sourceCol in sourceSchema.Value.Schema)
+                    {
+                        if (col.SourceColumn != null && !sourceCol.Key.StartsWith(col.SourceColumn + "."))
+                            continue;
+
+                        if (!sourceCol.Value.IsWildcardable)
+                            continue;
+
+                        var simpleName = sourceCol.Key.SplitMultiPartIdentifier().Last();
+                        aliasColumns[escapedAlias + "." + simpleName.EscapeIdentifier()] = sourceCol.Key;
+                    }
+                }
+                else
+                {
+                    aliasColumns[escapedAlias + "." + col.OutputColumn] = col.SourceColumn;
+                }
+            }
 
             return aliasColumns;
         }
@@ -287,18 +306,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var escapedAlias = Alias.EscapeIdentifier();
+            var mappings = GetColumnMappings(context);
 
             foreach (var entity in Source.Execute(context))
             {
-                foreach (var col in ColumnSet)
-                {
-                    if (col.SourceColumn == null)
-                        continue;
-
-                    var mapped = $"{escapedAlias}.{col.OutputColumn.EscapeIdentifier()}";
-                    entity[mapped] = entity[col.SourceColumn];
-                }
+                foreach (var mapping in mappings)
+                    entity[mapping.Key] = entity[mapping.Value];
 
                 yield return entity;
             }

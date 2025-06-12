@@ -139,6 +139,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public string SourceTable => null;
 
+        public string SourceAlias => null;
+
         public string SourceColumn => null;
 
         public DataTypeReference Type { get; }
@@ -176,6 +178,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public string SourceTable => null;
 
+        public string SourceAlias => null;
+
         public string SourceColumn => null;
 
         public DataTypeReference Type => _type.Value;
@@ -212,6 +216,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             public string SourceTable => _inner.SourceTable;
 
+            public string SourceAlias => _inner.SourceAlias;
+
             public string SourceColumn => _inner.SourceColumn;
 
             public DataTypeReference Type => _inner.Type;
@@ -245,6 +251,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public string SourceSchema => _inner.SourceSchema;
 
             public string SourceTable => _inner.SourceTable;
+
+            public string SourceAlias => _inner.SourceAlias;
 
             public string SourceColumn => _inner.SourceColumn;
 
@@ -280,6 +288,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             public string SourceTable => _inner.SourceTable;
 
+            public string SourceAlias => _inner.SourceAlias;
+
             public string SourceColumn => _inner.SourceColumn;
 
             public DataTypeReference Type => _inner.Type;
@@ -314,6 +324,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             public string SourceTable => _inner.SourceTable;
 
+            public string SourceAlias => _inner.SourceAlias;
+
             public string SourceColumn => _inner.SourceColumn;
 
             public DataTypeReference Type => _inner.Type;
@@ -336,12 +348,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             private readonly IColumnDefinition _inner;
 
-            public SourceColumnDefinition(IColumnDefinition inner, string server, string schema, string table, string column)
+            public SourceColumnDefinition(IColumnDefinition inner, string server, string schema, string table, string alias, string column)
             {
                 _inner = inner;
                 SourceServer = server;
                 SourceSchema = schema;
                 SourceTable = table;
+                SourceAlias = alias;
                 SourceColumn = column;
             }
 
@@ -350,6 +363,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public string SourceSchema { get; }
 
             public string SourceTable { get; }
+
+            public string SourceAlias { get; }
 
             public string SourceColumn { get; }
 
@@ -399,9 +414,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new WildcardableColumnDefinition(col, isWildcardable);
         }
 
-        public static IColumnDefinition FromSource(this IColumnDefinition col, string server, string schema, string table, string column)
+        public static IColumnDefinition FromSource(this IColumnDefinition col, string server, string schema, string table, string alias, string column)
         {
-            return new SourceColumnDefinition(col, server, schema, table, column);
+            return new SourceColumnDefinition(col, server, schema, table, alias, column);
         }
     }
 
@@ -465,6 +480,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The name of the table the column is being read from
         /// </summary>
         string SourceTable { get; }
+
+        /// <summary>
+        /// The alias of the table the column is being read from
+        /// </summary>
+        string SourceAlias { get; }
 
         /// <summary>
         /// The name of the column the column is being read from

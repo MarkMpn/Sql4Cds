@@ -687,5 +687,136 @@ SELECT * FROM account";
                 }
             }
         }
+
+        [TestMethod]
+        public void UpdateDuplicatesTempTable()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+CREATE TABLE #x(
+id INT NOT NULL,
+s VARCHAR(100) NOT NULL
+)
+
+INSERT INTO #x (id, s) VALUES (1, 'a'), (2, 'a'), (3, 'a'), (4, 'b'), (5, 'b')
+
+SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY s ORDER BY id) AS r FROM #x) a
+WHERE r > 1
+
+UPDATE a SET s += ' (' + CAST(r AS varchar(100)) + ')' FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY s ORDER BY id) AS r FROM #x) a
+WHERE r > 1
+
+SELECT * FROM #x";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2, reader["id"]);
+                    Assert.AreEqual("a", reader["s"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3, reader["id"]);
+                    Assert.AreEqual("a", reader["s"]);
+                    Assert.AreEqual(3L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5, reader["id"]);
+                    Assert.AreEqual("b", reader["s"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader["id"]);
+                    Assert.AreEqual("a", reader["s"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2, reader["id"]);
+                    Assert.AreEqual("a (2)", reader["s"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3, reader["id"]);
+                    Assert.AreEqual("a (3)", reader["s"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(4, reader["id"]);
+                    Assert.AreEqual("b", reader["s"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5, reader["id"]);
+                    Assert.AreEqual("b (2)", reader["s"]);
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void UpdateDuplicatesStandardTable()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+INSERT INTO account (turnover, name) VALUES (1, 'a'), (2, 'a'), (3, 'a'), (4, 'b'), (5, 'b')
+
+SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY name ORDER BY turnover) AS r FROM account) a
+WHERE r > 1
+
+UPDATE a SET name += ' (' + CAST(r AS varchar(100)) + ')' FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY name ORDER BY turnover) AS r FROM account) a
+WHERE r > 1
+
+SELECT * FROM account";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+                    Assert.AreEqual(3L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5M, reader["turnover"]);
+                    Assert.AreEqual("b", reader["name"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2M, reader["turnover"]);
+                    Assert.AreEqual("a (2)", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3M, reader["turnover"]);
+                    Assert.AreEqual("a (3)", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(4M, reader["turnover"]);
+                    Assert.AreEqual("b", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5M, reader["turnover"]);
+                    Assert.AreEqual("b (2)", reader["name"]);
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }
