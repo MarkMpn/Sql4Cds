@@ -115,7 +115,6 @@ namespace MarkMpn.Sql4Cds.ScriptDom.DebugVisualizer.DebuggerSide
         {
             var item = (TreeViewItem)sender;
             var fragment = (TSqlFragment)item.Tag;
-            fragment.FirstTokenIndex
         }
 
         private void UnHighlightFragment(object sender, MouseEventArgs e)
