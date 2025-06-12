@@ -78,6 +78,7 @@
   <ItemGroup>
     <Compile Include="CollationTests.cs" />
     <Compile Include="CursorTests.cs" />
+    <Compile Include="SerializerTests.cs" />
     <Compile Include="SqlDateTests.cs" />
     <Compile Include="ExecutionPlanNodeTests.cs" />
     <Compile Include="CteTests.cs" />
