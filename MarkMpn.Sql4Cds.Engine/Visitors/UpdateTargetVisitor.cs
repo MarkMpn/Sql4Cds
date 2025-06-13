@@ -34,6 +34,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public QueryDerivedTable TargetSubquery { get; private set; }
 
+        public CommonTableExpression TargetCTE { get; private set; }
+
         public bool Ambiguous => _ambiguous;
 
         public override void ExplicitVisit(NamedTableReference node)
@@ -87,6 +89,23 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             }
 
             // Do not recurse into subqueries
+        }
+
+        public override void ExplicitVisit(CommonTableExpression node)
+        {
+            if (node.ExpressionName != null && String.IsNullOrEmpty(_search.DatabaseIdentifier?.Value) && node.ExpressionName.Value.Equals(_search.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                _ambiguous = _foundAlias;
+
+                TargetDataSource = null;
+                TargetSchema = null;
+                TargetEntityName = null;
+                TargetAliasName = node.ExpressionName.Value;
+                TargetCTE = node;
+                _foundAlias = true;
+            }
+
+            // Do not recurse into CTEs
         }
     }
 }

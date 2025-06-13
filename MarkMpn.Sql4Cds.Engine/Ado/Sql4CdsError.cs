@@ -936,9 +936,9 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(3701, null, Collation.USEnglish.ToSqlString(operation), Collation.USEnglish.ToSqlString(objectType), (SqlInt32)objectName.Length, Collation.USEnglish.ToSqlString(objectName));
         }
 
-        internal static Sql4CdsError DerivedTableAffectsMultipleTables(QueryDerivedTable table)
+        internal static Sql4CdsError DerivedTableAffectsMultipleTables(TSqlFragment table, string alias)
         {
-            return Create(4405, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
+            return Create(4405, table, (SqlInt32)alias.Length, Collation.USEnglish.ToSqlString(alias));
         }
 
         internal static Sql4CdsError DerivedTableContainsUnion(QueryDerivedTable table)

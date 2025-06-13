@@ -55,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public override void Visit(NamedTableReference node)
         {
             if (_namedTable != null && _modificationType == UpdateableViewModificationType.Delete)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(_subquery));
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(_subquery, _subquery.Alias.Value));
 
             _namedTable = node;
 

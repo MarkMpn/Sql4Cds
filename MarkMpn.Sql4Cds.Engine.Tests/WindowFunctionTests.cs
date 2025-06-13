@@ -673,7 +673,61 @@ SELECT * FROM account";
                     Assert.AreEqual(2L, reader["r"]);
 
                     Assert.IsFalse(reader.Read());
-                    
+
+                    Assert.IsTrue(reader.NextResult());
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(4M, reader["turnover"]);
+                    Assert.AreEqual("b", reader["name"]);
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void DeleteDuplicatesStandardTableCTE()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+INSERT INTO account (turnover, name) VALUES (1, 'a'), (2, 'a'), (3, 'a'), (4, 'b'), (5, 'b');
+
+SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY name ORDER BY turnover) AS r FROM account) a
+WHERE r > 1;
+
+WITH cte (name, r) AS (
+    SELECT name, ROW_NUMBER() OVER (PARTITION BY name ORDER BY turnover) AS r FROM account
+)
+DELETE FROM cte
+WHERE r > 1;
+
+SELECT * FROM account";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+                    Assert.AreEqual(3L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5M, reader["turnover"]);
+                    Assert.AreEqual("b", reader["name"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsFalse(reader.Read());
+
                     Assert.IsTrue(reader.NextResult());
 
                     Assert.IsTrue(reader.Read());
@@ -773,6 +827,72 @@ UPDATE a SET name += ' (' + CAST(r AS varchar(100)) + ')' FROM (SELECT *, ROW_NU
 WHERE r > 1
 
 SELECT * FROM account";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+                    Assert.AreEqual(3L, reader["r"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5M, reader["turnover"]);
+                    Assert.AreEqual("b", reader["name"]);
+                    Assert.AreEqual(2L, reader["r"]);
+
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1M, reader["turnover"]);
+                    Assert.AreEqual("a", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2M, reader["turnover"]);
+                    Assert.AreEqual("a (2)", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3M, reader["turnover"]);
+                    Assert.AreEqual("a (3)", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(4M, reader["turnover"]);
+                    Assert.AreEqual("b", reader["name"]);
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(5M, reader["turnover"]);
+                    Assert.AreEqual("b (2)", reader["name"]);
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void UpdateDuplicatesStandardTableCTE()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+INSERT INTO account (turnover, name) VALUES (1, 'a'), (2, 'a'), (3, 'a'), (4, 'b'), (5, 'b');
+
+SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY name ORDER BY turnover) AS r FROM account) a
+WHERE r > 1;
+
+WITH cte (name, r) AS (
+    SELECT name, ROW_NUMBER() OVER (PARTITION BY name ORDER BY turnover) AS r FROM account
+)
+UPDATE cte SET name += ' (' + CAST(r AS varchar(100)) + ')'
+WHERE r > 1;
+
+SELECT * FROM account;";
 
                 using (var reader = cmd.ExecuteReader())
                 {
