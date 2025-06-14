@@ -1516,9 +1516,6 @@ namespace MarkMpn.Sql4Cds.Engine
         private InsertNode ConvertInsertStatement(InsertStatement insert)
         {
             // Check for any DOM elements that don't have an equivalent in CDS
-            if (insert.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.WithCtesAndXmlNamespaces, "WITH"));
-
             if (insert.InsertSpecification.Columns == null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert, "INSERT without column specification")) { Suggestion = "Define the column names to insert the values into, e.g. INSERT INTO table (col1, col2) VALUES (val1, val2)" };
 
@@ -1538,7 +1535,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (insert.InsertSpecification.InsertSource is ValuesInsertSource values)
                 source = ConvertInsertValuesSource(values, insert.OptimizerHints, null, null, _nodeContext, out columns);
             else if (insert.InsertSpecification.InsertSource is SelectInsertSource select)
-                source = ConvertInsertSelectSource(select, insert.OptimizerHints, out columns);
+                source = ConvertInsertSelectSource(select, insert.WithCtesAndXmlNamespaces, insert.OptimizerHints, out columns);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.InsertSpecification.InsertSource, "unknown INSERT source"));
 
@@ -1563,15 +1560,20 @@ namespace MarkMpn.Sql4Cds.Engine
             return ConvertInlineDerivedTable(table, hints, outerSchema, outerReferences, context);
         }
 
-        private IExecutionPlanNodeInternal ConvertInsertSelectSource(SelectInsertSource selectSource, IList<OptimizerHint> hints, out string[] columns)
+        private IExecutionPlanNodeInternal ConvertInsertSelectSource(SelectInsertSource selectSource, WithCtesAndXmlNamespaces ctes, IList<OptimizerHint> hints, out string[] columns)
         {
-            var selectStatement = new SelectStatement { QueryExpression = selectSource.Select };
+            var selectStatement = new SelectStatement
+            {
+                QueryExpression = selectSource.Select,
+                WithCtesAndXmlNamespaces = ctes?.Clone()
+            };
             CopyDmlHintsToSelectStatement(hints, selectStatement);
 
             var select = ConvertSelectStatement(selectStatement);
 
             if (select is SelectNode selectNode)
             {
+                selectNode.ExpandWildcardColumns(_nodeContext);
                 columns = selectNode.ColumnSet.Select(col => col.SourceColumn).ToArray();
                 return selectNode.Source;
             }
@@ -1597,15 +1599,108 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNodeInternal source, string[] sourceColumns, IList<OptimizerHint> queryHints, InsertStatement insertStatement)
         {
-            var dataSource = SelectDataSource(target.SchemaObject);
+            var insertTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
+            insertStatement.Accept(insertTarget);
+
+            if (insertTarget.Ambiguous)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
+
+            DataSource dataSource;
+
+            if (insertTarget.TargetSubquery != null)
+                throw new NotSupportedQueryFragmentException(); // Subqueries are not expected in an INSERT statement
+
+            if (insertTarget.TargetCTE == null)
+            {
+                if (String.IsNullOrEmpty(insertTarget.TargetEntityName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
+
+                if (!Session.DataSources.TryGetValue(insertTarget.TargetDataSource, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+
+                target = insertTarget.Target;
+            }
+            else
+            {
+                // UPDATE target is a CTE - check it follows the rules of updateable views
+                var updateableViewValidator = new UpdateableViewValidatingVisitor(UpdateableViewModificationType.Insert);
+                insertTarget.TargetCTE.Accept(updateableViewValidator);
+
+                // Check that the columns being updated all come from the same table
+                ConvertCTEs(insertStatement.Clone());
+                var aliasNode = _cteSubplans[insertTarget.TargetCTE.ExpressionName.Value];
+                _cteSubplans.Clear();
+                var schema = aliasNode.GetSchema(_nodeContext);
+                target = null;
+
+                if (targetColumns.Count == 0)
+                {
+                    // If we're inserting into a CTE without an explicit column list, assume the full set of columns from the
+                    // CTE definition
+                    foreach (var col in aliasNode.ColumnSet)
+                        targetColumns.Add(col.OutputColumn.ToColumnReference());
+                }
+
+                for (var colIndex = 0; colIndex < targetColumns.Count; colIndex++)
+                {
+                    var targetCol = targetColumns[colIndex].GetColumnName();
+
+                    if (!schema.ContainsColumn(targetCol, out targetCol))
+                        continue;
+
+                    var colDetails = schema.Schema[targetCol];
+
+                    var targetTable = new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = colDetails.SourceServer },
+                                new Identifier { Value = colDetails.SourceSchema },
+                                new Identifier { Value = colDetails.SourceTable },
+                            }
+                        },
+                        Alias = new Identifier { Value = colDetails.SourceAlias ?? colDetails.SourceTable }
+                    };
+
+                    if (target == null)
+                    {
+                        target = targetTable;
+                    }
+                    else
+                    {
+                        if (!target.Alias.Value.Equals(targetTable.Alias.Value, StringComparison.OrdinalIgnoreCase))
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(insertTarget.TargetCTE, insertTarget.TargetAliasName));
+
+                        for (var i = 0; i < targetTable.SchemaObject.Identifiers.Count; i++)
+                        {
+                            if (!target.SchemaObject.Identifiers[i].Value.Equals(targetTable.SchemaObject.Identifiers[i].Value, StringComparison.OrdinalIgnoreCase))
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(insertTarget.TargetCTE, insertTarget.TargetAliasName));
+                        }
+                    }
+
+                    // The subquery might expose the column as a different name - rename the target columns as we go
+                    targetColumns[colIndex] = colDetails.SourceColumn.ToColumnReference();
+                }
+
+                var dataSourceName = target.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource.Name;
+                if (!Session.DataSources.TryGetValue(dataSourceName, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            }
 
             ValidateDMLSchema(target, false);
+
+            var targetLogicalName = target.SchemaObject.BaseIdentifier.Value;
+            var targetSchema = target.SchemaObject.SchemaIdentifier?.Value;
+            var targetDatabase = target.SchemaObject.DatabaseIdentifier?.Value;
+            var targetAlias = insertTarget.TargetAliasName ?? insertTarget.TargetSubquery?.Alias.Value ?? insertTarget.TargetCTE?.ExpressionName.Value ?? targetLogicalName;
 
             // Validate the entity name
             var logicalName = target.SchemaObject.BaseIdentifier.Value;
             EntityReader reader;
 
-            if (target.SchemaObject.DatabaseIdentifier == null && target.SchemaObject.SchemaIdentifier == null && logicalName.StartsWith("#"))
+            if (targetDatabase == null && targetSchema == null && logicalName.StartsWith("#"))
             {
                 var table = Session.TempDb.Tables[logicalName];
 

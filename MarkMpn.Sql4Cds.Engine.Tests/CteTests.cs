@@ -800,6 +800,42 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void InsertIntoCte()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    create table #tst (id int);
+
+                    with cte (id1) as (select * from #tst)
+                    insert into cte values (1);
+
+                    select * from #tst";
+
+                Assert.AreEqual(1, cmd.ExecuteScalar());
+            }
+        }
+
+        [TestMethod]
+        public void InsertFromCte()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    create table #tst (id int);
+
+                    with cte (id) as (select 1)
+                    insert into #tst select * from cte;
+
+                    select * from #tst";
+
+                Assert.AreEqual(1, cmd.ExecuteScalar());
+            }
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));
