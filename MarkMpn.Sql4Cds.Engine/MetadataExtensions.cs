@@ -208,7 +208,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.Int;
 
             if (attrMetadata is BigIntAttributeMetadata || typeCode == AttributeTypeCode.BigInt)
+            {
+                if (attrMetadata.LogicalName == "versionnumber")
+                    return DataTypeHelpers.RowVersion;
+
                 return DataTypeHelpers.BigInt;
+            }
 
             if (typeCode == AttributeTypeCode.PartyList)
                 return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit);

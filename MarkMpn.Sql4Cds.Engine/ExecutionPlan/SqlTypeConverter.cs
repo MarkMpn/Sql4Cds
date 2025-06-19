@@ -40,6 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             SqlDataTypeOption.NText,
             SqlDataTypeOption.Text,
             SqlDataTypeOption.Image,
+            SqlDataTypeOption.Rowversion,
             SqlDataTypeOption.Timestamp,
             SqlDataTypeOption.UniqueIdentifier,
             SqlDataTypeOption.NVarChar,

@@ -73,6 +73,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static SqlDataTypeReference BigInt { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
 
+        public static SqlDataTypeReference RowVersion { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Rowversion };
+
         public static UserDataTypeReference Object(Type type)
         {
             return Object(type.FullName);

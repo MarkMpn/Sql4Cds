@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlClient;
@@ -662,6 +663,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, DataSource dataSource)
         {
+            if (Int64.TryParse(entity.RowVersion, out var versionNumber))
+            {
+                var buf = new byte[8];
+                BinaryPrimitives.WriteInt64BigEndian(buf.AsSpan(), versionNumber);
+                entity["versionnumber"] = buf;
+            }
+
             // Expose any formatted values for OptionSetValue and EntityReference values
             foreach (var formatted in entity.FormattedValues)
             {
