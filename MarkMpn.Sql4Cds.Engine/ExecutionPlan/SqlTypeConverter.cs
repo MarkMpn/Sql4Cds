@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
@@ -113,10 +114,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             AddNullableTypeConversion<SqlString, string>((ds, v, dt) => ((SqlDataTypeReferenceWithCollation)dt).Collation.ToSqlString(v), v => v.Value);
             AddTypeConversion<SqlMoney, decimal>((ds, v, dt) => v, v => v.Value);
             AddTypeConversion<SqlDate, DateTime>((ds, v, dt) => new SqlDate(v), v => v.Value);
-            AddTypeConversion<SqlDateTime2, DateTime>((ds, v, dt) => new SqlDateTime2(v), v => v.Value);
-            AddTypeConversion<SqlDateTimeOffset, DateTimeOffset>((ds, v, dt) => new SqlDateTimeOffset(v), v => v.Value);
+            AddTypeConversion<SqlDateTime2, DateTime>((ds, v, dt) => SqlDateTime2.ConvertToScale(new SqlDateTime2(v), dt.GetScale()), v => v.Value);
+            AddTypeConversion<SqlDateTimeOffset, DateTimeOffset>((ds, v, dt) => SqlDateTimeOffset.ConvertToScale(new SqlDateTimeOffset(v), dt.GetScale()), v => v.Value);
             AddTypeConversion<SqlSmallDateTime, DateTime>((ds, v, dt) => new SqlSmallDateTime(v), v => v.Value);
-            AddTypeConversion<SqlTime, TimeSpan>((ds, v, dt) => new SqlTime(v), v => v.Value);
+            AddTypeConversion<SqlTime, TimeSpan>((ds, v, dt) => SqlTime.ConvertToScale(new SqlTime(v), dt.GetScale()), v => v.Value);
             AddNullableTypeConversion<SqlXml, string>((ds, v, dt) => new SqlXml(new MemoryStream(Encoding.GetEncoding("utf-16").GetBytes(v))), v => v.Value);
 
             AddNullableTypeConversion<SqlMoney, Money>((ds, v, dt) => v.Value, null);
@@ -443,6 +444,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fromType.IsStringType() || toType.IsStringType())
                 return true;
 
+            // [var]binary can be converted to anything except a few selected types
+            if ((fromType == SqlDataTypeOption.Binary || fromType == SqlDataTypeOption.VarBinary) &&
+                (toType != SqlDataTypeOption.Date &&
+                toType != SqlDataTypeOption.Time &&
+                toType != SqlDataTypeOption.DateTimeOffset &&
+                toType != SqlDataTypeOption.DateTime2 &&
+                toType != SqlDataTypeOption.Float &&
+                toType != SqlDataTypeOption.Real &&
+                toType != SqlDataTypeOption.NText &&
+                toType != SqlDataTypeOption.Text))
+                return true;
+
             // Any numeric type can be implicitly converted to datetime
             if (fromType.IsNumeric() && (toType == SqlDataTypeOption.DateTime || toType == SqlDataTypeOption.SmallDateTime))
                 return true;
@@ -461,10 +474,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Anything can be converted to sql_variant except timestamp, image, text, ntext, xml and hierarchyid
             if (toType == SqlDataTypeOption.Sql_Variant &&
-                fromType != SqlDataTypeOption.Timestamp &&
+                !fromType.IsRowVersion() &&
                 fromType != SqlDataTypeOption.Image &&
                 fromType != SqlDataTypeOption.Text &&
                 fromType != SqlDataTypeOption.NText)
+                return true;
+
+            // binary, decimal and integer types can be converted to timestamp/rowversion
+            if (toType.IsRowVersion() &&
+                (fromType == SqlDataTypeOption.Binary ||
+                fromType == SqlDataTypeOption.VarBinary ||
+                fromType.IsExactNumeric() ||
+                fromType == SqlDataTypeOption.Bit))
+                return true;
+
+            // [var]binary, numeric, bit, timestamp and uniqueidentifier can be converted to [var]binary
+            if ((toType == SqlDataTypeOption.Binary || toType == SqlDataTypeOption.VarBinary) &&
+                (fromType == SqlDataTypeOption.Binary ||
+                fromType == SqlDataTypeOption.VarBinary ||
+                fromType.IsNumeric() ||
+                fromType == SqlDataTypeOption.Bit ||
+                fromType.IsRowVersion() ||
+                fromType == SqlDataTypeOption.UniqueIdentifier))
+                return true;
+
+            // timestamp can be converted to [var]binary, [var]char, [small]datetime, exact numerics, bit and image types
+            if (fromType.IsRowVersion() &&
+                (toType == SqlDataTypeOption.Binary ||
+                toType == SqlDataTypeOption.VarBinary ||
+                toType == SqlDataTypeOption.Char ||
+                toType == SqlDataTypeOption.VarChar ||
+                toType == SqlDataTypeOption.SmallDateTime ||
+                toType == SqlDataTypeOption.DateTime ||
+                toType.IsExactNumeric() ||
+                toType == SqlDataTypeOption.Bit ||
+                toType == SqlDataTypeOption.Image))
                 return true;
 
             return false;
@@ -497,10 +541,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Require explicit conversion from sql_variant to everything other than timestamp, image, text, ntext, xml and hierarchyid
             if (fromSql?.SqlDataTypeOption == SqlDataTypeOption.Sql_Variant &&
                 toSql != null &&
-                toSql.SqlDataTypeOption != SqlDataTypeOption.Timestamp &&
+                !toSql.SqlDataTypeOption.IsRowVersion() &&
                 toSql.SqlDataTypeOption != SqlDataTypeOption.Image &&
                 toSql.SqlDataTypeOption != SqlDataTypeOption.Text &&
                 toSql.SqlDataTypeOption != SqlDataTypeOption.NText)
+                return true;
+
+            // Require explicit version from string and datetime types to [var]binary
+            if ((fromSql?.SqlDataTypeOption.IsStringType() == true || fromSql?.SqlDataTypeOption.IsDateTimeType() == true) &&
+                (toSql?.SqlDataTypeOption == SqlDataTypeOption.Binary || toSql?.SqlDataTypeOption == SqlDataTypeOption.VarBinary))
+                return true;
+
+            // Require explicit conversion from [var]binary to modern datetime types
+            if ((fromSql?.SqlDataTypeOption == SqlDataTypeOption.Binary || fromSql?.SqlDataTypeOption == SqlDataTypeOption.VarBinary) &&
+                (toSql?.SqlDataTypeOption == SqlDataTypeOption.Date || toSql?.SqlDataTypeOption == SqlDataTypeOption.Time || toSql?.SqlDataTypeOption == SqlDataTypeOption.DateTimeOffset || toSql?.SqlDataTypeOption == SqlDataTypeOption.DateTime2))
                 return true;
 
             return false;
@@ -600,6 +654,71 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (expr.Type == typeof(SqlString) && to == typeof(SqlDateTimeOffset))
                 expr = Expr.Call(() => ParseDateTimeOffset(Expr.Arg<SqlString>(), Expr.Arg<ExpressionExecutionContext>()), expr, context);
 
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlInt64))
+                expr = Expr.Call(() => ParseBinaryInt64(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlInt64) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryInt64(Expr.Arg<SqlInt64>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlInt32))
+                expr = Expr.Call(() => ParseBinaryInt32(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlInt32) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryInt32(Expr.Arg<SqlInt32>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlInt16))
+                expr = Expr.Call(() => ParseBinaryInt16(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlInt16) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryInt16(Expr.Arg<SqlInt16>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlByte))
+                expr = Expr.Call(() => ParseBinaryByte(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlInt16) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryByte(Expr.Arg<SqlByte>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlMoney))
+                expr = Expr.Call(() => ParseBinaryMoney(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlMoney) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryMoney(Expr.Arg<SqlMoney>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlBoolean))
+                expr = Expr.Call(() => ParseBinaryBit(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlBoolean) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryBit(Expr.Arg<SqlBoolean>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlDecimal))
+                expr = Expr.Call(() => ParseBinaryDecimal(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlDecimal) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryDecimal(Expr.Arg<SqlDecimal>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlDateTime))
+                expr = Expr.Call(() => ParseBinaryDateTime(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlDateTime) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryDateTime(Expr.Arg<SqlDateTime>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlSmallDateTime))
+                expr = Expr.Call(() => ParseBinarySmallDateTime(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlSmallDateTime) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinarySmallDateTime(Expr.Arg<SqlSmallDateTime>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlDate))
+                expr = Expr.Call(() => ParseBinaryDate(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlDate) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryDate(Expr.Arg<SqlDate>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlTime))
+                expr = Expr.Call(() => ParseBinaryTime(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlTime) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryTime(Expr.Arg<SqlTime>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlDateTime2))
+                expr = Expr.Call(() => ParseBinaryDateTime2(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlDateTime2) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryDateTime2(Expr.Arg<SqlDateTime2>()), expr);
+
+            if (expr.Type == typeof(SqlBinary) && to == typeof(SqlDateTimeOffset))
+                expr = Expr.Call(() => ParseBinaryDateTimeOffset(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlDateTimeOffset) && to == typeof(SqlBinary))
+                expr = Expr.Call(() => SerializeBinaryDateTimeOffset(Expr.Arg<SqlDateTimeOffset>()), expr);
+
             if (expr.Type == typeof(SqlDecimal) && (to == typeof(SqlInt64) || to == typeof(SqlInt32) || to == typeof(SqlInt16) || to == typeof(SqlByte)))
             {
                 // Built-in conversion uses rounding, should use truncation
@@ -626,6 +745,498 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        private static SqlInt64 ParseBinaryInt64(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlInt64.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 8)
+            {
+                var enlarged = new byte[8];
+                bytes.CopyTo(enlarged, 8 - bytes.Length);
+                bytes = enlarged;
+            }
+
+            return BinaryPrimitives.ReadInt64BigEndian(bytes.AsSpan());
+        }
+
+        private static SqlBinary SerializeBinaryInt64(SqlInt64 value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(bytes.AsSpan(), value.Value);
+
+            return bytes;
+        }
+
+        private static SqlInt32 ParseBinaryInt32(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlInt32.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 4)
+            {
+                var enlarged = new byte[4];
+                bytes.CopyTo(enlarged, 4 - bytes.Length);
+                bytes = enlarged;
+            }
+
+            return BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan());
+        }
+
+        private static SqlBinary SerializeBinaryInt32(SqlInt32 value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(), value.Value);
+
+            return bytes;
+        }
+
+        private static SqlInt32 ParseBinaryInt16(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlInt16.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 2)
+            {
+                var enlarged = new byte[2];
+                bytes.CopyTo(enlarged, 2 - bytes.Length);
+                bytes = enlarged;
+            }
+
+            return BinaryPrimitives.ReadInt16BigEndian(bytes.AsSpan());
+        }
+
+        private static SqlBinary SerializeBinaryInt16(SqlInt16 value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[2];
+            BinaryPrimitives.WriteInt16BigEndian(bytes.AsSpan(), value.Value);
+
+            return bytes;
+        }
+
+        private static SqlByte ParseBinaryByte(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlByte.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 1)
+                return SqlByte.Zero;
+
+            return bytes[0];
+        }
+
+        private static SqlBinary SerializeBinaryByte(SqlByte value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[] { value.Value };
+
+            return bytes;
+        }
+
+        private static SqlMoney ParseBinaryMoney(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlMoney.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 8)
+            {
+                var enlarged = new byte[8];
+                bytes.CopyTo(enlarged, 8 - bytes.Length);
+                bytes = enlarged;
+            }
+
+            // SQL Server stores money8 as ticks of 1/10000.
+            // Could use SqlMoney.FromTdsValue but not supported in Net462
+            return BinaryPrimitives.ReadInt64BigEndian(bytes.AsSpan()) / 10000M;
+        }
+
+        private static SqlBinary SerializeBinaryMoney(SqlMoney value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(bytes.AsSpan(), (long)(value.Value * 10000M));
+
+            return bytes;
+        }
+
+        private static SqlMoney ParseBinarySmallMoney(SqlBinary sqlBinary)
+        {
+            if (sqlBinary.IsNull)
+                return SqlMoney.Null;
+
+            var bytes = sqlBinary.Value;
+
+            if (bytes.Length < 4)
+            {
+                var enlarged = new byte[4];
+                bytes.CopyTo(enlarged, 4 - bytes.Length);
+                bytes = enlarged;
+            }
+
+            // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/1266679d-cd6e-492a-b2b2-3a9ba004196d
+            return BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan()) / 10000M;
+        }
+
+        private static SqlBinary SerializeBinarySmallMoney(SqlMoney value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(), (int)(value.Value * 10000M));
+
+            return bytes;
+        }
+
+        private static SqlBoolean ParseBinaryBit(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlBoolean.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 1)
+                return SqlBoolean.False;
+
+            return bytes[0] != 0;
+        }
+
+        private static SqlBinary SerializeBinaryBit(SqlBoolean value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[] { (byte)(value.Value ? 1 : 0) };
+
+            return bytes;
+        }
+
+        private static SqlDecimal ParseBinaryDecimal(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlDecimal.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 20)
+            {
+                var enlarged = new byte[20];
+                bytes.CopyTo(enlarged, 0);
+                bytes = enlarged;
+            }
+
+            // precision
+            // scale
+            // unused?
+            // ispositive
+            // int[4]
+            var offset = 0;
+            var precision = bytes[offset++];
+            var scale = bytes[offset++];
+            _ = bytes[offset++];
+            var positive = bytes[offset++];
+            var data1 = BitConverter.ToInt32(bytes, offset); offset += 4;
+            var data2 = BitConverter.ToInt32(bytes, offset); offset += 4;
+            var data3 = BitConverter.ToInt32(bytes, offset); offset += 4;
+            var data4 = BitConverter.ToInt32(bytes, offset);
+            return new SqlDecimal(precision, scale, positive != 0, data1, data2, data3, data4);
+        }
+
+        private static SqlBinary SerializeBinaryDecimal(SqlDecimal value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[20];
+            var offset = 0;
+            bytes[offset++] = value.Precision;
+            bytes[offset++] = value.Scale;
+            bytes[offset++] = 0;
+            bytes[offset++] = (byte)(value.IsPositive ? 1 : 0);
+            Array.Copy(value.BinData, 0, bytes, offset, 16);
+
+            return bytes;
+        }
+
+        private static SqlDateTime ParseBinaryDateTime(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlDateTime.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 8)
+            {
+                var enlarged = new byte[8];
+                bytes.CopyTo(enlarged, 8 - bytes.Length);
+                bytes = enlarged;
+            }
+
+            // days (int)
+            // time (uint)
+            // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/786f5b8a-f87d-4980-9070-b9b7274c681d
+            var span = bytes.AsSpan();
+            var days = BinaryPrimitives.ReadInt32BigEndian(span); span = span.Slice(4);
+            var time = BinaryPrimitives.ReadInt32BigEndian(span);
+            return new SqlDateTime(days, time);
+        }
+
+        private static SqlBinary SerializeBinaryDateTime(SqlDateTime value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[8];
+            var span = bytes.AsSpan();
+            BinaryPrimitives.WriteInt32BigEndian(span, value.DayTicks); span = span.Slice(4);
+            BinaryPrimitives.WriteInt32BigEndian(span, value.TimeTicks);
+
+            return bytes;
+        }
+
+        private static SqlDateTime ParseBinarySmallDateTime(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlDateTime.Null;
+
+            var bytes = value.Value;
+
+            if (bytes.Length < 4)
+            {
+                var enlarged = new byte[4];
+                bytes.CopyTo(enlarged, 4 - bytes.Length);
+                bytes = enlarged;
+            }
+
+            // days (short)
+            // time (ushort)
+            // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/786f5b8a-f87d-4980-9070-b9b7274c681d
+            var span = bytes.AsSpan();
+            var days = BinaryPrimitives.ReadInt16BigEndian(span); span = span.Slice(2);
+            var time = BinaryPrimitives.ReadInt16BigEndian(span);
+            return new SqlDateTime(days, time);
+        }
+
+        private static SqlBinary SerializeBinarySmallDateTime(SqlSmallDateTime value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[4];
+            var span = bytes.AsSpan();
+            BinaryPrimitives.WriteInt16BigEndian(span, value.DayTicks); span = span.Slice(4);
+            BinaryPrimitives.WriteInt16BigEndian(span, value.TimeTicks);
+
+            return bytes;
+        }
+
+        private static SqlDate ParseBinaryDate(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlDate.Null;
+
+            var bytes = value.Value;
+            return ParseBinaryDate(bytes.AsSpan());
+        }
+
+        private static SqlDate ParseBinaryDate(Span<byte> span)
+        {
+            // date uses a 3-byte integer - expand it to 4 bytes so we can reuse the standard ReadInt32 method
+            if (span.Length < 4)
+            {
+                var enlarged = new byte[4];
+                span.CopyTo(enlarged.AsSpan());
+                span = enlarged.AsSpan();
+            }
+
+            var days = BinaryPrimitives.ReadInt32LittleEndian(span);
+            return DateTime.MinValue.AddDays(days);
+        }
+
+        private static SqlBinary SerializeBinaryDate(SqlDate value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var bytes = new byte[3];
+            SerializeBinaryDate(bytes.AsSpan(), value.Value);
+
+            return bytes;
+        }
+
+        private static void SerializeBinaryDate(Span<byte> span, DateTime value)
+        {
+            var days = (int)(value - DateTime.MinValue).TotalDays;
+            span[0] = (byte)(days & 0xff);
+            days >>= 8;
+            span[1] = (byte)(days & 0xff);
+            days >>= 8;
+            span[2] = (byte)(days & 0xff);
+        }
+
+        private static SqlTime ParseBinaryTime(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlTime.Null;
+
+            var bytes = value.Value;
+            return ParseBinaryTime(bytes.AsSpan(), out _);
+        }
+
+        private static SqlTime ParseBinaryTime(Span<byte> span, out int read)
+        {
+            // first byte is for scale
+            var scale = span[0];
+
+            if (scale <= 2)
+                read = 4;
+            else if (scale <= 4)
+                read = 5;
+            else if (scale <= 7)
+                read = 6;
+            else
+                throw new OverflowException();
+
+            if (span.Length < read)
+                throw new OverflowException();
+
+            span = span.Slice(1, read - 1);
+
+            // Expand it to 8 bytes so we can reuse the standard ReadInt64 method
+            var enlarged = new byte[8];
+            span.CopyTo(enlarged.AsSpan());
+            span = enlarged.AsSpan();
+
+            var ticks = BinaryPrimitives.ReadInt64LittleEndian(span);
+            ticks = ticks * (long)Math.Pow(10, 7 - scale);
+            return TimeSpan.FromTicks(ticks);
+        }
+
+        private static SqlBinary SerializeBinaryTime(SqlTime value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            // Variable length depending on scale
+            var length = GetTimeBinarySize(value.Scale);
+
+            var bytes = new byte[length];
+            SerializeBinaryTime(bytes.AsSpan(), value.Scale, value.Value);
+
+            return bytes;
+        }
+
+        private static int GetTimeBinarySize(short scale)
+        {
+            var length = 4;
+
+            if (scale >= 3)
+                length++;
+
+            if (scale >= 4)
+                length++;
+
+            return length;
+        }
+
+        private static void SerializeBinaryTime(Span<byte> span, short scale, TimeSpan value)
+        {
+            span[0] = (byte)scale;
+
+            var ticks = value.Ticks / (long)Math.Pow(10, 7 - scale);
+
+            for (var offset = 1; offset < span.Length; offset++)
+            {
+                span[offset] = (byte)(ticks & 0xff);
+                ticks >>= 8;
+            }
+        }
+
+        private static SqlDateTime2 ParseBinaryDateTime2(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlDateTime2.Null;
+
+            var bytes = value.Value;
+            var span = bytes.AsSpan();
+            var time = ParseBinaryTime(span, out var read);
+            span = span.Slice(read);
+            var date = ParseBinaryDate(span);
+
+            return date.Value.Add(time.Value);
+        }
+
+        private static SqlBinary SerializeBinaryDateTime2(SqlDateTime2 value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var timeLength = GetTimeBinarySize(value.Scale);
+            var dateLength = 3;
+            var bytes = new byte[timeLength + dateLength];
+            var span = bytes.AsSpan();
+            SerializeBinaryTime(span.Slice(0, timeLength), value.Scale, value.Value.TimeOfDay);
+            SerializeBinaryDate(span.Slice(timeLength, dateLength), value.Value);
+
+            return bytes;
+        }
+
+        private static SqlDateTimeOffset ParseBinaryDateTimeOffset(SqlBinary value)
+        {
+            if (value.IsNull)
+                return SqlDateTimeOffset.Null;
+
+            var bytes = value.Value;
+            var span = bytes.AsSpan();
+            var time = ParseBinaryTime(span, out var read);
+            span = span.Slice(read);
+            var date = ParseBinaryDate(span);
+            span = span.Slice(3);
+            var offset = BinaryPrimitives.ReadInt16BigEndian(span);
+
+            return new DateTimeOffset(date.Value.Add(time.Value), TimeSpan.FromMinutes(offset));
+        }
+
+        private static SqlBinary SerializeBinaryDateTimeOffset(SqlDateTimeOffset value)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            var timeLength = GetTimeBinarySize(value.Scale);
+            var dateLength = 3;
+            var offsetLength = 2;
+            var bytes = new byte[timeLength + dateLength + offsetLength];
+            var span = bytes.AsSpan();
+            SerializeBinaryTime(span.Slice(0, timeLength), value.Scale, value.Value.TimeOfDay);
+            SerializeBinaryDate(span.Slice(timeLength, dateLength), value.Value.Date);
+            BinaryPrimitives.WriteInt16BigEndian(span.Slice(timeLength + dateLength, offsetLength), (short)value.Value.Offset.TotalMinutes);
+
+            return bytes;
         }
 
         private static SqlTime ParseTime(SqlString value, ExpressionExecutionContext context)
@@ -750,8 +1361,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
             else if (expr.Type == typeof(SqlBinary) && targetType == typeof(SqlString))
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlBinary>(), Expr.Arg<Collation>(), Expr.Arg<bool>()), expr, Expression.Constant(targetCollation), Expression.Constant(toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar));
+            else if (expr.Type == typeof(SqlString) && targetType == typeof(SqlBinary))
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlString>(), Expr.Arg<bool>()), expr, Expression.Constant(fromSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar));
             else if (expr.Type == typeof(SqlGuid) && to.IsEntityReference(out toEr) && toEr != null)
                 expr = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<SqlString>(), Expr.Arg<SqlGuid>(), Expr.Arg<ExpressionExecutionContext>()), Expression.Constant((SqlString)toEr), expr, context);
+            else if (expr.Type == typeof(SqlBinary) && targetType == typeof(SqlMoney) && toSqlType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
+                expr = Expr.Call(() => ParseBinarySmallMoney(Expr.Arg<SqlBinary>()), expr);
+            else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlBinary) && fromSqlType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
+                expr = Expr.Call(() => SerializeBinarySmallMoney(Expr.Arg<SqlMoney>()), expr);
             else if (expr.Type == typeof(SqlString) && to.IsEntityReference(out toEr) && toEr != null)
             {
                 expr = Convert(expr, context, from, DataTypeHelpers.UniqueIdentifier, style, styleType, convert, throwOnTruncate, table, column);
@@ -857,6 +1474,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expr = Expr.Call(() => ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), expr, Expression.Constant(targetCollation));
             }
 
+            // Truncate results for [var]binary
+            if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Binary ||
+                toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarBinary ||
+                toSqlType.SqlDataTypeOption.IsRowVersion())
+            {
+                if (toSqlType.Parameters.Count == 1)
+                {
+                    if (toSqlType.Parameters[0].LiteralType == LiteralType.Integer && Int32.TryParse(toSqlType.Parameters[0].Value, out var maxLength))
+                    {
+                        if ((sourceType != typeof(SqlBinary) || fromSqlType.Parameters[0] is IntegerLiteral fromLengthParam && Int32.TryParse(fromLengthParam.Value, out var fromLength) && fromLength > maxLength))
+                        {
+                            if (maxLength < 1)
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidLengthOrPrecision(toSqlType));
+
+                            // Truncate the value to the specified length
+                            expr = Expr.Call(() => Truncate(Expr.Arg<SqlBinary>(), Expr.Arg<int>()),
+                                expr,
+                                Expression.Constant(maxLength));
+                        }
+                    }
+                    else if (toSqlType.Parameters[0].LiteralType != LiteralType.Max)
+                    {
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
+                    }
+                }
+                else if (toSqlType.Parameters.Count > 1)
+                {
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
+                }
+            }
+
             // Apply changes to precision & scale
             if (expr.Type == typeof(SqlDecimal))
             {
@@ -894,24 +1542,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Expression.Constant(to),
                     Expression.Constant(convert, typeof(TSqlFragment)));
             }
-            else if (expr.Type == typeof(SqlDateTime2) || expr.Type == typeof(SqlDateTimeOffset))
+            else if (expr.Type == typeof(SqlTime) || expr.Type == typeof(SqlDateTime2) || expr.Type == typeof(SqlDateTimeOffset))
             {
                 // Default scale is 7
-                var scale = 7;
+                short scale = 7;
 
                 if (toSqlType.Parameters.Count > 0)
                 {
-                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out scale) || scale < 0)
+                    if (!Int16.TryParse(toSqlType.Parameters[0].Value, out scale) || scale < 0)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(toSqlType)) { Suggestion = "Invalid attributes specified for type " + toSqlType.SqlDataTypeOption };
 
                     if (scale > 7)
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidScale(toSqlType, 1)) { Suggestion = "Scale cannot be greater than 7" };
                 }
 
+                if (expr.Type == typeof(SqlTime))
+                    expr = Expr.Call(() => SqlTime.ConvertToScale(Expr.Arg<SqlTime>(), Expr.Arg<short>()), expr, Expression.Constant(scale));
                 if (expr.Type == typeof(SqlDateTime2))
-                    expr = Expr.Call(() => ApplyScale(Expr.Arg<SqlDateTime2>(), Expr.Arg<int>()), expr, Expression.Constant(scale));
+                    expr = Expr.Call(() => SqlDateTime2.ConvertToScale(Expr.Arg<SqlDateTime2>(), Expr.Arg<short>()), expr, Expression.Constant(scale));
                 else
-                    expr = Expr.Call(() => ApplyScale(Expr.Arg<SqlDateTimeOffset>(), Expr.Arg<int>()), expr, Expression.Constant(scale));
+                    expr = Expr.Call(() => SqlDateTimeOffset.ConvertToScale(Expr.Arg<SqlDateTimeOffset>(), Expr.Arg<short>()), expr, Expression.Constant(scale));
             }
 
             return expr;
@@ -940,38 +1590,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static SqlDateTime2 ApplyScale(SqlDateTime2 value, int scale)
-        {
-            if (value.IsNull)
-                return value;
-
-            var ticks = value.Value.Ticks % TimeSpan.TicksPerSecond;
-            var integerSeconds = value.Value.AddTicks(-ticks);
-
-            if (scale == 0)
-                return integerSeconds;
-
-            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
-            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
-            return integerSeconds.AddTicks((int)(rounded * TimeSpan.TicksPerSecond));
-        }
-
-        private static SqlDateTimeOffset ApplyScale(SqlDateTimeOffset value, int scale)
-        {
-            if (value.IsNull)
-                return value;
-
-            var ticks = value.Value.Ticks % TimeSpan.TicksPerSecond;
-            var integerSeconds = value.Value.AddTicks(-ticks);
-
-            if (scale == 0)
-                return integerSeconds;
-
-            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
-            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
-            return integerSeconds.AddTicks((int)(rounded * TimeSpan.TicksPerSecond));
-        }
-
         /// <summary>
         /// Converts a <see cref="SqlString"/> value from one collation to another
         /// </summary>
@@ -986,7 +1604,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return collation.ToSqlString(value.Value);
         }
 
-        private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Func<string,Sql4CdsError> errorOnTruncate)
+        private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Func<string, Sql4CdsError> errorOnTruncate)
         {
             if (value.IsNull)
                 return value;
@@ -1003,6 +1621,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException(errorOnTruncate(truncated));
 
             return new SqlString(truncated, value.LCID, value.SqlCompareOptions);
+        }
+
+        private static SqlBinary Truncate(SqlBinary value, int maxLength)
+        {
+            if (value.IsNull)
+                return value;
+
+            if (value.Value.Length <= maxLength)
+                return value;
+
+            var truncated = new byte[maxLength];
+            Array.Copy(value.Value, truncated, maxLength);
+
+            return truncated;
         }
 
         private static EntityCollection CreateEntityCollection(SqlEntityReference value)
@@ -1405,6 +2037,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return SqlString.Null;
 
             return new SqlString(collation.LCID, collation.CompareOptions, value.Value, unicode);
+        }
+
+        private static SqlBinary Convert(SqlString value, bool unicode)
+        {
+            if (value.IsNull)
+                return SqlBinary.Null;
+
+            if (unicode)
+                return value.GetUnicodeBytes();
+            else
+                return value.GetNonUnicodeBytes();
         }
 
         /// <summary>
