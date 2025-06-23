@@ -661,6 +661,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public void RemoveAllAttributes()
+        {
+            // Remove any existing sorts
+            if (Entity.Items != null)
+            {
+                Entity.Items = Entity.Items.Where(i => !(i is allattributes)).ToArray();
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                    linkEntity.Items = linkEntity.Items.Where(i => !(i is allattributes)).ToArray();
+            }
+        }
+
+        public HashSet<FetchAttributeType> GetAttributes()
+        {
+            var attributes = new HashSet<FetchAttributeType>();
+
+            if (Entity.Items != null)
+            {
+                foreach (var attr in Entity.Items.OfType<FetchAttributeType>())
+                    attributes.Add(attr);
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                {
+                    foreach (var attr in linkEntity.Items.OfType<FetchAttributeType>())
+                        attributes.Add(attr);
+                }
+            }    
+
+            return attributes;
+        }
+
+        public void RemoveAttribute(FetchAttributeType attr)
+        {
+            if (Entity.Items == null)
+                return;
+
+            Entity.Items = Entity.Items.Where(i => i != attr).ToArray();
+
+            foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                linkEntity.Items = linkEntity.Items.Where(i => i != attr).ToArray();
+        }
+
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, DataSource dataSource)
         {
             if (Int64.TryParse(entity.RowVersion, out var versionNumber))
@@ -1193,7 +1235,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (attrMetadata == null)
                 {
                     attrMetadata = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
-                    isVirtual = true;
+
+                    if (attrMetadata != null)
+                        isVirtual = true;
                 }
 
                 if (attrMetadata != null)

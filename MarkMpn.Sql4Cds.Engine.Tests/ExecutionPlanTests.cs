@@ -9205,5 +9205,61 @@ WHERE  a.parentaccountid IN (SELECT _a.accountid
             var fetch1 = AssertNode<FetchXmlScan>(sort1.Source);
             var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
         }
+
+        [TestMethod]
+        public void AggregateOnSubquery()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/676
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT name
+FROM (
+    SELECT TOP 10 *
+    FROM account
+) AS SubQuery
+GROUP BY name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true' top='10'>
+  <entity name='account'>
+    <attribute name='name' />
+    <order attribute='name' />
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void DistinctStarFromSubqueryWithAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT DISTINCT *
+FROM (
+    SELECT TOP 10 name AS n
+    FROM account
+) AS SubQuery";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true' top='10'>
+  <entity name='account'>
+    <attribute name='name' alias='n' />
+    <order attribute='name' />
+  </entity>
+</fetch>");
+        }
     }
 }

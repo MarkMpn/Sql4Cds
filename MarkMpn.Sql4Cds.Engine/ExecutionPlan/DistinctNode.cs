@@ -115,6 +115,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 fetch.FetchXml.distinctSpecified = true;
                 var virtualAttr = false;
 
+                // Remove any existing <all-attributes /> listed in the FetchXML so the DISTINCT doesn't get accidentially applied
+                // across more columns than expected
+                fetch.RemoveAllAttributes();
+
+                // Keep track of all other <attributes /> so we can remove any that haven't been referenced by the DISTINCT
+                var existingAttributes = fetch.GetAttributes();
+
                 // Ensure there is a sort order applied to avoid paging issues
                 if (fetch.Entity.Items == null || !fetch.Entity.Items.OfType<FetchOrderType>().Any())
                 {
@@ -129,6 +136,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity, out _, out var isVirtual);
 
+                        existingAttributes.Remove(attr);
+
                         var nameParts = normalized.SplitMultiPartIdentifier();
 
                         virtualAttr |= isVirtual;
@@ -142,6 +151,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             linkEntity.AddItem(new FetchOrderType { attribute = attr.name });
                     }
                 }
+
+                foreach (var attr in existingAttributes)
+                    fetch.RemoveAttribute(attr);
 
                 // Virtual entity providers are unreliable - still fold the DISTINCT to the fetch but keep
                 // this node to ensure the DISTINCT is applied if the provider doesn't support it.

@@ -586,6 +586,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true)]
     [System.Xml.Serialization.XmlRootAttribute("all-attributes", Namespace="", IsNullable=false)]
     public partial class allattributes {
+        public allattributes() { }
     }
     
     /// <remarks/>
