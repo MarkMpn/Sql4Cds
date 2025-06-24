@@ -618,7 +618,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var order in items.OfType<FetchOrderType>())
             {
                 if (!String.IsNullOrEmpty(order.alias))
-                    lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.alias.Equals(order.alias, StringComparison.OrdinalIgnoreCase));
+                    lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.alias?.Equals(order.alias, StringComparison.OrdinalIgnoreCase) == true);
                 else
                     lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.name.Equals(order.attribute, StringComparison.OrdinalIgnoreCase));
 
@@ -1421,7 +1421,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (!String.IsNullOrEmpty(sort.alias))
                     {
-                        var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a.alias.Equals(sort.alias, StringComparison.OrdinalIgnoreCase));
+                        var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a?.alias.Equals(sort.alias, StringComparison.OrdinalIgnoreCase) == true);
 
                         if (!FetchXml.aggregate || attribute != null && attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
                             fullName = $"{alias}.{attribute.alias.EscapeIdentifier()}";
