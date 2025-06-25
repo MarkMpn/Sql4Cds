@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
@@ -26,8 +27,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Gets a list of all messages in the instance
         /// </summary>
+        /// <param name="lazy"><see langword="true"/> to only return message details that are immediately available, or <see langword="false"/> to force all messages to be retrieved</param>
         /// <returns>A list of all messages in the instance</returns>
-        IEnumerable<Message> GetAllMessages();
+        IEnumerable<Message> GetAllMessages(bool lazy);
 
         /// <summary>
         /// Indicates whether a specific message is valid for an entity
@@ -45,6 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private readonly IOrganizationService _org;
         private readonly IAttributeMetadataCache _metadata;
+        private readonly object _loaderLock;
         private Dictionary<string, Message> _cache;
         private Dictionary<string, bool> _entityMessages;
 
@@ -57,105 +60,109 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             _org = org;
             _metadata = metadata;
+            _loaderLock = new object();
         }
 
         private void Load()
         {
-            if (_cache != null)
-                return;
-
-            _entityMessages = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-
-            // Load the requests and input parameters
-            var requestQry = new QueryExpression("sdkmessagerequest");
-            requestQry.ColumnSet = new ColumnSet("name");
-            var messagePairLink = requestQry.AddLink("sdkmessagepair", "sdkmessagepairid", "sdkmessagepairid");
-            messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "api/data");
-            var fieldLink = requestQry.AddLink("sdkmessagerequestfield", "sdkmessagerequestid", "sdkmessagerequestid", JoinOperator.LeftOuter);
-            fieldLink.EntityAlias = "sdkmessagerequestfield";
-            fieldLink.Columns = new ColumnSet("name", "clrparser", "position", "optional", "parameterbindinginformation");
-
-            var messageRequestFields = new Dictionary<string, List<MessageParameter>>();
-
-            foreach (var entity in RetrieveAll(requestQry))
+            lock (_loaderLock)
             {
-                var messageName = entity.GetAttributeValue<string>("name");
+                if (_cache != null)
+                    return;
 
-                if (!messageRequestFields.TryGetValue(messageName, out var requestFields))
+                _entityMessages = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+                // Load the requests and input parameters
+                var requestQry = new QueryExpression("sdkmessagerequest");
+                requestQry.ColumnSet = new ColumnSet("name");
+                var messagePairLink = requestQry.AddLink("sdkmessagepair", "sdkmessagepairid", "sdkmessagepairid");
+                messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "api/data");
+                var fieldLink = requestQry.AddLink("sdkmessagerequestfield", "sdkmessagerequestid", "sdkmessagerequestid", JoinOperator.LeftOuter);
+                fieldLink.EntityAlias = "sdkmessagerequestfield";
+                fieldLink.Columns = new ColumnSet("name", "clrparser", "position", "optional", "parameterbindinginformation");
+
+                var messageRequestFields = new Dictionary<string, List<MessageParameter>>();
+
+                foreach (var entity in RetrieveAll(requestQry))
                 {
-                    requestFields = new List<MessageParameter>();
-                    messageRequestFields.Add(messageName, requestFields);
+                    var messageName = entity.GetAttributeValue<string>("name");
+
+                    if (!messageRequestFields.TryGetValue(messageName, out var requestFields))
+                    {
+                        requestFields = new List<MessageParameter>();
+                        messageRequestFields.Add(messageName, requestFields);
+                    }
+
+                    var fieldName = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.name");
+                    var fieldType = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.clrparser");
+                    var fieldPosition = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.position");
+                    var fieldOptional = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.optional");
+                    var fieldBindingInfo = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.parameterbindinginformation");
+
+                    if (fieldName != null)
+                    {
+                        requestFields.Add(new MessageParameter
+                        {
+                            Name = (string)fieldName.Value,
+                            Type = fieldType == null ? null : GetType((string)fieldType.Value),
+                            Position = (int)fieldPosition.Value,
+                            Optional = (bool)(fieldOptional?.Value ?? false),
+                            OTC = fieldBindingInfo == null ? null : ExtractOTC((string)fieldBindingInfo.Value)
+                        });
+                    }
                 }
 
-                var fieldName = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.name");
-                var fieldType = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.clrparser");
-                var fieldPosition = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.position");
-                var fieldOptional = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.optional");
-                var fieldBindingInfo = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.parameterbindinginformation");
+                // Load the response parameters
+                var responseQry = new QueryExpression("sdkmessageresponse");
+                var requestLink = responseQry.AddLink("sdkmessagerequest", "sdkmessagerequestid", "sdkmessagerequestid");
+                requestLink.EntityAlias = "sdkmessagerequest";
+                requestLink.Columns = new ColumnSet("name");
+                messagePairLink = requestLink.AddLink("sdkmessagepair", "sdkmessagepairid", "sdkmessagepairid");
+                messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "api/data");
+                fieldLink = responseQry.AddLink("sdkmessageresponsefield", "sdkmessageresponseid", "sdkmessageresponseid");
+                fieldLink.EntityAlias = "sdkmessageresponsefield";
+                fieldLink.Columns = new ColumnSet("name", "clrformatter", "position", "parameterbindinginformation");
 
-                if (fieldName != null)
+                var messageResponseFields = new Dictionary<string, List<MessageParameter>>();
+
+                foreach (var entity in RetrieveAll(responseQry))
                 {
-                    requestFields.Add(new MessageParameter
+                    var messageName = (string)entity.GetAttributeValue<AliasedValue>("sdkmessagerequest.name").Value;
+
+                    if (!messageResponseFields.TryGetValue(messageName, out var responseFields))
+                    {
+                        responseFields = new List<MessageParameter>();
+                        messageResponseFields.Add(messageName, responseFields);
+                    }
+
+                    var fieldName = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.name");
+                    var fieldType = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.clrformatter");
+                    var fieldPosition = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.position");
+                    var fieldBindingInfo = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.parameterbindinginformation");
+
+                    responseFields.Add(new MessageParameter
                     {
                         Name = (string)fieldName.Value,
                         Type = fieldType == null ? null : GetType((string)fieldType.Value),
                         Position = (int)fieldPosition.Value,
-                        Optional = (bool)(fieldOptional?.Value ?? false),
                         OTC = fieldBindingInfo == null ? null : ExtractOTC((string)fieldBindingInfo.Value)
                     });
                 }
+
+                _cache = messageRequestFields.ToDictionary(kvp => kvp.Key, kvp =>
+                {
+                    var requestFields = kvp.Value;
+                    requestFields.Sort((x, y) => x.Position.CompareTo(y.Position));
+                    messageResponseFields.TryGetValue(kvp.Key, out var responseFields);
+
+                    return new Message
+                    {
+                        Name = kvp.Key,
+                        InputParameters = requestFields.AsReadOnly(),
+                        OutputParameters = (IReadOnlyList<MessageParameter>)responseFields?.AsReadOnly() ?? Array.Empty<MessageParameter>()
+                    };
+                }, StringComparer.OrdinalIgnoreCase);
             }
-
-            // Load the response parameters
-            var responseQry = new QueryExpression("sdkmessageresponse");
-            var requestLink = responseQry.AddLink("sdkmessagerequest", "sdkmessagerequestid", "sdkmessagerequestid");
-            requestLink.EntityAlias = "sdkmessagerequest";
-            requestLink.Columns = new ColumnSet("name");
-            messagePairLink = requestLink.AddLink("sdkmessagepair", "sdkmessagepairid", "sdkmessagepairid");
-            messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "api/data");
-            fieldLink = responseQry.AddLink("sdkmessageresponsefield", "sdkmessageresponseid", "sdkmessageresponseid");
-            fieldLink.EntityAlias = "sdkmessageresponsefield";
-            fieldLink.Columns = new ColumnSet("name", "clrformatter", "position", "parameterbindinginformation");
-
-            var messageResponseFields = new Dictionary<string, List<MessageParameter>>();
-
-            foreach (var entity in RetrieveAll(responseQry))
-            {
-                var messageName = (string)entity.GetAttributeValue<AliasedValue>("sdkmessagerequest.name").Value;
-
-                if (!messageResponseFields.TryGetValue(messageName, out var responseFields))
-                {
-                    responseFields = new List<MessageParameter>();
-                    messageResponseFields.Add(messageName, responseFields);
-                }
-
-                var fieldName = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.name");
-                var fieldType = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.clrformatter");
-                var fieldPosition = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.position");
-                var fieldBindingInfo = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.parameterbindinginformation");
-
-                responseFields.Add(new MessageParameter
-                {
-                    Name = (string)fieldName.Value,
-                    Type = fieldType == null ? null : GetType((string)fieldType.Value),
-                    Position = (int)fieldPosition.Value,
-                    OTC = fieldBindingInfo == null ? null : ExtractOTC((string)fieldBindingInfo.Value)
-                });
-            }
-
-            _cache = messageRequestFields.ToDictionary(kvp => kvp.Key, kvp =>
-            {
-                var requestFields = kvp.Value;
-                requestFields.Sort((x, y) => x.Position.CompareTo(y.Position));
-                messageResponseFields.TryGetValue(kvp.Key, out var responseFields);
-
-                return new Message
-                {
-                    Name = kvp.Key,
-                    InputParameters = requestFields.AsReadOnly(),
-                    OutputParameters = (IReadOnlyList<MessageParameter>) responseFields?.AsReadOnly() ?? Array.Empty<MessageParameter>()
-                };
-            }, StringComparer.OrdinalIgnoreCase);
         }
 
         private IEnumerable<Entity> RetrieveAll(QueryExpression qry)
@@ -250,8 +257,14 @@ namespace MarkMpn.Sql4Cds.Engine
             return _cache.TryGetValue(name, out message);
         }
 
-        public IEnumerable<Message> GetAllMessages()
+        public IEnumerable<Message> GetAllMessages(bool lazy)
         {
+            if (lazy && _cache == null)
+            {
+                _ = Task.Run(() => Load());
+                return Enumerable.Empty<Message>();
+            }
+
             Load();
             return _cache.Values;
         }

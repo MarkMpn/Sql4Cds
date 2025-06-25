@@ -271,7 +271,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var connection = GetService(parent);
             var dataSource = _dataSources[connection.ConnectionName];
 
-            return dataSource.MessageCache.GetAllMessages()
+            return dataSource.MessageCache.GetAllMessages(false)
                 .Where(msg => predicate(msg))
                 .OrderBy(msg => msg.Name)
                 .Select(msg =>

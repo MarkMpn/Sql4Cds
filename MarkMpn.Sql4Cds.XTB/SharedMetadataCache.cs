@@ -137,5 +137,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
             return _entitiesByName.Values;
         }
+
+        public string[] TryGetRecycleBinEntities() => _innerCache.TryGetRecycleBinEntities();
     }
 }

@@ -262,6 +262,16 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return _metadata.Values;
         }
+
+        /// <inheritdoc/>
+        public string[] TryGetRecycleBinEntities()
+        {
+            if (_recycleBinEntities.IsValueCreated)
+                return _recycleBinEntities.Value;
+
+            _ = Task.Run(() => _recycleBinEntities.Value);
+            return Array.Empty<string>();
+        }
     }
 
     /// <summary>

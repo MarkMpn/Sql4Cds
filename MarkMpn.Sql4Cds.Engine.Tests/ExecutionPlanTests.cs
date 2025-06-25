@@ -8823,6 +8823,12 @@ WHERE a.accountid = '9B8AAC69-EECA-497A-99AB-C65B9E702D89'";
                 _log($"{nameof(TryGetValue)} {logicalName}");
                 return _cache.TryGetValue(logicalName, out metadata);
             }
+
+            public string[] TryGetRecycleBinEntities()
+            {
+                _log(nameof(TryGetRecycleBinEntities));
+                return _cache.TryGetRecycleBinEntities();
+            }
         }
 
         [TestMethod]
