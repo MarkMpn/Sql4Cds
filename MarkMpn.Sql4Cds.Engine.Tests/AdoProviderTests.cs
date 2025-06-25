@@ -2916,5 +2916,23 @@ DEALLOCATE MyCursor";
                 }
             }
         }
+
+        [TestMethod]
+        public void NullabilityLogic()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/677
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT name FROM account WHERE NOT (name IS NULL AND employees IS NULL)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+                    var nameSchema = schema.Rows[0];
+                    Assert.IsTrue((bool)nameSchema["AllowDBNull"]);
+                }
+            }
+        }
     }
 }

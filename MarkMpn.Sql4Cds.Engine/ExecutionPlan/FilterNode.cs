@@ -79,7 +79,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (filter is BooleanBinaryExpression binary)
             {
-                if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
+                if (not ^ binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
                     return;
 
                 AddNotNullColumns(schema, binary.FirstExpression, not);
