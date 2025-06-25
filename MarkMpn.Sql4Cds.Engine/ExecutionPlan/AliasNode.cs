@@ -25,8 +25,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (select == null)
                 return;
 
-            //select.ExpandWildcardColumns(context);
-
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
             Alias = identifier.Value;
