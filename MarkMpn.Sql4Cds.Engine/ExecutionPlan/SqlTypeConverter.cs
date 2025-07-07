@@ -1558,7 +1558,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (expr.Type == typeof(SqlTime))
                     expr = Expr.Call(() => SqlTime.ConvertToScale(Expr.Arg<SqlTime>(), Expr.Arg<short>()), expr, Expression.Constant(scale));
-                if (expr.Type == typeof(SqlDateTime2))
+                else if (expr.Type == typeof(SqlDateTime2))
                     expr = Expr.Call(() => SqlDateTime2.ConvertToScale(Expr.Arg<SqlDateTime2>(), Expr.Arg<short>()), expr, Expression.Constant(scale));
                 else
                     expr = Expr.Call(() => SqlDateTimeOffset.ConvertToScale(Expr.Arg<SqlDateTimeOffset>(), Expr.Arg<short>()), expr, Expression.Constant(scale));
