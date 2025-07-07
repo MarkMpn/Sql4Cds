@@ -432,6 +432,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Json.GetVariables().Union(Path?.GetVariables() ?? Array.Empty<string>());
+        }
+
         public override object Clone()
         {
             return new OpenJsonNode
