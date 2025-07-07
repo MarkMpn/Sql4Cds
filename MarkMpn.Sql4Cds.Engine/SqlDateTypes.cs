@@ -525,17 +525,17 @@ namespace MarkMpn.Sql4Cds.Engine
         public static SqlDateTime2 ConvertToScale(SqlDateTime2 value, short scale)
         {
             if (value.IsNull)
-                return new SqlDateTime2(null, scale);
+                return new SqlTime(null, scale);
 
-            var ticks = value.Value.TimeOfDay.Ticks;
+            var ticks = value.Value.TimeOfDay.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value - TimeSpan.FromTicks(ticks);
 
-            if (scale < value.Scale)
-            {
-                var rounding = (long)Math.Pow(10, 7 - scale);
-                ticks = ticks - (ticks % rounding);
-            }
+            if (scale == 0)
+                return new SqlDateTime2(integerSeconds, 0);
 
-            return new SqlDateTime2(value.Value.Date + TimeSpan.FromTicks(ticks), scale);
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return new SqlDateTime2(integerSeconds + TimeSpan.FromTicks((int)(rounded * TimeSpan.TicksPerSecond)), scale);
         }
 
         public static SqlBoolean operator ==(SqlDateTime2 x, SqlDateTime2 y) => x.IsNull || y.IsNull ? SqlBoolean.Null : x._dt == y._dt;
@@ -717,15 +717,15 @@ namespace MarkMpn.Sql4Cds.Engine
             if (value.IsNull)
                 return new SqlDateTimeOffset(null, scale);
 
-            var ticks = value.Value.TimeOfDay.Ticks;
+            var ticks = value.Value.TimeOfDay.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value - TimeSpan.FromTicks(ticks);
 
-            if (scale < value.Scale)
-            {
-                var rounding = (long)Math.Pow(10, 7 - scale);
-                ticks = ticks - (ticks % rounding);
-            }
+            if (scale == 0)
+                return new SqlDateTimeOffset(integerSeconds, 0);
 
-            return new SqlDateTimeOffset(value.Value - value.Value.TimeOfDay + TimeSpan.FromTicks(ticks), scale);
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return new SqlDateTimeOffset(integerSeconds + TimeSpan.FromTicks((int)(rounded * TimeSpan.TicksPerSecond)), scale);
         }
 
         public static SqlBoolean operator ==(SqlDateTimeOffset x, SqlDateTimeOffset y) => x.IsNull || y.IsNull ? SqlBoolean.Null : x._dt == y._dt;
