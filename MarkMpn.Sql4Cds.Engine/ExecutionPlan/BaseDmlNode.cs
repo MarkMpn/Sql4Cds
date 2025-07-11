@@ -563,7 +563,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
 
                                 // Generate the request to insert/update/delete this record
-                                var request = requestGenerator(entity);
+                                // Avoid any thread safety issues by locking the request generator. The function
+                                // should be fast so this should not introduce significant performance issues.
+                                OrganizationRequest request;
+
+                                lock (requestGenerator)
+                                {
+                                    request = requestGenerator(entity);
+                                }
 
                                 if (BypassCustomPluginExecution)
                                     request.Parameters["BypassCustomPluginExecution"] = true;
