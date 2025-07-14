@@ -34,6 +34,6 @@ namespace MarkMpn.Sql4Cds.XTB
 
     interface IFormatableDocumentWindow : IDocumentWindow
     {
-        void Format();
+        void Format(bool addDisplayNames);
     }
 }

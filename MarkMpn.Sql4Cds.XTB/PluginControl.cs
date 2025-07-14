@@ -304,7 +304,15 @@ namespace MarkMpn.Sql4Cds.XTB
             if (!(dockPanel.ActiveDocument is IFormatableDocumentWindow doc))
                 return;
 
-            doc.Format();
+            doc.Format(false);
+        }
+
+        private void addDisplayNamesToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!(dockPanel.ActiveDocument is IFormatableDocumentWindow doc))
+                return;
+
+            doc.Format(true);
         }
 
         private void tsbSettings_Click(object sender, EventArgs e)

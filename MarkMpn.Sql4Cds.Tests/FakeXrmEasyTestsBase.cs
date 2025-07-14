@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using FakeXrmEasy;
+using FakeXrmEasy.Extensions;
 using MarkMpn.Sql4Cds.Tests.Metadata;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -58,6 +59,42 @@ namespace MarkMpn.Sql4Cds.Tests
             _service = _context.GetOrganizationService();
 
             SetLookupTargets(_context);
+            SetDisplayNames(_context);
+        }
+
+        private void SetDisplayNames(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.LogicalName == "new_customentity")
+                {
+                    entity.DisplayName = new Label("Custom Entity", 1033);
+                }
+
+                if (entity.LogicalName == "account")
+                {
+                    entity.DisplayName = new Label("Account", 1033);
+                    var name = entity.Attributes.Single(a => a.LogicalName == "name");
+                    name.DisplayName = new Label("Account Name", 1033);
+                }
+
+                if (entity.LogicalName == "contact")
+                {
+                    entity.DisplayName = new Label("Contact", 1033);
+                    var fullname = entity.Attributes.Single(a => a.LogicalName == "fullname");
+                    fullname.DisplayName = new Label("Full Name", 1033);
+                }
+
+                entity.DisplayName.UserLocalizedLabel = entity.DisplayName.LocalizedLabels.SingleOrDefault(l => l.LanguageCode == 1033);
+
+                foreach (var attr in entity.Attributes)
+                {
+                    if (attr.DisplayName != null)
+                        attr.DisplayName.UserLocalizedLabel = attr.DisplayName.LocalizedLabels.SingleOrDefault(l => l.LanguageCode == 1033);
+                }
+
+                context.SetEntityMetadata(entity);
+            }
         }
 
         private void SetLookupTargets(XrmFakedContext context)

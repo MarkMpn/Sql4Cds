@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace MarkMpn.Sql4Cds.Tests
 {
     [TestClass]
-    public class FormatterTests
+    public class FormatterTests : FakeXrmEasyTestsBase
     {
         [TestMethod]
         public void SimpleSelect()
@@ -171,6 +172,46 @@ FROM   businessunit AS b
 WHERE  b.name = '';";
 
             Assert.AreEqual(expected, Formatter.Format(original));
+        }
+
+        [TestMethod]
+        public void AddDisplayNames()
+        {
+            var dataSource = new DataSource
+            {
+                Name = "test",
+                Connection = _service,
+                Metadata = new AttributeMetadataCache(_service),
+                TableSizeCache = new TableSizeCache(_service, new AttributeMetadataCache(_service)),
+                MessageCache = new MessageCache(_service, new AttributeMetadataCache(_service)),
+            };
+            var dataSources = new Dictionary<string, DataSource>
+            {
+                ["test"] = dataSource
+            };
+
+            var original = @"SELECT
+    a.name,
+    c.fullname,
+    c.lastname AS lname
+FROM account AS a
+INNER JOIN contact AS c ON c.parentcustomerid = a.accountid";
+
+            var expected = @"SELECT a.name AS [Account Name (Account)],
+       c.fullname AS [Full Name (Contact)],
+       c.lastname AS lname
+FROM   account AS a
+       INNER JOIN
+       contact AS c
+       ON c.parentcustomerid = a.accountid;";
+
+            Assert.AreEqual(expected, Formatter.Format(original,
+                new FormatterOptions
+                {
+                    AddDisplayNames = true,
+                    Connection = new Sql4CdsConnection(dataSources) { ColumnOrdering = ColumnOrdering.Alphabetical },
+                    DataSources = dataSources
+                }));
         }
     }
 }

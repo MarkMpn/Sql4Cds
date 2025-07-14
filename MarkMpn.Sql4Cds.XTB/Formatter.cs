@@ -4,19 +4,91 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
     public static class Formatter
     {
-        public static string Format(string sql)
+        public static string Format(string sql, FormatterOptions options = null)
         {
             var dom = new TSql160Parser(true);
             var fragment = dom.Parse(new StringReader(sql), out var errors);
 
             if (errors.Count != 0)
                 return sql;
+
+            if (options?.AddDisplayNames == true)
+            {
+                if (options.Connection == null)
+                    throw new ArgumentNullException();
+
+                var selectStatements = ((TSqlScript)fragment).Batches.SelectMany(batch => batch.Statements).OfType<SelectStatement>();
+
+                if (selectStatements.Any())
+                {
+                    using var cmd = options.Connection.CreateCommand();
+                    cmd.CommandText = sql;
+
+                    try
+                    {
+                        using var reader = cmd.ExecuteReader(System.Data.CommandBehavior.SchemaOnly);
+
+                        foreach (var select in selectStatements)
+                        {
+                            if (select.QueryExpression is QuerySpecification querySpec)
+                            {
+                                var schema = reader.GetSchemaTable();
+
+                                // Check if columns are from multiple tables
+                                var tables = new HashSet<string>();
+
+                                for (var colIndex = 0; colIndex < querySpec.SelectElements.Count; colIndex++)
+                                {
+                                    var table = schema.Rows[colIndex]["BaseTableName"] as string;
+                                    tables.Add(table);
+                                }
+
+                                for (var colIndex = 0; colIndex < querySpec.SelectElements.Count; colIndex++)
+                                {
+                                    if (!(querySpec.SelectElements[colIndex] is SelectScalarExpression scalar))
+                                        break;
+
+                                    if (scalar.ColumnName != null)
+                                        continue; // Already has an alias
+
+                                    var server = schema.Rows[colIndex]["BaseServerName"] as string;
+                                    var table = schema.Rows[colIndex]["BaseTableName"] as string;
+                                    var column = schema.Rows[colIndex]["BaseColumnName"] as string;
+
+                                    if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(table) && !string.IsNullOrEmpty(column) &&
+                                        options.DataSources.TryGetValue(server, out var dataSource) &&
+                                        dataSource.Metadata.TryGetValue(table, out var metadata))
+                                    {
+                                        var attribute = metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(column, StringComparison.OrdinalIgnoreCase));
+
+                                        if (attribute?.DisplayName?.UserLocalizedLabel?.Label != null)
+                                        {
+                                            var alias = attribute.DisplayName.UserLocalizedLabel.Label;
+
+                                            if (tables.Count > 1 && metadata.DisplayName?.UserLocalizedLabel?.Label != null)
+                                                alias += $" ({metadata.DisplayName.UserLocalizedLabel.Label})";
+
+                                            scalar.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = alias, QuoteType = QuoteType.SquareBracket } };
+                                        }
+                                    }
+                                }
+                            }
+
+                            reader.NextResult();
+                        }
+                    }
+                    catch (Sql4CdsException)
+                    {
+                    }
+                }
+            }
 
             return Format(fragment);
         }
@@ -188,5 +260,14 @@ namespace MarkMpn.Sql4Cds.XTB
 
             return false;
         }
+    }
+
+    public class FormatterOptions
+    {
+        public bool AddDisplayNames { get; set; }
+
+        public Sql4CdsConnection Connection { get; set; }
+
+        public IDictionary<string, DataSource> DataSources { get; set; }
     }
 }
