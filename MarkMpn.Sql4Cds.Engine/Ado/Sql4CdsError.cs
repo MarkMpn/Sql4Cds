@@ -931,6 +931,26 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(2238, func, Collation.USEnglish.ToSqlString($"XQuery [{func.FunctionName.Value.ToLowerInvariant()}()]: "), (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
+        internal static Sql4CdsError ObjectDoesNotExist(string operation, string objectType, string objectName)
+        {
+            return Create(3701, null, Collation.USEnglish.ToSqlString(operation), Collation.USEnglish.ToSqlString(objectType), (SqlInt32)objectName.Length, Collation.USEnglish.ToSqlString(objectName));
+        }
+
+        internal static Sql4CdsError DerivedTableAffectsMultipleTables(TSqlFragment table, string alias)
+        {
+            return Create(4405, table, (SqlInt32)alias.Length, Collation.USEnglish.ToSqlString(alias));
+        }
+
+        internal static Sql4CdsError DerivedTableContainsUnion(QueryDerivedTable table)
+        {
+            return Create(4417, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
+        }
+
+        internal static Sql4CdsError DerivedTableContainsAggregatesDistinctOrGroupBy(QueryDerivedTable table)
+        {
+            return Create(4418, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

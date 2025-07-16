@@ -201,7 +201,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 innerSchema.ContainsColumn(definedValue.Value, out var innerColumn);
 
-                var definedValueSchemaCol = innerSchema.Schema[innerColumn].Invisible().Calculated();
+                var definedValueSchemaCol = innerSchema.Schema[innerColumn].Invisible().Calculated().Wildcardable(false);
 
                 if (JoinType == QualifiedJoinType.LeftOuter)
                     definedValueSchemaCol = definedValueSchemaCol.Null();

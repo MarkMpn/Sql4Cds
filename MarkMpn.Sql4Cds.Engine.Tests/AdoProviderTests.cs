@@ -435,6 +435,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Assert.AreEqual(1, schema.Rows.Count);
                     Assert.AreEqual("name", schema.Rows[0]["ColumnName"]);
                     Assert.AreEqual(typeof(string), schema.Rows[0]["DataType"]);
+                    Assert.AreEqual("name", schema.Rows[0]["BaseColumnName"]);
+                    Assert.AreEqual("account", schema.Rows[0]["BaseTableName"]);
+                    Assert.AreEqual("dbo", schema.Rows[0]["BaseSchemaName"]);
 
                     Assert.IsFalse(reader.Read());
                 }
@@ -2910,6 +2913,24 @@ DEALLOCATE MyCursor";
                     Assert.AreEqual(new Guid("218ae23d-48ee-ef11-be20-7c1e5258ff38"), reader.GetGuid(0));
                     Assert.AreEqual("Mark", reader.GetString(1));
                     Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void NullabilityLogic()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/677
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT name FROM account WHERE NOT (name IS NULL AND employees IS NULL)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+                    var nameSchema = schema.Rows[0];
+                    Assert.IsTrue((bool)nameSchema["AllowDBNull"]);
                 }
             }
         }

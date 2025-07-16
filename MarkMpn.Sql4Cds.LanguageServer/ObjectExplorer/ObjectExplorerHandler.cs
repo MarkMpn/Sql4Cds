@@ -350,7 +350,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                 }
                 else if (url.AbsolutePath == "/Programmability/TVF")
                 {
-                    foreach (var msg in session.DataSource.MessageCache.GetAllMessages().OrderBy(m => m.Name))
+                    foreach (var msg in session.DataSource.MessageCache.GetAllMessages(false).OrderBy(m => m.Name))
                     {
                         if (msg.IsValidAsTableValuedFunction())
                         {
@@ -373,7 +373,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                 }
                 else if (url.AbsolutePath == "/Programmability/SProcs")
                 {
-                    foreach (var msg in session.DataSource.MessageCache.GetAllMessages().OrderBy(m => m.Name))
+                    foreach (var msg in session.DataSource.MessageCache.GetAllMessages(false).OrderBy(m => m.Name))
                     {
                         if (msg.IsValidAsStoredProcedure())
                         {

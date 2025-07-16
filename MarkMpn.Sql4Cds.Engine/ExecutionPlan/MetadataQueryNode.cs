@@ -659,7 +659,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_entityNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.Criteria, prop.PropertyName))
                         nullable = false;
 
-                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -695,7 +695,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_attributeNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.AttributeQuery?.Criteria, prop.PropertyName))
                         nullable = false;
 
-                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -732,7 +732,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
                         nullable = false;
 
-                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -769,7 +769,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
                         nullable = false;
 
-                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -806,7 +806,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_manyToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
                         nullable = false;
 
-                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -843,7 +843,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_keyNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.KeyQuery?.Criteria, prop.PropertyName))
                         nullable = false;
 
-                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -880,7 +880,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_valueNotNullProps.Contains(prop.PropertyName))
                         nullable = false;
 
-                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {

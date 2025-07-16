@@ -502,5 +502,38 @@ SELECT * from CTE";
                 }
             }
         }
+
+        [TestMethod]
+        public void OpenJsonResultsNotSpooled()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/682
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+CREATE TABLE #tmp (
+    ID INT NOT NULL,
+    JSON NVARCHAR(MAX) NOT NULL
+);
+
+INSERT INTO #tmp (ID, JSON) VALUES (1, '{""key"":""A""}');
+INSERT INTO #tmp (ID, JSON) VALUES (2, '{""key"":""B""}');
+
+SELECT t.ID, (SELECT TOP 1 [value] FROM OPENJSON(t.JSON)) AS [key] from #tmp t";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.AreEqual("A", reader.GetString(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(2, reader.GetInt32(0));
+                    Assert.AreEqual("B", reader.GetString(1));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

@@ -214,7 +214,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var prop in props)
             {
-                schema[$"{alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, true, false);
+                schema[$"{alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, true, false, isWildcardable: true);
 
                 if (!aliases.TryGetValue(prop.Name, out var a))
                 {

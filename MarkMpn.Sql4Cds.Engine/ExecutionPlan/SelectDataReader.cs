@@ -250,10 +250,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             for (var i = 0; i < _columnSet.Count; i++)
             {
                 var column = _columnSet[i];
-                var sqlType = _schema.Schema[_columnSet[i].SourceColumn].Type;
-                var nullable = _schema.Schema[_columnSet[i].SourceColumn].IsNullable;
+                var schemaCol = _schema.Schema[_columnSet[i].SourceColumn];
+                var sourceServer = (object)schemaCol.SourceServer ?? DBNull.Value;
+                var sourceSchema = (object)schemaCol.SourceSchema ?? DBNull.Value;
+                var sourceTable = (object)schemaCol.SourceTable ?? DBNull.Value;
+                var sourceColumn = (object)schemaCol.SourceColumn ?? DBNull.Value;
+                var sqlType = schemaCol.Type;
+                var nullable = schemaCol.IsNullable;
                 var key = _schema.PrimaryKey == _columnSet[i].SourceColumn;
-                var expression = _schema.Schema[_columnSet[i].SourceColumn].IsCalculated;
+                var expression = schemaCol.IsCalculated;
                 var aliased = _columnSet[i].OutputColumn != null && !_columnSet[i].SourceColumn.SplitMultiPartIdentifier().Last().Equals(_columnSet[i].OutputColumn.SplitMultiPartIdentifier().Last(), StringComparison.OrdinalIgnoreCase);
                 var providerType = sqlType.ToNetType(out _);
                 var type = providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml) ? providerType : providerType == typeof(SqlVariant) ? typeof(object) : SqlTypeConverter.SqlToNetType(providerType);
@@ -273,11 +278,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     scale,                // NumericScale
                     key,                  // IsUnique
                     key,                  // IsKey
-                    DBNull.Value,         // BaseServerName
+                    sourceServer,         // BaseServerName
                     DBNull.Value,         // BaseCatalogName
-                    DBNull.Value,         // BaseColumnName
-                    DBNull.Value,         // BaseSchemaName
-                    DBNull.Value,         // BaseTableName
+                    sourceColumn,         // BaseColumnName
+                    sourceSchema,         // BaseSchemaName
+                    sourceTable,          // BaseTableName
                     type,                 // DataType
                     nullable,             // AllowDBNull
                     providerType,         // ProviderType

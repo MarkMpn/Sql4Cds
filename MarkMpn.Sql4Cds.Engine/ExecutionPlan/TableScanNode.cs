@@ -50,10 +50,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     netType = SqlTypeConverter.NetToSqlType(netType);
 
                 var sqlType = netType.ToSqlType(context.PrimaryDataSource);
-                var colDefinition = (IColumnDefinition)new ColumnDefinition(sqlType, col.AllowDBNull, false);
+                var colDefinition = (IColumnDefinition)new ColumnDefinition(sqlType, col.AllowDBNull, false, isWildcardable: true);
 
                 if (col.ColumnName == primaryKey)
-                    colDefinition = colDefinition.Invisible();
+                    colDefinition = colDefinition.Invisible().Wildcardable(false);
+
+                colDefinition = colDefinition.FromSource(null, null, table.TableName, alias, col.ColumnName);
 
                 var baseColName = col.ColumnName.EscapeIdentifier();
                 var qualifiedColName = alias + "." + baseColName;

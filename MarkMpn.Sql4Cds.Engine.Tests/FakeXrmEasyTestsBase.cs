@@ -226,6 +226,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     // Add metadata for primarycontactidname virtual attribute
                     var nameAttr = entity.Attributes.Single(a => a.LogicalName == "primarycontactidname");
                     nameAttr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, "primarycontactid");
+
+                    // Add metadata for owneridname virtual attribute
+                    nameAttr = entity.Attributes.Single(a => a.LogicalName == "owneridname");
+                    nameAttr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, "ownerid");
                 }
                 else
                 {

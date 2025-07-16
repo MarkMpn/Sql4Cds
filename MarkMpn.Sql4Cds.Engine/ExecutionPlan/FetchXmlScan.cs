@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlClient;
@@ -92,10 +93,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private List<INullable> _lastPageValues;
         private bool _missingPagingCookie;
         private bool _isVirtualEntity;
+        private List<string> _lookupFieldsWithVirtualNameField;
+        private List<string> _lookupFieldsWithVirtualTypeField;
 
         public FetchXmlScan()
         {
             AllPages = true;
+
+            _lookupFieldsWithVirtualNameField = new List<string>();
+            _lookupFieldsWithVirtualTypeField = new List<string>();
         }
 
         /// <summary>
@@ -505,12 +511,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // from the SQL formats in BaseDataNode.TranslateFetchXMLCriteriaWithVirtualAttributes
                 if (attrType.IsSameAs(DataTypeHelpers.DateTime))
                 {
+                    var defaultConversion = conversion;
                     conversion = (value, ctx) =>
                     {
                         if (value is SqlString str && DateTimeOffset.TryParseExact(str.Value, "yyyy-MM-ddTHH:mm:ss.FFFzzz", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
                             return new SqlDateTimeOffset(dt);
 
-                        return conversion(value, ctx);
+                        return defaultConversion(value, ctx);
                     };
                 }
 
@@ -611,7 +618,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var order in items.OfType<FetchOrderType>())
             {
                 if (!String.IsNullOrEmpty(order.alias))
-                    lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.alias.Equals(order.alias, StringComparison.OrdinalIgnoreCase));
+                    lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.alias?.Equals(order.alias, StringComparison.OrdinalIgnoreCase) == true);
                 else
                     lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.name.Equals(order.attribute, StringComparison.OrdinalIgnoreCase));
 
@@ -654,8 +661,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public void RemoveAllAttributes()
+        {
+            // Remove any existing sorts
+            if (Entity.Items != null)
+            {
+                Entity.Items = Entity.Items.Where(i => !(i is allattributes)).ToArray();
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                    linkEntity.Items = linkEntity.Items.Where(i => !(i is allattributes)).ToArray();
+            }
+        }
+
+        public HashSet<FetchAttributeType> GetAttributes()
+        {
+            var attributes = new HashSet<FetchAttributeType>();
+
+            if (Entity.Items != null)
+            {
+                foreach (var attr in Entity.Items.OfType<FetchAttributeType>())
+                    attributes.Add(attr);
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                {
+                    foreach (var attr in linkEntity.Items.OfType<FetchAttributeType>())
+                        attributes.Add(attr);
+                }
+            }    
+
+            return attributes;
+        }
+
+        public void RemoveAttribute(FetchAttributeType attr)
+        {
+            if (Entity.Items == null)
+                return;
+
+            Entity.Items = Entity.Items.Where(i => i != attr).ToArray();
+
+            foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                linkEntity.Items = linkEntity.Items.Where(i => i != attr).ToArray();
+        }
+
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, DataSource dataSource)
         {
+            if (Int64.TryParse(entity.RowVersion, out var versionNumber))
+            {
+                var buf = new byte[8];
+                BinaryPrimitives.WriteInt64BigEndian(buf.AsSpan(), versionNumber);
+                entity["versionnumber"] = buf;
+            }
+
             // Expose any formatted values for OptionSetValue and EntityReference values
             foreach (var formatted in entity.FormattedValues)
             {
@@ -728,18 +784,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Expose the type and name of lookup values
-            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
+            foreach (var attr in _lookupFieldsWithVirtualNameField)
             {
-                var typeSuffix = AddSuffix(attribute.Key, "type");
-                var nameSuffix = AddSuffix(attribute.Key, "name");
+                if (entity.Attributes.TryGetValue(attr, out var value) && value is EntityReference er)
+                {
+                    var nameSuffix = AddSuffix(attr, "name");
+                    entity[nameSuffix] = er.Name;
+                }
+            }
 
-                // NOTE: pid for elastic lookup values is exposed as a separate column in the returned entity already
-
-                if (!entity.Contains(typeSuffix))
-                    entity[typeSuffix] = ((EntityReference)attribute.Value).LogicalName;
-
-                if (!entity.Contains(nameSuffix))
-                    entity[nameSuffix] = ((EntityReference)attribute.Value).Name;
+            foreach (var attr in _lookupFieldsWithVirtualTypeField)
+            {
+                if (entity.Attributes.TryGetValue(attr, out var value) && value is EntityReference er)
+                {
+                    var typeSuffix = AddSuffix(attr, "type");
+                    entity[typeSuffix] = er.LogicalName;
+                }
             }
 
             // Convert values to SQL types
@@ -1079,6 +1139,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = FetchXml.aggregate ? null : $"{Alias.EscapeIdentifier()}.{meta.PrimaryIdAttribute}";
             var sortOrder = new List<string>();
+            _lookupFieldsWithVirtualNameField.Clear();
+            _lookupFieldsWithVirtualTypeField.Clear();
 
             AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, entity.name, Alias.EscapeIdentifier(), entity.Items, true, false);
 
@@ -1113,7 +1175,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private void MapColumn(string sourceColumn, string outputColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, List<string> sortOrder)
         {
             var src = schema[sourceColumn];
-            schema[outputColumn] = new ColumnDefinition(src.Type, src.IsNullable, src.IsCalculated);
+            schema[outputColumn] = new ColumnDefinition(src.Type, src.IsNullable, src.IsCalculated, isWildcardable: true);
 
             var simpleName = outputColumn.ToColumnReference().MultiPartIdentifier.Identifiers.Last().Value.EscapeIdentifier();
 
@@ -1173,7 +1235,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (attrMetadata == null)
                 {
                     attrMetadata = metadata[Entity.name].FindBaseAttributeFromVirtualAttribute(attr.name, out _);
-                    isVirtual = true;
+
+                    if (attrMetadata != null)
+                        isVirtual = true;
                 }
 
                 if (attrMetadata != null)
@@ -1271,7 +1335,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var fullName = $"{alias}.{attrMetadata.LogicalName.EscapeIdentifier()}";
                     var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName.EscapeIdentifier();
                     var attrType = attrMetadata.GetAttributeSqlType(dataSource, false);
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, meta, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, meta, attrMetadata, innerJoin, alias);
                 }
             }
 
@@ -1329,7 +1393,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (requireTablePrefix)
                         attrAlias = null;
 
-                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, meta, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, meta, attrMetadata, innerJoin, alias);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -1346,7 +1410,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName.EscapeIdentifier();
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, meta, attrMetadata, innerJoin);
+                        AddSchemaAttribute(dataSource, schema, aliases, fullName, requireTablePrefix ? null : attrName, attrType, meta, attrMetadata, innerJoin, alias);
                     }
                 }
 
@@ -1357,7 +1421,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (!String.IsNullOrEmpty(sort.alias))
                     {
-                        var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a.alias.Equals(sort.alias, StringComparison.OrdinalIgnoreCase));
+                        var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a?.alias.Equals(sort.alias, StringComparison.OrdinalIgnoreCase) == true);
 
                         if (!FetchXml.aggregate || attribute != null && attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
                             fullName = $"{alias}.{attribute.alias.EscapeIdentifier()}";
@@ -1451,12 +1515,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullFilters(schema, aliases, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, EntityMetadata entityMetadata, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, EntityMetadata entityMetadata, AttributeMetadata attrMetadata, bool innerJoin, string alias)
         {
             var notNull = innerJoin && attrMetadata.LogicalName == entityMetadata.PrimaryIdAttribute;
 
             // Add the logical attribute
-            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, null, notNull);
+            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, null, notNull, entityMetadata.LogicalName, alias, attrMetadata.LogicalName);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -1466,10 +1530,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             foreach (var virtualAttr in attrMetadata.GetVirtualAttributes(dataSource, false))
-                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull);
+            {
+                if (virtualAttr.Suffix == "name")
+                    _lookupFieldsWithVirtualNameField.Add(fullName);
+
+                if (virtualAttr.Suffix == "type")
+                    _lookupFieldsWithVirtualTypeField.Add(fullName);
+
+                AddSchemaAttribute(schema, aliases, AddSuffix(fullName, virtualAttr.Suffix), (attrMetadata.LogicalName + virtualAttr.Suffix).EscapeIdentifier(), null, virtualAttr.DataType, virtualAttr.NotNull ?? notNull, entityMetadata.LogicalName, alias, attrMetadata.LogicalName + virtualAttr.Suffix);
+            }
         }
 
-        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull)
+        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, Func<DataTypeReference> typeLoader, bool notNull, string table, string alias, string column)
         {
             var parts = fullName.SplitMultiPartIdentifier();
             var visible = true;
@@ -1481,10 +1553,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_isVirtualEntity && type is SqlDataTypeReferenceWithCollation sqlType && sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
                 type = DataTypeHelpers.NVarChar(Int32.MaxValue, sqlType.Collation, sqlType.CollationLabel);
 
+            IColumnDefinition schemaCol;
             if (type != null)
-                schema[fullName] = new ColumnDefinition(type, !notNull, false, visible);
+                schemaCol = new ColumnDefinition(type, !notNull, false, visible, isWildcardable: visible);
             else
-                schema[fullName] = new LazyColumnDefinition(typeLoader, !notNull, false, visible);
+                schemaCol = new LazyColumnDefinition(typeLoader, !notNull, false, visible, isWildcardable: visible);
+
+            schemaCol = schemaCol.FromSource(DataSource, "dbo", table, alias, column);
+
+            schema[fullName] = schemaCol;
 
             if (simpleName == null)
                 return;
@@ -2799,6 +2876,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PartitionId = PartitionId,
                 PartitionIdVariable = PartitionIdVariable,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                _lookupFieldsWithVirtualNameField = _lookupFieldsWithVirtualNameField,
+                _lookupFieldsWithVirtualTypeField = _lookupFieldsWithVirtualTypeField,
             };
 
             // Custom properties are not serialized, so need to copy them manually

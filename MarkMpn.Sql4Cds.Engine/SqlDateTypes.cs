@@ -85,6 +85,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public DateTime Value => _dt.Value;
 
+        public short DayTicks => (short)(Value - MinValue.Value).TotalDays;
+
+        public short TimeTicks => (short)Value.TimeOfDay.TotalMinutes;
+
         public static SqlBoolean operator ==(SqlSmallDateTime x, SqlSmallDateTime y) => x.IsNull || y.IsNull ? SqlBoolean.Null : x._dt == y._dt;
 
         public static SqlBoolean operator !=(SqlSmallDateTime x, SqlSmallDateTime y) => !(x == y);
@@ -292,14 +296,20 @@ namespace MarkMpn.Sql4Cds.Engine
     public struct SqlTime : INullable, IComparable
     {
         private readonly TimeSpan? _ts;
+        private readonly short _scale;
         private static readonly DateTime _defaultDate = new DateTime(1900, 1, 1);
 
-        public SqlTime(TimeSpan? ts)
+        public SqlTime(TimeSpan? ts) : this(ts, 7)
         {
-            _ts = ts;
         }
 
-        public static readonly SqlTime Null = new SqlTime(null);
+        public SqlTime(TimeSpan? ts, short scale)
+        {
+            _ts = ts;
+            _scale = scale;
+        }
+
+        public static readonly SqlTime Null = new SqlTime(null, 7);
 
         public bool IsNull => _ts == null;
 
@@ -349,6 +359,24 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public TimeSpan Value => _ts.Value;
 
+        public short Scale => _scale;
+
+        public static SqlTime ConvertToScale(SqlTime value, short scale)
+        {
+            if (value.IsNull)
+                return new SqlTime(null, scale);
+
+            var ticks = value.Value.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value - TimeSpan.FromTicks(ticks);
+
+            if (scale == 0)
+                return new SqlTime(integerSeconds, 0);
+
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return new SqlTime(integerSeconds + TimeSpan.FromTicks((int)(rounded * TimeSpan.TicksPerSecond)), scale);
+        }
+
         public static SqlBoolean operator ==(SqlTime x, SqlTime y) => x.IsNull || y.IsNull ? SqlBoolean.Null : x._ts == y._ts;
 
         public static SqlBoolean operator !=(SqlTime x, SqlTime y) => !(x == y);
@@ -390,7 +418,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return Null;
 
-            return new SqlTime(dt.Value.TimeOfDay);
+            return new SqlTime(dt.Value.TimeOfDay, 7);
         }
         /*
         public static implicit operator SqlTime(SqlDateTime2 dt)
@@ -416,7 +444,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static implicit operator SqlTime(TimeSpan? ts)
         {
-            return new SqlTime(ts);
+            return new SqlTime(ts, 7);
         }
 
         public override string ToString()
@@ -428,12 +456,18 @@ namespace MarkMpn.Sql4Cds.Engine
     public struct SqlDateTime2 : INullable, IComparable
     {
         private readonly DateTime? _dt;
+        private readonly short _scale;
         private static readonly string[] x_DateTimeFormats = new string[8] { "MMM d yyyy hh:mm:ss:ffftt", "MMM d yyyy hh:mm:ss:fff", "d MMM yyyy hh:mm:ss:ffftt", "d MMM yyyy hh:mm:ss:fff", "hh:mm:ss:ffftt", "hh:mm:ss:fff", "yyMMdd", "yyyyMMdd" };
         private static readonly DateTime _defaultDate = new DateTime(1900, 1, 1);
 
-        public SqlDateTime2(DateTime? dt)
+        public SqlDateTime2(DateTime? dt) : this(dt, 7)
+        {
+        }
+
+        public SqlDateTime2(DateTime? dt, short scale)
         {
             _dt = dt;
+            _scale = scale;
         }
 
         public static readonly SqlDateTime2 Null = new SqlDateTime2(null);
@@ -486,6 +520,24 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public DateTime Value => _dt.Value;
 
+        public short Scale => _scale;
+
+        public static SqlDateTime2 ConvertToScale(SqlDateTime2 value, short scale)
+        {
+            if (value.IsNull)
+                return new SqlTime(null, scale);
+
+            var ticks = value.Value.TimeOfDay.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value - TimeSpan.FromTicks(ticks);
+
+            if (scale == 0)
+                return new SqlDateTime2(integerSeconds, 0);
+
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return new SqlDateTime2(integerSeconds + TimeSpan.FromTicks((int)(rounded * TimeSpan.TicksPerSecond)), scale);
+        }
+
         public static SqlBoolean operator ==(SqlDateTime2 x, SqlDateTime2 y) => x.IsNull || y.IsNull ? SqlBoolean.Null : x._dt == y._dt;
 
         public static SqlBoolean operator !=(SqlDateTime2 x, SqlDateTime2 y) => !(x == y);
@@ -519,7 +571,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return SqlTime.Null;
 
-            return (SqlTime)dt._dt.Value.TimeOfDay;
+            return new SqlTime(dt._dt.Value.TimeOfDay, dt.Scale);
         }
         /*
         public static implicit operator SqlDateTimeOffset(SqlDateTime2 dt)
@@ -551,7 +603,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return Null;
 
-            return new SqlDateTime2(_defaultDate + dt.Value);
+            return new SqlDateTime2(_defaultDate + dt.Value, dt.Scale);
         }
         /*
         public static implicit operator SqlDateTime2(SqlDateTimeOffset dt)
@@ -595,11 +647,17 @@ namespace MarkMpn.Sql4Cds.Engine
     public struct SqlDateTimeOffset : INullable, IComparable
     {
         private readonly DateTimeOffset? _dt;
+        private readonly short _scale;
         private static readonly DateTime _defaultDate = new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        public SqlDateTimeOffset(DateTimeOffset? dt)
+        public SqlDateTimeOffset(DateTimeOffset? dt) : this(dt, 7)
+        {
+        }
+
+        public SqlDateTimeOffset(DateTimeOffset? dt, short scale)
         {
             _dt = dt;
+            _scale = scale;
         }
 
         public static readonly SqlDateTimeOffset Null = new SqlDateTimeOffset(null);
@@ -652,6 +710,24 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public DateTimeOffset Value => _dt.Value;
 
+        public short Scale => _scale;
+
+        public static SqlDateTimeOffset ConvertToScale(SqlDateTimeOffset value, short scale)
+        {
+            if (value.IsNull)
+                return new SqlDateTimeOffset(null, scale);
+
+            var ticks = value.Value.TimeOfDay.Ticks % TimeSpan.TicksPerSecond;
+            var integerSeconds = value.Value - TimeSpan.FromTicks(ticks);
+
+            if (scale == 0)
+                return new SqlDateTimeOffset(integerSeconds, 0);
+
+            var fractionalSeconds = (decimal)ticks / TimeSpan.TicksPerSecond;
+            var rounded = Math.Round(fractionalSeconds, scale, MidpointRounding.AwayFromZero);
+            return new SqlDateTimeOffset(integerSeconds + TimeSpan.FromTicks((int)(rounded * TimeSpan.TicksPerSecond)), scale);
+        }
+
         public static SqlBoolean operator ==(SqlDateTimeOffset x, SqlDateTimeOffset y) => x.IsNull || y.IsNull ? SqlBoolean.Null : x._dt == y._dt;
 
         public static SqlBoolean operator !=(SqlDateTimeOffset x, SqlDateTimeOffset y) => !(x._dt != y._dt);
@@ -685,7 +761,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return SqlTime.Null;
 
-            return (SqlTime)dt._dt.Value.TimeOfDay;
+            return new SqlTime(dt._dt.Value.TimeOfDay, dt.Scale);
         }
 
         public static implicit operator SqlDateTime2(SqlDateTimeOffset dt)
@@ -693,7 +769,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return SqlDateTime.Null;
 
-            return (SqlDateTime2)dt._dt.Value.DateTime;
+            return new SqlDateTime2(dt._dt.Value.DateTime, dt.Scale);
         }
 
         public static implicit operator SqlDateTimeOffset(SqlDateTime dt)
@@ -717,7 +793,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return Null;
 
-            return new SqlDateTimeOffset(_defaultDate + dt.Value);
+            return new SqlDateTimeOffset(_defaultDate + dt.Value, dt.Scale);
         }
 
         public static implicit operator SqlDateTimeOffset(SqlDateTime2 dt)
@@ -725,7 +801,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dt.IsNull)
                 return Null;
 
-            return new SqlDateTimeOffset(DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc));
+            return new SqlDateTimeOffset(DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc), dt.Scale);
         }
 
         public static implicit operator SqlDateTimeOffset(SqlString str)

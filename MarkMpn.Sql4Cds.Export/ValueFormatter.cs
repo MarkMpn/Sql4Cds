@@ -60,6 +60,10 @@ namespace MarkMpn.Sql4Cds.Export
             {
                 text = dec.ToString("0" + (numericScale == 0 ? "" : ("." + new string('0', numericScale.Value))));
             }
+            else if (value is byte[] bin)
+            {
+                text = "0x" + BitConverter.ToString(bin).Replace("-", "").ToUpperInvariant();
+            }
 
             return new DbCellValue
             {

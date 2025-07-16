@@ -119,7 +119,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Admin
                 metadata.Add(new ObjectMetadata { MetadataType = MetadataType.Table, MetadataTypeName = "Table", Name = table.LogicalName, Schema = "metadata" });
             }
 
-            foreach (var msg in con.DataSource.MessageCache.GetAllMessages().OrderBy(m => m.Name))
+            foreach (var msg in con.DataSource.MessageCache.GetAllMessages(false).OrderBy(m => m.Name))
             {
                 if (msg.IsValidAsTableValuedFunction())
                 {

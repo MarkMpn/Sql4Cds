@@ -78,8 +78,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                if (String.IsNullOrEmpty(columnName))
-                    columnName = columns.Count.ToString();
+                while (String.IsNullOrEmpty(columnName) || columns.ContainsKey(columnName))
+                    columnName += columns.Count.ToString();
 
                 columns[columnName] = new ColumnDefinition(dataType, nullable, isCalculated);
             }

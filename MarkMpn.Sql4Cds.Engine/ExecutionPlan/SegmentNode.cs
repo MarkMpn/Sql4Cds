@@ -28,6 +28,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
+            foreach (var col in GroupBy)
+            {
+                if (!requiredColumns.Contains(col))
+                    requiredColumns.Add(col);
+            }
+
             Source.AddRequiredColumns(context, requiredColumns);
         }
 

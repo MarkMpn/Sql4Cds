@@ -569,8 +569,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                                 ||
                                                 (
                                                     schemaName == "bin" &&
-                                                    instance.Metadata.RecycleBinEntities != null &&
-                                                    instance.Metadata.RecycleBinEntities.Contains(e.LogicalName)
+                                                    instance.Metadata.TryGetRecycleBinEntities()?.Contains(e.LogicalName) == true
                                                 )
                                             )
                                         );
@@ -785,7 +784,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     // Show TVF list
                     if (fromClause && ds.MessageCache != null)
-                        list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, ds, currentLength)));
+                        list.AddRange(ds.MessageCache.GetAllMessages(true).Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, ds, currentLength)));
                 }
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
@@ -803,7 +802,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 {
                     // Could be a schema name
                     var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
-                    if (instance?.Metadata?.RecycleBinEntities != null)
+                    if (instance?.Metadata?.TryGetRecycleBinEntities()?.Length > 0)
                         schemaNames = schemaNames.Append("bin");
 
                     schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
@@ -836,13 +835,18 @@ namespace MarkMpn.Sql4Cds.XTB
                         else
                         {
                             // Suggest TVFs
-                            messages = instance.MessageCache.GetAllMessages();
+                            messages = instance.MessageCache.GetAllMessages(true);
                         }
                     }
                     else if (schemaName.Equals("bin", StringComparison.OrdinalIgnoreCase))
                     {
                         // Suggest tables that are enabled for the recycle bin
-                        entities = instance.Metadata.GetAllEntities().Where(e => instance.Metadata.RecycleBinEntities != null && instance.Metadata.RecycleBinEntities.Contains(e.LogicalName));
+                        var recycleBinEntities = instance.Metadata.TryGetRecycleBinEntities();
+
+                        if (recycleBinEntities?.Length > 0)
+                            entities = instance.Metadata.GetAllEntities().Where(e => recycleBinEntities.Contains(e.LogicalName));
+                        else
+                            entities = Array.Empty<EntityMetadata>();
                     }
                     else
                     {
@@ -876,7 +880,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
 
                 if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.MessageCache != null)
-                    list.AddRange(ds.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, ds, currentLength)));
+                    list.AddRange(ds.MessageCache.GetAllMessages(true).Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, _columnOrdering, ds, currentLength)));
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
@@ -893,7 +897,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 {
                     // Could be a schema name
                     var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
-                    if (instance?.Metadata?.RecycleBinEntities != null)
+                    if (instance?.Metadata?.TryGetRecycleBinEntities()?.Length > 0)
                         schemaNames = schemaNames.Append("bin");
 
                     schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
@@ -904,7 +908,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 // Could be a sproc name
                 if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && instance?.MessageCache != null)
-                    list.AddRange(instance.MessageCache.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, instance, lastPartLength)));
+                    list.AddRange(instance.MessageCache.GetAllMessages(true).Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, _columnOrdering, instance, lastPartLength)));
             }
 
             list.Sort();

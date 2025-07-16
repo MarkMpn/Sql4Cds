@@ -312,218 +312,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _cteSubplans = new Dictionary<string, AliasNode>(StringComparer.OrdinalIgnoreCase);
 
             if (statement is StatementWithCtesAndXmlNamespaces stmtWithCtes)
-            {
                 hints = stmtWithCtes.OptimizerHints;
-
-                if (stmtWithCtes.WithCtesAndXmlNamespaces != null)
-                {
-                    foreach (var cte in stmtWithCtes.WithCtesAndXmlNamespaces.CommonTableExpressions)
-                    {
-                        if (_cteSubplans.ContainsKey(cte.ExpressionName.Value))
-                            throw new NotSupportedQueryFragmentException(Sql4CdsError.CteDuplicateName(cte.ExpressionName));
-
-                        var cteValidator = new CteValidatorVisitor();
-                        cte.Accept(cteValidator);
-
-                        // Start by converting the anchor query to a subquery
-                        var plan = ConvertSelectStatement(cteValidator.AnchorQuery, hints, null, null, _nodeContext);
-
-                        plan.ExpandWildcardColumns(_nodeContext);
-
-                        // Apply column aliases
-                        if (cte.Columns.Count > 0)
-                        {
-                            if (cte.Columns.Count < plan.ColumnSet.Count)
-                                throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooManyColumns(cte.ExpressionName));
-
-                            if (cte.Columns.Count > plan.ColumnSet.Count)
-                                throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooFewColumns(cte.ExpressionName));
-
-                            for (var i = 0; i < cte.Columns.Count; i++)
-                                plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
-                        }
-
-                        for (var i = 0; i < plan.ColumnSet.Count; i++)
-                        {
-                            if (plan.ColumnSet[i].OutputColumn == null)
-                                throw new NotSupportedQueryFragmentException(Sql4CdsError.CteUnnamedColumn(cte.ExpressionName, i + 1));
-                        }
-
-                        var anchorQuery = new AliasNode(plan, cte.ExpressionName, _nodeContext);
-                        _cteSubplans.Add(cte.ExpressionName.Value, anchorQuery);
-
-                        if (cteValidator.RecursiveQueries.Count > 0)
-                        {
-                            anchorQuery = (AliasNode)anchorQuery.Clone();
-                            var ctePlan = anchorQuery.Source;
-                            var anchorSchema = anchorQuery.GetSchema(_nodeContext);
-
-                            // Add a ComputeScalar node to add the initial recursion depth (0)
-                            var recursionDepthField = _nodeContext.GetExpressionName();
-                            var initialRecursionDepthComputeScalar = new ComputeScalarNode
-                            {
-                                Source = ctePlan,
-                                Columns =
-                                {
-                                    [recursionDepthField] = new IntegerLiteral { Value = "0" }
-                                }
-                            };
-
-                            // Add a ConcatenateNode to combine the anchor results with the recursion results
-                            var recurseConcat = new ConcatenateNode
-                            {
-                                Sources = { initialRecursionDepthComputeScalar },
-                            };
-
-                            foreach (var col in anchorQuery.ColumnSet)
-                            {
-                                var concatCol = new ConcatenateColumn
-                                {
-                                    SourceColumns = { col.SourceColumn },
-                                    OutputColumn = col.OutputColumn
-                                };
-
-                                recurseConcat.ColumnSet.Add(concatCol);
-
-                                col.SourceColumn = col.OutputColumn;
-                            }
-
-                            recurseConcat.ColumnSet.Add(new ConcatenateColumn
-                            {
-                                SourceColumns = { recursionDepthField },
-                                OutputColumn = recursionDepthField
-                            });
-
-                            // Add an IndexSpool node in stack mode to enable the recursion
-                            var recurseIndexStack = new IndexSpoolNode
-                            {
-                                Source = recurseConcat,
-                                WithStack = true
-                            };
-
-                            // Pull the same records into the recursive loop
-                            var recurseTableSpool = new TableSpoolNode
-                            {
-                                Producer = recurseIndexStack,
-                                SpoolType = SpoolType.Lazy
-                            };
-
-                            // Increment the depth
-                            var incrementedDepthField = _nodeContext.GetExpressionName();
-                            var incrementRecursionDepthComputeScalar = new ComputeScalarNode
-                            {
-                                Source = recurseTableSpool,
-                                Columns =
-                                {
-                                    [incrementedDepthField] = new BinaryExpression
-                                    {
-                                        FirstExpression = recursionDepthField.ToColumnReference(),
-                                        BinaryExpressionType = BinaryExpressionType.Add,
-                                        SecondExpression = new IntegerLiteral { Value = "1" }
-                                    }
-                                }
-                            };
-
-                            // Use a nested loop to pass through the records to the recusive queries
-                            var recurseLoop = new NestedLoopNode
-                            {
-                                LeftSource = incrementRecursionDepthComputeScalar,
-                                JoinType = QualifiedJoinType.Inner,
-                                OuterReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                            };
-
-                            // Capture all CTE fields in the outer references
-                            foreach (var col in anchorSchema.Schema)
-                                recurseLoop.OuterReferences[col.Key.SplitMultiPartIdentifier().Last().EscapeIdentifier()] = "@" + _nodeContext.GetExpressionName();
-
-                            if (cteValidator.RecursiveQueries.Count > 1)
-                            {
-                                // Combine the results of each recursive query with a concat node
-                                var concat = new ConcatenateNode();
-                                recurseLoop.RightSource = concat;
-
-                                foreach (var qry in cteValidator.RecursiveQueries)
-                                {
-                                    var rightSource = ConvertRecursiveCTEQuery(qry, anchorSchema, cteValidator, recurseLoop.OuterReferences);
-                                    concat.Sources.Add(rightSource.Source);
-
-                                    if (concat.Sources.Count == 1)
-                                    {
-                                        for (var i = 0; i < rightSource.ColumnSet.Count; i++)
-                                        {
-                                            var col = rightSource.ColumnSet[i];
-                                            var expr = _nodeContext.GetExpressionName();
-                                            concat.ColumnSet.Add(new ConcatenateColumn { OutputColumn = expr });
-                                            recurseLoop.DefinedValues.Add(expr, expr);
-                                            recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
-                                        }
-                                    }
-
-                                    for (var i = 0; i < rightSource.ColumnSet.Count; i++)
-                                        concat.ColumnSet[i].SourceColumns.Add(rightSource.ColumnSet[i].SourceColumn);
-                                }
-                            }
-                            else
-                            {
-                                var rightSource = ConvertRecursiveCTEQuery(cteValidator.RecursiveQueries[0], anchorSchema, cteValidator, recurseLoop.OuterReferences);
-                                recurseLoop.RightSource = rightSource.Source;
-
-                                for (var i = 0; i < rightSource.ColumnSet.Count; i++)
-                                {
-                                    var col = rightSource.ColumnSet[i];
-                                    var expr = _nodeContext.GetExpressionName();
-
-                                    recurseLoop.DefinedValues.Add(expr, col.SourceColumn);
-                                    recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
-                                }
-                            }
-
-                            // Ensure we don't get stuck in an infinite loop
-                            var maxRecursionHint = stmtWithCtes.OptimizerHints
-                                .OfType<LiteralOptimizerHint>()
-                                .Where(hint => hint.HintKind == OptimizerHintKind.MaxRecursion)
-                                .FirstOrDefault();
-
-                            var maxRecursion = maxRecursionHint
-                                ?.Value
-                                ?.Value
-                                ?? "100";
-
-                            if (!Int32.TryParse(maxRecursion, out var max) || max < 0)
-                                throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(maxRecursionHint)) { Suggestion = "Invalid MAXRECURSION hint" };
-
-                            if (max > 32767)
-                                throw new NotSupportedQueryFragmentException(Sql4CdsError.ExceededMaxRecursion(maxRecursionHint, 32767, max));
-
-                            if (max > 0)
-                            {
-                                var assert = new AssertNode
-                                {
-                                    Source = recurseLoop,
-                                    Assertion = e =>
-                                    {
-                                        var depth = e.GetAttributeValue<SqlInt32>(incrementedDepthField);
-                                        return depth.Value < max;
-                                    },
-                                    ErrorMessage = "Recursion depth exceeded"
-                                };
-
-                                // Combine the recursion results into the main results
-                                recurseConcat.Sources.Add(assert);
-                            }
-                            else
-                            {
-                                recurseConcat.Sources.Add(recurseLoop);
-                            }
-
-                            recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
-
-                            anchorQuery.Source = recurseIndexStack;
-                            _cteSubplans[cte.ExpressionName.Value] = anchorQuery;
-                        }
-                    }
-                }
-            }
 
             if (statement is SelectStatement select)
                 plans = new[] { ConvertSelectStatement(select) };
@@ -596,16 +385,230 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (plan is CreateTableNode createTable)
                 {
                     // Create the table now in the local copy of the tempdb to allow converting later statements
-                    Session.TempDb.Tables.Add(createTable.TableDefinition.Clone());
+                    if (!Session.TempDb.Tables.Contains(createTable.TableDefinition.TableName))
+                        Session.TempDb.Tables.Add(createTable.TableDefinition.Clone());
                 }
                 else if (plan is DropTableNode dropTable)
                 {
                     // Remove the table now in the local copy of the tempdb for validating later statements
-                    Session.TempDb.Tables.Remove(dropTable.TableName);
+                    if (Session.TempDb.Tables.Contains(dropTable.TableName))
+                        Session.TempDb.Tables.Remove(dropTable.TableName);
                 }
             }
 
             return output.ToArray();
+        }
+
+        private void ConvertCTEs(StatementWithCtesAndXmlNamespaces stmtWithCtes)
+        {
+            if (stmtWithCtes.WithCtesAndXmlNamespaces == null)
+                return;
+            
+            foreach (var cte in stmtWithCtes.WithCtesAndXmlNamespaces.CommonTableExpressions)
+            {
+                if (_cteSubplans.ContainsKey(cte.ExpressionName.Value))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.CteDuplicateName(cte.ExpressionName));
+
+                var cteValidator = new CteValidatorVisitor();
+                cte.Accept(cteValidator);
+
+                // Start by converting the anchor query to a subquery
+                var plan = ConvertSelectStatement(cteValidator.AnchorQuery, stmtWithCtes.OptimizerHints, null, null, _nodeContext);
+
+                plan.ExpandWildcardColumns(_nodeContext);
+
+                // Apply column aliases
+                if (cte.Columns.Count > 0)
+                {
+                    if (cte.Columns.Count < plan.ColumnSet.Count)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooManyColumns(cte.ExpressionName));
+
+                    if (cte.Columns.Count > plan.ColumnSet.Count)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.TableValueConstructorTooFewColumns(cte.ExpressionName));
+
+                    for (var i = 0; i < cte.Columns.Count; i++)
+                        plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
+                }
+
+                for (var i = 0; i < plan.ColumnSet.Count; i++)
+                {
+                    if (plan.ColumnSet[i].OutputColumn == null)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteUnnamedColumn(cte.ExpressionName, i + 1));
+                }
+
+                var anchorQuery = new AliasNode(plan, cte.ExpressionName, _nodeContext);
+                _cteSubplans.Add(cte.ExpressionName.Value, anchorQuery);
+
+                if (cteValidator.RecursiveQueries.Count > 0)
+                {
+                    anchorQuery = (AliasNode)anchorQuery.Clone();
+                    var ctePlan = anchorQuery.Source;
+                    var anchorSchema = anchorQuery.GetSchema(_nodeContext);
+
+                    // Add a ComputeScalar node to add the initial recursion depth (0)
+                    var recursionDepthField = _nodeContext.GetExpressionName();
+                    var initialRecursionDepthComputeScalar = new ComputeScalarNode
+                    {
+                        Source = ctePlan,
+                        Columns =
+                                {
+                                    [recursionDepthField] = new IntegerLiteral { Value = "0" }
+                                }
+                    };
+
+                    // Add a ConcatenateNode to combine the anchor results with the recursion results
+                    var recurseConcat = new ConcatenateNode
+                    {
+                        Sources = { initialRecursionDepthComputeScalar },
+                    };
+
+                    foreach (var col in anchorQuery.ColumnSet)
+                    {
+                        var concatCol = new ConcatenateColumn
+                        {
+                            SourceColumns = { col.SourceColumn },
+                            OutputColumn = col.OutputColumn
+                        };
+
+                        recurseConcat.ColumnSet.Add(concatCol);
+
+                        col.SourceColumn = col.OutputColumn;
+                    }
+
+                    recurseConcat.ColumnSet.Add(new ConcatenateColumn
+                    {
+                        SourceColumns = { recursionDepthField },
+                        OutputColumn = recursionDepthField
+                    });
+
+                    // Add an IndexSpool node in stack mode to enable the recursion
+                    var recurseIndexStack = new IndexSpoolNode
+                    {
+                        Source = recurseConcat,
+                        WithStack = true
+                    };
+
+                    // Pull the same records into the recursive loop
+                    var recurseTableSpool = new TableSpoolNode
+                    {
+                        Producer = recurseIndexStack,
+                        SpoolType = SpoolType.Lazy
+                    };
+
+                    // Increment the depth
+                    var incrementedDepthField = _nodeContext.GetExpressionName();
+                    var incrementRecursionDepthComputeScalar = new ComputeScalarNode
+                    {
+                        Source = recurseTableSpool,
+                        Columns =
+                                {
+                                    [incrementedDepthField] = new BinaryExpression
+                                    {
+                                        FirstExpression = recursionDepthField.ToColumnReference(),
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        SecondExpression = new IntegerLiteral { Value = "1" }
+                                    }
+                                }
+                    };
+
+                    // Use a nested loop to pass through the records to the recusive queries
+                    var recurseLoop = new NestedLoopNode
+                    {
+                        LeftSource = incrementRecursionDepthComputeScalar,
+                        JoinType = QualifiedJoinType.Inner,
+                        OuterReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    };
+
+                    // Capture all CTE fields in the outer references
+                    foreach (var col in anchorSchema.Schema)
+                        recurseLoop.OuterReferences[col.Key.SplitMultiPartIdentifier().Last().EscapeIdentifier()] = "@" + _nodeContext.GetExpressionName();
+
+                    if (cteValidator.RecursiveQueries.Count > 1)
+                    {
+                        // Combine the results of each recursive query with a concat node
+                        var concat = new ConcatenateNode();
+                        recurseLoop.RightSource = concat;
+
+                        foreach (var qry in cteValidator.RecursiveQueries)
+                        {
+                            var rightSource = ConvertRecursiveCTEQuery(qry, anchorSchema, cteValidator, recurseLoop.OuterReferences);
+                            concat.Sources.Add(rightSource.Source);
+
+                            if (concat.Sources.Count == 1)
+                            {
+                                for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                {
+                                    var col = rightSource.ColumnSet[i];
+                                    var expr = _nodeContext.GetExpressionName();
+                                    concat.ColumnSet.Add(new ConcatenateColumn { OutputColumn = expr });
+                                    recurseLoop.DefinedValues.Add(expr, expr);
+                                    recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
+                                }
+                            }
+
+                            for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                                concat.ColumnSet[i].SourceColumns.Add(rightSource.ColumnSet[i].SourceColumn);
+                        }
+                    }
+                    else
+                    {
+                        var rightSource = ConvertRecursiveCTEQuery(cteValidator.RecursiveQueries[0], anchorSchema, cteValidator, recurseLoop.OuterReferences);
+                        recurseLoop.RightSource = rightSource.Source;
+
+                        for (var i = 0; i < rightSource.ColumnSet.Count; i++)
+                        {
+                            var col = rightSource.ColumnSet[i];
+                            var expr = _nodeContext.GetExpressionName();
+
+                            recurseLoop.DefinedValues.Add(expr, col.SourceColumn);
+                            recurseConcat.ColumnSet[i].SourceColumns.Add(expr);
+                        }
+                    }
+
+                    // Ensure we don't get stuck in an infinite loop
+                    var maxRecursionHint = stmtWithCtes.OptimizerHints
+                        .OfType<LiteralOptimizerHint>()
+                        .Where(hint => hint.HintKind == OptimizerHintKind.MaxRecursion)
+                        .FirstOrDefault();
+
+                    var maxRecursion = maxRecursionHint
+                        ?.Value
+                        ?.Value
+                        ?? "100";
+
+                    if (!Int32.TryParse(maxRecursion, out var max) || max < 0)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(maxRecursionHint)) { Suggestion = "Invalid MAXRECURSION hint" };
+
+                    if (max > 32767)
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.ExceededMaxRecursion(maxRecursionHint, 32767, max));
+
+                    if (max > 0)
+                    {
+                        var assert = new AssertNode
+                        {
+                            Source = recurseLoop,
+                            Assertion = e =>
+                            {
+                                var depth = e.GetAttributeValue<SqlInt32>(incrementedDepthField);
+                                return depth.Value < max;
+                            },
+                            ErrorMessage = "Recursion depth exceeded"
+                        };
+
+                        // Combine the recursion results into the main results
+                        recurseConcat.Sources.Add(assert);
+                    }
+                    else
+                    {
+                        recurseConcat.Sources.Add(recurseLoop);
+                    }
+
+                    recurseConcat.ColumnSet.Last().SourceColumns.Add(incrementedDepthField);
+
+                    anchorQuery.Source = recurseIndexStack;
+                    _cteSubplans[cte.ExpressionName.Value] = anchorQuery;
+                }
+            }
         }
 
         private IRootExecutionPlanNodeInternal[] ConvertDeallocateCursorStatement(DeallocateCursorStatement deallocateCursor)
@@ -679,20 +682,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     suggestions.Add("Only temporary tables are supported");
                     continue;
                 }
-                else if (!Session.TempDb.Tables.Contains(table.BaseIdentifier.Value))
-                {
-                    if (!dropTable.IsIfExists)
-                    {
-                        errors.Add(Sql4CdsError.InvalidObjectName(table));
-                        suggestions.Add("Check the table name is correct");
-                    }
-
-                    continue;
-                }
 
                 nodes.Add(new DropTableNode
                 {
-                    TableName = table.BaseIdentifier.Value
+                    TableName = table.BaseIdentifier.Value,
+                    IfExists = dropTable.IsIfExists
                 });
             }
 
@@ -1522,9 +1516,6 @@ namespace MarkMpn.Sql4Cds.Engine
         private InsertNode ConvertInsertStatement(InsertStatement insert)
         {
             // Check for any DOM elements that don't have an equivalent in CDS
-            if (insert.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.WithCtesAndXmlNamespaces, "WITH"));
-
             if (insert.InsertSpecification.Columns == null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert, "INSERT without column specification")) { Suggestion = "Define the column names to insert the values into, e.g. INSERT INTO table (col1, col2) VALUES (val1, val2)" };
 
@@ -1544,7 +1535,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (insert.InsertSpecification.InsertSource is ValuesInsertSource values)
                 source = ConvertInsertValuesSource(values, insert.OptimizerHints, null, null, _nodeContext, out columns);
             else if (insert.InsertSpecification.InsertSource is SelectInsertSource select)
-                source = ConvertInsertSelectSource(select, insert.OptimizerHints, out columns);
+                source = ConvertInsertSelectSource(select, insert.WithCtesAndXmlNamespaces, insert.OptimizerHints, out columns);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(insert.InsertSpecification.InsertSource, "unknown INSERT source"));
 
@@ -1569,15 +1560,20 @@ namespace MarkMpn.Sql4Cds.Engine
             return ConvertInlineDerivedTable(table, hints, outerSchema, outerReferences, context);
         }
 
-        private IExecutionPlanNodeInternal ConvertInsertSelectSource(SelectInsertSource selectSource, IList<OptimizerHint> hints, out string[] columns)
+        private IExecutionPlanNodeInternal ConvertInsertSelectSource(SelectInsertSource selectSource, WithCtesAndXmlNamespaces ctes, IList<OptimizerHint> hints, out string[] columns)
         {
-            var selectStatement = new SelectStatement { QueryExpression = selectSource.Select };
+            var selectStatement = new SelectStatement
+            {
+                QueryExpression = selectSource.Select,
+                WithCtesAndXmlNamespaces = ctes?.Clone()
+            };
             CopyDmlHintsToSelectStatement(hints, selectStatement);
 
             var select = ConvertSelectStatement(selectStatement);
 
             if (select is SelectNode selectNode)
             {
+                selectNode.ExpandWildcardColumns(_nodeContext);
                 columns = selectNode.ColumnSet.Select(col => col.SourceColumn).ToArray();
                 return selectNode.Source;
             }
@@ -1603,15 +1599,108 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNodeInternal source, string[] sourceColumns, IList<OptimizerHint> queryHints, InsertStatement insertStatement)
         {
-            var dataSource = SelectDataSource(target.SchemaObject);
+            var insertTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
+            insertStatement.Accept(insertTarget);
+
+            if (insertTarget.Ambiguous)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
+
+            DataSource dataSource;
+
+            if (insertTarget.TargetSubquery != null)
+                throw new NotSupportedQueryFragmentException(); // Subqueries are not expected in an INSERT statement
+
+            if (insertTarget.TargetCTE == null)
+            {
+                if (String.IsNullOrEmpty(insertTarget.TargetEntityName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
+
+                if (!Session.DataSources.TryGetValue(insertTarget.TargetDataSource, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+
+                target = insertTarget.Target;
+            }
+            else
+            {
+                // UPDATE target is a CTE - check it follows the rules of updateable views
+                var updateableViewValidator = new UpdateableViewValidatingVisitor(UpdateableViewModificationType.Insert);
+                insertTarget.TargetCTE.Accept(updateableViewValidator);
+
+                // Check that the columns being updated all come from the same table
+                ConvertCTEs(insertStatement.Clone());
+                var aliasNode = _cteSubplans[insertTarget.TargetCTE.ExpressionName.Value];
+                _cteSubplans.Clear();
+                var schema = aliasNode.GetSchema(_nodeContext);
+                target = null;
+
+                if (targetColumns.Count == 0)
+                {
+                    // If we're inserting into a CTE without an explicit column list, assume the full set of columns from the
+                    // CTE definition
+                    foreach (var col in aliasNode.ColumnSet)
+                        targetColumns.Add(col.OutputColumn.ToColumnReference());
+                }
+
+                for (var colIndex = 0; colIndex < targetColumns.Count; colIndex++)
+                {
+                    var targetCol = targetColumns[colIndex].GetColumnName();
+
+                    if (!schema.ContainsColumn(targetCol, out targetCol))
+                        continue;
+
+                    var colDetails = schema.Schema[targetCol];
+
+                    var targetTable = new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = colDetails.SourceServer },
+                                new Identifier { Value = colDetails.SourceSchema },
+                                new Identifier { Value = colDetails.SourceTable },
+                            }
+                        },
+                        Alias = new Identifier { Value = colDetails.SourceAlias ?? colDetails.SourceTable }
+                    };
+
+                    if (target == null)
+                    {
+                        target = targetTable;
+                    }
+                    else
+                    {
+                        if (!target.Alias.Value.Equals(targetTable.Alias.Value, StringComparison.OrdinalIgnoreCase))
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(insertTarget.TargetCTE, insertTarget.TargetAliasName));
+
+                        for (var i = 0; i < targetTable.SchemaObject.Identifiers.Count; i++)
+                        {
+                            if (!target.SchemaObject.Identifiers[i].Value.Equals(targetTable.SchemaObject.Identifiers[i].Value, StringComparison.OrdinalIgnoreCase))
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(insertTarget.TargetCTE, insertTarget.TargetAliasName));
+                        }
+                    }
+
+                    // The subquery might expose the column as a different name - rename the target columns as we go
+                    targetColumns[colIndex] = colDetails.SourceColumn.ToColumnReference();
+                }
+
+                var dataSourceName = target.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource.Name;
+                if (!Session.DataSources.TryGetValue(dataSourceName, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            }
 
             ValidateDMLSchema(target, false);
+
+            var targetLogicalName = target.SchemaObject.BaseIdentifier.Value;
+            var targetSchema = target.SchemaObject.SchemaIdentifier?.Value;
+            var targetDatabase = target.SchemaObject.DatabaseIdentifier?.Value;
+            var targetAlias = insertTarget.TargetAliasName ?? insertTarget.TargetSubquery?.Alias.Value ?? insertTarget.TargetCTE?.ExpressionName.Value ?? targetLogicalName;
 
             // Validate the entity name
             var logicalName = target.SchemaObject.BaseIdentifier.Value;
             EntityReader reader;
 
-            if (target.SchemaObject.DatabaseIdentifier == null && target.SchemaObject.SchemaIdentifier == null && logicalName.StartsWith("#"))
+            if (targetDatabase == null && targetSchema == null && logicalName.StartsWith("#"))
             {
                 var table = Session.TempDb.Tables[logicalName];
 
@@ -1696,24 +1785,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
         {
-            if (delete.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.WithCtesAndXmlNamespaces, "WITH"));
+            if (delete.DeleteSpecification.OutputClause != null)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.DeleteSpecification.OutputClause, "OUTPUT"));
 
-            return ConvertDeleteStatement(delete.DeleteSpecification, delete.OptimizerHints, delete);
-        }
+            if (delete.DeleteSpecification.OutputIntoClause != null)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.DeleteSpecification.OutputIntoClause, "OUTPUT INTO"));
 
-        private DeleteNode ConvertDeleteStatement(DeleteSpecification delete, IList<OptimizerHint> hints, DeleteStatement statement)
-        {
-            if (delete.OutputClause != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.OutputClause, "OUTPUT"));
+            if (!(delete.DeleteSpecification.Target is NamedTableReference target))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.DeleteSpecification.Target, "non-table DELETE target"));
 
-            if (delete.OutputIntoClause != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.OutputIntoClause, "OUTPUT INTO"));
-
-            if (!(delete.Target is NamedTableReference target))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(delete.Target, "non-table DELETE target"));
-
-            if (delete.WhereClause == null && Options.BlockDeleteWithoutWhere)
+            if (delete.DeleteSpecification.WhereClause == null && Options.BlockDeleteWithoutWhere)
             {
                 throw new NotSupportedQueryFragmentException("DELETE without WHERE is blocked by your settings", delete)
                 {
@@ -1724,38 +1805,68 @@ namespace MarkMpn.Sql4Cds.Engine
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
-                FromClause = delete.FromClause ?? new FromClause { TableReferences = { target } },
-                WhereClause = delete.WhereClause,
+                FromClause = delete.DeleteSpecification.FromClause ?? new FromClause { TableReferences = { target } },
+                WhereClause = delete.DeleteSpecification.WhereClause,
                 UniqueRowFilter = UniqueRowFilter.Distinct,
-                TopRowFilter = delete.TopRowFilter
+                TopRowFilter = delete.DeleteSpecification.TopRowFilter,
             };
 
-            var deleteTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
-            queryExpression.FromClause.Accept(deleteTarget);
+            var selectStatement = new SelectStatement
+            {
+                QueryExpression = queryExpression,
+                WithCtesAndXmlNamespaces = delete.WithCtesAndXmlNamespaces
+            };
+            CopyDmlHintsToSelectStatement(delete.OptimizerHints, selectStatement);
 
-            if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
+            var deleteTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
+            selectStatement.Accept(deleteTarget);
 
             if (deleteTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
-            if (!Session.DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            DataSource dataSource;
 
-            ValidateDMLSchema(deleteTarget.Target, true);
+            if (deleteTarget.TargetSubquery == null && deleteTarget.TargetCTE == null)
+            {
+                // DELETE target is a simple table name
+                if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
 
-            var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
-            var targetLogicalName = deleteTarget.TargetEntityName;
+                if (!Session.DataSources.TryGetValue(deleteTarget.TargetDataSource, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+
+                target = deleteTarget.Target;
+            }
+            else
+            {
+                // DELETE target is a subquery or CTE - check that subquery follows the rules of updateable views
+                var targetSubquery = (TSqlFragment)deleteTarget.TargetSubquery ?? deleteTarget.TargetCTE;
+                var updateableViewValidator = new UpdateableViewValidatingVisitor(UpdateableViewModificationType.Delete);
+                targetSubquery.Accept(updateableViewValidator);
+
+                target = updateableViewValidator.Target;
+
+                var dataSourceName = target.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource.Name;
+                if (!Session.DataSources.TryGetValue(dataSourceName, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            }
+
+            ValidateDMLSchema(target, true);
+
+            var targetLogicalName = target.SchemaObject.BaseIdentifier.Value;
+            var targetSchema = target.SchemaObject.SchemaIdentifier?.Value;
+            var targetDatabase = target.SchemaObject.DatabaseIdentifier?.Value;
+            var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetSubquery?.Alias.Value ?? deleteTarget.TargetCTE?.ExpressionName.Value ?? targetLogicalName;
 
             EntityMetadata targetMetadata = null;
             DataTable targetTable = null;
 
-            if (deleteTarget.Target.SchemaObject.DatabaseIdentifier == null && deleteTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
+            if (targetDatabase == null && targetSchema == null && targetLogicalName.StartsWith("#"))
             {
                 targetTable = Session.TempDb.Tables[targetLogicalName];
 
                 if (targetTable == null)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject));
 
                 targetLogicalName = targetTable.TableName;
             }
@@ -1768,7 +1879,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 catch (FaultException ex)
                 {
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(deleteTarget.Target.SchemaObject), ex);
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
                 }
             }
 
@@ -1783,7 +1894,65 @@ namespace MarkMpn.Sql4Cds.Engine
                 columnMappings["objecttypecode"] = "objecttypecode";
             }
 
-            if (deleteTarget.TargetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
+            if (deleteTarget.TargetSubquery != null)
+            {
+                // Modify the subquery to include the required key values. They might already exist, but to simplify the
+                // query generation process add them again with a unique alias
+                var sourceAlias = target.Alias?.Value ?? targetLogicalName;
+
+                foreach (var col in columnMappings.Keys.ToArray())
+                {
+                    var colAlias = "PK_" + Guid.NewGuid().ToString("N");
+                    columnMappings[col] = colAlias;
+
+                    ((QuerySpecification)deleteTarget.TargetSubquery.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = sourceAlias },
+                                    new Identifier { Value = col }
+                                }
+                            }
+                        },
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = colAlias } }
+                    });
+                }
+            }
+            else if (deleteTarget.TargetCTE != null)
+            {
+                // Modify the CTE to include the required key values. They might already exist, but to simplify the
+                // query generation process add them again with a unique alias
+                var sourceAlias = target.Alias?.Value ?? targetLogicalName;
+
+                foreach (var col in columnMappings.Keys.ToArray())
+                {
+                    var colAlias = "PK_" + Guid.NewGuid().ToString("N");
+                    columnMappings[col] = colAlias;
+
+                    ((QuerySpecification)deleteTarget.TargetCTE.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = sourceAlias },
+                                    new Identifier { Value = col }
+                                }
+                            }
+                        },
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = colAlias } }
+                    });
+                    deleteTarget.TargetCTE.Columns.Add(new Identifier { Value = colAlias });
+                }
+            }
+
+            if (targetSchema?.Equals("bin", StringComparison.OrdinalIgnoreCase) == true)
             {
                 // Deleting from the recycle bin needs to be translated to deleting the associated records from the deleteditemreference table
                 if (dataSource.Metadata.RecycleBinEntities == null || !dataSource.Metadata.RecycleBinEntities.Contains(targetLogicalName))
@@ -1990,15 +2159,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 queryExpression.SelectElements.Add(
-                new SelectScalarExpression
-                {
-                    Expression = expression,
-                    ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = columnMapping.Key } }
-                });
+                    new SelectScalarExpression
+                    {
+                        Expression = expression,
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = columnMapping.Key } }
+                    }
+                );
             }
-
-            var selectStatement = new SelectStatement { QueryExpression = queryExpression };
-            CopyDmlHintsToSelectStatement(hints, selectStatement);
 
             selectStatement.Accept(new ReplacePrimaryFunctionsVisitor());
             var source = ConvertSelectStatement(selectStatement);
@@ -2011,34 +2178,26 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             var reader = targetMetadata != null
-                ? new EntityReader(targetMetadata, _nodeContext, dataSource, statement, target, source)
-                : new EntityReader(targetTable, _nodeContext, dataSource, statement, target, source);
+                ? new EntityReader(targetMetadata, _nodeContext, dataSource, delete, target, source)
+                : new EntityReader(targetTable, _nodeContext, dataSource, delete, target, source);
             deleteNode.Source = reader.Source;
-            deleteNode.PrimaryIdAccessors = reader.ValidateDeleteColumnMapping(columnMappings);
+            deleteNode.PrimaryIdAccessors = reader.ValidateDeleteColumnMapping(columnMappings.ToDictionary(kvp => kvp.Key, kvp => kvp.Key));
 
             return deleteNode;
         }
 
         private UpdateNode ConvertUpdateStatement(UpdateStatement update)
         {
-            if (update.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.WithCtesAndXmlNamespaces, "WITH"));
+            if (update.UpdateSpecification.OutputClause != null)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.UpdateSpecification.OutputClause, "OUTPUT"));
 
-            return ConvertUpdateStatement(update.UpdateSpecification, update.OptimizerHints, update);
-        }
+            if (update.UpdateSpecification.OutputIntoClause != null)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.UpdateSpecification.OutputIntoClause, "OUTPUT INTO"));
 
-        private UpdateNode ConvertUpdateStatement(UpdateSpecification update, IList<OptimizerHint> hints, UpdateStatement updateStatement)
-        {
-            if (update.OutputClause != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.OutputClause, "OUTPUT"));
+            if (!(update.UpdateSpecification.Target is NamedTableReference target))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.UpdateSpecification.Target, "non-table UPDATE target"));
 
-            if (update.OutputIntoClause != null)
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.OutputIntoClause, "OUTPUT INTO"));
-
-            if (!(update.Target is NamedTableReference target))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(update.Target, "non-table UPDATE target"));
-
-            if (update.WhereClause == null && Options.BlockUpdateWithoutWhere)
+            if (update.UpdateSpecification.WhereClause == null && Options.BlockUpdateWithoutWhere)
             {
                 throw new NotSupportedQueryFragmentException("UPDATE without WHERE is blocked by your settings", update)
                 {
@@ -2049,38 +2208,122 @@ namespace MarkMpn.Sql4Cds.Engine
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
-                FromClause = update.FromClause ?? new FromClause { TableReferences = { target } },
-                WhereClause = update.WhereClause,
+                FromClause = update.UpdateSpecification.FromClause.Clone()  ?? new FromClause { TableReferences = { target.Clone() } },
+                WhereClause = update.UpdateSpecification.WhereClause?.Clone(),
                 UniqueRowFilter = UniqueRowFilter.Distinct,
-                TopRowFilter = update.TopRowFilter
+                TopRowFilter = update.UpdateSpecification.TopRowFilter?.Clone()
             };
 
-            var updateTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
-            queryExpression.FromClause.Accept(updateTarget);
+            var selectStatement = new SelectStatement
+            {
+                QueryExpression = queryExpression,
+                WithCtesAndXmlNamespaces = update.WithCtesAndXmlNamespaces
+            };
+            CopyDmlHintsToSelectStatement(update.OptimizerHints, selectStatement);
 
-            if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
+            var updateTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
+            selectStatement.Accept(updateTarget);
 
             if (updateTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousTable(target));
 
-            if (!Session.DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
-                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            DataSource dataSource;
+            var columnRenamings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            ValidateDMLSchema(updateTarget.Target, false);
+            if (updateTarget.TargetSubquery == null && updateTarget.TargetCTE == null)
+            {
+                if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Target table '{target.ToSql()}' not found in FROM clause" };
 
-            var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
-            var targetLogicalName = updateTarget.TargetEntityName;
+                if (!Session.DataSources.TryGetValue(updateTarget.TargetDataSource, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+
+                target = updateTarget.Target;
+            }
+            else
+            {
+                // UPDATE target is a subquery or CTE - check it follows the rules of updateable views
+                var targetSubquery = (TSqlFragment)updateTarget.TargetSubquery ?? updateTarget.TargetCTE;
+                var updateableViewValidator = new UpdateableViewValidatingVisitor(UpdateableViewModificationType.Update);
+                targetSubquery.Accept(updateableViewValidator);
+
+                // Check that the columns being updated all come from the same table
+                ConvertCTEs(selectStatement.Clone());
+                var selectNode = ConvertSelectQuerySpec(queryExpression.Clone(), update.OptimizerHints, null, null, _nodeContext);
+                _cteSubplans.Clear();
+                var schema = selectNode.Source.GetSchema(_nodeContext);
+                target = null;
+
+                foreach (var set in update.UpdateSpecification.SetClauses)
+                {
+                    if (!(set is AssignmentSetClause assignment))
+                        continue;
+
+                    if (assignment.Column == null)
+                        continue;
+
+                    var targetCol = assignment.Column.GetColumnName();
+
+                    if (!schema.ContainsColumn(targetCol, out targetCol))
+                        continue;
+
+                    var colDetails = schema.Schema[targetCol];
+
+                    var targetTable = new NamedTableReference
+                    {
+                        SchemaObject = new SchemaObjectName
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = colDetails.SourceServer },
+                                new Identifier { Value = colDetails.SourceSchema },
+                                new Identifier { Value = colDetails.SourceTable },
+                            }
+                        },
+                        Alias = new Identifier { Value = colDetails.SourceAlias ?? colDetails.SourceTable }
+                    };
+
+                    if (target == null)
+                    {
+                        target = targetTable;
+                    }
+                    else
+                    {
+                        if (!target.Alias.Value.Equals(targetTable.Alias.Value, StringComparison.OrdinalIgnoreCase))
+                            throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(targetSubquery, updateTarget.TargetAliasName));
+
+                        for (var i = 0; i < targetTable.SchemaObject.Identifiers.Count; i++)
+                        {
+                            if (!target.SchemaObject.Identifiers[i].Value.Equals(targetTable.SchemaObject.Identifiers[i].Value, StringComparison.OrdinalIgnoreCase))
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.DerivedTableAffectsMultipleTables(targetSubquery, updateTarget.TargetAliasName));
+                        }
+                    }
+
+                    // The subquery might expose the column as a different name - track the name mappings we're interested in
+                    columnRenamings[colDetails.SourceColumn] = targetCol.SplitMultiPartIdentifier().Last();
+                }
+
+                var dataSourceName = target.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource.Name;
+                if (!Session.DataSources.TryGetValue(dataSourceName, out dataSource))
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject)) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", Session.DataSources.Keys.OrderBy(k => k))}" };
+            }
+
+            ValidateDMLSchema(target, false);
+
+            var targetLogicalName = target.SchemaObject.BaseIdentifier.Value;
+            var targetSchema = target.SchemaObject.SchemaIdentifier?.Value;
+            var targetDatabase = target.SchemaObject.DatabaseIdentifier?.Value;
+            var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetSubquery?.Alias.Value ?? updateTarget.TargetCTE?.ExpressionName.Value ?? targetLogicalName;
 
             DataTable dataTable = null;
             EntityMetadata targetMetadata = null;
 
-            if (updateTarget.Target.SchemaObject.DatabaseIdentifier == null && updateTarget.TargetSchema == null && targetLogicalName.StartsWith("#"))
+            if (targetDatabase == null && targetSchema == null && targetLogicalName.StartsWith("#"))
             {
                 dataTable = Session.TempDb.Tables[targetLogicalName];
 
                 if (dataTable == null)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject));
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject));
 
                 targetLogicalName = dataTable.TableName;
             }
@@ -2093,7 +2336,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 catch (FaultException ex)
                 {
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(updateTarget.Target.SchemaObject), ex);
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidObjectName(target.SchemaObject), ex);
                 }
             }
 
@@ -2104,10 +2347,71 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var primaryKeyFields = EntityReader.GetPrimaryKeyFields(targetMetadata, dataTable, out var isIntersect);
 
+            if (updateTarget.TargetSubquery != null)
+            {
+                // Modify the subquery to include the required key values. They might already exist, but to simplify the
+                // query generation process add them again with a unique alias
+                var sourceAlias = target.Alias.Value;
+
+                foreach (var col in primaryKeyFields)
+                {
+                    var colAlias = "PK_" + Guid.NewGuid().ToString("N");
+                    columnRenamings[col] = colAlias;
+
+                    ((QuerySpecification)updateTarget.TargetSubquery.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = sourceAlias },
+                                    new Identifier { Value = col }
+                                }
+                            }
+                        },
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = colAlias } }
+                    });
+                }
+            }
+            else if (updateTarget.TargetCTE != null)
+            {
+                // Modify the CTE to include the required key values. They might already exist, but to simplify the
+                // query generation process add them again with a unique alias
+                var sourceAlias = target.Alias.Value;
+
+                foreach (var col in primaryKeyFields)
+                {
+                    var colAlias = "PK_" + Guid.NewGuid().ToString("N");
+                    columnRenamings[col] = colAlias;
+
+                    ((QuerySpecification)updateTarget.TargetCTE.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = sourceAlias },
+                                    new Identifier { Value = col }
+                                }
+                            }
+                        },
+                        ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = colAlias } }
+                    });
+                    updateTarget.TargetCTE.Columns.Add(new Identifier { Value = colAlias });
+                }
+            }
+
             if (!isIntersect)
             {
                 foreach (var primaryKey in primaryKeyFields)
                 {
+                    if (!columnRenamings.TryGetValue(primaryKey, out var sourceField))
+                        sourceField = primaryKey;
+
                     queryExpression.SelectElements.Add(new SelectScalarExpression
                     {
                         Expression = new ColumnReferenceExpression
@@ -2115,10 +2419,10 @@ namespace MarkMpn.Sql4Cds.Engine
                             MultiPartIdentifier = new MultiPartIdentifier
                             {
                                 Identifiers =
-                            {
-                                new Identifier { Value = targetAlias },
-                                new Identifier { Value = primaryKey }
-                            }
+                                {
+                                    new Identifier { Value = targetAlias },
+                                    new Identifier { Value = sourceField }
+                                }
                             }
                         },
                         ColumnName = new IdentifierOrValueExpression
@@ -2136,11 +2440,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     existingAttributes.Add(primaryKey);
             }
 
-            var useStateTransitions = targetMetadata != null && !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
+            var useStateTransitions = targetMetadata != null && !update.OptimizerHints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
             var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
-            var minimalUpdates = hints != null && hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("MINIMAL_UPDATES", StringComparison.OrdinalIgnoreCase)));
+            var minimalUpdates = update.OptimizerHints != null && update.OptimizerHints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("MINIMAL_UPDATES", StringComparison.OrdinalIgnoreCase)));
 
-            foreach (var set in update.SetClauses)
+            foreach (var set in update.UpdateSpecification.SetClauses)
             {
                 if (!(set is AssignmentSetClause assignment))
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(set, "SET"));
@@ -2323,16 +2627,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 existingValueMappings[existingAttribute] = "existing_" + existingAttribute;
             }
 
-            var selectStatement = new SelectStatement { QueryExpression = queryExpression };
-            CopyDmlHintsToSelectStatement(hints, selectStatement);
-
             selectStatement.Accept(new ReplacePrimaryFunctionsVisitor());
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
             var reader = targetMetadata != null
-                ? new EntityReader(targetMetadata, _nodeContext, dataSource, updateStatement, target, source)
-                : new EntityReader(dataTable, _nodeContext, dataSource, updateStatement, target, source);
+                ? new EntityReader(targetMetadata, _nodeContext, dataSource, update, target, source)
+                : new EntityReader(dataTable, _nodeContext, dataSource, update, target, source);
 
             var updateNode = new UpdateNode
             {
@@ -2416,6 +2717,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (select.On != null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(select.On, "ON"));
+
+            ConvertCTEs(select);
 
             var variableAssignments = new List<string>();
             SelectElement firstNonSetSelectElement = null;

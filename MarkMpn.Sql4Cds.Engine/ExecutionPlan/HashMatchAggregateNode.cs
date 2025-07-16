@@ -281,6 +281,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     metadata[fetchXml.Entity.name].DataProviderId != DataProviders.ElasticDataProvider)
                     canUseFetchXmlAggregate = false;
 
+                // Can't apply aggregates to a DISTINCT or TOP query
+                if (fetchXml.FetchXml.distinct || !String.IsNullOrEmpty(fetchXml.FetchXml.top))
+                    canUseFetchXmlAggregate = false;
+
                 // Check FetchXML supports grouping by each of the requested attributes
                 var fetchSchema = fetchXml.GetSchema(context);
                 var maxResultCount = 0;

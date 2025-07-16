@@ -59,7 +59,7 @@ namespace MarkMpn.Sql4Cds.Tests
             };
         }
 
-        public IEnumerable<Message> GetAllMessages()
+        public IEnumerable<Message> GetAllMessages(bool lazy)
         {
             return _cache.Values;
         }

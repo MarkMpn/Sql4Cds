@@ -472,7 +472,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     errors.Add(Sql4CdsError.InvalidColumnName(col));
                     continue;
                 }
-                else if ((operation == DmlOperationDetails.Insert && attr.IsPrimaryId == true) || isIntersect)
+                else if (((operation == DmlOperationDetails.Insert && attr.IsPrimaryId == true) || isIntersect) && attr.GetAttributeSqlType(_dataSource, true).IsEntityReference())
                 {
                     // When writing a primary key, treat is as a raw guid instead of an EntityReference
                     colName = attr.LogicalName;
@@ -584,7 +584,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (sourceType == DataTypeHelpers.ImplicitIntForNullLiteral)
                     {
-                        accessor = Expression.Constant(null, targetClrType);
+                        if (typeof(INullable).IsAssignableFrom(targetClrType))
+                            accessor = Expression.Constant(SqlTypeConverter.GetNullValue(targetClrType), targetClrType);
+                        else
+                            accessor = Expression.Constant(null, targetClrType);
+
                         rawAccessor = Expression.Constant(SqlTypeConverter.GetNullValue(targetNetType));
                     }
                     else

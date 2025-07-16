@@ -73,6 +73,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static SqlDataTypeReference BigInt { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
 
+        public static SqlDataTypeReference RowVersion { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Rowversion };
+
         public static UserDataTypeReference Object(Type type)
         {
             return Object(type.FullName);
@@ -231,6 +233,18 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Checks if a type represents a binary string
+        /// </summary>
+        /// <param name="type">The type to check</param>
+        /// <returns><c>true</c> if the <paramref name="type"/> is a binary type, or <c>false</c> otherwise</returns>
+        public static bool IsBinaryType(this SqlDataTypeOption type)
+        {
+            return type == SqlDataTypeOption.Binary ||
+                type == SqlDataTypeOption.VarBinary ||
+                type == SqlDataTypeOption.Image;
+        }
+
+        /// <summary>
         /// Checks if a type represents a date/time
         /// </summary>
         /// <param name="type">The type to check</param>
@@ -245,6 +259,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 type == SqlDataTypeOption.SmallDateTime ||
                 type == SqlDataTypeOption.DateTimeOffset ||
                 type == SqlDataTypeOption.DateTime2;
+        }
+
+        /// <summary>
+        /// Checks if a type represents a timestamp/rowversion
+        /// </summary>
+        /// <param name="type">The type to check</param>
+        /// <returns><c>true</c> if the <paramref name="type"/> is a timestamp/rowversion type, or <c>false</c> otherwise</returns>
+        public static bool IsRowVersion(this SqlDataTypeOption type)
+        {
+            return type == SqlDataTypeOption.Timestamp ||
+                type == SqlDataTypeOption.Rowversion;
         }
 
         /// <summary>
@@ -640,6 +665,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (xSql == null || ySql == null)
                 return false;
+
+            if (xSql.SqlDataTypeOption.IsRowVersion() && ySql.SqlDataTypeOption.IsRowVersion())
+                return true;
 
             if (xSql.SqlDataTypeOption != ySql.SqlDataTypeOption)
                 return false;

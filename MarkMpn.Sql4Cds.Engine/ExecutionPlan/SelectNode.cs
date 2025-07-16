@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is AliasNode alias)
             {
-                var aliasColumns = alias.ColumnSet.ToDictionary(col => alias.Alias.EscapeIdentifier() + "." + col.OutputColumn, col => col.SourceColumn);
+                var aliasColumns = alias.GetColumnMappings(context);
 
                 foreach (var col in ColumnSet)
                     col.SourceColumn = aliasColumns[col.SourceColumn];
@@ -248,7 +248,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    foreach (var src in sourceSchema.Schema.Where(k => k.Value.IsVisible && (col.SourceColumn == null || k.Key.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase))).Select(k => k.Key))
+                    foreach (var src in sourceSchema.Schema.Where(k => k.Value.IsWildcardable && (col.SourceColumn == null || k.Key.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase))).Select(k => k.Key))
                     {
                         // Columns might be available in the logical source schema but not in
                         // the real one, e.g. due to aggregation

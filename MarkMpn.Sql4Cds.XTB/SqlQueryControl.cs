@@ -358,11 +358,21 @@ namespace MarkMpn.Sql4Cds.XTB
             _editor.Focus();
         }
 
-        public void Format()
+        public void Format(bool addDisplayNames)
         {
             _ai.TrackEvent("Format SQL", new Dictionary<string, string> { ["Source"] = "XrmToolBox" });
 
-            _editor.Text = Formatter.Format(_editor.Text);
+            _connection.UseTDSEndpoint = false;
+            _connection.BlockDeleteWithoutWhere = false;
+            _connection.BlockUpdateWithoutWhere = false;
+
+            var options = new FormatterOptions
+            {
+                AddDisplayNames = addDisplayNames,
+                Connection = _connection,
+                DataSources = DataSources,
+            };
+            _editor.Text = Formatter.Format(_editor.Text, options);
         }
 
         private Scintilla CreateEditor()

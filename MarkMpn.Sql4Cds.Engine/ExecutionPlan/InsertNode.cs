@@ -324,7 +324,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (IgnoreDuplicateKey)
             {
-                if (fault.ErrorCode == -2147220937 || fault.ErrorCode == -2147088238 || fault.ErrorCode == 409)
+                if (fault.ErrorCode == -2147220937 || fault.ErrorCode == -2147088238 || fault.ErrorCode == 409 || fault.ErrorCode == -2147188216)
                 {
                     var logMessage = "Ignoring duplicate key error";
 

@@ -144,6 +144,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = ToExpression(str, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             else if (expr is OdbcLiteral odbc)
                 expression = ToExpression(odbc, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+            else if (expr is BinaryLiteral binLit)
+                expression = ToExpression(binLit, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             else if (expr is BooleanBinaryExpression boolBin)
                 expression = ToExpression(boolBin, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             else if (expr is BooleanComparisonExpression cmp)
@@ -447,6 +449,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             expr = Expression.Property(expr, nameof(DataSource.DefaultCollation));
             expr = Expression.Call(expr, nameof(Collation.ToSqlString), Array.Empty<Type>(), value);
             return expr;
+        }
+
+        private static Expression ToExpression(BinaryLiteral bin, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
+        {
+            sqlType = DataTypeHelpers.Binary((bin.Value.Length - 2) / 2);
+
+            cacheKey = $"<BinaryLiteral({GetTypeKey(sqlType, false)})>";
+
+            if (!createExpression)
+                return null;
+
+            var value = Expression.Property(Expression.Convert(exprParam, typeof(BinaryLiteral)), nameof(BinaryLiteral.Value));
+
+            return Expr.Call(() => ParseBinary(Expr.Arg<string>()), value);
+        }
+
+        private static SqlBinary ParseBinary(string literal)
+        {
+            // Literal is hex-encoded with leading 0x
+#if NETCOREAPP
+            return System.Convert.FromHexString(literal.AsSpan().Slice(2));
+#else
+            var count = (literal.Length - 2) / 2;
+            var value = new byte[count];
+
+            for (var i = 0; i < count; i++)
+                value[i] = System.Convert.ToByte(literal.Substring(2 + i * 2, 2), 16);
+
+            return value;
+#endif
         }
 
         private static Expression ToExpression(OdbcLiteral odbc, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
@@ -2133,11 +2165,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [SqlDataTypeOption.Numeric] = typeof(SqlDecimal),
             [SqlDataTypeOption.NVarChar] = typeof(SqlString),
             [SqlDataTypeOption.Real] = typeof(SqlSingle),
+            [SqlDataTypeOption.Rowversion] = typeof(SqlBinary),
             [SqlDataTypeOption.SmallDateTime] = typeof(SqlSmallDateTime),
             [SqlDataTypeOption.SmallInt] = typeof(SqlInt16),
             [SqlDataTypeOption.SmallMoney] = typeof(SqlMoney),
             [SqlDataTypeOption.Text] = typeof(SqlString),
             [SqlDataTypeOption.Time] = typeof(SqlTime),
+            [SqlDataTypeOption.Timestamp] = typeof(SqlBinary),
             [SqlDataTypeOption.TinyInt] = typeof(SqlByte),
             [SqlDataTypeOption.UniqueIdentifier] = typeof(SqlGuid),
             [SqlDataTypeOption.VarBinary] = typeof(SqlBinary),
@@ -2246,26 +2280,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression Convert(ExpressionCompilationContext context, ParameterExpression contextParam, Expression value, DataTypeReference valueType, string valueCacheKey, ref DataTypeReference sqlType, Expression style, DataTypeReference styleType, string styleCacheKey, TSqlFragment expr, string cacheKeyRoot, out string cacheKey)
         {
-            if (sqlType is SqlDataTypeReference sqlTargetType &&
-                sqlTargetType.SqlDataTypeOption.IsStringType())
+            if (sqlType is SqlDataTypeReference sqlTargetType)
             {
-                // Set default length to 30
-                if (sqlTargetType.Parameters.Count == 0)
-                    sqlTargetType.Parameters.Add(new IntegerLiteral { Value = "30" });
-
-                // If the input is a character string, the output string has the collation label of the input string
-                // If the input is not a character string, the output string is coercible-default and assigned the collation of the current database for the connection
-                var valueTypeColl = valueType as SqlDataTypeReferenceWithCollation;
-                var collation = valueTypeColl?.Collation ?? context.PrimaryDataSource.DefaultCollation;
-                var collationLabel = valueTypeColl?.CollationLabel ?? CollationLabel.CoercibleDefault;
-
-                sqlType = new SqlDataTypeReferenceWithCollation
+                if (sqlTargetType.SqlDataTypeOption.IsStringType())
                 {
-                    SqlDataTypeOption = sqlTargetType.SqlDataTypeOption,
-                    Parameters = { sqlTargetType.Parameters[0] },
-                    Collation = collation,
-                    CollationLabel = collationLabel
-                };
+                    // Set default length to 30
+                    if (sqlTargetType.Parameters.Count == 0)
+                        sqlTargetType.Parameters.Add(new IntegerLiteral { Value = "30" });
+
+                    // If the input is a character string, the output string has the collation label of the input string
+                    // If the input is not a character string, the output string is coercible-default and assigned the collation of the current database for the connection
+                    var valueTypeColl = valueType as SqlDataTypeReferenceWithCollation;
+                    var collation = valueTypeColl?.Collation ?? context.PrimaryDataSource.DefaultCollation;
+                    var collationLabel = valueTypeColl?.CollationLabel ?? CollationLabel.CoercibleDefault;
+
+                    sqlType = new SqlDataTypeReferenceWithCollation
+                    {
+                        SqlDataTypeOption = sqlTargetType.SqlDataTypeOption,
+                        Parameters = { sqlTargetType.Parameters[0] },
+                        Collation = collation,
+                        CollationLabel = collationLabel
+                    };
+                }
+                else if (sqlTargetType.SqlDataTypeOption.IsBinaryType())
+                {
+                    // Set default length to 30
+                    if (sqlTargetType.Parameters.Count == 0)
+                        sqlTargetType.Parameters.Add(new IntegerLiteral { Value = "30" });
+                }
             }
 
             cacheKey = $"{cacheKeyRoot}({GetTypeKey(sqlType, true)}, {valueCacheKey}";

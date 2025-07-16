@@ -94,6 +94,18 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets a list of all available entities for autocomplete
         /// </summary>
         /// <returns>A list of all available entities for autocomplete</returns>
+        /// <remarks>
+        /// This should be fast to return but may be incomplete.
+        /// </remarks>
         IEnumerable<EntityMetadata> GetAllEntities();
+
+        /// <summary>
+        /// Gets a list of recycle bin enabled entities for autocomplete
+        /// </summary>
+        /// <returns>A list of entity logical names that are enabled for recycle bin access for autocomplete</returns>
+        /// <remarks>
+        /// This should be fast to return but may be incomplete.
+        /// </remarks>
+        string[] TryGetRecycleBinEntities();
     }
 }

@@ -109,10 +109,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _inputCollation = (inputType as SqlDataTypeReferenceWithCollation)?.Collation ?? context.PrimaryDataSource.DefaultCollation;
             }
 
-            columns.Add(PrefixWithAlias("value", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(Int32.MaxValue, _inputCollation, CollationLabel.Implicit), false, false));
+            columns.Add(PrefixWithAlias("value", aliases), new ColumnDefinition(DataTypeHelpers.NVarChar(Int32.MaxValue, _inputCollation, CollationLabel.Implicit), false, false, isWildcardable: true));
 
             if (EnableOrdinal)
-                columns.Add(PrefixWithAlias("ordinal", aliases), new ColumnDefinition(DataTypeHelpers.Int, false, false));
+                columns.Add(PrefixWithAlias("ordinal", aliases), new ColumnDefinition(DataTypeHelpers.Int, false, false, isWildcardable: true));
 
             var schema = new NodeSchema(
                 columns,
