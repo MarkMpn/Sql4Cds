@@ -1,5 +1,30 @@
 # Change Log
 
+## [v10.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v10.0.0) - 2025-07-17
+
+New features:
+* Schema from result set now exposes the originating table &amp; column details
+* CTEs are now supported in DML queries
+* `versionnumber` column is now populated for Fetch XML based queries
+* `binary` and `varbinary` data types and their conversions are now supported
+
+Improvements:
+* `DROP TABLE IF NOT EXISTS` now confirms if table exists at runtime, not when the query is parsed
+* `IGNORE_DUP_KEY` query hint now works when inserting `connection` records
+
+Bug fixes:
+* Do not expose internal columns when using wildcard queries
+* Do not expose `type` or `name` virtual columns for lookup columns if another column with the same name already exists
+* Inserting into `principalobjectaccess` records no longer generates type conversion error
+* Inserting null values into a temporary table
+* Handle duplicated column names produced from TDS Endpoint query being used for DML operations
+* Custom Fetch XML datetime filter operators no longer crash
+* `DISTINCT` / `GROUP BY` now applies correctly to subqueries
+* Avoid conflicts between `DISTINCT`, `TOP` and aggregates
+* Nullability calculations now handle `AND` / `OR` within `NOT` clause
+* Do not cache `OPENJSON` results that are dependant on an outer query
+* Possible fix for DML query multithreading issues
+
 ## [v9.6.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v9.6.1) - 2025-04-30
 
 Bug fixes

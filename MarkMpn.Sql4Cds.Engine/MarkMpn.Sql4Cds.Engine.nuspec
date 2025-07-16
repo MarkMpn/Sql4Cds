@@ -12,19 +12,28 @@
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
     <releaseNotes>
-Bug fixes
-* Fixed retrieving `audit.changedata` even when `audit.objectid`
-* Fixed inserting a primary key value from an existing lookup value
-* Fixed arithmetic overflow error when concatenating large data sets
-* Check links to be added for `IN`/`EXISTS` predicates are valid before adding them to the query
-* Added support for more alphanumeric datetime formats
-* Do not use TDS Endpoint for temporary tables
-* Fixed DML operations on `listmember`
-* Handle real attributes that have a `type` suffix from another attribute
-* Fixed retrieving activity and elastic table primary keys
-* Fixed cloning Concatenate nodes
-* Do not fold `TOP` clause to FetchXML for virtual tables
-* Improved null handling when converting "not" conditions from FetchXML to SQL
+New features:
+* Schema from result set now exposes the originating table &amp; column details
+* CTEs are now supported in DML queries
+* `versionnumber` column is now populated for Fetch XML based queries
+* `binary` and `varbinary` data types and their conversions are now supported
+
+Improvements:
+* `DROP TABLE IF NOT EXISTS` now confirms if table exists at runtime, not when the query is parsed
+* `IGNORE_DUP_KEY` query hint now works when inserting `connection` records
+
+Bug fixes:
+* Do not expose internal columns when using wildcard queries
+* Do not expose `type` or `name` virtual columns for lookup columns if another column with the same name already exists
+* Inserting into `principalobjectaccess` records no longer generates type conversion error
+* Inserting null values into a temporary table
+* Handle duplicated column names produced from TDS Endpoint query being used for DML operations
+* Custom Fetch XML datetime filter operators no longer crash
+* `DISTINCT` / `GROUP BY` now applies correctly to subqueries
+* Avoid conflicts between `DISTINCT`, `TOP` and aggregates
+* Nullability calculations now handle `AND` / `OR` within `NOT` clause
+* Do not cache `OPENJSON` results that are dependant on an outer query
+* Possible fix for DML query multithreading issues
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
