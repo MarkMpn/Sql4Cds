@@ -443,6 +443,10 @@ namespace MarkMpn.Sql4Cds.Engine
         public override void PaintValue(PaintValueEventArgs e)
         {
             var values = (float[])((ExecutionPlanNodeTypeDescriptor)e.Value).GetPropertyOwner(null);
+
+            if (values.Length == 0)
+            return;
+            
             var brush = Brushes.DarkBlue;
             var barWidth = (float)e.Bounds.Width / values.Length;
             var maxValue = values.Max();
