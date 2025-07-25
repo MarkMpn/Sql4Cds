@@ -67,8 +67,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
             
-            if (!Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral) ||
-                !Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral))
+            if (!Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral, out _) ||
+                !Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral, out _))
                 return this;
 
             if (Source is FetchXmlScan fetchXml)
@@ -104,8 +104,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var sourceCount = Source.EstimateRowsOut(context);
             var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
 
-            if (!Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral) ||
-                !Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral))
+            if (!Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral, out _) ||
+                !Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral, out _))
                 return sourceCount;
 
             var offset = Int32.Parse(offsetLiteral.Value, CultureInfo.InvariantCulture);

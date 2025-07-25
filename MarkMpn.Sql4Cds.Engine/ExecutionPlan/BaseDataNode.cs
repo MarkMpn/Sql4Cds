@@ -369,7 +369,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var expressionContext = new ExpressionCompilationContext(context, schema, null);
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && variable == null && parameterless == null && globalVariable == null && (field2 == null || !dataSource.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(expressionContext, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && parameterless == null && globalVariable == null && (field2 == null || !dataSource.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(expressionContext, out literal, out _)))
                 {
                     if (field != null && !expr.GetColumns().Any())
                     {
@@ -497,7 +497,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         op = @operator.neuserid;
                     }
                 }
-                else if (expr.IsConstantValueExpression(expressionContext, out literal))
+                else if (expr.IsConstantValueExpression(expressionContext, out literal, out _))
                 {
                     values = new[] { literal };
                 }
@@ -948,7 +948,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Select(lit => new conditionValue
                 {
                     Value = lit is NullLiteral nullLit ? null
-                        : lit is Literal lit1 ? lit1.Value
+                        : lit is Literal lit1 ? ConvertConditionValueToFetchXmlString(context, lit1, attribute, attributeSuffix, op, dataSource)
                         : lit is VariableReference var1 ? var1.Name
                         : lit is GlobalVariableExpression glob ? glob.Name
                         : null,
@@ -970,44 +970,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     op = @operator.@null;
                 else
                     return false;
-            }
-
-            if (attribute is DateTimeAttributeMetadata && literals != null &&
-                (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le || op == @operator.@in || op == @operator.notin))
-            {
-                var ecc = new ExpressionCompilationContext(context, null, null);
-                var eec = new ExpressionExecutionContext(ecc);
-
-                for (var i = 0; i < literals.Length; i++)
-                {
-                    if (!(literals[i] is Literal lit))
-                        continue;
-
-                    lit.GetType(ecc, out var sourceType);
-                    var targetType = attribute.GetAttributeSqlType(dataSource, false);
-
-                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.DateTimeParseError(lit));
-
-                    var sqlValue = (INullable)lit.Compile(ecc)(eec);
-                    var conversion = SqlTypeConverter.GetConversion(sourceType, targetType);
-                    var datetimeValue = (SqlDateTime)conversion(sqlValue, eec);
-                    var dt = datetimeValue.Value;
-
-                    DateTimeOffset dto;
-
-                    if (context.Options.UseLocalTimeZone)
-                        dto = new DateTimeOffset(dt, TimeZoneInfo.Local.GetUtcOffset(dt));
-                    else
-                        dto = new DateTimeOffset(dt, TimeSpan.Zero);
-
-                    var formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
-
-                    if (literals.Length == 1)
-                        value = formatted;
-
-                    values[i].Value = formatted;
-                }
             }
 
             if (attribute != null && attributeSuffix != null)
@@ -1280,6 +1242,75 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return true;
+        }
+
+        protected string ConvertConditionValueToFetchXmlString(NodeCompilationContext context, ValueExpression literal, AttributeMetadata attributeMetadata, string attributeSuffix, @operator op, DataSource dataSource)
+        {
+            var ecc = new ExpressionCompilationContext(context, null, null);
+            literal.GetType(ecc, out var literalType);
+            var conditionType = attributeMetadata.GetAttributeSqlType(dataSource, false);
+
+            if (attributeMetadata is DateTimeAttributeMetadata &&
+                op != @operator.eq &
+                op != @operator.ne &&
+                op != @operator.neq &&
+                op != @operator.gt &&
+                op != @operator.ge &&
+                op != @operator.lt &&
+                op != @operator.le &&
+                op != @operator.@in &&
+                op != @operator.notin &&
+                op != @operator.on &&
+                op != @operator.onorafter &&
+                op != @operator.onorbefore)
+            {
+                // Complex datetime comparisons use integers, e.g. lastxdays
+                conditionType = DataTypeHelpers.Int;
+            }
+            else if (attributeMetadata is BigIntAttributeMetadata)
+            {
+                // versionnumber attributes will have an exposed data type of rowversion, but we need to use
+                // bigint to filter it
+                conditionType = DataTypeHelpers.BigInt;
+            }
+            else if (conditionType.IsEntityReference())
+            {
+                // EntityReference fields just use the guid part for filtering
+                conditionType = DataTypeHelpers.UniqueIdentifier;
+            }
+
+            if (attributeSuffix != null)
+            {
+                // Virtual attributes (__name, __type, __pid) are all strings
+                conditionType = DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit);
+            }
+
+            // Get the original typed value
+            if (!literal.IsConstantValueExpression(ecc, out _, out var value))
+                throw new NotSupportedException();
+
+            // Convert the value to the required type
+            var eec = new ExpressionExecutionContext(ecc);
+            var conversion = SqlTypeConverter.GetConversion(literalType, conditionType);
+            var conditionValue = conversion(value, eec);
+
+            // Convert the value back to a string
+            if (conditionValue == null || conditionValue.IsNull)
+                return null;
+
+            if (conditionValue is SqlDateTime dt)
+            {
+                DateTimeOffset dto;
+
+                if (context.Options.UseLocalTimeZone)
+                    dto = new DateTimeOffset(dt.Value, TimeZoneInfo.Local.GetUtcOffset(dt.Value));
+                else
+                    dto = new DateTimeOffset(dt.Value, TimeSpan.Zero);
+
+                return dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
+            }
+
+            return conditionValue.ToString();
         }
 
         /// <summary>

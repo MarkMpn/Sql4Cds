@@ -2654,24 +2654,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="expr">The expression to check</param>
         /// <param name="context">The context the expression is being evaluated in</param>
         /// <param name="literal">The equivalent literal value</param>
+        /// <param name="value">The constant runtime value of the expression</param>
         /// <returns><c>true</c> if the expression has a constant value, or <c>false</c> if it can change depending on the current data record</returns>
-        public static bool IsConstantValueExpression(this ScalarExpression expr, ExpressionCompilationContext context, out Literal literal)
+        public static bool IsConstantValueExpression(this ScalarExpression expr, ExpressionCompilationContext context, out Literal literal, out INullable value)
         {
             literal = expr as Literal;
+            value = null;
 
             if (literal != null)
+            {
+                var eec = new ExpressionExecutionContext(context);
+                value = (INullable)literal.Compile(context)(eec);
                 return true;
+            }
 
-            var columnVisitor = new ColumnCollectingVisitor();
-            expr.Accept(columnVisitor);
-
-            if (columnVisitor.Columns.Count > 0)
+            if (expr.GetColumns().Any())
                 return false;
 
-            var variableVisitor = new VariableCollectingVisitor();
-            expr.Accept(variableVisitor);
-
-            if (variableVisitor.Variables.Count > 0 || variableVisitor.GlobalVariables.Count > 0)
+            if (expr.GetVariables().Any())
                 return false;
 
             var parameterlessVisitor = new ParameterlessCollectingVisitor();
@@ -2688,7 +2688,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             var evaluationContext = new ExpressionExecutionContext(context);
-            var value = expr.Compile(context)(evaluationContext);
+            value = (INullable)expr.Compile(context)(evaluationContext);
 
             if (value == null || value is INullable n && n.IsNull)
                 literal = new NullLiteral();
@@ -2706,6 +2706,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 literal = new StringLiteral { Value = dt.Value.ToString("yyyy-MM-ddTHH:mm:ss.fff") };
             else if (value is SqlGuid g)
                 literal = new StringLiteral { Value = g.ToString() };
+            else if (value is SqlBinary bin)
+                literal = new BinaryLiteral { Value = bin.ToString() };
             else
                 return false;
 
@@ -2766,7 +2768,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // All the parameters must also be deterministic
             foreach (var param in functionCall.Parameters)
             {
-                if (!param.IsConstantValueExpression(context, out _))
+                if (!param.IsConstantValueExpression(context, out _, out _))
                     return false;
             }
 

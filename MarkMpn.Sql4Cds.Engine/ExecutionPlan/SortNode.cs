@@ -527,7 +527,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (top != null)
                             {
-                                if (!top.Top.IsConstantValueExpression(expressionCompilationContext, out var topLiteral))
+                                if (!top.Top.IsConstantValueExpression(expressionCompilationContext, out var topLiteral, out _))
                                     return this;
 
                                 if (Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture) > 50000)
@@ -535,8 +535,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                             else if (offset != null)
                             {
-                                if (!offset.Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral) ||
-                                    !offset.Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral))
+                                if (!offset.Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral, out _) ||
+                                    !offset.Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral, out _))
                                     return this;
 
                                 if (Int32.Parse(offsetLiteral.Value, CultureInfo.InvariantCulture) + Int32.Parse(fetchLiteral.Value, CultureInfo.InvariantCulture) > 50000)

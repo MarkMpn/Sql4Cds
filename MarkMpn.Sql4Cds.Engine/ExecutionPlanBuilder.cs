@@ -4215,7 +4215,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (aggregate.Expression.Parameters.Count != 2)
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(aggregate.Expression.FunctionName, 2));
 
-                        if (!aggregate.Expression.Parameters[1].IsConstantValueExpression(new ExpressionCompilationContext(context, null, null), out var separator))
+                        if (!aggregate.Expression.Parameters[1].IsConstantValueExpression(new ExpressionCompilationContext(context, null, null), out var separator, out _))
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidStringAggSeparator(aggregate.Expression.Parameters[1]));
 
                         converted.Separator = separator.Value;

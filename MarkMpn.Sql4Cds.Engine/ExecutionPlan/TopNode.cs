@@ -130,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
 
-            if (!Top.IsConstantValueExpression(expressionCompilationContext, out var literal))
+            if (!Top.IsConstantValueExpression(expressionCompilationContext, out var literal, out _))
                 return this;
 
             // FetchXML can support TOP directly provided it's for no more than 5,000 records
@@ -241,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
 
-            if (!Top.IsConstantValueExpression(expressionCompilationContext, out var topLiteral))
+            if (!Top.IsConstantValueExpression(expressionCompilationContext, out var topLiteral, out _))
                 return sourceCount;
 
             var top = Decimal.Parse(topLiteral.Value, CultureInfo.InvariantCulture);
