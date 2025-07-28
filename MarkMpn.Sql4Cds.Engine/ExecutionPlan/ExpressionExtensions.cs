@@ -365,15 +365,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(IntegerLiteral i, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
-            sqlType = DataTypeHelpers.Int;
-            cacheKey = "<IntLiteral>";
+            // Use bigint if the value is outside the range of an int
+            var value = SqlInt64.Parse(i.Value);
 
-            if (!createExpression)
-                return null;
+            if (value > SqlInt32.MaxValue || value < SqlInt32.MinValue)
+            {
+                sqlType = DataTypeHelpers.BigInt;
+                cacheKey = "<BigIntLiteral>";
 
-            return Expr.Call(
-                () => SqlInt32.Parse(Expr.Arg<string>()),
-                Expression.Property(Expression.Convert(exprParam, typeof(IntegerLiteral)), nameof(IntegerLiteral.Value)));
+                if (!createExpression)
+                    return null;
+
+                return Expr.Call(
+                    () => SqlInt64.Parse(Expr.Arg<string>()),
+                    Expression.Property(Expression.Convert(exprParam, typeof(IntegerLiteral)), nameof(IntegerLiteral.Value)));
+            }
+            else
+            {
+                sqlType = DataTypeHelpers.Int;
+                cacheKey = "<IntLiteral>";
+
+                if (!createExpression)
+                    return null;
+
+                return Expr.Call(
+                    () => SqlInt32.Parse(Expr.Arg<string>()),
+                    Expression.Property(Expression.Convert(exprParam, typeof(IntegerLiteral)), nameof(IntegerLiteral.Value)));
+            }
         }
 
         private static Expression ToExpression(MoneyLiteral money, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)

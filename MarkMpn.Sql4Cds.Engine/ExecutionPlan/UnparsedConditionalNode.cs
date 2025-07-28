@@ -138,7 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return statements.ToArray();
         }
 
-        public void FinishedFolding()
+        public void FinishedFolding(NodeCompilationContext context)
         {
         }
     }

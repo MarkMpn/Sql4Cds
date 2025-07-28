@@ -971,7 +971,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     return false;
             }
-
+            
             if (attribute is DateTimeAttributeMetadata && literals != null &&
                 (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le || op == @operator.@in || op == @operator.notin))
             {
@@ -1002,6 +1002,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         dto = new DateTimeOffset(dt, TimeSpan.Zero);
 
                     var formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
+
+                    if (literals.Length == 1)
+                        value = formatted;
+
+                    values[i].Value = formatted;
+                }
+            }
+
+            // Special case: versionnumber filtered by a binary literal needs to be converted to bigint
+            if (attribute is BigIntAttributeMetadata && literals != null)
+            {
+                var ecc = new ExpressionCompilationContext(context, null, null);
+                var eec = new ExpressionExecutionContext(ecc);
+
+                for (var i = 0; i < literals.Length; i++)
+                {
+                    if (!(literals[i] is BinaryLiteral binLit))
+                        continue;
+
+                    var conversion = new ConvertCall
+                    {
+                        DataType = DataTypeHelpers.BigInt,
+                        Parameter = binLit
+                    };
+
+                    var expr = conversion.Compile(ecc);
+                    var bigint = (SqlInt64)expr(eec);
+
+                    var formatted = bigint.Value.ToString(CultureInfo.InvariantCulture);
 
                     if (literals.Length == 1)
                         value = formatted;
