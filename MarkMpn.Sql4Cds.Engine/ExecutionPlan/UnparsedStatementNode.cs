@@ -56,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new[] { this };
         }
 
-        public void FinishedFolding()
+        public void FinishedFolding(NodeCompilationContext context)
         {
         }
 
