@@ -7752,22 +7752,27 @@ ORDER BY
                 var select = AssertNode<SelectNode>(plans[0]);
                 var top = AssertNode<TopNode>(select.Source);
                 var sort = AssertNode<SortNode>(top.Source);
-                var filter = AssertNode<FilterNode>(sort.Source);
-                var loop = AssertNode<NestedLoopNode>(filter.Source);
+                var existsOrInFilter = AssertNode<FilterNode>(sort.Source);
+                var loop = AssertNode<NestedLoopNode>(existsOrInFilter.Source);
                 var merge = AssertNode<MergeJoinNode>(loop.LeftSource);
-                var mainFetch = AssertNode<FetchXmlScan>(merge.LeftSource);
+                var columnComparisonFilter = AssertNode<FilterNode>(merge.LeftSource);
+                var mainFetch = AssertNode<FetchXmlScan>(columnComparisonFilter.Source);
                 var existsFetch = AssertNode<FetchXmlScan>(merge.RightSource);
                 var inTop = AssertNode<TopNode>(loop.RightSource);
                 var inIndexSpool = AssertNode<IndexSpoolNode>(inTop.Source);
                 var inFetch = AssertNode<FetchXmlScan>(inIndexSpool.Source);
 
+                Assert.AreEqual(@"(Expr4 IS NOT NULL
+ OR Expr2 IS NOT NULL)", existsOrInFilter.Filter.ToNormalizedSql());
+                Assert.AreEqual("account.createdon = contact.createdon", columnComparisonFilter.Filter.ToNormalizedSql());
+
                 AssertFetchXml(mainFetch, @"
 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
   <entity name='account'>
     <attribute name='name' />
-    <attribute name='createdon' />
     <attribute name='accountid' />
     <attribute name='employees' />
+    <attribute name='createdon' />
     <link-entity name='contact' to='primarycontactid' from='contactid' alias='contact' link-type='inner'>
       <attribute name='fullname' />
       <attribute name='createdon' />
@@ -9266,6 +9271,27 @@ FROM (
     <order attribute='name' />
   </entity>
 </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldFiltersAroundOuterApply()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"select *
+from (values('a')) t1 (a)
+outer apply (select 1 as b) t2
+where t1.a like 'x%'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<NestedLoopNode>(select.Source);
+            var filter = AssertNode<FilterNode>(join.LeftSource);
+            var t1 = AssertNode<ConstantScanNode>(filter.Source);
+            var t2 = AssertNode<ConstantScanNode>(join.RightSource);
         }
     }
 }
