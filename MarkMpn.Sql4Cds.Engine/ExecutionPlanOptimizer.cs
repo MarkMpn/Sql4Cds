@@ -68,18 +68,18 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Let the nodes know that folding is now finished so they can do any internal tidy-up
                 if (!bypassOptimization)
-                    MarkComplete(n);
+                    MarkComplete(n, context);
             }
 
             return nodes;
         }
 
-        private void MarkComplete(IExecutionPlanNodeInternal node)
+        private void MarkComplete(IExecutionPlanNodeInternal node, NodeCompilationContext context)
         {
             foreach (var child in node.GetSources())
-                MarkComplete((IExecutionPlanNodeInternal)child);
+                MarkComplete((IExecutionPlanNodeInternal)child, context);
 
-            node.FinishedFolding();
+            node.FinishedFolding(context);
         }
 
         private void SortFetchXmlElements(IExecutionPlanNode node)

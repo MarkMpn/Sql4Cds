@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using FakeXrmEasy;
+using FakeXrmEasy.Extensions;
 using FakeXrmEasy.FakeMessageExecutors;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Crm.Sdk.Messages;
@@ -129,6 +130,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             SetMaxLength(_context);
             SetMaxLength(_context2);
 
+            AddVersionNumberAttribute(_context);
+            AddVersionNumberAttribute(_context2);
+
             SetColumnNumber(_context);
             SetColumnNumber(_context2);
 
@@ -145,6 +149,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 // Set the primary name attribute on contact
                 typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryNameAttribute)).SetValue(entity, "fullname");
+            }
+        }
+
+        private void AddVersionNumberAttribute(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                var attributes = entity.Attributes
+                    .Concat(new AttributeMetadata[]
+                    {
+                        new BigIntAttributeMetadata
+                        {
+                            LogicalName = "versionnumber",
+                        }
+                    })
+                    .ToArray();
+
+                entity.SetSealedPropertyValue(nameof(entity.Attributes), attributes);
+                context.SetEntityMetadata(entity);
             }
         }
 
