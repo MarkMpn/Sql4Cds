@@ -187,23 +187,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             string primaryKey = null;
 
             if (MetadataSource.HasFlag(OptionSetSource.OptionSet))
-                AddSchemaCols(context, schema, aliases, _optionsetCols ?? _optionsetProps, OptionSetAlias, ref primaryKey);
+            {
+                AddSchemaCols(context, schema, aliases, _optionsetCols ?? _optionsetProps, OptionSetAlias);
+                primaryKey = $"{OptionSetAlias}.{nameof(OptionSetMetadataBase.MetadataId).ToLowerInvariant()}";
+            }
 
             if (MetadataSource.HasFlag(OptionSetSource.Value))
             {
-                AddSchemaCols(context, schema, aliases, _valueCols ?? _valueProps, ValueAlias, ref primaryKey);
+                AddSchemaCols(context, schema, aliases, _valueCols ?? _valueProps, ValueAlias);
                 primaryKey = null;
             }
 
             return new NodeSchema(
-                primaryKey: $"{OptionSetAlias}.{nameof(OptionSetMetadataBase.MetadataId)}",
+                primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
                 sortOrder: Array.Empty<string>()
                 );
         }
 
-        private void AddSchemaCols(NodeCompilationContext context, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, IDictionary<string, OptionSetProperty> cols, string alias, ref string primaryKey)
+        private void AddSchemaCols(NodeCompilationContext context, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, IDictionary<string, OptionSetProperty> cols, string alias)
         {
             var props = (IEnumerable<OptionSetProperty>)cols.Values;
 
@@ -214,7 +217,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var prop in props)
             {
-                schema[$"{alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, true, false, isWildcardable: true);
+                var nullable = true;
+
+                if ((alias == OptionSetAlias && prop.Name == nameof(OptionSetMetadata.MetadataId).ToLowerInvariant()) ||
+                    (alias == ValueAlias && prop.Name == "optionsetid"))
+                {
+                    nullable = false;
+                }
+
+                schema[$"{alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                 if (!aliases.TryGetValue(prop.Name, out var a))
                 {
@@ -224,8 +235,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 ((List<string>)a).Add($"{alias}.{prop.Name}");
             }
-
-            primaryKey = $"{alias}.{nameof(OptionSetMetadataBase.MetadataId)}";
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

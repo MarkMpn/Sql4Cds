@@ -354,6 +354,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _keyCols = new Dictionary<string, MetadataProperty>();
             _valueCols = new Dictionary<string, MetadataProperty>();
 
+            if (MetadataSource.HasFlag(MetadataSource.Entity))
+                Query.Properties = Query.Properties ?? new MetadataPropertiesExpression();
+
+            if (MetadataSource.HasFlag(MetadataSource.Attribute) ||
+                MetadataSource.HasFlag(MetadataSource.Value))
+            {
+                Query.AttributeQuery = Query.AttributeQuery ?? new AttributeQueryExpression();
+                Query.AttributeQuery.Properties = Query.AttributeQuery.Properties ?? new MetadataPropertiesExpression();
+            }
+
+            if (MetadataSource.HasFlag(MetadataSource.OneToManyRelationship) ||
+                MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship) ||
+                MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
+            {
+                Query.RelationshipQuery = Query.RelationshipQuery ?? new RelationshipQueryExpression();
+                Query.RelationshipQuery.Properties = Query.RelationshipQuery.Properties ?? new MetadataPropertiesExpression();
+            }
+
+            if (MetadataSource.HasFlag(MetadataSource.Key))
+            {
+                Query.KeyQuery = Query.KeyQuery ?? new EntityKeyQueryExpression();
+                Query.KeyQuery.Properties = Query.KeyQuery.Properties ?? new MetadataPropertiesExpression();
+            }
+
             foreach (var col in requiredColumns)
             {
                 var parts = col.SplitMultiPartIdentifier();
@@ -363,9 +387,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (parts[0].Equals(EntityAlias, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Query.Properties == null)
-                        Query.Properties = new MetadataPropertiesExpression();
-
                     var prop = _entityProps[parts[1]];
 
                     if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(prop.PropertyName))
@@ -375,12 +396,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (parts[0].Equals(AttributeAlias, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Query.AttributeQuery == null)
-                        Query.AttributeQuery = new AttributeQueryExpression();
-
-                    if (Query.AttributeQuery.Properties == null)
-                        Query.AttributeQuery.Properties = new MetadataPropertiesExpression();
-
                     var prop = _attributeProps[parts[1]];
 
                     if (!Query.AttributeQuery.Properties.AllProperties && !Query.AttributeQuery.Properties.PropertyNames.Contains(prop.PropertyName))
@@ -390,12 +405,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (parts[0].Equals(OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Query.RelationshipQuery == null)
-                        Query.RelationshipQuery = new RelationshipQueryExpression();
-
-                    if (Query.RelationshipQuery.Properties == null)
-                        Query.RelationshipQuery.Properties = new MetadataPropertiesExpression();
-
                     var prop = _oneToManyRelationshipProps[parts[1]];
 
                     if (!Query.RelationshipQuery.Properties.AllProperties && !Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
@@ -405,12 +414,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (parts[0].Equals(ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Query.RelationshipQuery == null)
-                        Query.RelationshipQuery = new RelationshipQueryExpression();
-
-                    if (Query.RelationshipQuery.Properties == null)
-                        Query.RelationshipQuery.Properties = new MetadataPropertiesExpression();
-
                     var prop = _oneToManyRelationshipProps[parts[1]];
 
                     if (!Query.RelationshipQuery.Properties.AllProperties && !Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
@@ -420,12 +423,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (parts[0].Equals(ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Query.RelationshipQuery == null)
-                        Query.RelationshipQuery = new RelationshipQueryExpression();
-
-                    if (Query.RelationshipQuery.Properties == null)
-                        Query.RelationshipQuery.Properties = new MetadataPropertiesExpression();
-
                     var prop = _manyToManyRelationshipProps[parts[1]];
 
                     if (!Query.RelationshipQuery.Properties.AllProperties && !Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
@@ -435,12 +432,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (parts[0].Equals(KeyAlias, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Query.KeyQuery == null)
-                        Query.KeyQuery = new EntityKeyQueryExpression();
-
-                    if (Query.KeyQuery.Properties == null)
-                        Query.KeyQuery.Properties = new MetadataPropertiesExpression();
-
                     var prop = _keyProps[parts[1]];
 
                     if (!Query.KeyQuery.Properties.AllProperties && !Query.KeyQuery.Properties.PropertyNames.Contains(prop.PropertyName))
@@ -450,12 +441,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (parts[0].Equals(ValueAlias, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Query.AttributeQuery == null)
-                        Query.AttributeQuery = new AttributeQueryExpression();
-
-                    if (Query.AttributeQuery.Properties == null)
-                        Query.AttributeQuery.Properties = new MetadataPropertiesExpression();
-
                     var prop = nameof(EnumAttributeMetadata.OptionSet);
 
                     if (!Query.AttributeQuery.Properties.AllProperties && !Query.AttributeQuery.Properties.PropertyNames.Contains(prop))
