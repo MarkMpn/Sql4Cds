@@ -187,11 +187,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             string primaryKey = null;
 
             if (MetadataSource.HasFlag(OptionSetSource.OptionSet))
-                AddSchemaCols(context, schema, aliases, _optionsetCols ?? _optionsetProps, OptionSetAlias, ref primaryKey);
+            {
+                AddSchemaCols(context, schema, aliases, _optionsetCols ?? _optionsetProps, OptionSetAlias);
+                primaryKey = $"{OptionSetAlias}.{nameof(OptionSetMetadataBase.MetadataId).ToLowerInvariant()}";
+            }
 
             if (MetadataSource.HasFlag(OptionSetSource.Value))
             {
-                AddSchemaCols(context, schema, aliases, _valueCols ?? _valueProps, ValueAlias, ref primaryKey);
+                AddSchemaCols(context, schema, aliases, _valueCols ?? _valueProps, ValueAlias);
                 primaryKey = null;
             }
 
@@ -203,7 +206,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 );
         }
 
-        private void AddSchemaCols(NodeCompilationContext context, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, IDictionary<string, OptionSetProperty> cols, string alias, ref string primaryKey)
+        private void AddSchemaCols(NodeCompilationContext context, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, IDictionary<string, OptionSetProperty> cols, string alias)
         {
             var props = (IEnumerable<OptionSetProperty>)cols.Values;
 
@@ -232,8 +235,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 ((List<string>)a).Add($"{alias}.{prop.Name}");
             }
-
-            primaryKey = $"{alias}.{nameof(OptionSetMetadataBase.MetadataId)}";
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
