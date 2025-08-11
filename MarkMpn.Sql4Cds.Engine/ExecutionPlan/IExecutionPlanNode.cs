@@ -70,6 +70,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Notifies the node that all folding of the query is completed
         /// </summary>
-        void FinishedFolding();
+        /// <param name="context">The context in which the node is being built</param>
+        void FinishedFolding(NodeCompilationContext context);
     }
 }

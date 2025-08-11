@@ -472,6 +472,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (attrType.IsEntityReference())
                     attrType = DataTypeHelpers.UniqueIdentifier;
 
+                // Special case: we will have already converted rowversion values to their bigint equivalent
+                if (attrType.IsSameAs(DataTypeHelpers.RowVersion))
+                    attrType = DataTypeHelpers.BigInt;
+
                 // For some operators the value type may be different from the attribute type
                 switch (condition.@operator)
                 {
@@ -527,7 +531,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (condition.Items != null)
                 {
                     foreach (var value in condition.Items)
+                    {
+                        if (value.IsVariable)
+                            continue;
+
                         conversion(dataSource.DefaultCollation.ToSqlString(value.Value), context);
+                    }
                 }
             }
 
@@ -580,6 +589,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     dto = new DateTimeOffset(dt.Value, TimeSpan.Zero);
 
                 formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
+            }
+
+            if (value is SqlBinary bin)
+            {
+                var bigint = SqlTypeConverter.ChangeType<SqlInt64>(bin, null);
+                formatted = bigint.Value.ToString(CultureInfo.InvariantCulture);
             }
 
             return formatted;
@@ -2547,7 +2562,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ReturnFullSchema = fullSchema;
         }
 
-        public override void FinishedFolding()
+        public override void FinishedFolding(NodeCompilationContext context)
         {
             ReturnFullSchema = false;
 
@@ -2557,6 +2572,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (ColumnMappings[i].OutputColumn == ColumnMappings[i].SourceColumn)
                     ColumnMappings.RemoveAt(i);
             }
+
+            if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
+
+            var eec = new ExpressionExecutionContext(context.CreateExecutionContext(null));
+            VerifyFilterValueTypes(Entity.name, Entity.Items, dataSource, eec);
         }
 
         protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)

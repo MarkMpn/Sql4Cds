@@ -125,7 +125,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "parentaccountidname",
                 "primarycontactid",
                 "primarycontactidname",
-                "turnover"
+                "turnover",
+                "versionnumber",
             }, select.ColumnSet.Select(col => col.OutputColumn).ToArray());
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
@@ -4234,7 +4235,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
-            var query = "SELECT name FROM account WHERE accountid IN ('0000000000000000-0000-0000-000000000000', '0000000000000000-0000-0000-000000000001')";
+            var query = "SELECT name FROM account WHERE accountid IN ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000001')";
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -4248,8 +4249,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                         <filter>
                             <condition attribute='accountid' operator='in'>
-                                <value>0000000000000000-0000-0000-000000000000</value>
-                                <value>0000000000000000-0000-0000-000000000001</value>
+                                <value>00000000-0000-0000-0000-000000000000</value>
+                                <value>00000000-0000-0000-0000-000000000001</value>
                             </condition>
                         </filter>
                     </entity>
@@ -9264,6 +9265,31 @@ FROM (
   <entity name='account'>
     <attribute name='name' alias='n' />
     <order attribute='name' />
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnBinaryVersionNumber()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT name FROM account WHERE versionnumber > 0x00000000033F264D";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='account'>
+    <attribute name='name' />
+    <filter>
+      <condition attribute='versionnumber' operator='gt' value='54470221' />
+    </filter>
   </entity>
 </fetch>");
         }

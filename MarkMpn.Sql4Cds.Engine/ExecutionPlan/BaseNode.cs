@@ -68,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Notifies the node that query folding is complete
         /// </summary>
-        public virtual void FinishedFolding()
+        public virtual void FinishedFolding(NodeCompilationContext context)
         {
         }
 
