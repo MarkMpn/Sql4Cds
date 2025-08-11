@@ -196,7 +196,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return new NodeSchema(
-                primaryKey: $"{OptionSetAlias}.{nameof(OptionSetMetadataBase.MetadataId)}",
+                primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
                 sortOrder: Array.Empty<string>()
@@ -214,7 +214,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var prop in props)
             {
-                schema[$"{alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, true, false, isWildcardable: true);
+                var nullable = true;
+
+                if ((alias == OptionSetAlias && prop.Name == nameof(OptionSetMetadata.MetadataId).ToLowerInvariant()) ||
+                    (alias == ValueAlias && prop.Name == "optionsetid"))
+                {
+                    nullable = false;
+                }
+
+                schema[$"{alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, nullable, false, isWildcardable: true);
 
                 if (!aliases.TryGetValue(prop.Name, out var a))
                 {
