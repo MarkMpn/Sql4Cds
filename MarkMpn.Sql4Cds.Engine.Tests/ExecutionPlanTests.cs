@@ -9267,5 +9267,35 @@ FROM (
   </entity>
 </fetch>");
         }
+
+        [TestMethod]
+        public void MetadataJoins()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT
+    a.entitylogicalname
+    FROM
+    metadata.entity AS e
+    INNER JOIN metadata.attribute AS a ON a.entitylogicalname = e.logicalname
+    INNER JOIN metadata.globaloptionset AS os ON a.optionset = os.metadataid
+WHERE
+     a.entitylogicalname LIKE 'prefix%'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            var optionset = AssertNode<GlobalOptionSetQueryNode>(join.LeftSource);
+            var filter = AssertNode<FilterNode>(join.RightSource);
+            var metadata = AssertNode<MetadataQueryNode>(filter.Source);
+
+            var metadataSchema = metadata.GetSchema(new NodeCompilationContext(planBuilder.Session, planBuilder.Options, null, null));
+            Assert.AreEqual(2, metadataSchema.Schema.Count);
+            CollectionAssert.AreEqual(new[] { "a.entitylogicalname", "a.optionset" }, metadataSchema.Schema.Keys.ToArray());
+        }
     }
 }
