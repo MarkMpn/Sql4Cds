@@ -125,7 +125,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "parentaccountidname",
                 "primarycontactid",
                 "primarycontactidname",
-                "turnover"
+                "turnover",
+                "versionnumber",
             }, select.ColumnSet.Select(col => col.OutputColumn).ToArray());
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
@@ -4234,7 +4235,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
-            var query = "SELECT name FROM account WHERE accountid IN ('0000000000000000-0000-0000-000000000000', '0000000000000000-0000-0000-000000000001')";
+            var query = "SELECT name FROM account WHERE accountid IN ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000001')";
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -4248,8 +4249,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                         <filter>
                             <condition attribute='accountid' operator='in'>
-                                <value>0000000000000000-0000-0000-000000000000</value>
-                                <value>0000000000000000-0000-0000-000000000001</value>
+                                <value>00000000-0000-0000-0000-000000000000</value>
+                                <value>00000000-0000-0000-0000-000000000001</value>
                             </condition>
                         </filter>
                     </entity>
@@ -7752,22 +7753,27 @@ ORDER BY
                 var select = AssertNode<SelectNode>(plans[0]);
                 var top = AssertNode<TopNode>(select.Source);
                 var sort = AssertNode<SortNode>(top.Source);
-                var filter = AssertNode<FilterNode>(sort.Source);
-                var loop = AssertNode<NestedLoopNode>(filter.Source);
+                var existsOrInFilter = AssertNode<FilterNode>(sort.Source);
+                var loop = AssertNode<NestedLoopNode>(existsOrInFilter.Source);
                 var merge = AssertNode<MergeJoinNode>(loop.LeftSource);
-                var mainFetch = AssertNode<FetchXmlScan>(merge.LeftSource);
+                var columnComparisonFilter = AssertNode<FilterNode>(merge.LeftSource);
+                var mainFetch = AssertNode<FetchXmlScan>(columnComparisonFilter.Source);
                 var existsFetch = AssertNode<FetchXmlScan>(merge.RightSource);
                 var inTop = AssertNode<TopNode>(loop.RightSource);
                 var inIndexSpool = AssertNode<IndexSpoolNode>(inTop.Source);
                 var inFetch = AssertNode<FetchXmlScan>(inIndexSpool.Source);
 
+                Assert.AreEqual(@"(Expr4 IS NOT NULL
+ OR Expr2 IS NOT NULL)", existsOrInFilter.Filter.ToNormalizedSql());
+                Assert.AreEqual("account.createdon = contact.createdon", columnComparisonFilter.Filter.ToNormalizedSql());
+
                 AssertFetchXml(mainFetch, @"
 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
   <entity name='account'>
     <attribute name='name' />
-    <attribute name='createdon' />
     <attribute name='accountid' />
     <attribute name='employees' />
+    <attribute name='createdon' />
     <link-entity name='contact' to='primarycontactid' from='contactid' alias='contact' link-type='inner'>
       <attribute name='fullname' />
       <attribute name='createdon' />
@@ -9266,6 +9272,82 @@ FROM (
     <order attribute='name' />
   </entity>
 </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnBinaryVersionNumber()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT name FROM account WHERE versionnumber > 0x00000000033F264D";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+<fetch xmlns:generator='MarkMpn.SQL4CDS'>
+  <entity name='account'>
+    <attribute name='name' />
+    <filter>
+      <condition attribute='versionnumber' operator='gt' value='54470221' />
+    </filter>
+  </entity>
+</fetch>");
+        }
+
+        [TestMethod]
+        public void MetadataJoins()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+SELECT
+    a.entitylogicalname
+    FROM
+    metadata.entity AS e
+    INNER JOIN metadata.attribute AS a ON a.entitylogicalname = e.logicalname
+    INNER JOIN metadata.globaloptionset AS os ON a.optionset = os.metadataid
+WHERE
+     a.entitylogicalname LIKE 'prefix%'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            var optionset = AssertNode<GlobalOptionSetQueryNode>(join.LeftSource);
+            var filter = AssertNode<FilterNode>(join.RightSource);
+            var metadata = AssertNode<MetadataQueryNode>(filter.Source);
+
+            var metadataSchema = metadata.GetSchema(new NodeCompilationContext(planBuilder.Session, planBuilder.Options, null, null));
+            Assert.AreEqual(2, metadataSchema.Schema.Count);
+            CollectionAssert.AreEqual(new[] { "a.entitylogicalname", "a.optionset" }, metadataSchema.Schema.Keys.ToArray());
+        }
+
+        [TestMethod]
+        public void FoldFiltersAroundOuterApply()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"select *
+from (values('a')) t1 (a)
+outer apply (select 1 as b) t2
+where t1.a like 'x%'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<NestedLoopNode>(select.Source);
+            var filter = AssertNode<FilterNode>(join.LeftSource);
+            var t1 = AssertNode<ConstantScanNode>(filter.Source);
+            var t2 = AssertNode<ConstantScanNode>(join.RightSource);
         }
     }
 }

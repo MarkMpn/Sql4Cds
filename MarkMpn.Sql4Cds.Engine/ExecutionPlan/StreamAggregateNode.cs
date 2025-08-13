@@ -44,11 +44,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override void FinishedFolding()
+        public override void FinishedFolding(NodeCompilationContext context)
         {
             _fullWindowSchema = false;
 
-            base.FinishedFolding();
+            base.FinishedFolding(context);
         }
 
         public override INodeSchema GetSchema(NodeCompilationContext context)

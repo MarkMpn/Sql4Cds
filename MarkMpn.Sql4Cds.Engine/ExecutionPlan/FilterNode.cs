@@ -166,7 +166,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foldedFilters |= FoldTableSpoolToIndexSpool(context, hints);
             foldedFilters |= ExpandFiltersOnColumnComparisons(context);
             foldedFilters |= FoldFiltersToDataSources(context, hints, subqueryConditions, out var dynamicValuesLoop);
-            foldedFilters |= FoldFiltersToInnerJoinSources(context, hints);
+            foldedFilters |= FoldFiltersToJoinSources(context, hints);
             foldedFilters |= FoldFiltersToSpoolSource(context, hints);
             foldedFilters |= FoldFiltersToNestedLoopCondition(context, hints);
 
@@ -405,63 +405,70 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        private bool FoldFiltersToInnerJoinSources(NodeCompilationContext context, IList<OptimizerHint> hints)
+        private bool FoldFiltersToJoinSources(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             if (Filter == null)
                 return false;
 
-            if (!(Source is BaseJoinNode join) || join.JoinType != QualifiedJoinType.Inner)
+            if (!(Source is BaseJoinNode join))
                 return false;
 
             var folded = false;
             var leftSchema = join.LeftSource.GetSchema(context);
-            Filter = ExtractChildFilters(Filter, leftSchema, col => leftSchema.ContainsColumn(col, out _), out var leftFilter);
 
-            if (leftFilter != null)
+            if (join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.LeftOuter)
             {
-                join.LeftSource = new FilterNode
+                Filter = ExtractChildFilters(Filter, leftSchema, col => leftSchema.ContainsColumn(col, out _), out var leftFilter);
+
+                if (leftFilter != null)
                 {
-                    Source = join.LeftSource,
-                    Filter = leftFilter
-                }.FoldQuery(context, hints);
-                join.LeftSource.Parent = join;
+                    join.LeftSource = new FilterNode
+                    {
+                        Source = join.LeftSource,
+                        Filter = leftFilter
+                    }.FoldQuery(context, hints);
+                    join.LeftSource.Parent = join;
 
-                folded = true;
-            }
-
-            if (Filter == null)
-                return true;
-
-            var rightContext = context;
-
-            if (join is NestedLoopNode loop && loop.OuterReferences != null)
-            {
-                var innerParameterTypes = loop.OuterReferences
-                    .Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type))
-                    .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
-
-                rightContext = context.CreateChildContext(innerParameterTypes);
-            }
-
-            var rightSchema = join.RightSource.GetSchema(rightContext);
-            Filter = ExtractChildFilters(Filter, rightSchema, col => rightSchema.ContainsColumn(col, out _) || join.DefinedValues.ContainsKey(col), out var rightFilter);
-
-            if (rightFilter != null)
-            {
-                if (join.DefinedValues.Count > 0)
-                {
-                    var rewrite = new RewriteVisitor(join.DefinedValues.ToDictionary(kvp => (ScalarExpression)kvp.Key.ToColumnReference(), kvp => (ScalarExpression)kvp.Value.ToColumnReference()));
-                    rightFilter.Accept(rewrite);
+                    folded = true;
                 }
 
-                join.RightSource = new FilterNode
-                {
-                    Source = join.RightSource,
-                    Filter = rightFilter
-                }.FoldQuery(rightContext, hints);
-                join.RightSource.Parent = join;
+                if (Filter == null)
+                    return true;
+            }
 
-                folded = true;
+            if (join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.RightOuter)
+            {
+                var rightContext = context;
+
+                if (join is NestedLoopNode loop && loop.OuterReferences != null)
+                {
+                    var innerParameterTypes = loop.OuterReferences
+                        .Select(or => new KeyValuePair<string, DataTypeReference>(or.Value, leftSchema.Schema[or.Key].Type))
+                        .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+
+                    rightContext = context.CreateChildContext(innerParameterTypes);
+                }
+
+                var rightSchema = join.RightSource.GetSchema(rightContext);
+                Filter = ExtractChildFilters(Filter, rightSchema, col => rightSchema.ContainsColumn(col, out _) || join.DefinedValues.ContainsKey(col), out var rightFilter);
+
+                if (rightFilter != null)
+                {
+                    if (join.DefinedValues.Count > 0)
+                    {
+                        var rewrite = new RewriteVisitor(join.DefinedValues.ToDictionary(kvp => (ScalarExpression)kvp.Key.ToColumnReference(), kvp => (ScalarExpression)kvp.Value.ToColumnReference()));
+                        rightFilter.Accept(rewrite);
+                    }
+
+                    join.RightSource = new FilterNode
+                    {
+                        Source = join.RightSource,
+                        Filter = rightFilter
+                    }.FoldQuery(rightContext, hints);
+                    join.RightSource.Parent = join;
+
+                    folded = true;
+                }
             }
 
             if (folded)
