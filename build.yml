@@ -102,7 +102,6 @@ steps:
       $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
       $cert.Import("$(CodeSigningCert.secureFilePath)", "$(CodeSigningCertPassword)", [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
       Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.20.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
-      Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.21.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.21.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
 
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS 20 installer to pipeline
@@ -114,7 +113,7 @@ steps:
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS 21 installer to pipeline
   inputs:
-    targetPath: 'MarkMpn.Sql4Cds.SSMS.21.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.21.Setup.msi'
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.21.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.vsix'
     artifact: 'SSMS21Installer'
     publishLocation: 'pipeline'
 
