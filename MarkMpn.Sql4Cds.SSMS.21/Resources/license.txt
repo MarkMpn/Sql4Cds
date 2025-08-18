@@ -1,0 +1,2 @@
+
+For license, see https://github.com/MarkMpn/Sql4Cds/blob/master/LICENSE
