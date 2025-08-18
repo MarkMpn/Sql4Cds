@@ -58,8 +58,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 (node.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource).Equals(_search.DatabaseIdentifier?.Value ?? PrimaryDataSource, StringComparison.OrdinalIgnoreCase) &&
                 node.SchemaObject.BaseIdentifier.Value.Equals(_search.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
             {
-                if (!_foundAlias && !String.IsNullOrEmpty(TargetEntityName))
-                    _ambiguous = true;
+                if (!String.IsNullOrEmpty(TargetEntityName))
+                    _ambiguous = (Target != null && Target.SchemaObject != _search);
 
                 TargetDataSource = node.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource;
                 TargetSchema = node.SchemaObject.SchemaIdentifier?.Value;
