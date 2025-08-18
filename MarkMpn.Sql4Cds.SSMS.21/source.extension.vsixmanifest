@@ -2,18 +2,24 @@
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
     <Identity Id="MarkMpn.Sql4Cds.SSMS.6739e1e9-23a8-45a5-a025-5130fd478647" Version="1.0" Language="en-US" Publisher="Mark Carrington" />
-    <DisplayName>MarkMpn.Sql4Cds.SSMS</DisplayName>
-    <Description>Empty VSIX Project.</Description>
+    <DisplayName>SQL 4 CDS</DisplayName>
+    <Description>Extends support for Dataverse queries to include DML and other queries not supported by the TDS Endpoint</Description>
+    <MoreInfo>https://github.com/MarkMpn/Sql4CDs</MoreInfo>
+    <License>Resources\license.txt</License>
+    <GettingStartedGuide>https://github.com/MarkMpn/Sql4Cds/wiki</GettingStartedGuide>
+    <Icon>Resources\sql4cds.png</Icon>
+    <Tags>sql ssms cds dataverse d365 dynamics sql4cds</Tags>
   </Metadata>
-  <Installation>
-    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[15.0, 16.0)" />
+  <Installation AllUsers="true">
+    <InstallationTarget Id="Microsoft.VisualStudio.Ssms" Version="[21.0,)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
   </Installation>
   <Dependencies>
-    <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.5,)" />
-    <Dependency Id="Microsoft.VisualStudio.MPF.15.0" DisplayName="Visual Studio MPF 15.0" d:Source="Installed" Version="[15.0]" />
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.6.2,)" />
   </Dependencies>
   <Prerequisites>
-    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[15.0,16.0)" DisplayName="Visual Studio core editor" />
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,)" DisplayName="Visual Studio core editor" />
   </Prerequisites>
   <Assets>
     <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />

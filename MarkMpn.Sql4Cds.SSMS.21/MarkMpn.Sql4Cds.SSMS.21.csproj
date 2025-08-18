@@ -46,7 +46,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <CopyVsixExtensionFiles>True</CopyVsixExtensionFiles>
-    <CopyVsixExtensionLocation>C:\Program Files\Microsoft SQL Server Management Studio 21\Preview\Common7\IDE\Extensions\MarkMpn.Sql4Cds.SSMS</CopyVsixExtensionLocation>
+    <CopyVsixExtensionLocation>C:\Program Files\Microsoft SQL Server Management Studio 21\Release\Common7\IDE\Extensions\MarkMpn.Sql4Cds.SSMS</CopyVsixExtensionLocation>
     <DeployExtension>False</DeployExtension>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -177,9 +177,14 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Resources\FetchXml2SqlCommand.png" />
+    <Content Include="Resources\license.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
     <Content Include="Resources\Sql2FetchXmlCommand.png" />
     <Content Include="Resources\Sql2FetchXmlCommandPackage.ico" />
     <Content Include="Resources\Sql2MCommand.png" />
+    <Content Include="Resources\sql4cds.png" />
   </ItemGroup>
   <Import Project="..\MarkMpn.Sql4Cds.SSMS\MarkMpn.Sql4Cds.SSMS.projitems" Label="Shared" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
