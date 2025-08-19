@@ -2934,5 +2934,39 @@ DEALLOCATE MyCursor";
                 }
             }
         }
+
+        [TestMethod]
+        public void CoalesceSelect()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/698
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @Result VARCHAR(50);
+SELECT @Result=COALESCE(NULL, 'Hello world!', 'Do not select this')
+SELECT @Result";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("Hello world!", result);
+            }
+        }
+
+        [TestMethod]
+        public void CoalesceSet()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/698
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @Result VARCHAR(50);
+SET @Result=COALESCE(NULL, 'Hello world!', 'Do not select this')
+SELECT @Result";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("Hello world!", result);
+            }
+        }
     }
 }

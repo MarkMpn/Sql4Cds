@@ -250,5 +250,19 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             ReplaceExpression(node, n => n.Variable);
             ReplaceExpression(node, n => n.RowPattern);
         }
+
+        public override void ExplicitVisit(SelectSetVariable node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.Variable);
+            ReplaceExpression(node, n => n.Expression);
+        }
+
+        public override void ExplicitVisit(SetVariableStatement node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.Variable);
+            ReplaceExpression(node, n => n.Expression);
+        }
     }
 }
