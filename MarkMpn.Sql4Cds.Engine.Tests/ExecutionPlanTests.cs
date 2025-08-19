@@ -9349,5 +9349,23 @@ where t1.a like 'x%'";
             var t1 = AssertNode<ConstantScanNode>(filter.Source);
             var t2 = AssertNode<ConstantScanNode>(join.RightSource);
         }
+
+        [TestMethod]
+        public void InsertToTableWithAlias()
+        {
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+insert into account (name)
+select a.name
+from account a";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var insert = AssertNode<InsertNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(insert.Source);
+        }
     }
 }
