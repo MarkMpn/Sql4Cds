@@ -1129,6 +1129,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 paramExpressionsWithType.Insert(0, new { Expression = targetParam, Type = targetType, CacheKey = targetCacheKey, Exception = targetException });
             }
 
+            if (func.TrimOptions != null)
+            {
+                // If this is a TRIM function, add the trim option as the first parameter
+                paramExpressionsWithType.Insert(0, new { Expression = createExpression ? (Expression)Expression.Constant(func.TrimOptions.Value) : null, Type = (DataTypeReference)DataTypeHelpers.NVarChar(func.TrimOptions.Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), CacheKey = func.TrimOptions.Value, Exception = (NotSupportedQueryFragmentException)null });
+            }
+
             var paramExceptions = paramExpressionsWithType
                 .Select(p => p.Exception)
                 .Where(e => e != null)

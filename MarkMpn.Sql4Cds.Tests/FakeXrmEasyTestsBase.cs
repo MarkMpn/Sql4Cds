@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Tests
         {
             // Microsoft.Xrm.Sdk has a reference to System.Text.Json 6.0.0.2 but the NuGet package pulls in 6.0.0.7,
             // which causes a runtime error. Redirect the assembly to the newer version.
-            RedirectAssembly("System.Text.Json", new Version("6.0.0.7"), "cc7b13ffcd2ddd51");
+            RedirectAssembly("System.Text.Json", new Version("8.0.0.6"), "cc7b13ffcd2ddd51");
         }
 
         // https://stackoverflow.com/questions/5646306/is-it-possible-to-create-a-binding-redirect-at-runtime

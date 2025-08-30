@@ -20,7 +20,6 @@ using System.Text.Json;
 using Microsoft.SqlServer.Server;
 using Microsoft.Xrm.Sdk.Metadata;
 
-
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -943,6 +942,43 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Removes the space character from the start and end of a string
+        /// </summary>
+        /// <param name="expression">A character expression where characters should be removed</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlString Trim(SqlString characters, [MaxLength] SqlString expression)
+        {
+            if (characters.IsNull || expression.IsNull)
+                return expression;
+
+            return new SqlString(expression.Value.Trim(characters.Value.ToCharArray()), expression.LCID, expression.SqlCompareOptions);
+        }
+
+        /// <summary>
+        /// Removes the space character from the start and end of a string
+        /// </summary>
+        /// <param name="expression">A character expression where characters should be removed</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlString Trim(SqlString trimType, SqlString characters, [MaxLength] SqlString expression)
+        {
+            if (trimType.IsNull || characters.IsNull || expression.IsNull)
+                return expression;
+
+            if (trimType.Value.Equals("LEADING", StringComparison.OrdinalIgnoreCase))
+                return new SqlString(expression.Value.TrimStart(characters.Value.ToCharArray()), expression.LCID, expression.SqlCompareOptions);
+
+            if (trimType.Value.Equals("TRAILING", StringComparison.OrdinalIgnoreCase))
+                return new SqlString(expression.Value.TrimEnd(characters.Value.ToCharArray()), expression.LCID, expression.SqlCompareOptions);
+
+            if (trimType.Value.Equals("BOTH", StringComparison.OrdinalIgnoreCase))
+                return new SqlString(expression.Value.Trim(characters.Value.ToCharArray()), expression.LCID, expression.SqlCompareOptions);
+
+            throw new QueryExecutionException("Invalid trim type");
+        }
+
+        /// <summary>
         /// Removes the space character from the start of a string
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
@@ -957,6 +993,20 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Removes the space character from the start of a string
+        /// </summary>
+        /// <param name="expression">A character expression where characters should be removed</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlString LTrim([MaxLength] SqlString expression, SqlString characters)
+        {
+            if (expression.IsNull || characters.IsNull)
+                return expression;
+
+            return new SqlString(expression.Value.TrimStart(characters.Value.ToCharArray()), expression.LCID, expression.SqlCompareOptions);
+        }
+
+        /// <summary>
         /// Removes the space character from the end of a string
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
@@ -968,6 +1018,20 @@ namespace MarkMpn.Sql4Cds.Engine
                 return expression;
 
             return new SqlString(expression.Value.TrimEnd(' '), expression.LCID, expression.SqlCompareOptions);
+        }
+
+        /// <summary>
+        /// Removes the space character from the end of a string
+        /// </summary>
+        /// <param name="expression">A character expression where characters should be removed</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlString RTrim([MaxLength] SqlString expression, SqlString characters)
+        {
+            if (expression.IsNull || characters.IsNull)
+                return expression;
+
+            return new SqlString(expression.Value.TrimEnd(characters.Value.ToCharArray()), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>

@@ -2968,5 +2968,122 @@ SELECT @Result";
                 Assert.AreEqual("Hello world!", result);
             }
         }
+
+        [TestMethod]
+        public void LTrimDefault()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT LTRIM('     Five spaces are at the beginning of this string.');";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("Five spaces are at the beginning of this string.", result);
+            }
+        }
+
+        [TestMethod]
+        public void LTrimChars()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT LTRIM('123abc.' , '123.');";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("abc.", result);
+            }
+        }
+
+        [TestMethod]
+        public void RTrimDefault()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT RTRIM('Removes trailing spaces.   ');";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("Removes trailing spaces.", result);
+            }
+        }
+
+        [TestMethod]
+        public void RTrimChars()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT RTRIM('.123abc.' , 'abc.');";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual(".123", result);
+            }
+        }
+
+        [TestMethod]
+        public void TrimDefault()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT TRIM( '     test    ') AS Result;";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("test", result);
+            }
+        }
+
+        [TestMethod]
+        public void TrimChars()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT TRIM( '.,! ' FROM '     #     test    .') AS Result;";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("#     test", result);
+            }
+        }
+
+        [TestMethod]
+        public void TrimLeadingChars()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT TRIM(LEADING '.,! ' FROM  '     .#     test    .') AS Result;";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("#     test    .", result);
+            }
+        }
+
+        [TestMethod]
+        public void TrimTrailingChars()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT TRIM(TRAILING '.,! ' FROM '     .#     test    .') AS Result;";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("     .#     test", result);
+            }
+        }
+
+        [TestMethod]
+        public void TrimBothChars()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT TRIM(BOTH '123' FROM '123abc123') AS Result;";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("abc", result);
+            }
+        }
     }
 }
