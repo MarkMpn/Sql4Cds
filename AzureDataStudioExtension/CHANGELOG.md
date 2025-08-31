@@ -1,5 +1,20 @@
 # Change Log
 
+## [v10.1.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v10.1.0) - 2025-08-31
+
+New features:
+* Support additional parameters for `TRIM`, `LTRIM` and `RTRIM` functions for SQL Server 2022 compatibility
+* Allow filtering on `versionnumber` column using binary literals
+
+Improvements:
+* Ensure optionset metadata primary key columns are flagged as not null for more efficient joins
+* Fold filters to inner side of outer joins for better performance
+
+Bug fixes:
+* Fixed `KeyNotFoundException` when referencing a metadata table without selecting any columns from it
+* Fixed "The table '<name>' is ambiguous" error when using `UPDATE` with joins and subqueries
+* Fixed use of `COALESCE` and other primary functions in variable assignments
+
 ## [v10.0.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v10.0.0) - 2025-07-17
 
 New features:
