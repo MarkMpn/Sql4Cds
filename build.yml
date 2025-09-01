@@ -113,7 +113,7 @@ steps:
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS 21 installer to pipeline
   inputs:
-    targetPath: 'MarkMpn.Sql4Cds.SSMS.21.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.vsix'
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.21\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.vsix'
     artifact: 'SSMS21Installer'
     publishLocation: 'pipeline'
 
