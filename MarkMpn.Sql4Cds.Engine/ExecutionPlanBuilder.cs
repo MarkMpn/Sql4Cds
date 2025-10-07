@@ -5018,7 +5018,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 subAlias = alias.Alias;
             }
 
-            if (rightAttribute.MultiPartIdentifier.Identifiers.Count == 2)
+            if (subAlias != null && rightAttribute.MultiPartIdentifier.Identifiers.Count == 2)
                 rightAttribute.MultiPartIdentifier.Identifiers[0].Value = subAlias;
 
             // Add the required column with the expected alias (used for scalar subqueries and IN predicates, not for CROSS/OUTER APPLY
