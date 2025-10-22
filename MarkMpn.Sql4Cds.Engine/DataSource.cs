@@ -3,13 +3,10 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
-using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Microsoft.Crm.Sdk.Messages;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading.Tasks;
-
-
 
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;

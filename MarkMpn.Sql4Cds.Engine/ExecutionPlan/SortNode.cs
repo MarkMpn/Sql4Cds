@@ -421,6 +421,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                         if (fetchSort.attribute == null)
                                             return this;
 
+                                        var virtualAttribute = meta.Attributes.SingleOrDefault(a => a.AttributeOf == attribute.LogicalName);
+
+                                        if (virtualAttribute == null)
+                                        {
+                                            // Virtual attribute might have a different name, but we need to check it actually exists, e.g.
+                                            // ribbondiff.difftype does not have a virtual name attribute so sorting on it fails.
+                                            return this;
+                                        }
+
                                         fetchSort.attribute = attribute.LogicalName;
 
                                         if (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
@@ -495,6 +504,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     if (fetchSort.attribute == null)
                                         return this;
+
+                                    var virtualAttribute = meta.Attributes.SingleOrDefault(a => a.AttributeOf == attribute.LogicalName);
+
+                                    if (virtualAttribute == null)
+                                    {
+                                        // Virtual attribute might have a different name, but we need to check it actually exists, e.g.
+                                        // ribbondiff.difftype does not have a virtual name attribute so sorting on it fails.
+                                        return this;
+                                    }
 
                                     fetchSort.attribute = attribute.LogicalName;
 
