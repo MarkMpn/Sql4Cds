@@ -1,5 +1,13 @@
 # Change Log
 
+## [v10.1.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v10.1.1) - 2025-11-01
+
+Bug fixes:
+* Fixed error when using subquery without alias
+* Fixed sorting by optionset attributes that do not have a corresponding name virtual attribute
+* Fixed using conditional query referencing metadata tables
+* Fixed error when values are returned for unexpected attributes
+
 ## [v10.1.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v10.1.0) - 2025-08-31
 
 New features:

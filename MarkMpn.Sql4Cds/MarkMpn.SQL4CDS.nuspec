@@ -23,18 +23,13 @@ plugins or integrations by writing familiar SQL and converting it.
 Queries can also run using the preview TDS Endpoint. A wide range of SQL functionality is also built
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>New features:
-* Support additional parameters for `TRIM`, `LTRIM` and `RTRIM` functions for SQL Server 2022 compatibility
-* Allow filtering on `versionnumber` column using binary literals
-
-Improvements:
-* Ensure optionset metadata primary key columns are flagged as not null for more efficient joins
-* Fold filters to inner side of outer joins for better performance
-
-Bug fixes:
-* Fixed `KeyNotFoundException` when referencing a metadata table without selecting any columns from it
-* Fixed "The table '&lt;name&gt;' is ambiguous" error when using `UPDATE` with joins and subqueries
-* Fixed use of `COALESCE` and other primary functions in variable assignments
+    <releaseNotes>Bug fixes:
+* Fixed Ctrl+S shortcut
+* Fixed error when using subquery without alias
+* Fixed sorting by optionset attributes that do not have a corresponding name virtual attribute
+* Fixed using conditional query referencing metadata tables
+* Fixed deadlock when running large DML queries on temp tables
+* Fixed error when values are returned for unexpected attributes
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
