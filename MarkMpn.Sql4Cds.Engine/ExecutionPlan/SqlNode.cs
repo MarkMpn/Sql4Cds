@@ -111,10 +111,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (svc.CallerId != Guid.Empty)
                         throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
 
-                    if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                    // Check if we have an access token either directly or via AccessTokenProvider
+                    if (String.IsNullOrEmpty(svc.CurrentAccessToken) && dataSource.AccessTokenProvider == null)
                         throw new QueryExecutionException("OAuth must be used to authenticate with the TDS Endpoint");
 
-                    var con = TDSEndpoint.Connect(svc);
+                    var con = TDSEndpoint.Connect(dataSource);
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;

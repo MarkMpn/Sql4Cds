@@ -131,25 +131,34 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Opens a connection to the TDS Endpoint
         /// </summary>
-        /// <param name="svc">The <see cref="IOrganizationService"/> instance to connect to</param>
+        /// <param name="dataSource">The <see cref="DataSource"/> containing the connection and optional access token provider</param>
         /// <returns>A <see cref="SqlConnection"/> connected to the same instance</returns>
-        public static SqlConnection Connect(IOrganizationService org)
+        public static SqlConnection Connect(DataSource dataSource)
         {
-            if (org == null)
-                throw new ArgumentNullException(nameof(org));
+            if (dataSource == null)
+                throw new ArgumentNullException(nameof(dataSource));
+
+            if (dataSource.Connection == null)
+                throw new ArgumentNullException(nameof(dataSource.Connection));
 
 #if NETCOREAPP
-            if (!(org is ServiceClient svc))
-                throw new ArgumentOutOfRangeException(nameof(org), "Only ServiceClient instances are supported");
+            if (!(dataSource.Connection is ServiceClient svc))
+                throw new ArgumentOutOfRangeException(nameof(dataSource.Connection), "Only ServiceClient instances are supported");
 
             var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
 #else
-            if (!(org is CrmServiceClient svc))
-                throw new ArgumentOutOfRangeException(nameof(org), "Only CrmServiceClient instances are supported");
+            if (!(dataSource.Connection is CrmServiceClient svc))
+                throw new ArgumentOutOfRangeException(nameof(dataSource.Connection), "Only CrmServiceClient instances are supported");
 
             var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
 #endif
-            con.AccessToken = svc.CurrentAccessToken;
+
+            // Try to get the access token from CurrentAccessToken first, then fall back to the AccessTokenProvider
+            var accessToken = svc.CurrentAccessToken;
+            if (String.IsNullOrEmpty(accessToken) && dataSource.AccessTokenProvider != null)
+                accessToken = dataSource.AccessTokenProvider();
+
+            con.AccessToken = accessToken;
             con.Open();
             return con;
         }
@@ -190,12 +199,12 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Checks if the TDS endpoint is valid to be used with a specific connection and set of options
+        /// Checks if the TDS endpoint is valid to be used with a specific data source and set of options
         /// </summary>
         /// <param name="options">The <see cref="IQueryExecutionOptions"/> that describe how a query should be executed</param>
-        /// <param name="org">The <see cref="IOrganizationService"/> that is connected to the instance to use</param>
+        /// <param name="dataSource">The <see cref="DataSource"/> containing the connection to the instance to use</param>
         /// <returns><c>true</c> if the TDS endpoint can be used for this connection and options, or <c>false</c> otherwise</returns>
-        internal static bool CanUseTDSEndpoint(IQueryExecutionOptions options, IOrganizationService org)
+        internal static bool CanUseTDSEndpoint(IQueryExecutionOptions options, DataSource dataSource)
         {
             if (!options.UseTDSEndpoint)
                 return false;
@@ -204,13 +213,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 return false;
 
             // Allow generating TDS-based plans in tests
-            if (org == null)
+            if (dataSource?.Connection == null)
                 return true;
 
 #if NETCOREAPP
-            var svc = org as ServiceClient;
+            var svc = dataSource.Connection as ServiceClient;
 #else
-            var svc = org as CrmServiceClient;
+            var svc = dataSource.Connection as CrmServiceClient;
 #endif
 
             if (svc == null)
@@ -219,7 +228,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (svc.CallerId != Guid.Empty)
                 return false;
 
-            if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+            // Check if we have an access token either directly or via the AccessTokenProvider
+            if (String.IsNullOrEmpty(svc.CurrentAccessToken) && dataSource.AccessTokenProvider == null)
                 return false;
 
             if (!IsEnabled(svc))
