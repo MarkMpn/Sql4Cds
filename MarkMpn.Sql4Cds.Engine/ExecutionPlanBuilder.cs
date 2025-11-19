@@ -94,9 +94,9 @@ namespace MarkMpn.Sql4Cds.Engine
             var hintValidator = new OptimizerHintValidatingVisitor(false);
             fragment.Accept(hintValidator);
 
-            if (hintValidator.TdsCompatible && TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource.Connection))
+            if (hintValidator.TdsCompatible && TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource))
             {
-                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource.Connection))
+                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource))
                 {
                     var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata);
                     fragment.Accept(tdsEndpointCompatibilityVisitor);
@@ -2674,9 +2674,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNodeInternal ConvertSelectStatement(SelectStatement select)
         {
-            if (TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource.Connection))
+            if (TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource))
             {
-                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource.Connection))
+                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource))
                 {
                     var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata, false, parameterTypes: _nodeContext.ParameterTypes);
                     select.Accept(tdsEndpointCompatibilityVisitor);
