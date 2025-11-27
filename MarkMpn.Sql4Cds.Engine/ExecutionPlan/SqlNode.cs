@@ -396,42 +396,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var dataReader = Execute(context, CommandBehavior.Default);
-            var schema = GetSchema(dataReader, context);
-
-            while (dataReader.Read())
+            using (var dataReader = Execute(context, CommandBehavior.Default))
             {
-                var entity = new Entity();
-                var colIndex = 0;
+                var schema = GetSchema(dataReader, context);
 
-                foreach (var col in schema.Schema)
+                while (dataReader.Read())
                 {
-                    var value = dataReader.GetProviderSpecificValue(colIndex++);
+                    var entity = new Entity();
+                    var colIndex = 0;
 
-                    if (value is DateTime dt)
+                    foreach (var col in schema.Schema)
                     {
-                        if (col.Value.Type.IsSameAs(DataTypeHelpers.Date))
-                            value = new SqlDate(dt);
-                        else
-                            value = new SqlDateTime2(dt);
-                    }
-                    else if (value is DateTimeOffset dto)
-                    {
-                        value = new SqlDateTimeOffset(dto);
-                    }
-                    else if (value is TimeSpan ts)
-                    {
-                        value = new SqlTime(ts);
-                    }
-                    else if (value is DBNull)
-                    {
-                        value = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
+                        var value = dataReader.GetProviderSpecificValue(colIndex++);
+
+                        if (value is DateTime dt)
+                        {
+                            if (col.Value.Type.IsSameAs(DataTypeHelpers.Date))
+                                value = new SqlDate(dt);
+                            else
+                                value = new SqlDateTime2(dt);
+                        }
+                        else if (value is DateTimeOffset dto)
+                        {
+                            value = new SqlDateTimeOffset(dto);
+                        }
+                        else if (value is TimeSpan ts)
+                        {
+                            value = new SqlTime(ts);
+                        }
+                        else if (value is DBNull)
+                        {
+                            value = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
+                        }
+
+                        entity[col.Key] = value;
                     }
 
-                    entity[col.Key] = value;
+                    yield return entity;
                 }
-
-                yield return entity;
             }
         }
     }
