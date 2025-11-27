@@ -16,6 +16,7 @@
     <LangVersion>9.0</LangVersion>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <ForceDesignerDPIUnaware >true</ForceDesignerDPIUnaware>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
