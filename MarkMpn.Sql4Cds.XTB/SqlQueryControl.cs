@@ -1271,6 +1271,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 grid.ContextMenuStrip = gridContextMenuStrip;
                 grid.DataSource = results;
 
+                if (Settings.Instance.ResultGridFontSize != null)
+                    grid.Font = new Font(grid.Font.FontFamily, Settings.Instance.ResultGridFontSize.Value);
+
                 foreach (DataColumn col in results.Columns)
                 {
                     grid.Columns.Add(new DataGridViewTextBoxColumn

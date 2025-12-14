@@ -57,6 +57,7 @@ namespace MarkMpn.Sql4Cds.XTB
             openAiKeyTextBox.Text = settings.OpenAIKey;
             assistantIdTextBox.Text = settings.AssistantID;
             allowCopilotSelectQueriesCheckBox.Checked = settings.AllowCopilotSelectQueries;
+            resultsGridFontSizeNumericUpDown.Value = (decimal)(settings.ResultGridFontSize ?? SystemFonts.DefaultFont.Size);
 
             SetSqlStyle(simpleSqlScintilla);
             SetSqlStyle(nativeSqlScintilla);
@@ -143,6 +144,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.OpenAIKey = openAiKeyTextBox.Text;
                 _settings.AssistantID = assistantIdTextBox.Text;
                 _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
+                _settings.ResultGridFontSize = resultsGridFontSizeNumericUpDown.Value == (decimal)SystemFonts.DefaultFont.Size ? null : (float)resultsGridFontSizeNumericUpDown.Value;
 
                 if (_assistantVersion != null)
                     _settings.AssistantVersion = _assistantVersion;
