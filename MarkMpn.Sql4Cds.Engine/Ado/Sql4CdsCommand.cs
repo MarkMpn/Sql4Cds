@@ -260,14 +260,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (UseTDSEndpointDirectly)
                 {
+                    var dataSource = _connection.Session.DataSources[_connection.Database];
 #if NETCOREAPP
-                    var svc = (ServiceClient)_connection.Session.DataSources[_connection.Database].Connection;
+                    var svc = (ServiceClient)dataSource.Connection;
                     var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
 #else
-                    var svc = (CrmServiceClient)_connection.Session.DataSources[_connection.Database].Connection;
+                    var svc = (CrmServiceClient)dataSource.Connection;
                     var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
 #endif
-                    con.AccessToken = svc.CurrentAccessToken;
+                    // Try to get the access token from CurrentAccessToken first, then fall back to the AccessTokenProvider
+                    var accessToken = svc.CurrentAccessToken;
+                    if (String.IsNullOrEmpty(accessToken) && dataSource.AccessTokenProvider != null)
+                        accessToken = dataSource.AccessTokenProvider();
+                    
+                    con.AccessToken = accessToken;
                     con.Open();
 
                     var cmd = con.CreateCommand();
