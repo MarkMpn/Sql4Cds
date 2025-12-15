@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds
         static Plugin()
         {
             var currAssembly = Assembly.GetExecutingAssembly();
-            var dir = Path.GetDirectoryName(currAssembly.Location).ToLower();
+            var dir = Path.GetDirectoryName(currAssembly.Location);
             var folder = Path.GetFileNameWithoutExtension(currAssembly.Location);
             dir = Path.Combine(dir, folder);
             _primaryAssembly = Assembly.LoadFrom(Path.Combine(dir, "MarkMpn.Sql4Cds.XTB.dll"));
