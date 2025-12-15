@@ -46,14 +46,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             /// </summary>
             public string InProgressLowercase { get; set; }
 
-            public Func<AttributeMetadata, bool> ValidAttributeFilter { get; private set; }
+            public Func<AttributeMetadata, DataSource, bool> ValidAttributeFilter { get; private set; }
 
             public static DmlOperationDetails Insert { get; } = new DmlOperationDetails
             {
                 ClauseName = "INSERT",
                 InProgressUppercase = "Inserting",
                 InProgressLowercase = "inserting",
-                ValidAttributeFilter = attr => attr.IsValidForCreate != false
+                ValidAttributeFilter = (attr, _) => attr.IsValidForCreate != false
             };
 
             public static DmlOperationDetails UpdatePrimaryKey { get; } = new DmlOperationDetails
@@ -61,7 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ClauseName = "UPDATE",
                 InProgressUppercase = "Updating",
                 InProgressLowercase = "updating",
-                ValidAttributeFilter = attr => attr.IsValidForRead != false
+                ValidAttributeFilter = (attr, _) => attr.IsValidForRead != false
             };
 
             public static DmlOperationDetails UpdateNewValues { get; } = new DmlOperationDetails
@@ -69,7 +69,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ClauseName = "UPDATE",
                 InProgressUppercase = "Updating",
                 InProgressLowercase = "updating",
-                ValidAttributeFilter = attr => attr.IsValidForUpdate != false
+                ValidAttributeFilter = IsUpdateable
             };
 
             public static DmlOperationDetails UpdateExistingValues { get; } = new DmlOperationDetails
@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ClauseName = "UPDATE",
                 InProgressUppercase = "Updating",
                 InProgressLowercase = "updating",
-                ValidAttributeFilter = attr => attr.IsValidForRead != false
+                ValidAttributeFilter = IsUpdateable
             };
 
             public static DmlOperationDetails Delete { get; } = new DmlOperationDetails
@@ -85,8 +85,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ClauseName = "DELETE",
                 InProgressUppercase = "Deleting",
                 InProgressLowercase = "deleting",
-                ValidAttributeFilter = attr => attr.IsValidForRead != false
+                ValidAttributeFilter = (attr, _) => attr.IsValidForRead != false
             };
+
+            private static bool IsUpdateable(AttributeMetadata attr, DataSource instance)
+            {
+                if (attr.AttributeOf != null)
+                    return false;
+
+                if (attr.IsValidForUpdate != false)
+                    return true;
+
+                // Special case: importsequencenumber is flagged as being invalid for update, but
+                // does actually work in conjunction with UpdateMultiple
+                if (attr.LogicalName == "importsequencenumber" && instance.MessageCache.IsMessageAvailable(attr.EntityLogicalName, "UpdateMultiple"))
+                    return true;
+
+                return false;
+            }
         }
 
         class ColumnMapping
@@ -531,7 +547,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else
                 {
-                    if (attr != null && !operation.ValidAttributeFilter(attr))
+                    if (attr != null && !operation.ValidAttributeFilter(attr, _dataSource))
                     {
                         errors.Add(Sql4CdsError.ReadOnlyColumn(col));
                         suggestions.Add($"Column is not valid for {operation.ClauseName}");

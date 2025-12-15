@@ -523,6 +523,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                             }
                                         }
                                     }
+
+                                    // importsequencenumber can only be updated by UpdateMultiple
+                                    if (updateRequest.Target.Contains("importsequencenumber"))
+                                    {
+                                        var index = requests.IndexOf(updateRequest);
+                                        requests.RemoveAt(index);
+                                        requests.Insert(index, new UpdateMultipleRequest
+                                        {
+                                            Targets = new EntityCollection
+                                            {
+                                                EntityName = LogicalName,
+                                                Entities = { updateRequest.Target }
+                                            }
+                                        });
+                                    }
                                 }
 
                                 if (requests.Count == 1)
@@ -694,18 +709,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
-            if (!req.Requests.All(r => r is UpdateRequest))
+            if (!req.Requests.All(r => r is UpdateRequest || r is UpdateMultipleRequest))
                 return base.ExecuteMultiple(dataSource, org, meta, req);
 
             if (meta.DataProviderId == DataProviders.ElasticDataProvider || meta.DataProviderId == null &&
                 dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "UpdateMultiple") &&
-                req.Requests.Cast<UpdateRequest>().GroupBy(r => r.Target.LogicalName).Count() == 1)
+                req.Requests.OfType<UpdateRequest>().Select(r => r.Target.LogicalName).Concat(req.RequestName.OfType<UpdateMultipleRequest>().Select(r => r.Targets.EntityName)).Distinct().Count() == 1)
             {
                 // Elastic tables can use UpdateMultiple for better performance than ExecuteMultiple
                 var entities = new EntityCollection { EntityName = meta.LogicalName };
 
-                foreach (UpdateRequest update in req.Requests)
+                foreach (var update in req.Requests.OfType<UpdateRequest>())
                     entities.Entities.Add(update.Target);
+
+                foreach (var multi in req.Requests.OfType<UpdateMultipleRequest>())
+                    entities.Entities.AddRange(multi.Targets.Entities);
 
                 var updateMultiple = new OrganizationRequest("UpdateMultiple")
                 {
