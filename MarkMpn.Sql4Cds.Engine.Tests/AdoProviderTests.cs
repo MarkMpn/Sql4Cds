@@ -3085,5 +3085,27 @@ SELECT @Result";
                 Assert.AreEqual("abc", result);
             }
         }
+
+        [TestMethod]
+        public void AttributeExists()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/713
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+if exists(select
+    *
+from metadata.attribute
+where
+    entitylogicalname='account' and
+    logicalname='name') begin
+   select 'Run Update'
+end";
+
+                var result = (string)cmd.ExecuteScalar();
+                Assert.AreEqual("Run Update", result);
+            }
+        }
     }
 }

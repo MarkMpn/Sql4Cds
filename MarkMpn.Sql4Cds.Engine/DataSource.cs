@@ -3,13 +3,10 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
-using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Microsoft.Crm.Sdk.Messages;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading.Tasks;
-
-
 
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -133,6 +130,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The session token to use for Elastic table consistency
         /// </summary>
         public string SessionToken { get; set; }
+
+        /// <summary>
+        /// A function that returns an access token for authentication with the TDS endpoint.
+        /// This is used as a fallback when the CurrentAccessToken property is not available
+        /// (e.g., when using ExternalTokenManagement authentication type).
+        /// </summary>
+        public Func<string> AccessTokenProvider { get; set; }
 
         /// <summary>
         /// Indicates if the server supports column comparison conditions in FetchXML

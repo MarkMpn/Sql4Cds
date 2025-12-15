@@ -720,6 +720,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, DataSource dataSource)
         {
+            RemoveUnknownAttributes(entity, dataSource);
+
             if (Int64.TryParse(entity.RowVersion, out var versionNumber))
             {
                 var buf = new byte[8];
@@ -956,6 +958,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var pagingField in _pagingFields)
                     _lastPageValues.Add((INullable)entity[pagingField.Value]);
+            }
+        }
+
+        private void RemoveUnknownAttributes(Entity entity, DataSource dataSource)
+        {
+            // If a new attribute has been added since the metadata was cached and we're using an <all-attributes /> query,
+            // or for troublesome virtual entity providers, we might get values for attributes we're not expecting.
+            foreach (var attribute in entity.Attributes.ToList())
+            {
+                var entityName = entity.LogicalName;
+                var attributeName = attribute.Key;
+
+                if (attribute.Value is AliasedValue alias)
+                {
+                    entityName = alias.EntityLogicalName ?? entityName;
+                    attributeName = alias.AttributeLogicalName ?? attributeName;
+                }
+
+                var meta = dataSource.Metadata[entityName];
+
+                if (!meta.Attributes.Any(a => a.LogicalName == attributeName))
+                    entity.Attributes.Remove(attribute.Key);
             }
         }
 

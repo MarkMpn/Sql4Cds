@@ -773,6 +773,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 _threadCount = 1;
                 _maxThreadCount = 1;
+                var lastProgress = DateTime.UtcNow;
 
                 foreach (var entity in entities)
                 {
@@ -781,7 +782,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Interlocked.Increment(ref _inProgressCount);
                     tableAction(entity);
                     Interlocked.Increment(ref _successCount);
-                    ShowProgress(context.Options, operationNames, null, dataTable);
+
+                    if ((DateTime.UtcNow - lastProgress).TotalSeconds >= 1)
+                    {
+                        ShowProgress(context.Options, operationNames, null, dataTable);
+                        lastProgress = DateTime.UtcNow;
+                    }
                 }
             }
             catch (Exception ex)

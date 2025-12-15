@@ -82,6 +82,8 @@ namespace MarkMpn.Sql4Cds.XTB
         public string AssistantVersion { get; set; }
 
         public bool RememberSessionConnections { get; set; } = true;
+
+        public float? ResultGridFontSize { get; set; }
     }
 
     public class TabContent
