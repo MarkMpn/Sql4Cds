@@ -437,7 +437,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                             {
                                 if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
                                 {
-                                    var attributes = metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null);
+                                    var attributes = metadata.Attributes.Where(a => IsUpdateable(a, instance));
 
                                     if (tableName == "solutioncomponent")
                                         attributes = metadata.Attributes.Where(a => a.LogicalName == "objectid" || a.LogicalName == "componenttype" || a.LogicalName == "solutionid" || a.LogicalName == "rootcomponentbehavior");
@@ -695,6 +695,22 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             }
 
             return Array.Empty<SqlAutocompleteItem>();
+        }
+
+        private bool IsUpdateable(AttributeMetadata a, DataSource instance)
+        {
+            if (a.AttributeOf != null)
+                return false;
+
+            if (a.IsValidForUpdate != false)
+                return true;
+
+            // Special case: importsequencenumber is flagged as being invalid for update, but
+            // does actually work in conjunction with UpdateMultiple
+            if (a.LogicalName == "importsequencenumber" && instance.MessageCache.IsMessageAvailable(a.EntityLogicalName, "UpdateMultiple"))
+                return true;
+
+            return false;
         }
 
         private List<AttributeMetadata> GetMessageOutputAttributes(Message message, DataSource instance)
