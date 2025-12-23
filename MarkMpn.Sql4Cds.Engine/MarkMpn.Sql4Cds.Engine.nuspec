@@ -11,11 +11,12 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Bug fixes:
-* Fixed error when using subquery without alias
-* Fixed sorting by optionset attributes that do not have a corresponding name virtual attribute
-* Fixed using conditional query referencing metadata tables
-* Fixed error when values are returned for unexpected attributes
+    <releaseNotes>New features:
+* New `AccessTokenProvider` property on `DataSource` to allow obtaining tokens for TDS Endpoint when using custom authentication
+* Allow updating `importsequencenumber` attribute
+
+Bug fixes:
+* Fixed connection timeout issue after executing 100 queries against TDS Endpoint
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

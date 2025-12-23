@@ -23,13 +23,12 @@ plugins or integrations by writing familiar SQL and converting it.
 Queries can also run using the preview TDS Endpoint. A wide range of SQL functionality is also built
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Bug fixes:
-* Fixed Ctrl+S shortcut
-* Fixed error when using subquery without alias
-* Fixed sorting by optionset attributes that do not have a corresponding name virtual attribute
-* Fixed using conditional query referencing metadata tables
-* Fixed deadlock when running large DML queries on temp tables
-* Fixed error when values are returned for unexpected attributes
+    <releaseNotes>New features:
+* Added setting for results grid font size
+* Allow updating `importsequencenumber` attribute
+
+Bug fixes:
+* Fixed connection timeout issue after executing 100 queries against TDS Endpoint
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

@@ -1,5 +1,13 @@
 # Change Log
 
+## [v10.2.0](https://github.com/MarkMpn/Sql4Cds/releases/tag/v10.2.0) - 2025-12-23
+
+New features:
+* Allow updating `importsequencenumber` attribute
+
+Bug fixes:
+* Fixed connection timeout issue after executing 100 queries against TDS Endpoint*
+
 ## [v10.1.1](https://github.com/MarkMpn/Sql4Cds/releases/tag/v10.1.1) - 2025-11-01
 
 Bug fixes:
