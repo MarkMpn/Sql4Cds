@@ -520,7 +520,7 @@ namespace MarkMpn.Sql4Cds.XTB
         protected override bool ProcessCmdKey(ref System.Windows.Forms.Message msg, Keys keyData)
         {
             if (keyData == (Keys.Control | Keys.S))
-                tsbSave.PerformClick();
+                tsbSave.PerformButtonClick();
             else if (keyData == (Keys.Control | Keys.O))
                 tsbOpen.PerformClick();
             else if (keyData == (Keys.Control | Keys.N))

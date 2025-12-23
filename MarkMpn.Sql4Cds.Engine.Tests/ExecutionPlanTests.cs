@@ -9367,5 +9367,39 @@ from account a";
             var insert = AssertNode<InsertNode>(plans[0]);
             var fetch = AssertNode<FetchXmlScan>(insert.Source);
         }
+
+        [TestMethod]
+        public void GlobalOptionSetsInSubquery()
+        {
+            // Simplified version of https://github.com/MarkMpn/Sql4Cds/issues/706
+            var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
+
+            var query = @"
+select name,
+(SELECT W.displayname FROM metadata.globaloptionset W WHERE W.metadataid = primarycontactid)
+from account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("W.displayname", select.ColumnSet[1].SourceColumn);
+            var hash = AssertNode<HashJoinNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.RightOuter, hash.JoinType);
+            Assert.AreEqual("W.metadataid", hash.LeftAttribute.ToSql());
+            var optionset = AssertNode<GlobalOptionSetQueryNode>(hash.LeftSource);
+            Assert.AreEqual("W", optionset.OptionSetAlias);
+            Assert.AreEqual("account.primarycontactid", hash.RightAttribute.ToSql());
+            var fetch = AssertNode<FetchXmlScan>(hash.RightSource);
+            AssertFetchXml(fetch, @"
+<fetch>
+    <entity name='account'>
+        <attribute name='name' />
+        <attribute name='primarycontactid' />
+    </entity>
+</fetch>");
+        }
     }
 }

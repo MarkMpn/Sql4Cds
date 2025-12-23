@@ -288,6 +288,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Check FetchXML supports grouping by each of the requested attributes
                 var fetchSchema = fetchXml.GetSchema(context);
                 var maxResultCount = 0;
+                var supportsPaging = true;
 
                 foreach (var group in GroupBy)
                 {
@@ -328,13 +329,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         maxResultCount = Int32.MaxValue;
                     }
+
+                    if (attr is EnumAttributeMetadata && !metadata[entityName].Attributes.Any(a => a.AttributeOf == attr.LogicalName))
+                    {
+                        // Picklist attribute doesn't have an associated virtual name attribute, so FetchXML
+                        // can't sort by this attribute
+                        supportsPaging = false;
+                    }
                 }
 
                 // Cosmos DB can't use sorting and grouping together, so we can't use FetchXML aggregates
                 // if we'll need to page the results. Applies to the audit entity as well, even though it's
                 // not using the elastic table provider
-                if (maxResultCount > 500 &&
-                    (fetchXml.Entity.name == "audit" || metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider))
+                var maxPageSize = 5000;
+
+                var isElastic = fetchXml.Entity.name == "audit" || metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider;
+
+                if (isElastic)
+                    maxPageSize = 500;
+
+                if (maxResultCount > maxPageSize && isElastic)
                     canUseFetchXmlAggregate = false;
 
                 // Aggregates on audit entity seem to transform inner joins to left outer joins, so can't
@@ -418,7 +432,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         // Add a sort order for each grouping to allow consistent paging if required
-                        if (maxResultCount > 5000)
+                        if (maxResultCount > 5000 && supportsPaging)
                         {
                             var items = linkEntity?.Items ?? fetchXml.Entity.Items;
                             var sort = items.OfType<FetchOrderType>().FirstOrDefault(order => order.alias == alias);
@@ -578,6 +592,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         RightSource = firstTry,
                         JoinType = QualifiedJoinType.Inner
                     };
+                }
+
+                // If we could return more than a single page of data and we can't reliably page the data, fall back to the stream
+                // aggregate processing
+                if (maxResultCount > maxPageSize && !supportsPaging)
+                {
+                    var spoolProducer = new TableSpoolNode
+                    {
+                        Source = firstTry,
+                        SpoolType = SpoolType.Eager
+                    };
+                    var spoolConsumer = new TableSpoolNode
+                    {
+                        Producer = spoolProducer,
+                        SpoolType = SpoolType.Eager
+                    };
+                    var countCol = context.GetExpressionName();
+                    var rowCount = new StreamAggregateNode
+                    {
+                        Source = spoolConsumer,
+                        Aggregates =
+                        {
+                            [countCol] = new Aggregate
+                            {
+                                AggregateType = AggregateType.CountStar
+                            }
+                        }
+                    };
+                    var loop = new NestedLoopNode
+                    {
+                        LeftSource = spoolProducer,
+                        RightSource = rowCount,
+                        JoinType = QualifiedJoinType.Inner
+                    };
+                    var assert = new AssertNode
+                    {
+                        Source = loop,
+                        Assertion = e => ((SqlInt32)e[countCol]).Value < maxPageSize,
+                        ErrorMessage = "Aggregate query requires paging",
+                        ExceptionConstructor = msg => new FetchXmlScan.InvalidPagingException(msg)
+                    };
+                    firstTry = assert;
                 }
 
                 // If the main aggregate query fails due to having over 50K records, check if we can retry with partitioning. We

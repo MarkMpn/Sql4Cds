@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
+using System.Numerics;
+using System.Reflection;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -80,14 +82,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IRootExecutionPlanNodeInternal[] Compile()
         {
             var hasQuery = Compiler.ConvertPredicateQuery(Predicate, out var predicateSource, out var sourceCol);
-
-            return new GoToNode
+            
+            var folded = new GoToNode
             {
                 Condition = hasQuery ? null : Predicate,
                 Label = Label,
                 Source = predicateSource,
                 SourceColumn = sourceCol
             }.FoldQuery(_context, _hints);
+
+            var output = new List<IRootExecutionPlanNodeInternal>();
+
+            foreach (var plan in folded)
+            {
+                SetParent(plan);
+                var optimized = Optimizer.Optimize(plan, _hints);
+
+                foreach (var qry in optimized)
+                {
+                    if (qry.Sql == null)
+                        qry.Sql = Sql;
+
+                    qry.LineNumber = LineNumber;
+                    qry.Index = Index;
+                    qry.Length = Length;
+                }
+
+                output.AddRange(optimized);
+            }
+
+            return output.ToArray();
+        }
+
+        private void SetParent(IExecutionPlanNodeInternal plan)
+        {
+            foreach (IExecutionPlanNodeInternal child in plan.GetSources())
+            {
+                child.Parent = plan;
+                SetParent(child);
+            }
         }
     }
 }
