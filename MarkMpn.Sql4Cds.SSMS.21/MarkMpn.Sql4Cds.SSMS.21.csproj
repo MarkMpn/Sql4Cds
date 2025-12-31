@@ -24,7 +24,7 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MarkMpn.Sql4Cds.SSMS.19</RootNamespace>
-    <AssemblyName>MarkMpn.Sql4Cds.SSMS</AssemblyName>
+    <AssemblyName>MarkMpn.Sql4Cds.SSMS.21</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
     <IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>

@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         }
 
         public SqlScriptEditorControlWrapper GetCurrentlyActiveFrameDocView(
-#if SSMS21
+#if SSMS21 || SSMS22
             Microsoft.VisualStudio.Shell.Interop.IVsMonitorSelection pMonSel,
 #else
             Microsoft.SqlServer.Management.UI.VSIntegration.IVsMonitorSelection pMonSel,

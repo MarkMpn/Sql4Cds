@@ -104,17 +104,17 @@ steps:
       Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.20.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
 
 - task: PublishPipelineArtifact@1
-  displayName: Publish SSMS 20 installer to pipeline
-  inputs:
-    targetPath: 'MarkMpn.Sql4Cds.SSMS.20.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.20.Setup.msi'
-    artifact: 'SSMS20Installer'
-    publishLocation: 'pipeline'
-
-- task: PublishPipelineArtifact@1
   displayName: Publish SSMS 21 installer to pipeline
   inputs:
-    targetPath: 'MarkMpn.Sql4Cds.SSMS.21\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.vsix'
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.21\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.21.vsix'
     artifact: 'SSMS21Installer'
+    publishLocation: 'pipeline'
+    
+- task: PublishPipelineArtifact@1
+  displayName: Publish SSMS 22 installer to pipeline
+  inputs:
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.22\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.22.vsix'
+    artifact: 'SSMS22Installer'
     publishLocation: 'pipeline'
 
 - task: PublishPipelineArtifact@1
