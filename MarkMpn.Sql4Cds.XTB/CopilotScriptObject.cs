@@ -2,26 +2,36 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using Anthropic;
+using Azure.AI.OpenAI;
 using Markdig;
 using Markdig.Syntax;
 using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Extensions.AI;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Tooling.Connector;
-using Newtonsoft.Json;
 using OpenAI.Assistants;
+using OpenAI.Chat;
 using QuikGraph;
 using QuikGraph.Algorithms;
 using XrmToolBox.Extensibility;
+using ChatFinishReason = Microsoft.Extensions.AI.ChatFinishReason;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 
@@ -34,16 +44,17 @@ namespace MarkMpn.Sql4Cds.XTB
         private readonly SqlQueryControl _control;
         private readonly WebView2 _copilotWebView;
         private readonly MarkdownPipeline _markdownPipeline;
-        private AssistantClient _assistantClient;
-        private Assistant _assistant;
-        private AssistantThread _assistantThread;
-        private ThreadRun _run;
+        private IChatClient _chatClient;
         private string _lastMessage;
-        private bool _canceled;
         private bool _runningQuery;
         private Dictionary<string, string> _pendingQueries;
-        private List<ToolOutput> _toolOutputs;
+        private List<FunctionResultContent> _toolOutputs;
         private TimeSpan _toolDelay;
+        private CancellationTokenSource _cts;
+        private List<ChatMessage> _messages;
+        private ChatOptions _options;
+        private Dictionary<string, AIFunction> _tools;
+        private string _toolCallId;
 
         internal CopilotScriptObject(SqlQueryControl control, WebView2 copilotWebView)
         {
@@ -55,59 +66,83 @@ namespace MarkMpn.Sql4Cds.XTB
             _copilotWebView = copilotWebView;
             _pendingQueries = new Dictionary<string, string>();
             _toolDelay = TimeSpan.FromSeconds(0.5);
+            _messages = new List<ChatMessage>();
+
+            string systemPrompt;
+
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.XTB.Resources.CopilotInstructions.txt"))
+            using (var reader = new StreamReader(stream))
+            {
+                systemPrompt = reader.ReadToEnd();
+            }
+
+            _messages.Add(new ChatMessage(ChatRole.System, systemPrompt));
+
+            _options = new ChatOptions();
+            _options.RawRepresentationFactory = _ => new ChatCompletionOptions { ReasoningEffortLevel = ChatReasoningEffortLevel.Low };
+            var jsonSerializerOptions = new JsonSerializerOptions
+            {
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                TypeInfoResolver = new DefaultJsonTypeInfoResolver()
+            };
+
+            _options.Tools = new List<AITool>
+            {
+                AIFunctionFactory.Create((Func<IDictionary<string,ListTableResult>>)ListTables, name: "list_tables", serializerOptions: jsonSerializerOptions),
+                AIFunctionFactory.Create((Func<string, IDictionary<string,ColumnListResult>>)GetColumnsInTable, name: "get_columns_in_table", serializerOptions: jsonSerializerOptions),
+                AIFunctionFactory.Create((Func<string>)GetCurrentQuery, name: "get_current_query", serializerOptions: jsonSerializerOptions),
+                AIFunctionFactory.Create((Func<string, string, Relationship[]>)FindRelationship, name: "find_relationship", serializerOptions: jsonSerializerOptions),
+                AIFunctionFactory.Create((Func<string,Task<string[]>>)ExecuteQueryAsync, name: "execute_query", serializerOptions: jsonSerializerOptions)
+            };
+            _options.AllowMultipleToolCalls = true;
+
+            _tools = _options.Tools.Cast<AIFunction>().ToDictionary(t => t.Name);
         }
 
         public void Cancel()
         {
-            if (_run != null)
+            if (_cts != null)
             {
-                _canceled = true;
-                _assistantClient.CancelRun(_run);
+                _cts.Cancel();
                 if (_runningQuery && _control.Cancellable)
                     _control.Cancel();
-                _run = null;
                 _pendingQueries.Clear();
             }
         }
 
         public async Task<string[]> SendMessage(string request)
         {
-            _canceled = false;
+            _cts = new CancellationTokenSource();
+            _messages.Add(new ChatMessage(ChatRole.User, request));
 
             try
             {
-                if (_assistantClient == null)
+                if (_chatClient == null)
                 {
-                    var client = String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint) ? new OpenAI.OpenAIClient(new ApiKeyCredential(Settings.Instance.OpenAIKey)) : new Azure.AI.OpenAI.AzureOpenAIClient(new Uri(Settings.Instance.OpenAIEndpoint), new Azure.AzureKeyCredential(Settings.Instance.OpenAIKey));
-                    _assistantClient = client.GetAssistantClient();
-
-                    if (!Version.TryParse(Settings.Instance.AssistantVersion, out var assistantVersion) || assistantVersion < Assembly.GetExecutingAssembly().GetName().Version)
+                    if (!String.IsNullOrEmpty(Settings.Instance.OpenAIEndpoint))
                     {
-                        // Update the assistant definition before we try to use it
-                        var definition = CreateCopilotAssistantForm.Definition;
-
-                        await _assistantClient.ModifyAssistantAsync(Settings.Instance.AssistantID, new AssistantModificationOptions
-                        {
-                            Instructions = definition.Instructions,
-                            DefaultTools = definition.Tools,
-                        });
-                        
-                        Settings.Instance.AssistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
-                        SettingsManager.Instance.Save(typeof(PluginControl), Settings.Instance);
+                        _chatClient = new AzureOpenAIClient(new Uri(Settings.Instance.OpenAIEndpoint), new ApiKeyCredential(Settings.Instance.OpenAIKey))
+                            .GetChatClient(Settings.Instance.OpenAIModel)
+                            .AsIChatClient();
                     }
+                    else if (Settings.Instance.OpenAIModel == "Anthropic")
+                    {
+                        _chatClient = new AnthropicClient(Settings.Instance.OpenAIKey);
+                    }
+                    else
+                    {
+                        _chatClient = new OpenAI.Chat.ChatClient(Settings.Instance.OpenAIModel, new ApiKeyCredential(Settings.Instance.OpenAIKey)).AsIChatClient();
+                    }
+
+                    _chatClient.AsBuilder()
+                        .ConfigureOptions(options =>
+                        {
+                            options.ModelId = Settings.Instance.OpenAIModel;
+                        })
+                        .Build();
                 }
 
-                if (_assistant == null)
-                    _assistant = await _assistantClient.GetAssistantAsync(Settings.Instance.AssistantID);
-
-                if (_assistantThread == null)
-                    _assistantThread = await _assistantClient.CreateThreadAsync();
-
-                ThreadMessage message = await _assistantClient.CreateMessageAsync(
-                    _assistantThread,
-                    new[] { MessageContent.FromText(request) });
-
-                var updates = _assistantClient.CreateRunStreamingAsync(_assistantThread, _assistant);
+                var updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
                 await DoRunAsync(updates);
             }
             catch (Exception ex)
@@ -117,56 +152,57 @@ namespace MarkMpn.Sql4Cds.XTB
 
             return null;
         }
-
+        
         public async Task<string[]> ExecuteQuery(string id, bool executeAllowed)
         {
-            await ExecuteInternal(id, executeAllowed);
+            if (!executeAllowed)
+            {
+                _toolOutputs.Add(new FunctionResultContent(id, JsonSerializer.Serialize(new { status = "Canceled", error = "User rejected running this query. Abort this process and await further input." })));
+            }
+            else
+            {
+                var results = await ExecuteInternal(id);
 
-            if (_pendingQueries.Count == 0 && !_canceled)
+                if (results.Count == 1)
+                    _toolOutputs.Add(new FunctionResultContent(id, results[0]));
+                else
+                    _toolOutputs.Add(new FunctionResultContent(id, JsonSerializer.Serialize(results)));
+            }
+
+            if (_pendingQueries.Count == 0 && !_cts.IsCancellationRequested)
             {
                 // We've collected all the required query results, submit them to the assistant
-                var updates = _assistantClient.SubmitToolOutputsToRunStreamingAsync(_run, _toolOutputs);
+                var updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
                 await DoRunAsync(updates);
             }
 
             return null;
         }
-
-        private async Task ExecuteInternal(string id, bool executeAllowed)
+        
+        private async Task<List<string>> ExecuteInternal(string id)
         {
             if (!_pendingQueries.TryGetValue(id, out var query))
-                return;
+                throw new ApplicationException("Unknown query ID");
 
             await RunningQuery();
 
-            if (!executeAllowed)
-            {
-                _toolOutputs.Add(new ToolOutput(id, JsonConvert.SerializeObject(new { status = "Canceled", error = "User rejected running this query. Abort this process and await further input." })));
-            }
-            else
-            {
-                _runningQuery = true;
-                var results = await Task.Run(() => _control.Execute(query));
-                _runningQuery = false;
-                _copilotWebView.Focus();
-
-                if (results.Count == 1)
-                    _toolOutputs.Add(new ToolOutput(id, results[0]));
-                else
-                    _toolOutputs.Add(new ToolOutput(id, JsonConvert.SerializeObject(results)));
-            }
+            _runningQuery = true;
+            var results = await Task.Run(() => _control.Execute(query));
+            _runningQuery = false;
+            _copilotWebView.Focus();
 
             _pendingQueries.Remove(id);
+            return results;
         }
-
+        
         public async Task<string[]> Retry()
         {
-            var updates = _assistantClient.CreateRunStreamingAsync(_assistantThread, _assistant);
+            var updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
             await DoRunAsync(updates);
             return null;
         }
-
-        private async Task DoRunAsync(AsyncResultCollection<StreamingUpdate> updates)
+        
+        private async Task DoRunAsync(IAsyncEnumerable<ChatResponseUpdate> updates)
         {
             Func<Task> promptSuggestion = null;
 
@@ -174,16 +210,63 @@ namespace MarkMpn.Sql4Cds.XTB
             { 
                 var dataSource = _control.DataSources[_control.Connection.ConnectionName];
                 var messageText = new ConcurrentDictionary<string, string>();
-                
+                bool submittedToolOutputs;
+
                 do
                 {
-                    _toolOutputs = new List<ToolOutput>();
+                    _toolOutputs = new List<FunctionResultContent>();
+                    var runStarted = false;
+                    submittedToolOutputs = false;
+                    var updateCache = new List<ChatResponseUpdate>();
 
                     await foreach (var update in updates)
                     {
-                        if (_canceled)
+                        if (_cts.IsCancellationRequested)
                             break;
 
+                        if (!runStarted)
+                        {
+                            await RunStarted();
+                            runStarted = true;
+                        }
+
+                        foreach (var content in update.Contents)
+                        {
+                            if (content is FunctionCallContent func)
+                            {
+                                try
+                                {
+                                    if (!_tools.TryGetValue(func.Name, out var tool))
+                                    {
+                                        throw new ApplicationException($"The tool '{func.Name}' is not available.");
+                                    }
+                                    else
+                                    {
+                                        _toolCallId = func.CallId;
+
+                                        var result = await tool.InvokeAsync(new AIFunctionArguments(func.Arguments), _cts.Token);
+
+                                        if (result != null)
+                                            _toolOutputs.Add(new FunctionResultContent(func.CallId, JsonSerializer.Serialize(result, tool.JsonSerializerOptions)));
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _toolOutputs.Add(new FunctionResultContent(func.CallId, JsonSerializer.Serialize(new { success = false, error = ex.Message })));
+                                }
+                            }
+                            else if (content is TextContent messageContentUpdate)
+                            {
+                                var text = messageText.AddOrUpdate(update.MessageId, messageContentUpdate.Text, (_, existing) => existing + messageContentUpdate.Text);
+                                _lastMessage = text;
+
+                                var html = Markdown.ToHtml(text, _markdownPipeline);
+                                await ShowMessageAsync(update.MessageId, html);
+                            }
+                        }
+
+                        updateCache.Add(update);
+                        /*
                         if (update is RunUpdate runUpdate)
                         {
                             if (_run == null)
@@ -478,17 +561,96 @@ namespace MarkMpn.Sql4Cds.XTB
                             await Task.Delay(_toolDelay);
 
                             updates = _assistantClient.SubmitToolOutputsToRunStreamingAsync(_run, _toolOutputs);
+                        }*/
+                    }
+
+                    // Add these messages to the chat history
+                    await _messages.AddMessagesAsync(updateCache.ToAsyncEnumerable());
+
+                    // Validate any new messages
+                    foreach (var messageId in updateCache.Select(u => u.MessageId).Distinct())
+                    {
+                        if (!messageText.TryGetValue(messageId, out var text))
+                            continue;
+
+                        // If there are any SQL queries in this message, validate them now
+                        var queries = Markdown.Parse(text)
+                            .OfType<FencedCodeBlock>()
+                            .Where(c => c.Info == "sql");
+
+                        var errors = new List<string>();
+                        var errorHints = new List<string>();
+
+                        foreach (var query in queries)
+                        {
+                            try
+                            {
+                                _control.ValidateQuery(query.Lines.ToString());
+                            }
+                            catch (Sql4CdsException ex)
+                            {
+                                errors.AddRange(ex.Errors.Select(e => e.Message));
+
+                                var error = (Exception)ex;
+                                while (error.InnerException != null)
+                                {
+                                    if (error is NotSupportedQueryFragmentException nsqfe &&
+                                        nsqfe.Suggestion != null)
+                                    {
+                                        errors.Add(nsqfe.Suggestion);
+                                    }
+
+                                    error = error.InnerException;
+                                }
+
+                                var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
+                                var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
+                                var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query.Lines.ToString());
+
+                                if (showListTablesHint)
+                                    errorHints.Add("To get a list of valid table names, use the `list_tables` function");
+                                if (showGetColumnsInTableHint)
+                                    errorHints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
+                                if (showFindRelationshipHint)
+                                    errorHints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
+                            }
+                        }
+
+                        if (errors.Any())
+                        {
+                            var html = Markdown.ToHtml($"The suggested query contains errors:\r\n```\r\n{errors[0]}\r\n```", _markdownPipeline);
+                            var prompt = $"This query contains the following errors:\r\n{String.Join("\r\n", errors.Select(e => $"* {e}"))}";
+
+                            if (errorHints.Any())
+                                prompt += "\r\n\r\nTry the following changes:\r\n" + String.Join("\r\n", errorHints.Select(h => $"* {h}"));
+
+                            promptSuggestion = () => ShowPromptSuggestionAsync("warning", html, "Retry", prompt);
+                        }
+                        else if (queries.Count() == 1)
+                        {
+                            promptSuggestion = () => ShowPromptSuggestionAsync("info", "", "Run this query", "Run this query");
                         }
                     }
-                } while (_run?.Status.IsTerminal == false && !_canceled);
 
+                    if (_toolOutputs.Any() && _pendingQueries.Count == 0 && !_cts.IsCancellationRequested)
+                    {
+                        // Sleep to avoid overloading the API with sequential function calls
+                        await Task.Delay(_toolDelay);
+
+                        _messages.Add(new ChatMessage(ChatRole.Tool, _toolOutputs.Cast<AIContent>().ToList()));
+                        updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
+                        submittedToolOutputs = true;
+                    }
+                } while (!_cts.IsCancellationRequested && submittedToolOutputs);
+
+                /*
                 if (_run?.LastError != null)
                 {
                     if (_run.LastError.Code == RunErrorCode.RateLimitExceeded)
                         _toolDelay = TimeSpan.FromSeconds(_toolDelay.TotalSeconds * 2);
 
                     await ShowRetryAsync(HttpUtility.HtmlEncode(_run.LastError.Message));
-                }
+                }*/
             }
             catch (Exception ex)
             {
@@ -501,10 +663,200 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 if (_pendingQueries.Count == 0)
                 {
-                    _run = null;
                     await Finished();
                 }
             }
+        }
+
+        [Description("Get the list of tables in the current environment")]
+        private IDictionary<string,ListTableResult> ListTables()
+        {
+            var dataSource = _control.DataSources[_control.Connection.ConnectionName];
+            var entities = dataSource.Metadata.GetAllEntities();
+            var response = entities.ToDictionary(e => e.LogicalName, e => new ListTableResult { displayName = e.DisplayName?.UserLocalizedLabel?.Label, description = e.Description?.UserLocalizedLabel?.Label });
+            return response;
+        }
+
+        class ListTableResult
+        {
+            public string displayName { get; set; }
+            public string description { get; set; }
+        }
+
+        [Description("Get the list of columns in a table, including the available values for optionset columns and the relationships for foreign key columns")]
+        private Dictionary<string, ColumnListResult> GetColumnsInTable([Description("The name of the table, e.g. 'account'")] string table_name)
+        {
+            var dataSource = _control.DataSources[_control.Connection.ConnectionName];
+            dataSource.Metadata.TryGetValue(table_name, out var metadata);
+
+            if (metadata == null)
+                throw new ApplicationException($"The table '{table_name}' does not exist in this environment");
+
+            var columns = metadata.Attributes.ToDictionary(a => a.LogicalName, a => new ColumnListResult { displayName = a.DisplayName?.UserLocalizedLabel?.Label, description = ShowDescription(a) ? a.Description?.UserLocalizedLabel?.Label : null, type = a.AttributeTypeName?.Value, options = (a as EnumAttributeMetadata)?.OptionSet?.Options?.ToDictionary(o => o.Value.Value, o => o.Label?.UserLocalizedLabel?.Label), lookupTo = (a as LookupAttributeMetadata)?.Targets?.Select(target => target + "." + dataSource.Metadata[target].PrimaryIdAttribute)?.ToArray() });
+            return columns;
+        }
+
+        class ColumnListResult
+        {
+            public string displayName { get; set; }
+            public string description { get; set; }
+            public string type { get; set; }
+            public Dictionary<int,string> options { get; set; }
+            public string[] lookupTo { get; set; }
+        }
+
+        [Description("Gets the contents of the query the user is currently editing")]
+        private string GetCurrentQuery()
+        {
+            return _control.Sql;
+        }
+
+        [Description("Runs a SQL query and returns the result. Only queries which have previously been shown to the user will be run")]
+        private async Task<string[]> ExecuteQueryAsync([Description("The SQL query to execute")] string query)
+        {
+            var executeAllowed = false;
+
+            // Validate the query first
+            try
+            {
+                _control.ValidateQuery(query);
+            }
+            catch (Sql4CdsException ex)
+            {
+                var errors = ex.Errors.Select(e => e.Message).ToList();
+
+                var error = (Exception)ex;
+                while (error.InnerException != null)
+                {
+                    if (error is NotSupportedQueryFragmentException nsqfe &&
+                        nsqfe.Suggestion != null)
+                    {
+                        errors.Add(nsqfe.Suggestion);
+                    }
+
+                    error = error.InnerException;
+                }
+
+                var html = Markdown.ToHtml($"Errors found while validating a proposed query:\r\n\r\n```sql\r\n{query}\r\n```\r\n\r\n```\r\n{errors[0]}\r\n```\r\n\r\nRetrying...", _markdownPipeline);
+                await ShowPromptSuggestionAsync("warning", html, null, null);
+
+                var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
+                var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
+                var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query);
+                var errorHints = new List<string>();
+
+                if (showListTablesHint)
+                    errorHints.Add("To get a list of valid table names, use the `list_tables` function");
+                if (showGetColumnsInTableHint)
+                    errorHints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
+                if (showFindRelationshipHint)
+                    errorHints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
+
+                var prompt = $"This query contains the following errors:\r\n{String.Join("\r\n", errors.Select(e => $"* {e}"))}";
+
+                if (errorHints.Any())
+                    prompt += "\r\n\r\nTry the following changes:\r\n" + String.Join("\r\n", errorHints.Select(h => $"* {h}"));
+
+                throw new ApplicationException(prompt);
+            }
+
+            // Check if the user has seen this query in the previous message
+            var whitespace = new Regex(@"\s+");
+            var seenInLastMessage = _lastMessage != null && whitespace.Replace(_lastMessage, " ").Contains(whitespace.Replace(query, " "));
+
+            if (!executeAllowed && Settings.Instance.AllowCopilotSelectQueries)
+            {
+                // Check if unprompted execution is allowed - must be a single SELECT query only
+                var parser = new TSql160Parser(Settings.Instance.QuotedIdentifiers);
+                var result = parser.Parse(new StringReader(query), out var errors);
+
+                if (result is TSqlScript script &&
+                    script.Batches.Count == 1 &&
+                    script.Batches[0].Statements.Count == 1 &&
+                    script.Batches[0].Statements[0] is SelectStatement)
+                {
+                    executeAllowed = true;
+
+                    if (!seenInLastMessage)
+                    {
+                        // Show a message to the user so they know what query is being executed
+                        var markdown = "Executing the query:\n\n```sql\n" + query + "\n```";
+                        var html = Markdown.ToHtml(markdown, _markdownPipeline);
+                        await ShowMessageAsync(_toolCallId, html);
+                    }
+                }
+            }
+
+            if (!executeAllowed)
+            {
+                // Check if the user wants to run this query
+                var markdown = seenInLastMessage ? "Do you want to run this query?" : $"Do you want to run the query:\n\n```sql\n{query}\n```";
+                var html = Markdown.ToHtml(markdown, _markdownPipeline);
+                await ShowExecutePromptAsync(html, _toolCallId);
+            }
+
+            _pendingQueries.Add(_toolCallId, query);
+
+            if (executeAllowed)
+            {
+                var results = await ExecuteInternal(_toolCallId);
+                return results.ToArray();
+            }
+
+            return null;
+        }
+
+        [Description("Finds the path of joins that can be used to connect two tables")]
+        private Relationship[] FindRelationship([Description("The table to join from")] string table1, [Description("The table to join to")] string table2)
+        {
+            var dataSource = _control.DataSources[_control.Connection.ConnectionName];
+
+            if (!dataSource.Metadata.TryGetValue(table1, out var t1))
+                throw new ApplicationException($"The table '{table1}' does not exist in this environment");
+
+            if (!dataSource.Metadata.TryGetValue(table2, out var t2))
+                throw new ApplicationException($"The table '{table2}' does not exist in this environment");
+
+            // Build the graph of relationships between each entity
+            var graph = new UndirectedGraph<string, TaggedEdge<string, string>>();
+
+            foreach (var e in dataSource.Metadata.GetAllEntities())
+                graph.AddVertex(e.LogicalName);
+
+            // Some entities have links to almost everything else - ignore them unless they're one of the entities we're interested in
+            var ignoreEntities = new[] { "organization", "systemuser", "team", "queue", "businessunit", "asyncoperation", "userentityinstancedata" };
+
+            foreach (var e in dataSource.Metadata.GetAllEntities())
+            {
+                if (ignoreEntities.Contains(e.LogicalName) && t1.LogicalName != e.LogicalName && t2.LogicalName != e.LogicalName)
+                    continue;
+
+                foreach (var a in e.Attributes.OfType<LookupAttributeMetadata>())
+                {
+                    foreach (var target in a.Targets)
+                    {
+                        if (ignoreEntities.Contains(target) && t1.LogicalName != target && t2.LogicalName != target)
+                            continue;
+
+                        graph.AddEdge(new TaggedEdge<string, string>(e.LogicalName, target, a.LogicalName));
+                    }
+                }
+            }
+
+            var paths = graph.ShortestPathsDijkstra(e => 1, table1);
+
+            if (!paths(table2, out var path))
+                throw new ApplicationException("There is no set of relationships that link these two tables");
+            
+            return path.Select(e => new Relationship { fromTable = e.Source, fromColumn = e.Tag, toTable = e.Target, toColumn = dataSource.Metadata[e.Target].PrimaryIdAttribute }).ToArray();
+        }
+
+        class Relationship
+        {
+            public string fromTable { get; set; }
+            public string fromColumn { get; set; }
+            public string toTable { get; set; }
+            public string toColumn { get; set; }
         }
 
         private bool ShowDescription(AttributeMetadata a)
@@ -558,22 +910,22 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private async Task ShowMessageAsync(string id, string html)
         {
-            await _copilotWebView.ExecuteScriptAsync("updateMessage(" + JsonConvert.SerializeObject(id) + "," + JsonConvert.SerializeObject(html) + ")");
+            await _copilotWebView.ExecuteScriptAsync("updateMessage(" + JsonSerializer.Serialize(id) + "," + JsonSerializer.Serialize(html) + ")");
         }
 
         private async Task ShowPromptSuggestionAsync(string type, string title, string action, string message)
         {
-            await _copilotWebView.ExecuteScriptAsync("showPromptSuggestion(" + JsonConvert.SerializeObject(type) + "," + JsonConvert.SerializeObject(title) + "," + JsonConvert.SerializeObject(action) + "," + JsonConvert.SerializeObject(message) + ")");
+            await _copilotWebView.ExecuteScriptAsync("showPromptSuggestion(" + JsonSerializer.Serialize(type) + "," + JsonSerializer.Serialize(title) + "," + JsonSerializer.Serialize(action) + "," + JsonSerializer.Serialize(message) + ")");
         }
 
         private async Task ShowExecutePromptAsync(string html, string id)
         {
-            await _copilotWebView.ExecuteScriptAsync("showExecutePrompt(" + JsonConvert.SerializeObject(html) + "," + JsonConvert.SerializeObject(id) + ")");
+            await _copilotWebView.ExecuteScriptAsync("showExecutePrompt(" + JsonSerializer.Serialize(html) + "," + JsonSerializer.Serialize(id) + ")");
         }
 
         private async Task ShowRetryAsync(string html)
         {
-            await _copilotWebView.ExecuteScriptAsync("showRetryPrompt(" + JsonConvert.SerializeObject(html) + ")");
+            await _copilotWebView.ExecuteScriptAsync("showRetryPrompt(" + JsonSerializer.Serialize(html) + ")");
         }
 
         private async Task RunStarted()

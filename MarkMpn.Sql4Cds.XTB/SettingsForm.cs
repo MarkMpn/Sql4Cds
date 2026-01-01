@@ -18,7 +18,6 @@ namespace MarkMpn.Sql4Cds.XTB
         private readonly Settings _settings;
         private readonly FetchXml2SqlOptions _fetchXml2SqlOptions;
         private readonly PluginControl _pluginControl;
-        private string _assistantVersion;
 
         public SettingsForm(Settings settings, PluginControl plugin)
         {
@@ -55,7 +54,7 @@ namespace MarkMpn.Sql4Cds.XTB
             fontSizeNumericUpDown.Value = Settings.Instance.EditorFontSize;
             openAiEndpointTextBox.Text = settings.OpenAIEndpoint;
             openAiKeyTextBox.Text = settings.OpenAIKey;
-            assistantIdTextBox.Text = settings.AssistantID;
+            modelTextBox.Text = settings.OpenAIModel;
             allowCopilotSelectQueriesCheckBox.Checked = settings.AllowCopilotSelectQueries;
             resultsGridFontSizeNumericUpDown.Value = (decimal)(settings.ResultGridFontSize ?? SystemFonts.DefaultFont.Size);
 
@@ -142,12 +141,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.EditorFontSize = (int) fontSizeNumericUpDown.Value;
                 _settings.OpenAIEndpoint = openAiEndpointTextBox.Text;
                 _settings.OpenAIKey = openAiKeyTextBox.Text;
-                _settings.AssistantID = assistantIdTextBox.Text;
+                _settings.OpenAIModel = modelTextBox.Text;
                 _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
                 _settings.ResultGridFontSize = resultsGridFontSizeNumericUpDown.Value == (decimal)SystemFonts.DefaultFont.Size ? null : (float)resultsGridFontSizeNumericUpDown.Value;
-
-                if (_assistantVersion != null)
-                    _settings.AssistantVersion = _assistantVersion;
             }
         }
 
@@ -221,18 +217,6 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 e.Graphics.DrawString(ff.Name, font, Brushes.Black, e.Bounds.Location.X + monospaceIndictorOffset + monospaceIndictorSize + monospaceIndictorOffset, e.Bounds.Location.Y);
                 e.DrawFocusRectangle();
-            }
-        }
-
-        private void createAssistantbutton_Click(object sender, EventArgs e)
-        {
-            using (var form = new CreateCopilotAssistantForm(openAiEndpointTextBox.Text, openAiKeyTextBox.Text))
-            {
-                if (form.ShowDialog(this) == DialogResult.OK)
-                {
-                    assistantIdTextBox.Text = form.AssistantId;
-                    _assistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
-                }
             }
         }
 

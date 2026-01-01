@@ -75,11 +75,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
         public string OpenAIKey { get; set; }
 
-        public string AssistantID { get; set; }
+        public string OpenAIModel { get; set; }
 
         public bool AllowCopilotSelectQueries { get; set; }
-
-        public string AssistantVersion { get; set; }
 
         public bool RememberSessionConnections { get; set; } = true;
 

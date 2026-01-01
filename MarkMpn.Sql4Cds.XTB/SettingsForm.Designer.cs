@@ -85,6 +85,12 @@
             this.label18 = new System.Windows.Forms.Label();
             this.resetToolWindowsButton = new System.Windows.Forms.Button();
             this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
+            this.tabPage6 = new System.Windows.Forms.TabPage();
+            this.label26 = new System.Windows.Forms.Label();
+            this.resultsGridFontSizeNumericUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label27 = new System.Windows.Forms.Label();
+            this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
+            this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
             this.tabPage4 = new System.Windows.Forms.TabPage();
             this.fetchXml2SqlConversionAdvancedLinkLabel = new System.Windows.Forms.LinkLabel();
             this.nativeSqlScintilla = new ScintillaNET.Scintilla();
@@ -94,21 +100,14 @@
             this.label17 = new System.Windows.Forms.Label();
             this.tabPage5 = new System.Windows.Forms.TabPage();
             this.label25 = new System.Windows.Forms.Label();
-            this.createAssistantbutton = new System.Windows.Forms.Button();
             this.label24 = new System.Windows.Forms.Label();
             this.allowCopilotSelectQueriesCheckBox = new System.Windows.Forms.CheckBox();
-            this.assistantIdTextBox = new System.Windows.Forms.TextBox();
+            this.modelTextBox = new System.Windows.Forms.TextBox();
             this.label23 = new System.Windows.Forms.Label();
             this.openAiKeyTextBox = new System.Windows.Forms.TextBox();
             this.label22 = new System.Windows.Forms.Label();
             this.openAiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
-            this.tabPage6 = new System.Windows.Forms.TabPage();
-            this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
-            this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
-            this.label26 = new System.Windows.Forms.Label();
-            this.resultsGridFontSizeNumericUpDown = new System.Windows.Forms.NumericUpDown();
-            this.label27 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -130,10 +129,10 @@
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
             this.tabPage3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.fontSizeNumericUpDown)).BeginInit();
-            this.tabPage4.SuspendLayout();
-            this.tabPage5.SuspendLayout();
             this.tabPage6.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.resultsGridFontSizeNumericUpDown)).BeginInit();
+            this.tabPage4.SuspendLayout();
+            this.tabPage5.SuspendLayout();
             this.SuspendLayout();
             // 
             // topPanel
@@ -797,6 +796,75 @@
             this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
             this.rememberSessionCheckbox.CheckedChanged += new System.EventHandler(this.rememberSessionCheckbox_CheckedChanged);
             // 
+            // tabPage6
+            // 
+            this.tabPage6.Controls.Add(this.label26);
+            this.tabPage6.Controls.Add(this.resultsGridFontSizeNumericUpDown);
+            this.tabPage6.Controls.Add(this.label27);
+            this.tabPage6.Controls.Add(this.localDateFormatCheckbox);
+            this.tabPage6.Controls.Add(this.autoSizeColumnsCheckBox);
+            this.tabPage6.Location = new System.Drawing.Point(4, 22);
+            this.tabPage6.Name = "tabPage6";
+            this.tabPage6.Size = new System.Drawing.Size(409, 269);
+            this.tabPage6.TabIndex = 5;
+            this.tabPage6.Text = "Results";
+            this.tabPage6.UseVisualStyleBackColor = true;
+            // 
+            // label26
+            // 
+            this.label26.AutoSize = true;
+            this.label26.Location = new System.Drawing.Point(50, 76);
+            this.label26.Name = "label26";
+            this.label26.Size = new System.Drawing.Size(16, 13);
+            this.label26.TabIndex = 13;
+            this.label26.Text = "pt";
+            // 
+            // resultsGridFontSizeNumericUpDown
+            // 
+            this.resultsGridFontSizeNumericUpDown.Location = new System.Drawing.Point(6, 74);
+            this.resultsGridFontSizeNumericUpDown.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.resultsGridFontSizeNumericUpDown.Name = "resultsGridFontSizeNumericUpDown";
+            this.resultsGridFontSizeNumericUpDown.Size = new System.Drawing.Size(38, 20);
+            this.resultsGridFontSizeNumericUpDown.TabIndex = 12;
+            this.resultsGridFontSizeNumericUpDown.Value = new decimal(new int[] {
+            10,
+            0,
+            0,
+            0});
+            // 
+            // label27
+            // 
+            this.label27.AutoSize = true;
+            this.label27.Location = new System.Drawing.Point(3, 58);
+            this.label27.Name = "label27";
+            this.label27.Size = new System.Drawing.Size(111, 13);
+            this.label27.TabIndex = 11;
+            this.label27.Text = "Results Grid Font Size";
+            // 
+            // localDateFormatCheckbox
+            // 
+            this.localDateFormatCheckbox.AutoSize = true;
+            this.localDateFormatCheckbox.Location = new System.Drawing.Point(6, 29);
+            this.localDateFormatCheckbox.Name = "localDateFormatCheckbox";
+            this.localDateFormatCheckbox.Size = new System.Drawing.Size(203, 17);
+            this.localDateFormatCheckbox.TabIndex = 6;
+            this.localDateFormatCheckbox.Text = "Show date/time values in local format";
+            this.localDateFormatCheckbox.UseVisualStyleBackColor = true;
+            // 
+            // autoSizeColumnsCheckBox
+            // 
+            this.autoSizeColumnsCheckBox.AutoSize = true;
+            this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(6, 6);
+            this.autoSizeColumnsCheckBox.Name = "autoSizeColumnsCheckBox";
+            this.autoSizeColumnsCheckBox.Size = new System.Drawing.Size(158, 17);
+            this.autoSizeColumnsCheckBox.TabIndex = 5;
+            this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
+            this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
+            // 
             // tabPage4
             // 
             this.tabPage4.Controls.Add(this.fetchXml2SqlConversionAdvancedLinkLabel);
@@ -880,10 +948,9 @@
             // tabPage5
             // 
             this.tabPage5.Controls.Add(this.label25);
-            this.tabPage5.Controls.Add(this.createAssistantbutton);
             this.tabPage5.Controls.Add(this.label24);
             this.tabPage5.Controls.Add(this.allowCopilotSelectQueriesCheckBox);
-            this.tabPage5.Controls.Add(this.assistantIdTextBox);
+            this.tabPage5.Controls.Add(this.modelTextBox);
             this.tabPage5.Controls.Add(this.label23);
             this.tabPage5.Controls.Add(this.openAiKeyTextBox);
             this.tabPage5.Controls.Add(this.label22);
@@ -907,16 +974,6 @@
             this.label25.Text = "Leave blank when using OpenAI.\r\nFor Azure OpenAI, enter the endpoint of your reso" +
     "urce, e.g. https://my-copilot.openai.azure.com/";
             // 
-            // createAssistantbutton
-            // 
-            this.createAssistantbutton.Location = new System.Drawing.Point(329, 161);
-            this.createAssistantbutton.Name = "createAssistantbutton";
-            this.createAssistantbutton.Size = new System.Drawing.Size(75, 23);
-            this.createAssistantbutton.TabIndex = 8;
-            this.createAssistantbutton.Text = "Create";
-            this.createAssistantbutton.UseVisualStyleBackColor = true;
-            this.createAssistantbutton.Click += new System.EventHandler(this.createAssistantbutton_Click);
-            // 
             // label24
             // 
             this.label24.Location = new System.Drawing.Point(26, 216);
@@ -936,14 +993,13 @@
             this.allowCopilotSelectQueriesCheckBox.Text = "Allow Copilot to execute SELECT queries independently";
             this.allowCopilotSelectQueriesCheckBox.UseVisualStyleBackColor = true;
             // 
-            // assistantIdTextBox
+            // modelTextBox
             // 
-            this.assistantIdTextBox.Location = new System.Drawing.Point(7, 162);
-            this.assistantIdTextBox.Margin = new System.Windows.Forms.Padding(2);
-            this.assistantIdTextBox.Name = "assistantIdTextBox";
-            this.assistantIdTextBox.ReadOnly = true;
-            this.assistantIdTextBox.Size = new System.Drawing.Size(321, 20);
-            this.assistantIdTextBox.TabIndex = 5;
+            this.modelTextBox.Location = new System.Drawing.Point(7, 162);
+            this.modelTextBox.Margin = new System.Windows.Forms.Padding(2);
+            this.modelTextBox.Name = "modelTextBox";
+            this.modelTextBox.Size = new System.Drawing.Size(397, 20);
+            this.modelTextBox.TabIndex = 5;
             // 
             // label23
             // 
@@ -951,9 +1007,9 @@
             this.label23.Location = new System.Drawing.Point(4, 146);
             this.label23.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label23.Name = "label23";
-            this.label23.Size = new System.Drawing.Size(63, 13);
+            this.label23.Size = new System.Drawing.Size(36, 13);
             this.label23.TabIndex = 4;
-            this.label23.Text = "Assistant ID";
+            this.label23.Text = "Model";
             // 
             // openAiKeyTextBox
             // 
@@ -990,75 +1046,6 @@
             this.label21.Size = new System.Drawing.Size(121, 13);
             this.label21.TabIndex = 0;
             this.label21.Text = "Azure Open AI Endpoint";
-            // 
-            // tabPage6
-            // 
-            this.tabPage6.Controls.Add(this.label26);
-            this.tabPage6.Controls.Add(this.resultsGridFontSizeNumericUpDown);
-            this.tabPage6.Controls.Add(this.label27);
-            this.tabPage6.Controls.Add(this.localDateFormatCheckbox);
-            this.tabPage6.Controls.Add(this.autoSizeColumnsCheckBox);
-            this.tabPage6.Location = new System.Drawing.Point(4, 22);
-            this.tabPage6.Name = "tabPage6";
-            this.tabPage6.Size = new System.Drawing.Size(409, 269);
-            this.tabPage6.TabIndex = 5;
-            this.tabPage6.Text = "Results";
-            this.tabPage6.UseVisualStyleBackColor = true;
-            // 
-            // localDateFormatCheckbox
-            // 
-            this.localDateFormatCheckbox.AutoSize = true;
-            this.localDateFormatCheckbox.Location = new System.Drawing.Point(6, 29);
-            this.localDateFormatCheckbox.Name = "localDateFormatCheckbox";
-            this.localDateFormatCheckbox.Size = new System.Drawing.Size(203, 17);
-            this.localDateFormatCheckbox.TabIndex = 6;
-            this.localDateFormatCheckbox.Text = "Show date/time values in local format";
-            this.localDateFormatCheckbox.UseVisualStyleBackColor = true;
-            // 
-            // autoSizeColumnsCheckBox
-            // 
-            this.autoSizeColumnsCheckBox.AutoSize = true;
-            this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(6, 6);
-            this.autoSizeColumnsCheckBox.Name = "autoSizeColumnsCheckBox";
-            this.autoSizeColumnsCheckBox.Size = new System.Drawing.Size(158, 17);
-            this.autoSizeColumnsCheckBox.TabIndex = 5;
-            this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
-            this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
-            // 
-            // label26
-            // 
-            this.label26.AutoSize = true;
-            this.label26.Location = new System.Drawing.Point(50, 76);
-            this.label26.Name = "label26";
-            this.label26.Size = new System.Drawing.Size(16, 13);
-            this.label26.TabIndex = 13;
-            this.label26.Text = "pt";
-            // 
-            // resultsGridFontSizeNumericUpDown
-            // 
-            this.resultsGridFontSizeNumericUpDown.Location = new System.Drawing.Point(6, 74);
-            this.resultsGridFontSizeNumericUpDown.Minimum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            this.resultsGridFontSizeNumericUpDown.Name = "resultsGridFontSizeNumericUpDown";
-            this.resultsGridFontSizeNumericUpDown.Size = new System.Drawing.Size(38, 20);
-            this.resultsGridFontSizeNumericUpDown.TabIndex = 12;
-            this.resultsGridFontSizeNumericUpDown.Value = new decimal(new int[] {
-            10,
-            0,
-            0,
-            0});
-            // 
-            // label27
-            // 
-            this.label27.AutoSize = true;
-            this.label27.Location = new System.Drawing.Point(3, 58);
-            this.label27.Name = "label27";
-            this.label27.Size = new System.Drawing.Size(111, 13);
-            this.label27.TabIndex = 11;
-            this.label27.Text = "Results Grid Font Size";
             // 
             // SettingsForm
             // 
@@ -1104,13 +1091,13 @@
             this.tabPage3.ResumeLayout(false);
             this.tabPage3.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.fontSizeNumericUpDown)).EndInit();
+            this.tabPage6.ResumeLayout(false);
+            this.tabPage6.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.resultsGridFontSizeNumericUpDown)).EndInit();
             this.tabPage4.ResumeLayout(false);
             this.tabPage4.PerformLayout();
             this.tabPage5.ResumeLayout(false);
             this.tabPage5.PerformLayout();
-            this.tabPage6.ResumeLayout(false);
-            this.tabPage6.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.resultsGridFontSizeNumericUpDown)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -1180,7 +1167,7 @@
         private System.Windows.Forms.Label label18;
         private System.Windows.Forms.Label label20;
         private System.Windows.Forms.TabPage tabPage5;
-        private System.Windows.Forms.TextBox assistantIdTextBox;
+        private System.Windows.Forms.TextBox modelTextBox;
         private System.Windows.Forms.Label label23;
         private System.Windows.Forms.TextBox openAiKeyTextBox;
         private System.Windows.Forms.Label label22;
@@ -1188,7 +1175,6 @@
         private System.Windows.Forms.Label label21;
         private System.Windows.Forms.Label label24;
         private System.Windows.Forms.CheckBox allowCopilotSelectQueriesCheckBox;
-        private System.Windows.Forms.Button createAssistantbutton;
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.CheckBox rememberSessionConnectionsCheckBox;
         private System.Windows.Forms.TabPage tabPage6;

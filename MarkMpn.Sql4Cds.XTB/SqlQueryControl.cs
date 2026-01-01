@@ -27,7 +27,6 @@ using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.Export.DataStorage;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
-using Microsoft.Identity.Client;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
@@ -186,7 +185,7 @@ namespace MarkMpn.Sql4Cds.XTB
             splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
 
             // Show/hide the copilot panel
-            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
+            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey);
 
             Connect();
 
@@ -228,7 +227,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _autocomplete.Font = new Font(Settings.Instance.EditorFontName, Settings.Instance.EditorFontSize);
 
             // Show/hide the copilot panel
-            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
+            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey);
         }
 
         protected override void OnClosing(CancelEventArgs e)
