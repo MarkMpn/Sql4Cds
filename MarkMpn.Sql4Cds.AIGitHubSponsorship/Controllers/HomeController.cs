@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Linq;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
@@ -90,8 +92,11 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     HttpContext.Session.SetString("GitHubUsername", username);
                     _logger.LogInformation($"User {username} authenticated successfully");
 
+                    // Determine sponsorship level and allowed credits
+                    var tokensAllowed = await DetermineTokenAllowance(accessToken);
+
                     // Create or update user in database
-                    await CreateOrUpdateUser(username, accessToken);
+                    await CreateOrUpdateUser(username, accessToken, tokensAllowed);
                 }
 
                 // TODO: Check sponsorship status
@@ -106,7 +111,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             }
         }
 
-        private async Task CreateOrUpdateUser(string username, string accessToken)
+        private async Task CreateOrUpdateUser(string username, string accessToken, int tokensAllowed)
         {
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.GitHubUsername == username);
@@ -118,7 +123,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 {
                     GitHubUsername = username,
                     AccessToken = accessToken,
-                    TokensAllowedPerMonth = 0, // Will be updated based on sponsorship level
+                    TokensAllowedPerMonth = tokensAllowed,
                     CreatedAt = DateTime.UtcNow,
                     LastUpdatedAt = DateTime.UtcNow
                 };
@@ -129,6 +134,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             {
                 // Update existing user
                 user.AccessToken = accessToken;
+                user.TokensAllowedPerMonth = tokensAllowed;
                 user.LastUpdatedAt = DateTime.UtcNow;
                 _logger.LogInformation($"Updated existing user: {username}");
             }
@@ -190,6 +196,102 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
             var content = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<JsonElement>(content);
+        }
+
+        private async Task<int> DetermineTokenAllowance(string accessToken)
+        {
+            const string sponsorableLogin = "MarkMpn"; // Owner of SQL 4 CDS project
+
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("SQL4CDS-AI-Sponsorship");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+            client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+
+            var query = @"query {
+                viewer {
+                    sponsorshipsAsSponsor(first: 50, activeOnly: true) {
+                        nodes {
+                            sponsorable {
+                                ... on User { login }
+                                ... on Organization { login }
+                            }
+                            tier { monthlyPriceInCents name }
+                        }
+                    }
+                }
+            }";
+
+            var requestBody = new { query };
+            var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("https://api.github.com/graphql", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning($"GitHub Sponsors query failed with status {response.StatusCode}");
+                return 0;
+            }
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+            if (doc.RootElement.TryGetProperty("errors", out var errorsElement))
+            {
+                _logger.LogWarning("GitHub Sponsors API returned errors: {Errors}", errorsElement.ToString());
+                return 0;
+            }
+
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                !data.TryGetProperty("viewer", out var viewer) ||
+                !viewer.TryGetProperty("sponsorshipsAsSponsor", out var sponsorships) ||
+                !sponsorships.TryGetProperty("nodes", out var nodes))
+            {
+                _logger.LogWarning("Unexpected Sponsors API response shape");
+                return 0;
+            }
+
+            foreach (var node in nodes.EnumerateArray())
+            {
+                if (!node.TryGetProperty("sponsorable", out var sponsorableElement))
+                {
+                    continue;
+                }
+
+                string? sponsorableLoginValue = null;
+                if (sponsorableElement.ValueKind == JsonValueKind.Object &&
+                    sponsorableElement.TryGetProperty("login", out var loginProp))
+                {
+                    sponsorableLoginValue = loginProp.GetString();
+                }
+
+                if (string.IsNullOrEmpty(sponsorableLoginValue) ||
+                    !string.Equals(sponsorableLoginValue, sponsorableLogin, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!node.TryGetProperty("tier", out var tier) || !tier.TryGetProperty("monthlyPriceInCents", out var price))
+                {
+                    continue;
+                }
+
+                var monthlyCents = price.GetInt32();
+                var tokens = MapTierToTokens(monthlyCents);
+                _logger.LogInformation($"Sponsor detected for {sponsorableLogin} at {monthlyCents} cents => {tokens} credits/month");
+                return tokens;
+            }
+
+            return 0;
+        }
+
+        private static int MapTierToTokens(int monthlyPriceInCents)
+        {
+            // Map sponsorship tiers to AI credits per month
+            // Bronze: $5 -> 1,000; Silver: $15 -> 5,000; Gold: $50 -> 25,000
+            if (monthlyPriceInCents >= 5000) return 25000;
+            if (monthlyPriceInCents >= 1500) return 5000;
+            if (monthlyPriceInCents >= 500) return 1000;
+            return 0;
         }
 
         public async Task<IActionResult> Dashboard()
