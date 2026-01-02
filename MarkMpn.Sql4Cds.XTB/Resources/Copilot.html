@@ -368,6 +368,10 @@
             result.querySelectorAll("button").forEach(b => b.disabled = true);
         }
 
+        runContinuing = function () {
+            processing.querySelectorAll("button").forEach(b => b.disabled = false);
+        }
+
         finished = function () {
             send.className = "";
 

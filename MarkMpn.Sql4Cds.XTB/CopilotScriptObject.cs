@@ -282,6 +282,8 @@ namespace MarkMpn.Sql4Cds.XTB
                         _messages.Add(new ChatMessage(ChatRole.Tool, _toolOutputs.Cast<AIContent>().ToList()));
                         updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
                         submittedToolOutputs = true;
+
+                        await RunContinuing();
                     }
                 } while (!_cts.IsCancellationRequested && submittedToolOutputs);
             }
@@ -457,6 +459,11 @@ namespace MarkMpn.Sql4Cds.XTB
         private async Task RunStarted()
         {
             await _copilotWebView.ExecuteScriptAsync("runStarted()");
+        }
+
+        private async Task RunContinuing()
+        {
+            await _copilotWebView.ExecuteScriptAsync("runContinuing()");
         }
 
         private async Task Finished()
