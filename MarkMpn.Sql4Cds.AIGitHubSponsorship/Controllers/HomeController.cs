@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
@@ -123,6 +124,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 {
                     GitHubUsername = username,
                     AccessToken = accessToken,
+                    ApiKey = GenerateApiKey(),
                     TokensAllowedPerMonth = tokensAllowed,
                     CreatedAt = DateTime.UtcNow,
                     LastUpdatedAt = DateTime.UtcNow
@@ -135,6 +137,10 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 // Update existing user
                 user.AccessToken = accessToken;
                 user.TokensAllowedPerMonth = tokensAllowed;
+                if (string.IsNullOrWhiteSpace(user.ApiKey))
+                {
+                    user.ApiKey = GenerateApiKey();
+                }
                 user.LastUpdatedAt = DateTime.UtcNow;
                 _logger.LogInformation($"Updated existing user: {username}");
             }
@@ -294,6 +300,17 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return 0;
         }
 
+        private static string GenerateApiKey()
+        {
+            // 48 bytes -> 64 base64 chars; prefix with sk_
+            var bytes = RandomNumberGenerator.GetBytes(48);
+            var token = Convert.ToBase64String(bytes)
+                .Replace('+', '-')
+                .Replace('/', '_')
+                .TrimEnd('=');
+            return $"sk_{token}";
+        }
+
         private static string DescribeSponsorship(int tokensAllowed)
         {
             return tokensAllowed switch
@@ -325,6 +342,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 ViewBag.Username = username;
                 ViewBag.TokensAllowed = user.TokensAllowedPerMonth;
                 ViewBag.SponsorshipLevel = DescribeSponsorship(user.TokensAllowedPerMonth);
+                ViewBag.ApiKey = user.ApiKey;
                 
                 // Calculate tokens used this month
                 var currentMonth = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -344,6 +362,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 ViewBag.TokensUsedThisMonth = 0;
                 ViewBag.TokensRemaining = 0;
                 ViewBag.SponsorshipLevel = DescribeSponsorship(0);
+                ViewBag.ApiKey = "sk_pending_verification";
             }
 
             return View();

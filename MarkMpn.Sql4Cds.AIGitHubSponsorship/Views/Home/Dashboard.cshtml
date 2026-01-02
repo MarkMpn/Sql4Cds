@@ -60,10 +60,10 @@
                                         Your API Key
                                     </h4>
                                     <div class="mb-3">
-                                        <p class="text-muted small mb-2">Once your sponsorship is verified, your API key will appear here:</p>
+                                        <p class="text-muted small mb-2">Use this key to access AI services. Keep it secret.</p>
                                         <div class="input-group">
-                                            <input type="text" class="form-control" value="sk_pending_verification" readonly style="background-color: var(--gh-bg-tertiary); color: var(--gh-text-secondary); border: 1px solid var(--gh-border);">
-                                            <button class="btn btn-outline-secondary" type="button" disabled>
+                                            <input type="text" class="form-control" value="@ViewBag.ApiKey" readonly style="background-color: var(--gh-bg-tertiary); color: var(--gh-text-secondary); border: 1px solid var(--gh-border);">
+                                            <button class="btn btn-outline-secondary" type="button" @(ViewBag.ApiKey == "sk_pending_verification" ? "disabled" : "")>
                                                 <i class="bi bi-clipboard"></i>
                                             </button>
                                         </div>
