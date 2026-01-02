@@ -294,6 +294,17 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return 0;
         }
 
+        private static string DescribeSponsorship(int tokensAllowed)
+        {
+            return tokensAllowed switch
+            {
+                >= 25000 => "Gold ($50/mo) - 25,000 credits",
+                >= 5000 => "Silver ($15/mo) - 5,000 credits",
+                >= 1000 => "Bronze ($5/mo) - 1,000 credits",
+                _ => "Not a sponsor yet"
+            };
+        }
+
         public async Task<IActionResult> Dashboard()
         {
             var accessToken = HttpContext.Session.GetString("GitHubAccessToken");
@@ -313,6 +324,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             {
                 ViewBag.Username = username;
                 ViewBag.TokensAllowed = user.TokensAllowedPerMonth;
+                ViewBag.SponsorshipLevel = DescribeSponsorship(user.TokensAllowedPerMonth);
                 
                 // Calculate tokens used this month
                 var currentMonth = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -331,9 +343,28 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 ViewBag.TokensAllowed = 0;
                 ViewBag.TokensUsedThisMonth = 0;
                 ViewBag.TokensRemaining = 0;
+                ViewBag.SponsorshipLevel = DescribeSponsorship(0);
             }
 
             return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RefreshSponsorship()
+        {
+            var accessToken = HttpContext.Session.GetString("GitHubAccessToken");
+            var username = HttpContext.Session.GetString("GitHubUsername");
+
+            if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(username))
+            {
+                return RedirectToAction("Index");
+            }
+
+            var tokensAllowed = await DetermineTokenAllowance(accessToken);
+            await CreateOrUpdateUser(username, accessToken, tokensAllowed);
+
+            return RedirectToAction("Dashboard");
         }
 
         public IActionResult Logout()
