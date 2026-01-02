@@ -117,16 +117,20 @@
                         </div>
                     </div>
 
-                    <div class="alert alert-info d-flex align-items-start" role="alert">
-                        <i class="bi bi-info-circle-fill me-2 mt-1"></i>
-                        <div>
-                            <strong>Not a sponsor yet?</strong><br/>
-                            <small>
-                                Become a GitHub Sponsor to unlock AI credits and support the SQL 4 CDS project. 
-                                <a href="https://github.com/sponsors/MarkMpn" target="_blank" style="color: #f5576c; font-weight: 600;">Sponsor now</a>
-                            </small>
+                    @{ var tokensAllowed = ViewBag.TokensAllowed as int? ?? 0; }
+                    @if (tokensAllowed == 0)
+                    {
+                        <div class="alert alert-info d-flex align-items-start" role="alert">
+                            <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+                            <div>
+                                <strong>Not a sponsor yet?</strong><br/>
+                                <small>
+                                    Become a GitHub Sponsor to unlock AI credits and support the SQL 4 CDS project. 
+                                    <a href="https://github.com/sponsors/MarkMpn" target="_blank" style="color: #f5576c; font-weight: 600;">Sponsor now</a>
+                                </small>
+                            </div>
                         </div>
-                    </div>
+                    }
                 </div>
             </div>
 
