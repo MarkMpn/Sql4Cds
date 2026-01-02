@@ -47,6 +47,25 @@ footer {
   flex-shrink: 0;
 }
 
+.btn-sponsor-gradient {
+  background: var(--gh-bg-secondary);
+  border: 2px solid transparent;
+  background-image: linear-gradient(var(--gh-bg-secondary), var(--gh-bg-secondary)), var(--gh-gradient-pink);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  color: #f5576c;
+  font-weight: 700;
+  padding: 0.75rem 2rem;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.btn-sponsor-gradient:hover {
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(240, 147, 251, 0.35);
+  transform: translateY(-1px);
+}
+
 /* Gradient Hero Section */
 .gradient-hero {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
