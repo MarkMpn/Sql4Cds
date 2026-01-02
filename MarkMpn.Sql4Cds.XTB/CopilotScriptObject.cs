@@ -72,7 +72,6 @@ namespace MarkMpn.Sql4Cds.XTB
             _messages.Add(new ChatMessage(ChatRole.System, systemPrompt));
 
             _options = new ChatOptions();
-            _options.RawRepresentationFactory = _ => new ChatCompletionOptions { ReasoningEffortLevel = ChatReasoningEffortLevel.Low };
 
             var aiFunctions = new AIFunctions(_control);
             _options.Tools = new List<AITool>(aiFunctions.GetTools());
