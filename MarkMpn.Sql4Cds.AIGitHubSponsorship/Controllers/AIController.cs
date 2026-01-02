@@ -105,20 +105,38 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     requestBody = await reader.ReadToEndAsync();
                 }
 
-                // Get OpenAI configuration
-                var openAiApiKey = _configuration["OpenAI:ApiKey"];
-                var openAiBaseUrl = _configuration["OpenAI:BaseUrl"] ?? "https://api.openai.com/v1";
+                // Parse request to extract model/deployment
+                using var requestDoc = JsonDocument.Parse(requestBody);
+                var requestJson = requestDoc.RootElement.Clone();
 
-                if (string.IsNullOrEmpty(openAiApiKey))
+                if (!requestJson.TryGetProperty("model", out var modelProp) || modelProp.ValueKind != JsonValueKind.String)
                 {
-                    _logger.LogError("OpenAI API key not configured");
+                    return BadRequest(new { error = new { message = "Missing model in request body" } });
+                }
+
+                var modelName = modelProp.GetString();
+                if (string.IsNullOrWhiteSpace(modelName))
+                {
+                    return BadRequest(new { error = new { message = "Model must be provided" } });
+                }
+
+                // Get Azure OpenAI configuration
+                var azureApiKey = _configuration["AzureOpenAI:ApiKey"];
+                var azureEndpoint = _configuration["AzureOpenAI:Endpoint"];
+                var azureApiVersion = _configuration["AzureOpenAI:ApiVersion"] ?? "2024-02-15-preview";
+
+                if (string.IsNullOrEmpty(azureApiKey) || string.IsNullOrEmpty(azureEndpoint))
+                {
+                    _logger.LogError("Azure OpenAI configuration is missing ApiKey or Endpoint");
                     return StatusCode(500, new { error = new { message = "AI service not configured" } });
                 }
 
-                // Forward request to OpenAI
+                var targetUrl = $"{azureEndpoint.TrimEnd('/')}/openai/deployments/{modelName}/chat/completions?api-version={azureApiVersion}";
+
+                // Forward request to Azure OpenAI
                 var client = _httpClientFactory.CreateClient();
-                var request = new HttpRequestMessage(HttpMethod.Post, $"{openAiBaseUrl}/chat/completions");
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", openAiApiKey);
+                var request = new HttpRequestMessage(HttpMethod.Post, targetUrl);
+                request.Headers.Add("api-key", azureApiKey);
                 request.Headers.Add("User-Agent", "SQL4CDS-AI-Sponsorship");
                 request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
@@ -127,12 +145,11 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError($"OpenAI API error: {response.StatusCode} - {errorContent}");
+                    _logger.LogError($"Azure OpenAI API error: {response.StatusCode} - {errorContent}");
                     return StatusCode((int)response.StatusCode, errorContent);
                 }
 
                 // Check if it's a streaming response
-                var requestJson = JsonSerializer.Deserialize<JsonElement>(requestBody);
                 var isStreaming = requestJson.TryGetProperty("stream", out var streamProp) && streamProp.GetBoolean();
 
                 if (isStreaming)
