@@ -1,4 +1,5 @@
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
+using MarkMpn.Sql4Cds.AIGitHubSponsorship.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,6 +11,9 @@ builder.Services.AddHttpClient();
 // Add DbContext
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Add custom services
+builder.Services.AddScoped<GitHubSponsorshipService>();
 
 builder.Services.AddSession(options =>
 {

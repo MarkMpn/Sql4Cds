@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Models;
+using MarkMpn.Sql4Cds.AIGitHubSponsorship.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,17 +17,20 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ApplicationDbContext _context;
+        private readonly GitHubSponsorshipService _sponsorshipService;
 
         public AIController(
             ILogger<AIController> logger,
             IConfiguration configuration,
             IHttpClientFactory httpClientFactory,
-            ApplicationDbContext context)
+            ApplicationDbContext context,
+            GitHubSponsorshipService sponsorshipService)
         {
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _context = context;
+            _sponsorshipService = sponsorshipService;
         }
 
         [HttpPost("chat/completions")]
@@ -53,10 +57,35 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     return Unauthorized(new { error = new { message = "Invalid API key" } });
                 }
 
-                // Check remaining credits
+                // Check if this is the first request of the month and refresh sponsorship status if needed
                 var currentMonth = DateOnly.FromDateTime(DateTime.UtcNow);
                 var firstDayOfMonth = new DateOnly(currentMonth.Year, currentMonth.Month, 1);
 
+                var hasUsageThisMonth = await _context.TokenUsages
+                    .AnyAsync(t => t.UserId == user.Id && t.UsageDate >= firstDayOfMonth);
+
+                if (!hasUsageThisMonth)
+                {
+                    // First request of the month - refresh sponsorship status
+                    try
+                    {
+                        var newTokensAllowed = await _sponsorshipService.DetermineTokenAllowance(user.AccessToken);
+                        if (newTokensAllowed != user.TokensAllowedPerMonth)
+                        {
+                            user.TokensAllowedPerMonth = newTokensAllowed;
+                            user.LastUpdatedAt = DateTime.UtcNow;
+                            await _context.SaveChangesAsync();
+                            _logger.LogInformation($"Updated sponsorship for user {user.GitHubUsername}: {newTokensAllowed} tokens/month");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, $"Failed to refresh sponsorship status for user {user.GitHubUsername}");
+                        // Continue with existing allowance if refresh fails
+                    }
+                }
+
+                // Check remaining credits
                 var tokensUsedThisMonth = await _context.TokenUsages
                     .Where(t => t.UserId == user.Id && t.UsageDate >= firstDayOfMonth)
                     .SumAsync(t => t.TokensUsed);
