@@ -108,7 +108,10 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (_chatClient == null)
                     _chatClient = Settings.Instance.CreateChatClient();
 
-                var updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
+                var updates = _options.ConversationId == null
+                    ? _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token)
+                    : _chatClient.GetStreamingResponseAsync(_messages.Last(), _options, _cts.Token);
+
                 await DoRunAsync(updates);
             }
             catch (Exception ex)
@@ -138,7 +141,12 @@ namespace MarkMpn.Sql4Cds.XTB
             if (_pendingQueries.Count == 0 && !_cts.IsCancellationRequested)
             {
                 // We've collected all the required query results, submit them to the assistant
-                var updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
+                _messages.Add(new ChatMessage(ChatRole.Tool, _toolOutputs.Cast<AIContent>().ToList()));
+
+                var updates = _options.ConversationId == null
+                    ? _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token)
+                    : _chatClient.GetStreamingResponseAsync(_messages.Last(), _options, _cts.Token);
+
                 await DoRunAsync(updates);
             }
 
@@ -189,11 +197,8 @@ namespace MarkMpn.Sql4Cds.XTB
                         if (_cts.IsCancellationRequested)
                             break;
 
-                        if (!runStarted)
-                        {
-                            await RunStarted();
-                            runStarted = true;
-                        }
+                        if (_options.ConversationId == null && update.ConversationId != null)
+                            _options.ConversationId = update.ConversationId;
 
                         foreach (var content in update.Contents)
                         {
@@ -280,7 +285,11 @@ namespace MarkMpn.Sql4Cds.XTB
                         await Task.Delay(_toolDelay);
 
                         _messages.Add(new ChatMessage(ChatRole.Tool, _toolOutputs.Cast<AIContent>().ToList()));
-                        updates = _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token);
+
+                        updates = _options.ConversationId == null
+                            ? _chatClient.GetStreamingResponseAsync(_messages, _options, _cts.Token)
+                            : _chatClient.GetStreamingResponseAsync(_messages.Last(), _options, _cts.Token);
+
                         submittedToolOutputs = true;
 
                         await RunContinuing();
