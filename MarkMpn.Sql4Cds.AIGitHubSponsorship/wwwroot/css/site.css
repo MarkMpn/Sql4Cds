@@ -29,9 +29,22 @@ html {
 }
 
 body {
-  margin-bottom: 60px;
   background-color: var(--gh-bg-primary);
   color: var(--gh-text-primary);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.container {
+  flex: 1;
+  padding-bottom: 200px;
+}
+
+footer {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
 }
 
 /* Gradient Hero Section */
