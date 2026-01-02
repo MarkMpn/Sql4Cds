@@ -99,6 +99,8 @@
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
             this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.aiProviderComboBox = new System.Windows.Forms.ComboBox();
+            this.label25 = new System.Windows.Forms.Label();
             this.label24 = new System.Windows.Forms.Label();
             this.allowCopilotSelectQueriesCheckBox = new System.Windows.Forms.CheckBox();
             this.aiModelTextBox = new System.Windows.Forms.TextBox();
@@ -107,8 +109,8 @@
             this.label22 = new System.Windows.Forms.Label();
             this.aiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
-            this.label25 = new System.Windows.Forms.Label();
-            this.aiProviderComboBox = new System.Windows.Forms.ComboBox();
+            this.aiAutocompleteCheckBox = new System.Windows.Forms.CheckBox();
+            this.label28 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -948,6 +950,8 @@
             // 
             // tabPage5
             // 
+            this.tabPage5.Controls.Add(this.label28);
+            this.tabPage5.Controls.Add(this.aiAutocompleteCheckBox);
             this.tabPage5.Controls.Add(this.aiProviderComboBox);
             this.tabPage5.Controls.Add(this.label25);
             this.tabPage5.Controls.Add(this.label24);
@@ -966,6 +970,30 @@
             this.tabPage5.TabIndex = 4;
             this.tabPage5.Text = "Copilot";
             this.tabPage5.UseVisualStyleBackColor = true;
+            // 
+            // aiProviderComboBox
+            // 
+            this.aiProviderComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.aiProviderComboBox.FormattingEnabled = true;
+            this.aiProviderComboBox.Items.AddRange(new object[] {
+            "< None >",
+            "Anthropic",
+            "OpenAI",
+            "Azure OpenAI"});
+            this.aiProviderComboBox.Location = new System.Drawing.Point(5, 18);
+            this.aiProviderComboBox.Name = "aiProviderComboBox";
+            this.aiProviderComboBox.Size = new System.Drawing.Size(205, 21);
+            this.aiProviderComboBox.TabIndex = 9;
+            this.aiProviderComboBox.SelectedIndexChanged += new System.EventHandler(this.aiProviderComboBox_SelectedIndexChanged);
+            // 
+            // label25
+            // 
+            this.label25.AutoSize = true;
+            this.label25.Location = new System.Drawing.Point(4, 2);
+            this.label25.Name = "label25";
+            this.label25.Size = new System.Drawing.Size(59, 13);
+            this.label25.TabIndex = 8;
+            this.label25.Text = "AI Provider";
             // 
             // label24
             // 
@@ -1040,29 +1068,24 @@
             this.label21.TabIndex = 0;
             this.label21.Text = "Endpoint";
             // 
-            // label25
+            // aiAutocompleteCheckBox
             // 
-            this.label25.AutoSize = true;
-            this.label25.Location = new System.Drawing.Point(4, 2);
-            this.label25.Name = "label25";
-            this.label25.Size = new System.Drawing.Size(59, 13);
-            this.label25.TabIndex = 8;
-            this.label25.Text = "AI Provider";
+            this.aiAutocompleteCheckBox.AutoSize = true;
+            this.aiAutocompleteCheckBox.Location = new System.Drawing.Point(7, 232);
+            this.aiAutocompleteCheckBox.Name = "aiAutocompleteCheckBox";
+            this.aiAutocompleteCheckBox.Size = new System.Drawing.Size(266, 17);
+            this.aiAutocompleteCheckBox.TabIndex = 10;
+            this.aiAutocompleteCheckBox.Text = "Include Copilot-powered autocomplete suggestions";
+            this.aiAutocompleteCheckBox.UseVisualStyleBackColor = true;
             // 
-            // aiProviderComboBox
+            // label28
             // 
-            this.aiProviderComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.aiProviderComboBox.FormattingEnabled = true;
-            this.aiProviderComboBox.Items.AddRange(new object[] {
-            "< None >",
-            "Anthropic",
-            "OpenAI",
-            "Azure OpenAI"});
-            this.aiProviderComboBox.Location = new System.Drawing.Point(5, 18);
-            this.aiProviderComboBox.Name = "aiProviderComboBox";
-            this.aiProviderComboBox.Size = new System.Drawing.Size(205, 21);
-            this.aiProviderComboBox.TabIndex = 9;
-            this.aiProviderComboBox.SelectedIndexChanged += new System.EventHandler(this.aiProviderComboBox_SelectedIndexChanged);
+            this.label28.AutoSize = true;
+            this.label28.Location = new System.Drawing.Point(26, 252);
+            this.label28.Name = "label28";
+            this.label28.Size = new System.Drawing.Size(308, 13);
+            this.label28.TabIndex = 11;
+            this.label28.Text = "Press Ctrl+Space while editing a query to include AI suggestions";
             // 
             // SettingsForm
             // 
@@ -1201,5 +1224,7 @@
         private System.Windows.Forms.CheckBox autoSizeColumnsCheckBox;
         private System.Windows.Forms.ComboBox aiProviderComboBox;
         private System.Windows.Forms.Label label25;
+        private System.Windows.Forms.Label label28;
+        private System.Windows.Forms.CheckBox aiAutocompleteCheckBox;
     }
 }

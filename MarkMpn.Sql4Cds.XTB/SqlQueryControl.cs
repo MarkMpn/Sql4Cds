@@ -656,7 +656,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 var text = _control._editor.Text;
 
-                if (forced && Settings.Instance.AIProvider != null)
+                if (forced && Settings.Instance.AIProvider != null && Settings.Instance.UseAIAutocomplete)
                 {
                     if (_aiAutocomplete == null)
                         _aiAutocomplete = new AIAutocomplete(_control);

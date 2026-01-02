@@ -80,6 +80,8 @@ namespace MarkMpn.Sql4Cds.XTB
         public string AIAPIKey { get; set; }
 
         public string AIModel { get; set; }
+
+        public bool UseAIAutocomplete { get; set; } = true;
     }
 
     public class TabContent

@@ -57,6 +57,7 @@ namespace MarkMpn.Sql4Cds.XTB
             aiAPIKeyTextBox.Text = settings.AIAPIKey;
             aiModelTextBox.Text = settings.AIModel;
             allowCopilotSelectQueriesCheckBox.Checked = settings.AllowCopilotSelectQueries;
+            aiAutocompleteCheckBox.Checked = settings.UseAIAutocomplete;
             resultsGridFontSizeNumericUpDown.Value = (decimal)(settings.ResultGridFontSize ?? SystemFonts.DefaultFont.Size);
 
             SetSqlStyle(simpleSqlScintilla);
@@ -145,6 +146,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.AIAPIKey = aiAPIKeyTextBox.Text;
                 _settings.AIModel = aiModelTextBox.Text;
                 _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
+                _settings.UseAIAutocomplete = aiAutocompleteCheckBox.Checked;
                 _settings.ResultGridFontSize = resultsGridFontSizeNumericUpDown.Value == (decimal)SystemFonts.DefaultFont.Size ? null : (float)resultsGridFontSizeNumericUpDown.Value;
             }
         }
