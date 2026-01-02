@@ -77,6 +77,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _options.Tools = new List<AITool>(aiFunctions.GetTools());
             _options.Tools.Add(AIFunctionFactory.Create((Func<string>)GetCurrentQuery, name: "get_current_query", serializerOptions: aiFunctions.JsonSerializerOptions));
             _options.Tools.Add(AIFunctionFactory.Create((Func<string, Task<string[]>>)ExecuteQueryAsync, name: "execute_query", serializerOptions: aiFunctions.JsonSerializerOptions));
+            _options.Tools.Add(AIFunctionFactory.Create((Func<string, QueryValidationResult>)ValidateQuery, name: "validate_query", serializerOptions: aiFunctions.JsonSerializerOptions));
             
             _options.AllowMultipleToolCalls = true;
 
@@ -251,7 +252,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                         foreach (var query in queries)
                         {
-                            var validationResult = ValidateQuery(query.Line.ToString());
+                            var validationResult = ValidateQuery(query.Lines.ToString());
 
                             errors.AddRange(validationResult.Errors);
                             errorHints.AddRange(validationResult.Hints);
@@ -375,7 +376,8 @@ namespace MarkMpn.Sql4Cds.XTB
             return null;
         }
 
-        private QueryValidationResult ValidateQuery(string query)
+        [Description("Checks if a query is valid")]
+        private QueryValidationResult ValidateQuery([Description("The query to check")] string query)
         {
             var result = new QueryValidationResult();
 
