@@ -90,6 +90,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 if (userInfo != null)
                 {
                     var username = userInfo.Value.GetProperty("login").GetString() ?? "";
+                    var avatarUrl = userInfo.Value.GetProperty("avatar_url").GetString() ?? "";
                     HttpContext.Session.SetString("GitHubUsername", username);
                     _logger.LogInformation($"User {username} authenticated successfully");
 
@@ -97,7 +98,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     var tokensAllowed = await DetermineTokenAllowance(accessToken);
 
                     // Create or update user in database
-                    await CreateOrUpdateUser(username, accessToken, tokensAllowed);
+                    await CreateOrUpdateUser(username, accessToken, tokensAllowed, avatarUrl);
                 }
 
                 // TODO: Check sponsorship status
@@ -112,7 +113,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             }
         }
 
-        private async Task CreateOrUpdateUser(string username, string accessToken, int tokensAllowed)
+        private async Task CreateOrUpdateUser(string username, string accessToken, int tokensAllowed, string avatarUrl = "")
         {
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.GitHubUsername == username);
@@ -125,6 +126,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     GitHubUsername = username,
                     AccessToken = accessToken,
                     ApiKey = GenerateApiKey(),
+                    AvatarUrl = avatarUrl,
                     TokensAllowedPerMonth = tokensAllowed,
                     CreatedAt = DateTime.UtcNow,
                     LastUpdatedAt = DateTime.UtcNow
@@ -137,6 +139,10 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 // Update existing user
                 user.AccessToken = accessToken;
                 user.TokensAllowedPerMonth = tokensAllowed;
+                if (!string.IsNullOrWhiteSpace(avatarUrl))
+                {
+                    user.AvatarUrl = avatarUrl;
+                }
                 if (string.IsNullOrWhiteSpace(user.ApiKey))
                 {
                     user.ApiKey = GenerateApiKey();
@@ -340,6 +346,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             if (user != null)
             {
                 ViewBag.Username = username;
+                ViewBag.AvatarUrl = user.AvatarUrl;
                 ViewBag.TokensAllowed = user.TokensAllowedPerMonth;
                 ViewBag.SponsorshipLevel = DescribeSponsorship(user.TokensAllowedPerMonth);
                 ViewBag.ApiKey = user.ApiKey;
@@ -358,6 +365,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             else
             {
                 ViewBag.Username = username;
+                ViewBag.AvatarUrl = "";
                 ViewBag.TokensAllowed = 0;
                 ViewBag.TokensUsedThisMonth = 0;
                 ViewBag.TokensRemaining = 0;

@@ -6,9 +6,16 @@
     <div class="row justify-content-center">
         <div class="col-lg-10">
             <div class="mb-4 d-flex justify-content-between align-items-center">
-                <div>
-                    <h1 class="display-5 fw-bold">
-                        <i class="bi bi-person-circle me-2" style="color: var(--gh-accent-blue);"></i>
+                <div class="d-flex align-items-center">
+                    @if (!string.IsNullOrEmpty(ViewBag.AvatarUrl))
+                    {
+                        <img src="@ViewBag.AvatarUrl" alt="@ViewBag.Username" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 2px solid var(--gh-accent-blue);">
+                    }
+                    else
+                    {
+                        <i class="bi bi-person-circle me-3" style="font-size: 3rem; color: var(--gh-accent-blue);"></i>
+                    }
+                    <h1 class="display-5 fw-bold mb-0">
                         Welcome, @ViewBag.Username!
                     </h1>
                 </div>

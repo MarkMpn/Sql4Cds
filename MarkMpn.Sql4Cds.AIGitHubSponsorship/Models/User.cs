@@ -19,6 +19,9 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Models
         [MaxLength(200)]
         public string ApiKey { get; set; } = string.Empty;
 
+        [MaxLength(500)]
+        public string AvatarUrl { get; set; } = string.Empty;
+
         public int TokensAllowedPerMonth { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
