@@ -8,7 +8,6 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,11 +18,7 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Extensions.AI;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Tooling.Connector;
-using OpenAI.Chat;
-using QuikGraph;
-using QuikGraph.Algorithms;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -78,7 +73,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _options.Tools.Add(AIFunctionFactory.Create((Func<string>)GetCurrentQuery, name: "get_current_query", serializerOptions: aiFunctions.JsonSerializerOptions));
             _options.Tools.Add(AIFunctionFactory.Create((Func<string, Task<string[]>>)ExecuteQueryAsync, name: "execute_query", serializerOptions: aiFunctions.JsonSerializerOptions));
             _options.Tools.Add(AIFunctionFactory.Create((Func<string, QueryValidationResult>)ValidateQuery, name: "validate_query", serializerOptions: aiFunctions.JsonSerializerOptions));
-            
+
             _options.AllowMultipleToolCalls = true;
 
             _tools = _options.Tools.Cast<AIFunction>().ToDictionary(t => t.Name);
@@ -181,7 +176,7 @@ namespace MarkMpn.Sql4Cds.XTB
             Func<Task> promptSuggestion = null;
 
             try
-            { 
+            {
                 var runStarted = false;
                 var messageText = new ConcurrentDictionary<string, string>();
                 bool submittedToolOutputs;
