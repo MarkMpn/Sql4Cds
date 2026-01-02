@@ -1,0 +1,146 @@
+@{
+    ViewData["Title"] = "Dashboard - SQL 4 CDS AI Credits";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="mb-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="display-5 fw-bold">
+                        <i class="bi bi-person-circle me-2" style="color: var(--gh-accent-blue);"></i>
+                        Welcome, @ViewBag.Username!
+                    </h1>
+                </div>
+                <div>
+                    <a asp-controller="Home" asp-action="Logout" class="btn btn-outline-secondary">
+                        <i class="bi bi-box-arrow-right me-2"></i>Sign Out
+                    </a>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-5">
+                    <div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+                        <i class="bi bi-check-circle-fill me-2" style="font-size: 1.5rem;"></i>
+                        <div>
+                            <strong>Successfully authenticated!</strong><br/>
+                            <small>Your GitHub account has been verified.</small>
+                        </div>
+                    </div>
+
+                    <h2 class="h3 mb-4">Your Sponsorship Status</h2>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card h-100" style="background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(188, 140, 255, 0.1) 100%); border: 1px solid rgba(88, 166, 255, 0.3);">
+                                <div class="card-body text-center p-4">
+                                    <i class="bi bi-hourglass-split" style="font-size: 3rem; color: var(--gh-accent-blue);"></i>
+                                    <h3 class="h4 mt-3 mb-2">Checking Sponsorship...</h3>
+                                    <p class="text-muted mb-0">We're verifying your GitHub Sponsors status</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-body p-4">
+                                    <h4 class="h5 mb-3">
+                                        <i class="bi bi-key-fill me-2" style="color: var(--gh-accent-purple);"></i>
+                                        Your API Key
+                                    </h4>
+                                    <div class="mb-3">
+                                        <p class="text-muted small mb-2">Once your sponsorship is verified, your API key will appear here:</p>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" value="sk_pending_verification" readonly style="background-color: var(--gh-bg-tertiary); color: var(--gh-text-secondary); border: 1px solid var(--gh-border);">
+                                            <button class="btn btn-outline-secondary" type="button" disabled>
+                                                <i class="bi bi-clipboard"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="h4 mb-3">AI Credits Overview</h3>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Available Credits</span>
+                                        <i class="bi bi-stars" style="color: var(--gh-accent-blue);"></i>
+                                    </div>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-blue);">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Used This Month</span>
+                                        <i class="bi bi-graph-up" style="color: var(--gh-accent-green);"></i>
+                                    </div>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-green);">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Total Lifetime</span>
+                                        <i class="bi bi-trophy" style="color: var(--gh-accent-purple);"></i>
+                                    </div>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-purple);">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info d-flex align-items-start" role="alert">
+                        <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+                        <div>
+                            <strong>Not a sponsor yet?</strong><br/>
+                            <small>
+                                Become a GitHub Sponsor to unlock AI credits and support the SQL 4 CDS project. 
+                                <a href="https://github.com/sponsors/MarkMpn" target="_blank" class="alert-link">Sponsor now</a>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <h3 class="h5 mb-3">
+                        <i class="bi bi-book me-2"></i>
+                        Using Your API Key
+                    </h3>
+                    <p class="mb-3">Once you have your API key, you can use it to access AI-powered features in SQL 4 CDS:</p>
+                    <div class="bg-dark p-3 rounded" style="background-color: var(--gh-bg-tertiary) !important;">
+                        <code style="color: var(--gh-text-primary);">
+                            <span style="color: var(--gh-accent-purple);">// Configure your API key in SQL 4 CDS</span><br/>
+                            <span style="color: var(--gh-accent-blue);">Settings</span>.<span style="color: var(--gh-accent-green);">AIApiKey</span> = <span style="color: #f778ba);">"your-api-key-here"</span>;
+                        </code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .alert-success {
+        background: linear-gradient(135deg, rgba(63, 185, 80, 0.1) 0%, rgba(88, 166, 255, 0.1) 100%);
+        border: 1px solid rgba(63, 185, 80, 0.3);
+        color: var(--gh-accent-green);
+    }
+    
+    .form-control:focus {
+        background-color: var(--gh-bg-tertiary) !important;
+        border-color: var(--gh-accent-blue);
+        color: var(--gh-text-primary);
+    }
+</style>
