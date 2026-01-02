@@ -68,7 +68,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AIAutocomplete.cs" />
+    <Compile Include="AIExtensions.cs" />
     <Compile Include="AsyncEnumerableExtensions.cs" />
+    <Compile Include="Autocomplete\IAutocompleteItemSource.cs" />
     <Compile Include="CopilotScriptObject.cs" />
     <Compile Include="Formatter.cs" />
     <Compile Include="IconColorizer.cs" />
@@ -414,6 +417,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\CopilotInstructions.txt" />
     <None Include="Resources\Copilot for SQL 4 CDS.png" />
+    <EmbeddedResource Include="Resources\AIAutocompleteInstructions.txt" />
     <Content Include="Resources\Copilot.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -99,15 +99,16 @@
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
             this.tabPage5 = new System.Windows.Forms.TabPage();
-            this.label25 = new System.Windows.Forms.Label();
             this.label24 = new System.Windows.Forms.Label();
             this.allowCopilotSelectQueriesCheckBox = new System.Windows.Forms.CheckBox();
-            this.modelTextBox = new System.Windows.Forms.TextBox();
+            this.aiModelTextBox = new System.Windows.Forms.TextBox();
             this.label23 = new System.Windows.Forms.Label();
-            this.openAiKeyTextBox = new System.Windows.Forms.TextBox();
+            this.aiAPIKeyTextBox = new System.Windows.Forms.TextBox();
             this.label22 = new System.Windows.Forms.Label();
-            this.openAiEndpointTextBox = new System.Windows.Forms.TextBox();
+            this.aiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
+            this.label25 = new System.Windows.Forms.Label();
+            this.aiProviderComboBox = new System.Windows.Forms.ComboBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -947,14 +948,15 @@
             // 
             // tabPage5
             // 
+            this.tabPage5.Controls.Add(this.aiProviderComboBox);
             this.tabPage5.Controls.Add(this.label25);
             this.tabPage5.Controls.Add(this.label24);
             this.tabPage5.Controls.Add(this.allowCopilotSelectQueriesCheckBox);
-            this.tabPage5.Controls.Add(this.modelTextBox);
+            this.tabPage5.Controls.Add(this.aiModelTextBox);
             this.tabPage5.Controls.Add(this.label23);
-            this.tabPage5.Controls.Add(this.openAiKeyTextBox);
+            this.tabPage5.Controls.Add(this.aiAPIKeyTextBox);
             this.tabPage5.Controls.Add(this.label22);
-            this.tabPage5.Controls.Add(this.openAiEndpointTextBox);
+            this.tabPage5.Controls.Add(this.aiEndpointTextBox);
             this.tabPage5.Controls.Add(this.label21);
             this.tabPage5.Location = new System.Drawing.Point(4, 22);
             this.tabPage5.Margin = new System.Windows.Forms.Padding(2);
@@ -965,18 +967,9 @@
             this.tabPage5.Text = "Copilot";
             this.tabPage5.UseVisualStyleBackColor = true;
             // 
-            // label25
-            // 
-            this.label25.Location = new System.Drawing.Point(5, 49);
-            this.label25.Name = "label25";
-            this.label25.Size = new System.Drawing.Size(399, 41);
-            this.label25.TabIndex = 9;
-            this.label25.Text = "Leave blank when using OpenAI.\r\nFor Azure OpenAI, enter the endpoint of your reso" +
-    "urce, e.g. https://my-copilot.openai.azure.com/";
-            // 
             // label24
             // 
-            this.label24.Location = new System.Drawing.Point(26, 216);
+            this.label24.Location = new System.Drawing.Point(26, 197);
             this.label24.Name = "label24";
             this.label24.Size = new System.Drawing.Size(378, 32);
             this.label24.TabIndex = 7;
@@ -986,66 +979,90 @@
             // allowCopilotSelectQueriesCheckBox
             // 
             this.allowCopilotSelectQueriesCheckBox.AutoSize = true;
-            this.allowCopilotSelectQueriesCheckBox.Location = new System.Drawing.Point(7, 196);
+            this.allowCopilotSelectQueriesCheckBox.Location = new System.Drawing.Point(7, 177);
             this.allowCopilotSelectQueriesCheckBox.Name = "allowCopilotSelectQueriesCheckBox";
             this.allowCopilotSelectQueriesCheckBox.Size = new System.Drawing.Size(289, 17);
             this.allowCopilotSelectQueriesCheckBox.TabIndex = 6;
             this.allowCopilotSelectQueriesCheckBox.Text = "Allow Copilot to execute SELECT queries independently";
             this.allowCopilotSelectQueriesCheckBox.UseVisualStyleBackColor = true;
             // 
-            // modelTextBox
+            // aiModelTextBox
             // 
-            this.modelTextBox.Location = new System.Drawing.Point(7, 162);
-            this.modelTextBox.Margin = new System.Windows.Forms.Padding(2);
-            this.modelTextBox.Name = "modelTextBox";
-            this.modelTextBox.Size = new System.Drawing.Size(397, 20);
-            this.modelTextBox.TabIndex = 5;
+            this.aiModelTextBox.Location = new System.Drawing.Point(7, 143);
+            this.aiModelTextBox.Margin = new System.Windows.Forms.Padding(2);
+            this.aiModelTextBox.Name = "aiModelTextBox";
+            this.aiModelTextBox.Size = new System.Drawing.Size(397, 20);
+            this.aiModelTextBox.TabIndex = 5;
             // 
             // label23
             // 
             this.label23.AutoSize = true;
-            this.label23.Location = new System.Drawing.Point(4, 146);
+            this.label23.Location = new System.Drawing.Point(4, 127);
             this.label23.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label23.Name = "label23";
             this.label23.Size = new System.Drawing.Size(36, 13);
             this.label23.TabIndex = 4;
             this.label23.Text = "Model";
             // 
-            // openAiKeyTextBox
+            // aiAPIKeyTextBox
             // 
-            this.openAiKeyTextBox.Location = new System.Drawing.Point(7, 115);
-            this.openAiKeyTextBox.Margin = new System.Windows.Forms.Padding(2);
-            this.openAiKeyTextBox.Name = "openAiKeyTextBox";
-            this.openAiKeyTextBox.Size = new System.Drawing.Size(397, 20);
-            this.openAiKeyTextBox.TabIndex = 3;
+            this.aiAPIKeyTextBox.Location = new System.Drawing.Point(7, 96);
+            this.aiAPIKeyTextBox.Margin = new System.Windows.Forms.Padding(2);
+            this.aiAPIKeyTextBox.Name = "aiAPIKeyTextBox";
+            this.aiAPIKeyTextBox.Size = new System.Drawing.Size(397, 20);
+            this.aiAPIKeyTextBox.TabIndex = 3;
             // 
             // label22
             // 
             this.label22.AutoSize = true;
-            this.label22.Location = new System.Drawing.Point(4, 99);
+            this.label22.Location = new System.Drawing.Point(4, 80);
             this.label22.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label22.Name = "label22";
-            this.label22.Size = new System.Drawing.Size(67, 13);
+            this.label22.Size = new System.Drawing.Size(45, 13);
             this.label22.TabIndex = 2;
-            this.label22.Text = "Open AI Key";
+            this.label22.Text = "API Key";
             // 
-            // openAiEndpointTextBox
+            // aiEndpointTextBox
             // 
-            this.openAiEndpointTextBox.Location = new System.Drawing.Point(7, 27);
-            this.openAiEndpointTextBox.Margin = new System.Windows.Forms.Padding(2);
-            this.openAiEndpointTextBox.Name = "openAiEndpointTextBox";
-            this.openAiEndpointTextBox.Size = new System.Drawing.Size(397, 20);
-            this.openAiEndpointTextBox.TabIndex = 1;
+            this.aiEndpointTextBox.Location = new System.Drawing.Point(7, 58);
+            this.aiEndpointTextBox.Margin = new System.Windows.Forms.Padding(2);
+            this.aiEndpointTextBox.Name = "aiEndpointTextBox";
+            this.aiEndpointTextBox.Size = new System.Drawing.Size(397, 20);
+            this.aiEndpointTextBox.TabIndex = 1;
             // 
             // label21
             // 
             this.label21.AutoSize = true;
-            this.label21.Location = new System.Drawing.Point(4, 11);
+            this.label21.Location = new System.Drawing.Point(4, 42);
             this.label21.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label21.Name = "label21";
-            this.label21.Size = new System.Drawing.Size(121, 13);
+            this.label21.Size = new System.Drawing.Size(49, 13);
             this.label21.TabIndex = 0;
-            this.label21.Text = "Azure Open AI Endpoint";
+            this.label21.Text = "Endpoint";
+            // 
+            // label25
+            // 
+            this.label25.AutoSize = true;
+            this.label25.Location = new System.Drawing.Point(4, 2);
+            this.label25.Name = "label25";
+            this.label25.Size = new System.Drawing.Size(59, 13);
+            this.label25.TabIndex = 8;
+            this.label25.Text = "AI Provider";
+            // 
+            // aiProviderComboBox
+            // 
+            this.aiProviderComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.aiProviderComboBox.FormattingEnabled = true;
+            this.aiProviderComboBox.Items.AddRange(new object[] {
+            "< None >",
+            "Anthropic",
+            "OpenAI",
+            "Azure OpenAI"});
+            this.aiProviderComboBox.Location = new System.Drawing.Point(5, 18);
+            this.aiProviderComboBox.Name = "aiProviderComboBox";
+            this.aiProviderComboBox.Size = new System.Drawing.Size(205, 21);
+            this.aiProviderComboBox.TabIndex = 9;
+            this.aiProviderComboBox.SelectedIndexChanged += new System.EventHandler(this.aiProviderComboBox_SelectedIndexChanged);
             // 
             // SettingsForm
             // 
@@ -1167,15 +1184,14 @@
         private System.Windows.Forms.Label label18;
         private System.Windows.Forms.Label label20;
         private System.Windows.Forms.TabPage tabPage5;
-        private System.Windows.Forms.TextBox modelTextBox;
+        private System.Windows.Forms.TextBox aiModelTextBox;
         private System.Windows.Forms.Label label23;
-        private System.Windows.Forms.TextBox openAiKeyTextBox;
+        private System.Windows.Forms.TextBox aiAPIKeyTextBox;
         private System.Windows.Forms.Label label22;
-        private System.Windows.Forms.TextBox openAiEndpointTextBox;
+        private System.Windows.Forms.TextBox aiEndpointTextBox;
         private System.Windows.Forms.Label label21;
         private System.Windows.Forms.Label label24;
         private System.Windows.Forms.CheckBox allowCopilotSelectQueriesCheckBox;
-        private System.Windows.Forms.Label label25;
         private System.Windows.Forms.CheckBox rememberSessionConnectionsCheckBox;
         private System.Windows.Forms.TabPage tabPage6;
         private System.Windows.Forms.Label label26;
@@ -1183,5 +1199,7 @@
         private System.Windows.Forms.Label label27;
         private System.Windows.Forms.CheckBox localDateFormatCheckbox;
         private System.Windows.Forms.CheckBox autoSizeColumnsCheckBox;
+        private System.Windows.Forms.ComboBox aiProviderComboBox;
+        private System.Windows.Forms.Label label25;
     }
 }

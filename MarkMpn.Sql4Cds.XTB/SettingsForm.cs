@@ -52,9 +52,10 @@ namespace MarkMpn.Sql4Cds.XTB
             schemaColumnOrderingCheckbox.Checked = settings.ColumnOrdering == ColumnOrdering.Strict;
             fontComboBox.SelectedValue = Settings.Instance.EditorFontName;
             fontSizeNumericUpDown.Value = Settings.Instance.EditorFontSize;
-            openAiEndpointTextBox.Text = settings.OpenAIEndpoint;
-            openAiKeyTextBox.Text = settings.OpenAIKey;
-            modelTextBox.Text = settings.OpenAIModel;
+            aiProviderComboBox.SelectedIndex = settings.AIProvider.HasValue ? (int)settings.AIProvider.Value + 1 : 0;
+            aiEndpointTextBox.Text = settings.AIEndpoint;
+            aiAPIKeyTextBox.Text = settings.AIAPIKey;
+            aiModelTextBox.Text = settings.AIModel;
             allowCopilotSelectQueriesCheckBox.Checked = settings.AllowCopilotSelectQueries;
             resultsGridFontSizeNumericUpDown.Value = (decimal)(settings.ResultGridFontSize ?? SystemFonts.DefaultFont.Size);
 
@@ -139,9 +140,10 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.ColumnOrdering = schemaColumnOrderingCheckbox.Checked ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
                 _settings.EditorFontName = (string)fontComboBox.SelectedValue ?? "Courier New";
                 _settings.EditorFontSize = (int) fontSizeNumericUpDown.Value;
-                _settings.OpenAIEndpoint = openAiEndpointTextBox.Text;
-                _settings.OpenAIKey = openAiKeyTextBox.Text;
-                _settings.OpenAIModel = modelTextBox.Text;
+                _settings.AIProvider = aiProviderComboBox.SelectedIndex == 0 ? null : (AIProvider)aiProviderComboBox.SelectedIndex - 1;
+                _settings.AIEndpoint = aiEndpointTextBox.Text;
+                _settings.AIAPIKey = aiAPIKeyTextBox.Text;
+                _settings.AIModel = aiModelTextBox.Text;
                 _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
                 _settings.ResultGridFontSize = resultsGridFontSizeNumericUpDown.Value == (decimal)SystemFonts.DefaultFont.Size ? null : (float)resultsGridFontSizeNumericUpDown.Value;
             }
@@ -223,6 +225,15 @@ namespace MarkMpn.Sql4Cds.XTB
         private void rememberSessionCheckbox_CheckedChanged(object sender, EventArgs e)
         {
             rememberSessionConnectionsCheckBox.Enabled = rememberSessionCheckbox.Checked;
+        }
+
+        private void aiProviderComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            AIProvider? provider = aiProviderComboBox.SelectedIndex == 0 ? null : (AIProvider)aiProviderComboBox.SelectedIndex - 1;
+
+            aiEndpointTextBox.Enabled = provider == AIProvider.AzureOpenAI;
+            aiAPIKeyTextBox.Enabled = provider != null;
+            aiModelTextBox.Enabled = provider != null;
         }
     }
 }
