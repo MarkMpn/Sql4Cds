@@ -39,11 +39,6 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return View();
         }
 
-        public IActionResult Privacy()
-        {
-            return View();
-        }
-
         public IActionResult GitHubLogin()
         {
             var clientId = _configuration["GitHub:ClientId"];
