@@ -22,15 +22,12 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Extensions.AI;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Tooling.Connector;
-using OpenAI.Assistants;
 using OpenAI.Chat;
 using QuikGraph;
 using QuikGraph.Algorithms;
 using XrmToolBox.Extensibility;
-using ChatFinishReason = Microsoft.Extensions.AI.ChatFinishReason;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -41,19 +38,26 @@ namespace MarkMpn.Sql4Cds.XTB
     [ComVisible(true)]
     public class CopilotScriptObject
     {
+        class CopilotException : Exception
+        {
+            public CopilotException(string message) : base(message)
+            {
+            }
+        }
+
         private readonly SqlQueryControl _control;
         private readonly WebView2 _copilotWebView;
         private readonly MarkdownPipeline _markdownPipeline;
+        private readonly Dictionary<string, string> _pendingQueries;
+        private readonly List<ChatMessage> _messages;
+        private readonly Dictionary<string, AIFunction> _tools;
+        private readonly ChatOptions _options;
         private IChatClient _chatClient;
         private string _lastMessage;
         private bool _runningQuery;
-        private Dictionary<string, string> _pendingQueries;
         private List<FunctionResultContent> _toolOutputs;
         private TimeSpan _toolDelay;
         private CancellationTokenSource _cts;
-        private List<ChatMessage> _messages;
-        private ChatOptions _options;
-        private Dictionary<string, AIFunction> _tools;
         private string _toolCallId;
 
         internal CopilotScriptObject(SqlQueryControl control, WebView2 copilotWebView)
@@ -131,7 +135,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     }
                     else
                     {
-                        _chatClient = new OpenAI.Chat.ChatClient(Settings.Instance.OpenAIModel, new ApiKeyCredential(Settings.Instance.OpenAIKey)).AsIChatClient();
+                        _chatClient = new ChatClient(Settings.Instance.OpenAIModel, new ApiKeyCredential(Settings.Instance.OpenAIKey)).AsIChatClient();
                     }
 
                     _chatClient.AsBuilder()
@@ -182,7 +186,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private async Task<List<string>> ExecuteInternal(string id)
         {
             if (!_pendingQueries.TryGetValue(id, out var query))
-                throw new ApplicationException("Unknown query ID");
+                throw new CopilotException("Unknown query ID");
 
             await RunningQuery();
 
@@ -208,7 +212,6 @@ namespace MarkMpn.Sql4Cds.XTB
 
             try
             { 
-                var dataSource = _control.DataSources[_control.Connection.ConnectionName];
                 var messageText = new ConcurrentDictionary<string, string>();
                 bool submittedToolOutputs;
 
@@ -238,7 +241,7 @@ namespace MarkMpn.Sql4Cds.XTB
                                 {
                                     if (!_tools.TryGetValue(func.Name, out var tool))
                                     {
-                                        throw new ApplicationException($"The tool '{func.Name}' is not available.");
+                                        throw new CopilotException($"The tool '{func.Name}' is not available.");
                                     }
                                     else
                                     {
@@ -266,302 +269,6 @@ namespace MarkMpn.Sql4Cds.XTB
                         }
 
                         updateCache.Add(update);
-                        /*
-                        if (update is RunUpdate runUpdate)
-                        {
-                            if (_run == null)
-                                await RunStarted();
-
-                            _run = runUpdate;
-                        }
-                        else if (update is RequiredActionUpdate func)
-                        {
-                            promptSuggestion = null;
-                            Dictionary<string, string> args;
-
-                            try
-                            {
-                                args = JsonConvert.DeserializeObject<Dictionary<string, string>>(func.FunctionArguments);
-                            }
-                            catch (JsonException)
-                            {
-                                if (func.FunctionName == "execute_query")
-                                {
-                                    // Query is sometimes presented directly rather than wrapped in JSON
-                                    args = new Dictionary<string, string>
-                                    {
-                                        ["query"] = func.FunctionArguments
-                                    };
-                                }
-                                else
-                                {
-                                    throw;
-                                }
-                            }
-
-                            switch (func.FunctionName)
-                            {
-                                case "list_tables":
-                                    var entities = dataSource.Metadata.GetAllEntities();
-                                    var response = entities.ToDictionary(e => e.LogicalName, e => new { displayName = e.DisplayName?.UserLocalizedLabel?.Label, description = e.Description?.UserLocalizedLabel?.Label });
-                                    _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(response, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })));
-                                    break;
-
-                                case "get_columns_in_table":
-                                    var entity = args["table_name"];
-                                    dataSource.Metadata.TryGetValue(entity, out var metadata);
-
-                                    if (metadata == null)
-                                    {
-                                        _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = $"The table '{entity}' does not exist in this environment" })));
-                                    }
-                                    else
-                                    {
-                                        var columns = metadata.Attributes.ToDictionary(a => a.LogicalName, a => new { displayName = a.DisplayName?.UserLocalizedLabel?.Label, description = ShowDescription(a) ? a.Description?.UserLocalizedLabel?.Label : null, type = a.AttributeTypeName?.Value, options = (a as EnumAttributeMetadata)?.OptionSet?.Options?.ToDictionary(o => o.Value, o => o.Label?.UserLocalizedLabel?.Label), lookupTo = (a as LookupAttributeMetadata)?.Targets?.Select(target => target + "." + dataSource.Metadata[target].PrimaryIdAttribute)?.ToArray() });
-                                        _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(columns, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })));
-                                    }
-                                    break;
-
-                                case "get_current_query":
-                                    _toolOutputs.Add(new ToolOutput(func.ToolCallId, _control.Sql));
-                                    break;
-
-                                case "execute_query":
-                                    var query = args["query"];
-                                    var executeAllowed = false;
-
-                                    // Validate the query first
-                                    try
-                                    {
-                                        _control.ValidateQuery(query);
-                                    }
-                                    catch (Sql4CdsException ex)
-                                    {
-                                        var errors = ex.Errors.Select(e => e.Message).ToList();
-
-                                        var error = (Exception)ex;
-                                        while (error.InnerException != null)
-                                        {
-                                            if (error is NotSupportedQueryFragmentException nsqfe &&
-                                                nsqfe.Suggestion != null)
-                                            {
-                                                errors.Add(nsqfe.Suggestion);
-                                            }
-
-                                            error = error.InnerException;
-                                        }
-
-                                        var html = Markdown.ToHtml($"Errors found while validating a proposed query:\r\n\r\n```sql\r\n{query}\r\n```\r\n\r\n```\r\n{errors[0]}\r\n```\r\n\r\nRetrying...", _markdownPipeline);
-                                        await ShowPromptSuggestionAsync("warning", html, null, null);
-
-                                        var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
-                                        var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
-                                        var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query);
-                                        var errorHints = new List<string>();
-
-                                        if (showListTablesHint)
-                                            errorHints.Add("To get a list of valid table names, use the `list_tables` function");
-                                        if (showGetColumnsInTableHint)
-                                            errorHints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
-                                        if (showFindRelationshipHint)
-                                            errorHints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
-
-                                        var prompt = $"This query contains the following errors:\r\n{String.Join("\r\n", errors.Select(e => $"* {e}"))}";
-
-                                        if (errorHints.Any())
-                                            prompt += "\r\n\r\nTry the following changes:\r\n" + String.Join("\r\n", errorHints.Select(h => $"* {h}"));
-
-                                        _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = prompt })));
-
-                                        break;
-                                    }
-
-                                    // Check if the user has seen this query in the previous message
-                                    var whitespace = new Regex(@"\s+");
-                                    var seenInLastMessage = _lastMessage != null && whitespace.Replace(_lastMessage, " ").Contains(whitespace.Replace(query, " "));
-                                    
-                                    if (!executeAllowed && Settings.Instance.AllowCopilotSelectQueries)
-                                    {
-                                        // Check if unprompted execution is allowed - must be a single SELECT query only
-                                        var parser = new TSql160Parser(Settings.Instance.QuotedIdentifiers);
-                                        var result = parser.Parse(new StringReader(query), out var errors);
-
-                                        if (result is TSqlScript script &&
-                                            script.Batches.Count == 1 &&
-                                            script.Batches[0].Statements.Count == 1 &&
-                                            script.Batches[0].Statements[0] is SelectStatement)
-                                        {
-                                            executeAllowed = true;
-
-                                            if (!seenInLastMessage)
-                                            {
-                                                // Show a message to the user so they know what query is being executed
-                                                var markdown = "Executing the query:\n\n```sql\n" + query + "\n```";
-                                                var html = Markdown.ToHtml(markdown, _markdownPipeline);
-                                                await ShowMessageAsync(func.ToolCallId, html);
-                                            }
-                                        }
-                                    }
-
-                                    if (!executeAllowed)
-                                    {
-                                        // Check if the user wants to run this query
-                                        var markdown = seenInLastMessage ? "Do you want to run this query?" : $"Do you want to run the query:\n\n```sql\n{query}\n```";
-                                        var html = Markdown.ToHtml(markdown, _markdownPipeline);
-                                        await ShowExecutePromptAsync(html, func.ToolCallId);
-                                    }
-
-                                    _pendingQueries.Add(func.ToolCallId, query);
-
-                                    if (executeAllowed)
-                                        await ExecuteInternal(func.ToolCallId, true);
-                                    else
-                                        return;
-                                    break;
-
-                                case "find_relationship":
-                                    var table1 = args["table1"];
-                                    var table2 = args["table2"];
-
-                                    if (!dataSource.Metadata.TryGetValue(table1, out var t1) ||
-                                        !dataSource.Metadata.TryGetValue(table2, out var t2))
-                                    {
-                                        _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = "One or both of the tables do not exist in this environment. Use the list_tables function to get the valid table names." })));
-                                    }
-                                    else
-                                    {
-                                        // Build the graph of relationships between each entity
-                                        var graph = new UndirectedGraph<string, TaggedEdge<string, string>>();
-
-                                        foreach (var e in dataSource.Metadata.GetAllEntities())
-                                            graph.AddVertex(e.LogicalName);
-
-                                        // Some entities have links to almost everything else - ignore them unless they're one of the entities we're interested in
-                                        var ignoreEntities = new[] { "organization", "systemuser", "team", "queue", "businessunit", "asyncoperation", "userentityinstancedata" };
-
-                                        foreach (var e in dataSource.Metadata.GetAllEntities())
-                                        {
-                                            if (ignoreEntities.Contains(e.LogicalName) && t1.LogicalName != e.LogicalName && t2.LogicalName != e.LogicalName)
-                                                continue;
-
-                                            foreach (var a in e.Attributes.OfType<LookupAttributeMetadata>())
-                                            {
-                                                foreach (var target in a.Targets)
-                                                {
-                                                    if (ignoreEntities.Contains(target) && t1.LogicalName != target && t2.LogicalName != target)
-                                                        continue;
-
-                                                    graph.AddEdge(new TaggedEdge<string, string>(e.LogicalName, target, a.LogicalName));
-                                                }
-                                            }
-                                        }
-
-                                        var paths = graph.ShortestPathsDijkstra(e => 1, table1);
-
-                                        if (paths(table2, out var path))
-                                        {
-                                            _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(path.Select(e => new { fromTable = e.Source, fromColumn = e.Tag, toTable = e.Target, toColumn = dataSource.Metadata[e.Target].PrimaryIdAttribute }).ToArray())));
-                                        }
-                                        else
-                                        {
-                                            _toolOutputs.Add(new ToolOutput(func.ToolCallId, JsonConvert.SerializeObject(new { success = false, error = "There is no set of relationships that link these two tables" })));
-                                        }
-                                    }
-                                    break;
-
-                                default:
-                                    break;
-                            }
-                        }
-                        else if (update is MessageContentUpdate messageContentUpdate)
-                        {
-                            var text = messageText.AddOrUpdate(messageContentUpdate.MessageId, messageContentUpdate.Text, (_, existing) => existing + messageContentUpdate.Text);
-                            _lastMessage = text;
-
-                            var html = Markdown.ToHtml(text, _markdownPipeline);
-                            await ShowMessageAsync(messageContentUpdate.MessageId, html);
-                        }
-                        else if (update is MessageStatusUpdate messageStatusUpdate)
-                        {
-                            if (messageStatusUpdate.UpdateKind != StreamingUpdateReason.MessageCompleted)
-                            {
-                                promptSuggestion = null;
-                            }
-                            else
-                            {
-                                var text = messageText[messageStatusUpdate.Value.Id];
-
-                                // If there are any SQL queries in this message, validate them now
-                                var queries = Markdown.Parse(text)
-                                    .OfType<FencedCodeBlock>()
-                                    .Where(c => c.Info == "sql");
-
-                                var errors = new List<string>();
-                                var errorHints = new List<string>();
-
-                                foreach (var query in queries)
-                                {
-                                    try
-                                    {
-                                        _control.ValidateQuery(query.Lines.ToString());
-                                    }
-                                    catch (Sql4CdsException ex)
-                                    {
-                                        errors.AddRange(ex.Errors.Select(e => e.Message));
-
-                                        var error = (Exception)ex;
-                                        while (error.InnerException != null)
-                                        {
-                                            if (error is NotSupportedQueryFragmentException nsqfe &&
-                                                nsqfe.Suggestion != null)
-                                            {
-                                                errors.Add(nsqfe.Suggestion);
-                                            }
-
-                                            error = error.InnerException;
-                                        }
-
-                                        var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
-                                        var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
-                                        var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query.Lines.ToString());
-
-                                        if (showListTablesHint)
-                                            errorHints.Add("To get a list of valid table names, use the `list_tables` function");
-                                        if (showGetColumnsInTableHint)
-                                            errorHints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
-                                        if (showFindRelationshipHint)
-                                            errorHints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
-                                    }
-                                }
-
-                                if (errors.Any())
-                                {
-                                    var html = Markdown.ToHtml($"The suggested query contains errors:\r\n```\r\n{errors[0]}\r\n```", _markdownPipeline);
-                                    var prompt = $"This query contains the following errors:\r\n{String.Join("\r\n", errors.Select(e => $"* {e}"))}";
-
-                                    if (errorHints.Any())
-                                        prompt += "\r\n\r\nTry the following changes:\r\n" + String.Join("\r\n", errorHints.Select(h => $"* {h}"));
-
-                                    promptSuggestion = () => ShowPromptSuggestionAsync("warning", html, "Retry", prompt);
-                                }
-                                else if (queries.Count() == 1)
-                                {
-                                    promptSuggestion = () => ShowPromptSuggestionAsync("info", "", "Run this query", "Run this query");
-                                }
-                            }
-                        }
-                        else
-                        {
-                            //throw new NotSupportedException();
-                        }
-
-                        if (_toolOutputs.Any() && _pendingQueries.Count == 0 && !_canceled)
-                        {
-                            // Sleep to avoid overloading the API with sequential function calls
-                            await Task.Delay(_toolDelay);
-
-                            updates = _assistantClient.SubmitToolOutputsToRunStreamingAsync(_run, _toolOutputs);
-                        }*/
                     }
 
                     // Add these messages to the chat history
@@ -583,37 +290,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
                         foreach (var query in queries)
                         {
-                            try
-                            {
-                                _control.ValidateQuery(query.Lines.ToString());
-                            }
-                            catch (Sql4CdsException ex)
-                            {
-                                errors.AddRange(ex.Errors.Select(e => e.Message));
+                            var validationResult = ValidateQuery(query.Line.ToString());
 
-                                var error = (Exception)ex;
-                                while (error.InnerException != null)
-                                {
-                                    if (error is NotSupportedQueryFragmentException nsqfe &&
-                                        nsqfe.Suggestion != null)
-                                    {
-                                        errors.Add(nsqfe.Suggestion);
-                                    }
-
-                                    error = error.InnerException;
-                                }
-
-                                var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
-                                var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
-                                var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query.Lines.ToString());
-
-                                if (showListTablesHint)
-                                    errorHints.Add("To get a list of valid table names, use the `list_tables` function");
-                                if (showGetColumnsInTableHint)
-                                    errorHints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
-                                if (showFindRelationshipHint)
-                                    errorHints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
-                            }
+                            errors.AddRange(validationResult.Errors);
+                            errorHints.AddRange(validationResult.Hints);
                         }
 
                         if (errors.Any())
@@ -642,15 +322,6 @@ namespace MarkMpn.Sql4Cds.XTB
                         submittedToolOutputs = true;
                     }
                 } while (!_cts.IsCancellationRequested && submittedToolOutputs);
-
-                /*
-                if (_run?.LastError != null)
-                {
-                    if (_run.LastError.Code == RunErrorCode.RateLimitExceeded)
-                        _toolDelay = TimeSpan.FromSeconds(_toolDelay.TotalSeconds * 2);
-
-                    await ShowRetryAsync(HttpUtility.HtmlEncode(_run.LastError.Message));
-                }*/
             }
             catch (Exception ex)
             {
@@ -690,7 +361,7 @@ namespace MarkMpn.Sql4Cds.XTB
             dataSource.Metadata.TryGetValue(table_name, out var metadata);
 
             if (metadata == null)
-                throw new ApplicationException($"The table '{table_name}' does not exist in this environment");
+                throw new CopilotException($"The table '{table_name}' does not exist in this environment");
 
             var columns = metadata.Attributes.ToDictionary(a => a.LogicalName, a => new ColumnListResult { displayName = a.DisplayName?.UserLocalizedLabel?.Label, description = ShowDescription(a) ? a.Description?.UserLocalizedLabel?.Label : null, type = a.AttributeTypeName?.Value, options = (a as EnumAttributeMetadata)?.OptionSet?.Options?.ToDictionary(o => o.Value.Value, o => o.Label?.UserLocalizedLabel?.Label), lookupTo = (a as LookupAttributeMetadata)?.Targets?.Select(target => target + "." + dataSource.Metadata[target].PrimaryIdAttribute)?.ToArray() });
             return columns;
@@ -717,54 +388,26 @@ namespace MarkMpn.Sql4Cds.XTB
             var executeAllowed = false;
 
             // Validate the query first
-            try
+            var validationResult = ValidateQuery(query);
+
+            if (validationResult.Errors.Count > 0)
             {
-                _control.ValidateQuery(query);
-            }
-            catch (Sql4CdsException ex)
-            {
-                var errors = ex.Errors.Select(e => e.Message).ToList();
-
-                var error = (Exception)ex;
-                while (error.InnerException != null)
-                {
-                    if (error is NotSupportedQueryFragmentException nsqfe &&
-                        nsqfe.Suggestion != null)
-                    {
-                        errors.Add(nsqfe.Suggestion);
-                    }
-
-                    error = error.InnerException;
-                }
-
-                var html = Markdown.ToHtml($"Errors found while validating a proposed query:\r\n\r\n```sql\r\n{query}\r\n```\r\n\r\n```\r\n{errors[0]}\r\n```\r\n\r\nRetrying...", _markdownPipeline);
+                var html = Markdown.ToHtml($"Errors found while validating a proposed query:\r\n\r\n```sql\r\n{query}\r\n```\r\n\r\n```\r\n{validationResult.Errors[0]}\r\n```\r\n\r\nRetrying...", _markdownPipeline);
                 await ShowPromptSuggestionAsync("warning", html, null, null);
 
-                var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
-                var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
-                var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query);
-                var errorHints = new List<string>();
+                var prompt = $"This query contains the following errors:\r\n{String.Join("\r\n", validationResult.Errors.Select(e => $"* {e}"))}";
 
-                if (showListTablesHint)
-                    errorHints.Add("To get a list of valid table names, use the `list_tables` function");
-                if (showGetColumnsInTableHint)
-                    errorHints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
-                if (showFindRelationshipHint)
-                    errorHints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
+                if (validationResult.Hints.Count > 0)
+                    prompt += "\r\n\r\nTry the following changes:\r\n" + String.Join("\r\n", validationResult.Hints.Select(h => $"* {h}"));
 
-                var prompt = $"This query contains the following errors:\r\n{String.Join("\r\n", errors.Select(e => $"* {e}"))}";
-
-                if (errorHints.Any())
-                    prompt += "\r\n\r\nTry the following changes:\r\n" + String.Join("\r\n", errorHints.Select(h => $"* {h}"));
-
-                throw new ApplicationException(prompt);
+                throw new CopilotException(prompt);
             }
 
             // Check if the user has seen this query in the previous message
             var whitespace = new Regex(@"\s+");
             var seenInLastMessage = _lastMessage != null && whitespace.Replace(_lastMessage, " ").Contains(whitespace.Replace(query, " "));
 
-            if (!executeAllowed && Settings.Instance.AllowCopilotSelectQueries)
+            if (Settings.Instance.AllowCopilotSelectQueries)
             {
                 // Check if unprompted execution is allowed - must be a single SELECT query only
                 var parser = new TSql160Parser(Settings.Instance.QuotedIdentifiers);
@@ -806,16 +449,62 @@ namespace MarkMpn.Sql4Cds.XTB
             return null;
         }
 
+        private QueryValidationResult ValidateQuery(string query)
+        {
+            var result = new QueryValidationResult();
+
+            try
+            {
+                _control.ValidateQuery(query);
+            }
+            catch (Sql4CdsException ex)
+            {
+                result.Errors.AddRange(ex.Errors.Select(e => e.Message));
+
+                var error = (Exception)ex;
+                while (error.InnerException != null)
+                {
+                    if (error is NotSupportedQueryFragmentException nsqfe &&
+                        nsqfe.Suggestion != null)
+                    {
+                        result.Errors.Add(nsqfe.Suggestion);
+                    }
+
+                    error = error.InnerException;
+                }
+
+                var showListTablesHint = ex.Errors.Any(e => e.Number == 208);
+                var showGetColumnsInTableHint = ex.Errors.Any(e => e.Number == 207);
+                var showFindRelationshipHint = showGetColumnsInTableHint && ContainsJoin(query);
+
+                if (showListTablesHint)
+                    result.Hints.Add("To get a list of valid table names, use the `list_tables` function");
+                if (showGetColumnsInTableHint)
+                    result.Hints.Add("To get a list of valid column names in a table, use the `get_columns_in_table` function");
+                if (showFindRelationshipHint)
+                    result.Hints.Add("If you need to find how to join two tables together, try the `find_relationship` function");
+            }
+
+            return result;
+        }
+
+        class QueryValidationResult
+        {
+            public List<string> Errors { get; } = new List<string>();
+
+            public List<string> Hints { get; } = new List<string>();
+        }
+
         [Description("Finds the path of joins that can be used to connect two tables")]
         private Relationship[] FindRelationship([Description("The table to join from")] string table1, [Description("The table to join to")] string table2)
         {
             var dataSource = _control.DataSources[_control.Connection.ConnectionName];
 
             if (!dataSource.Metadata.TryGetValue(table1, out var t1))
-                throw new ApplicationException($"The table '{table1}' does not exist in this environment");
+                throw new CopilotException($"The table '{table1}' does not exist in this environment");
 
             if (!dataSource.Metadata.TryGetValue(table2, out var t2))
-                throw new ApplicationException($"The table '{table2}' does not exist in this environment");
+                throw new CopilotException($"The table '{table2}' does not exist in this environment");
 
             // Build the graph of relationships between each entity
             var graph = new UndirectedGraph<string, TaggedEdge<string, string>>();
@@ -846,7 +535,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var paths = graph.ShortestPathsDijkstra(e => 1, table1);
 
             if (!paths(table2, out var path))
-                throw new ApplicationException("There is no set of relationships that link these two tables");
+                throw new CopilotException("There is no set of relationships that link these two tables");
             
             return path.Select(e => new Relationship { fromTable = e.Source, fromColumn = e.Tag, toTable = e.Target, toColumn = dataSource.Metadata[e.Target].PrimaryIdAttribute }).ToArray();
         }
@@ -921,11 +610,6 @@ namespace MarkMpn.Sql4Cds.XTB
         private async Task ShowExecutePromptAsync(string html, string id)
         {
             await _copilotWebView.ExecuteScriptAsync("showExecutePrompt(" + JsonSerializer.Serialize(html) + "," + JsonSerializer.Serialize(id) + ")");
-        }
-
-        private async Task ShowRetryAsync(string html)
-        {
-            await _copilotWebView.ExecuteScriptAsync("showRetryPrompt(" + JsonSerializer.Serialize(html) + ")");
         }
 
         private async Task RunStarted()
