@@ -43,6 +43,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.Engine", "M
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.SSMS.21", "MarkMpn.Sql4Cds.SSMS.21\MarkMpn.Sql4Cds.SSMS.21.csproj", "{01705E0A-F3CC-403B-A2C8-73C7D42CA44A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.AIGitHubSponsorship", "MarkMpn.Sql4Cds.AIGitHubSponsorship\MarkMpn.Sql4Cds.AIGitHubSponsorship.csproj", "{82C21104-6DCA-49A3-B506-936792F4636E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -278,6 +280,22 @@ Global
 		{01705E0A-F3CC-403B-A2C8-73C7D42CA44A}.Release|x64.Build.0 = Release|Any CPU
 		{01705E0A-F3CC-403B-A2C8-73C7D42CA44A}.Release|x86.ActiveCfg = Release|x86
 		{01705E0A-F3CC-403B-A2C8-73C7D42CA44A}.Release|x86.Build.0 = Release|x86
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|arm64.Build.0 = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|x64.Build.0 = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Debug|x86.Build.0 = Debug|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|arm64.ActiveCfg = Release|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|arm64.Build.0 = Release|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|x64.ActiveCfg = Release|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|x64.Build.0 = Release|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|x86.ActiveCfg = Release|Any CPU
+		{82C21104-6DCA-49A3-B506-936792F4636E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
