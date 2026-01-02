@@ -182,13 +182,19 @@ namespace MarkMpn.Sql4Cds.XTB
 
             try
             { 
+                var runStarted = false;
                 var messageText = new ConcurrentDictionary<string, string>();
                 bool submittedToolOutputs;
 
                 do
                 {
+                    if (!runStarted)
+                    {
+                        await RunStarted();
+                        runStarted = true;
+                    }
+
                     _toolOutputs = new List<FunctionResultContent>();
-                    var runStarted = false;
                     submittedToolOutputs = false;
                     var updateCache = new List<ChatResponseUpdate>();
 
@@ -214,10 +220,16 @@ namespace MarkMpn.Sql4Cds.XTB
                                     {
                                         _toolCallId = func.CallId;
 
+                                        if (func.Name != "execute_query")
+                                            await LogToolUsage(func.CallId, func.Name, false);
+
                                         var result = await tool.InvokeAsync(new AIFunctionArguments(func.Arguments), _cts.Token);
 
                                         if (result != null)
                                             _toolOutputs.Add(new FunctionResultContent(func.CallId, JsonSerializer.Serialize(result, tool.JsonSerializerOptions)));
+
+                                        if (func.Name != "execute_query")
+                                            await LogToolUsage(func.CallId, func.Name, true);
                                     }
                                 }
                                 catch (Exception ex)
@@ -484,6 +496,11 @@ namespace MarkMpn.Sql4Cds.XTB
         private async Task RunningQuery()
         {
             await _copilotWebView.ExecuteScriptAsync("runningQuery()");
+        }
+
+        private async Task LogToolUsage(string callId, string tool, bool complete)
+        {
+            await _copilotWebView.ExecuteScriptAsync("updateMessage(" + JsonSerializer.Serialize(callId) + "," + JsonSerializer.Serialize($"<p>Executing tool <code>{tool}</code>{(complete ? "✅" : "⌛")}</p>") + ")");
         }
     }
 }
