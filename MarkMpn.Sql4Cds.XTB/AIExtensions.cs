@@ -24,6 +24,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             switch (settings.AIProvider)
             {
+                case AIProvider.Sponsorship:
+                    chatClient = new ChatClient(settings.AIModel, new ApiKeyCredential(settings.AIAPIKey), new OpenAI.OpenAIClientOptions { Endpoint = new Uri("https://localhost:7140/api/ai") }).AsIChatClient();
+                    break;
+
                 case AIProvider.Anthropic:
                     chatClient = new AnthropicClient(Settings.Instance.AIAPIKey);
                     break;

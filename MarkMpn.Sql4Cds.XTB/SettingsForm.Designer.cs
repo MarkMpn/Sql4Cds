@@ -99,6 +99,8 @@
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
             this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.label28 = new System.Windows.Forms.Label();
+            this.aiAutocompleteCheckBox = new System.Windows.Forms.CheckBox();
             this.aiProviderComboBox = new System.Windows.Forms.ComboBox();
             this.label25 = new System.Windows.Forms.Label();
             this.label24 = new System.Windows.Forms.Label();
@@ -109,8 +111,6 @@
             this.label22 = new System.Windows.Forms.Label();
             this.aiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
-            this.aiAutocompleteCheckBox = new System.Windows.Forms.CheckBox();
-            this.label28 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -971,12 +971,32 @@
             this.tabPage5.Text = "Copilot";
             this.tabPage5.UseVisualStyleBackColor = true;
             // 
+            // label28
+            // 
+            this.label28.AutoSize = true;
+            this.label28.Location = new System.Drawing.Point(26, 252);
+            this.label28.Name = "label28";
+            this.label28.Size = new System.Drawing.Size(308, 13);
+            this.label28.TabIndex = 11;
+            this.label28.Text = "Press Ctrl+Space while editing a query to include AI suggestions";
+            // 
+            // aiAutocompleteCheckBox
+            // 
+            this.aiAutocompleteCheckBox.AutoSize = true;
+            this.aiAutocompleteCheckBox.Location = new System.Drawing.Point(7, 232);
+            this.aiAutocompleteCheckBox.Name = "aiAutocompleteCheckBox";
+            this.aiAutocompleteCheckBox.Size = new System.Drawing.Size(266, 17);
+            this.aiAutocompleteCheckBox.TabIndex = 10;
+            this.aiAutocompleteCheckBox.Text = "Include Copilot-powered autocomplete suggestions";
+            this.aiAutocompleteCheckBox.UseVisualStyleBackColor = true;
+            // 
             // aiProviderComboBox
             // 
             this.aiProviderComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.aiProviderComboBox.FormattingEnabled = true;
             this.aiProviderComboBox.Items.AddRange(new object[] {
             "< None >",
+            "Sponsorship",
             "Anthropic",
             "OpenAI",
             "Azure OpenAI"});
@@ -1067,25 +1087,6 @@
             this.label21.Size = new System.Drawing.Size(49, 13);
             this.label21.TabIndex = 0;
             this.label21.Text = "Endpoint";
-            // 
-            // aiAutocompleteCheckBox
-            // 
-            this.aiAutocompleteCheckBox.AutoSize = true;
-            this.aiAutocompleteCheckBox.Location = new System.Drawing.Point(7, 232);
-            this.aiAutocompleteCheckBox.Name = "aiAutocompleteCheckBox";
-            this.aiAutocompleteCheckBox.Size = new System.Drawing.Size(266, 17);
-            this.aiAutocompleteCheckBox.TabIndex = 10;
-            this.aiAutocompleteCheckBox.Text = "Include Copilot-powered autocomplete suggestions";
-            this.aiAutocompleteCheckBox.UseVisualStyleBackColor = true;
-            // 
-            // label28
-            // 
-            this.label28.AutoSize = true;
-            this.label28.Location = new System.Drawing.Point(26, 252);
-            this.label28.Name = "label28";
-            this.label28.Size = new System.Drawing.Size(308, 13);
-            this.label28.TabIndex = 11;
-            this.label28.Text = "Press Ctrl+Space while editing a query to include AI suggestions";
             // 
             // SettingsForm
             // 

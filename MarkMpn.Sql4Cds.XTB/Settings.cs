@@ -97,6 +97,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
     public enum AIProvider
     {
+        Sponsorship,
         Anthropic,
         OpenAI,
         AzureOpenAI,
