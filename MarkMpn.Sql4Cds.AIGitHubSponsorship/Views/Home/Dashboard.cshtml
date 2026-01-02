@@ -71,7 +71,7 @@
                                         <span class="text-muted">Available Credits</span>
                                         <i class="bi bi-stars" style="color: var(--gh-accent-blue);"></i>
                                     </div>
-                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-blue);">0</h3>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-blue);">@ViewBag.TokensRemaining</h3>
                                 </div>
                             </div>
                         </div>
@@ -82,7 +82,7 @@
                                         <span class="text-muted">Used This Month</span>
                                         <i class="bi bi-graph-up" style="color: var(--gh-accent-green);"></i>
                                     </div>
-                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-green);">0</h3>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-green);">@ViewBag.TokensUsedThisMonth</h3>
                                 </div>
                             </div>
                         </div>
@@ -90,10 +90,10 @@
                             <div class="card">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <span class="text-muted">Total Lifetime</span>
+                                        <span class="text-muted">Monthly Allowance</span>
                                         <i class="bi bi-trophy" style="color: var(--gh-accent-purple);"></i>
                                     </div>
-                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-purple);">0</h3>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-purple);">@ViewBag.TokensAllowed</h3>
                                 </div>
                             </div>
                         </div>

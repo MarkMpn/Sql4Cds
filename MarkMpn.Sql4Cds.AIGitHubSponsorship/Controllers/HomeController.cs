@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 {
@@ -11,12 +13,18 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
         private readonly ILogger<HomeController> _logger;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ApplicationDbContext _context;
 
-        public HomeController(ILogger<HomeController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
+        public HomeController(
+            ILogger<HomeController> logger, 
+            IConfiguration configuration, 
+            IHttpClientFactory httpClientFactory,
+            ApplicationDbContext context)
         {
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
+            _context = context;
         }
 
         public IActionResult Index()
@@ -78,8 +86,12 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 var userInfo = await GetGitHubUserInfo(accessToken);
                 if (userInfo != null)
                 {
-                    HttpContext.Session.SetString("GitHubUsername", userInfo.Value.GetProperty("login").GetString() ?? "");
-                    _logger.LogInformation($"User {userInfo.Value.GetProperty("login").GetString()} authenticated successfully");
+                    var username = userInfo.Value.GetProperty("login").GetString() ?? "";
+                    HttpContext.Session.SetString("GitHubUsername", username);
+                    _logger.LogInformation($"User {username} authenticated successfully");
+
+                    // Create or update user in database
+                    await CreateOrUpdateUser(username, accessToken);
                 }
 
                 // TODO: Check sponsorship status
@@ -92,6 +104,36 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 _logger.LogError(ex, "Error during GitHub OAuth callback");
                 return RedirectToAction("Error");
             }
+        }
+
+        private async Task CreateOrUpdateUser(string username, string accessToken)
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.GitHubUsername == username);
+
+            if (user == null)
+            {
+                // Create new user with default token allowance
+                user = new User
+                {
+                    GitHubUsername = username,
+                    AccessToken = accessToken,
+                    TokensAllowedPerMonth = 0, // Will be updated based on sponsorship level
+                    CreatedAt = DateTime.UtcNow,
+                    LastUpdatedAt = DateTime.UtcNow
+                };
+                _context.Users.Add(user);
+                _logger.LogInformation($"Created new user: {username}");
+            }
+            else
+            {
+                // Update existing user
+                user.AccessToken = accessToken;
+                user.LastUpdatedAt = DateTime.UtcNow;
+                _logger.LogInformation($"Updated existing user: {username}");
+            }
+
+            await _context.SaveChangesAsync();
         }
 
         private async Task<string?> ExchangeCodeForAccessToken(string code)
@@ -150,17 +192,45 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return JsonSerializer.Deserialize<JsonElement>(content);
         }
 
-        public IActionResult Dashboard()
+        public async Task<IActionResult> Dashboard()
         {
             var accessToken = HttpContext.Session.GetString("GitHubAccessToken");
             var username = HttpContext.Session.GetString("GitHubUsername");
 
-            if (string.IsNullOrEmpty(accessToken))
+            if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(username))
             {
                 return RedirectToAction("Index");
             }
 
-            ViewBag.Username = username;
+            // Get user from database
+            var user = await _context.Users
+                .Include(u => u.TokenUsages)
+                .FirstOrDefaultAsync(u => u.GitHubUsername == username);
+
+            if (user != null)
+            {
+                ViewBag.Username = username;
+                ViewBag.TokensAllowed = user.TokensAllowedPerMonth;
+                
+                // Calculate tokens used this month
+                var currentMonth = DateOnly.FromDateTime(DateTime.UtcNow);
+                var firstDayOfMonth = new DateOnly(currentMonth.Year, currentMonth.Month, 1);
+                
+                var tokensUsedThisMonth = await _context.TokenUsages
+                    .Where(t => t.UserId == user.Id && t.UsageDate >= firstDayOfMonth)
+                    .SumAsync(t => t.TokensUsed);
+                
+                ViewBag.TokensUsedThisMonth = tokensUsedThisMonth;
+                ViewBag.TokensRemaining = Math.Max(0, user.TokensAllowedPerMonth - tokensUsedThisMonth);
+            }
+            else
+            {
+                ViewBag.Username = username;
+                ViewBag.TokensAllowed = 0;
+                ViewBag.TokensUsedThisMonth = 0;
+                ViewBag.TokensRemaining = 0;
+            }
+
             return View();
         }
 
