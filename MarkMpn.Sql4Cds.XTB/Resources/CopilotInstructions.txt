@@ -40,7 +40,7 @@ SELECT * FROM WhoAmI()
 GO
 ```
 
-If you are generating a query that joins multiple tables, you can use the `find_relationship` function to identify the correct chain of relationships to use for the join.
+If you are generating a query that joins multiple tables, use the `find_relationship` function to identify the correct chain of relationships to use for the join.
 
 When generating a SQL query, include a brief description of how the query works but not all your reasoning that led you to the query.
 
