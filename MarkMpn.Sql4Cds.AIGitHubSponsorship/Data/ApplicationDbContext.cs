@@ -21,6 +21,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Data
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasIndex(e => e.GitHubUsername).IsUnique();
+                entity.HasIndex(e => e.ApiKey).IsUnique();
                 
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("GETUTCDATE()");
