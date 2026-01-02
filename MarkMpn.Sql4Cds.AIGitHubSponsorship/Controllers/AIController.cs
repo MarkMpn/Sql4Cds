@@ -225,16 +225,46 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
         private async Task RecordTokenUsage(int userId, int tokensUsed)
         {
-            var usage = new TokenUsage
-            {
-                UserId = userId,
-                TokensUsed = tokensUsed,
-                UsageDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                CreatedAt = DateTime.UtcNow
-            };
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var now = DateTime.UtcNow;
 
-            _context.TokenUsages.Add(usage);
-            await _context.SaveChangesAsync();
+            // Try to update existing record first (atomic operation)
+            var rowsAffected = await _context.TokenUsages
+                .Where(t => t.UserId == userId && t.UsageDate == today)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(t => t.TokensUsed, t => t.TokensUsed + tokensUsed)
+                    .SetProperty(t => t.LastUpdatedAt, now));
+
+            if (rowsAffected > 0)
+            {
+                // Successfully updated existing record
+                return;
+            }
+
+            // No existing record - try to insert
+            try
+            {
+                var usage = new TokenUsage
+                {
+                    UserId = userId,
+                    TokensUsed = tokensUsed,
+                    UsageDate = today,
+                    CreatedAt = now,
+                    LastUpdatedAt = now
+                };
+                _context.TokenUsages.Add(usage);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // Race condition: another thread inserted between our update and insert
+                // Try update again
+                await _context.TokenUsages
+                    .Where(t => t.UserId == userId && t.UsageDate == today)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(t => t.TokensUsed, t => t.TokensUsed + tokensUsed)
+                        .SetProperty(t => t.LastUpdatedAt, DateTime.UtcNow));
+            }
         }
     }
 }
