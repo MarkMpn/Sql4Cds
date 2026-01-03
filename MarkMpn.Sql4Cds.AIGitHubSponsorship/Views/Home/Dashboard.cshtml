@@ -50,7 +50,7 @@
                                     </div>
                                     <div class="mt-3 text-center">
                                         <div style="max-width: 300px; margin-left: auto; margin-right: auto;">
-                                            <a href="https://github.com/sponsors/MarkMpn" target="_blank" class="btn btn-sm btn-sponsor-gradient btn-sponsor-wide" style="padding: 0.5rem 1.25rem; width: 100%;">
+                                            <a href="https://github.com/sponsors/MarkMpn?sponsor=@(ViewBag.Username)" target="_blank" class="btn btn-sm btn-sponsor-gradient btn-sponsor-wide" style="padding: 0.5rem 1.25rem; width: 100%;">
                                                 <i class="bi bi-heart me-1"></i> Update sponsorship level
                                             </a>
                                             <form asp-controller="Home" asp-action="RefreshSponsorship" method="post" class="d-inline">
@@ -134,8 +134,8 @@
                             <div>
                                 <strong>Not a sponsor yet?</strong><br/>
                                 <small>
-                                    Become a GitHub Sponsor to unlock AI credits and support the SQL 4 CDS project. 
-                                    <a href="https://github.com/sponsors/MarkMpn" target="_blank" style="color: #f5576c; font-weight: 600;">Sponsor now</a>
+                                    Become a GitHub Sponsor to unlock AI credits and support the SQL 4 CDS project.
+                                    <a href="https://github.com/sponsors/MarkMpn?sponsor=@(ViewBag.Username)" target="_blank" style="color: #f5576c; font-weight: 600;">Sponsor now</a>
                                 </small>
                             </div>
                         </div>
@@ -247,8 +247,8 @@
                                             </div>
                                         </div>
                                         <div>
-                                            <a href="https://github.com/sponsors/MarkMpn" target="_blank" class="btn btn-sm btn-sponsor-gradient">
-                                                <i class="bi bi-heart me-1"></i> Encourage Sponsorship
+                                            <a href="https://github.com/sponsors/MarkMpn?sponsor=@(org.Name)" target="_blank" class="btn btn-sm btn-sponsor-gradient">
+                                                <i class="bi bi-heart me-1"></i> Sponsor as @org.Name
                                             </a>
                                         </div>
                                     </div>
