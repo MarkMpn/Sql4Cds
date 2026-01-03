@@ -92,8 +92,8 @@
                                     <div class="mb-3">
                                         <p class="text-muted small mb-2">Use this key to access AI services. Keep it secret.</p>
                                         <div class="input-group">
-                                            <input type="text" class="form-control" value="@ViewBag.ApiKey" readonly style="background-color: var(--gh-bg-tertiary); color: var(--gh-text-secondary); border: 1px solid var(--gh-border);">
-                                            <button class="btn btn-outline-secondary" type="button" @(ViewBag.ApiKey == "sk_pending_verification" ? "disabled" : "")>
+                                            <input type="text" id="apiKeyInput" class="form-control" value="@ViewBag.ApiKey" readonly style="background-color: var(--gh-bg-tertiary); color: var(--gh-text-secondary); border: 1px solid var(--gh-border);">
+                                            <button id="apiKeyCopyBtn" class="btn btn-outline-secondary" type="button" @(ViewBag.ApiKey == "sk_pending_verification" ? "disabled" : "") title="Copy to clipboard">
                                                 <i class="bi bi-clipboard"></i>
                                             </button>
                                         </div>
@@ -319,3 +319,40 @@
         color: var(--gh-text-primary);
     }
 </style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const copyBtn = document.getElementById('apiKeyCopyBtn');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        
+        if (copyBtn && apiKeyInput) {
+            copyBtn.addEventListener('click', function() {
+                const apiKey = apiKeyInput.value;
+                
+                // Use the modern Clipboard API
+                navigator.clipboard.writeText(apiKey).then(function() {
+                    // Show success feedback
+                    const originalIcon = copyBtn.innerHTML;
+                    const originalTitle = copyBtn.title;
+                    
+                    copyBtn.innerHTML = '<i class="bi bi-check"></i>';
+                    copyBtn.title = 'Copied!';
+                    copyBtn.classList.add('btn-success');
+                    copyBtn.classList.remove('btn-outline-secondary');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(function() {
+                        copyBtn.innerHTML = originalIcon;
+                        copyBtn.title = originalTitle;
+                        copyBtn.classList.remove('btn-success');
+                        copyBtn.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }).catch(function(err) {
+                    // Fallback for clipboard API failure
+                    console.error('Failed to copy:', err);
+                    alert('Failed to copy API key. Please copy manually.');
+                });
+            });
+        }
+    });
+</script>
