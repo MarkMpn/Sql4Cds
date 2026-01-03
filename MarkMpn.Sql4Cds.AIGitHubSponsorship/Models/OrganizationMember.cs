@@ -3,29 +3,24 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Models
 {
-    public class TokenUsage
+    public class OrganizationMember
     {
         [Key]
         public int Id { get; set; }
 
-        public int? UserId { get; set; }
-
-        public int? OrganizationId { get; set; }
+        [Required]
+        public int UserId { get; set; }
 
         [Required]
-        public DateOnly UsageDate { get; set; }
-
-        public int TokensUsed { get; set; }
+        public int OrganizationId { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
-
         // Navigation properties
         [ForeignKey(nameof(UserId))]
-        public User? User { get; set; }
+        public User User { get; set; } = null!;
 
         [ForeignKey(nameof(OrganizationId))]
-        public Organization? Organization { get; set; }
+        public Organization Organization { get; set; } = null!;
     }
 }

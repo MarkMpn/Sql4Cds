@@ -98,6 +98,9 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
                     // Create or update user in database
                     await CreateOrUpdateUser(username, accessToken, tokensAllowed, avatarUrl);
+
+                    // Update organization memberships and sponsorships
+                    await UpdateOrganizationMemberships(username, accessToken);
                 }
 
                 // TODO: Check sponsorship status
@@ -148,6 +151,91 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 }
                 user.LastUpdatedAt = DateTime.UtcNow;
                 _logger.LogInformation($"Updated existing user: {username}");
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task UpdateOrganizationMemberships(string username, string accessToken)
+        {
+            var user = await _context.Users
+                .Include(u => u.OrganizationMemberships)
+                .FirstOrDefaultAsync(u => u.GitHubUsername == username);
+
+            if (user == null)
+                return;
+
+            // Get all sponsorships including organizations
+            var allSponsorships = await _sponsorshipService.GetAllSponsorships(accessToken);
+            var orgSponsorships = allSponsorships.Where(s => s.IsOrganization).ToList();
+
+            // Get user's organization memberships from GitHub
+            var userOrgLogins = await _sponsorshipService.GetOrganizationMemberships(accessToken);
+
+            // Find organizations that are both sponsoring and user is a member of
+            var relevantOrgLogins = orgSponsorships
+                .Where(os => userOrgLogins.Contains(os.Login, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            // Create or update organizations in database
+            foreach (var orgSponsorship in relevantOrgLogins)
+            {
+                var org = await _context.Organizations
+                    .FirstOrDefaultAsync(o => o.GitHubLogin == orgSponsorship.Login);
+
+                if (org == null)
+                {
+                    org = new Organization
+                    {
+                        GitHubLogin = orgSponsorship.Login,
+                        AvatarUrl = orgSponsorship.AvatarUrl,
+                        TokensAllowedPerMonth = orgSponsorship.TokensAllowed,
+                        CreatedAt = DateTime.UtcNow,
+                        LastUpdatedAt = DateTime.UtcNow
+                    };
+                    _context.Organizations.Add(org);
+                    await _context.SaveChangesAsync(); // Save to get the ID
+                    _logger.LogInformation($"Created organization: {org.GitHubLogin} with {org.TokensAllowedPerMonth} tokens/month");
+                }
+                else
+                {
+                    org.TokensAllowedPerMonth = orgSponsorship.TokensAllowed;
+                    org.AvatarUrl = orgSponsorship.AvatarUrl;
+                    org.LastUpdatedAt = DateTime.UtcNow;
+                    _logger.LogInformation($"Updated organization: {org.GitHubLogin} with {org.TokensAllowedPerMonth} tokens/month");
+                }
+
+                // Add membership if not exists
+                var membership = await _context.OrganizationMembers
+                    .FirstOrDefaultAsync(om => om.UserId == user.Id && om.OrganizationId == org.Id);
+
+                if (membership == null)
+                {
+                    membership = new OrganizationMember
+                    {
+                        UserId = user.Id,
+                        OrganizationId = org.Id,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.OrganizationMembers.Add(membership);
+                    _logger.LogInformation($"Added user {username} to organization {org.GitHubLogin}");
+                }
+            }
+
+            // Remove memberships for organizations user is no longer part of or not sponsoring
+            var relevantOrgIds = await _context.Organizations
+                .Where(o => relevantOrgLogins.Select(r => r.Login).Contains(o.GitHubLogin))
+                .Select(o => o.Id)
+                .ToListAsync();
+
+            var membershipsToRemove = user.OrganizationMemberships
+                .Where(om => !relevantOrgIds.Contains(om.OrganizationId))
+                .ToList();
+
+            foreach (var membership in membershipsToRemove)
+            {
+                _context.OrganizationMembers.Remove(membership);
+                _logger.LogInformation($"Removed user {username} from organization membership {membership.OrganizationId}");
             }
 
             await _context.SaveChangesAsync();
@@ -233,6 +321,9 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             // Get user from database
             var user = await _context.Users
                 .Include(u => u.TokenUsages)
+                .Include(u => u.OrganizationMemberships)
+                    .ThenInclude(om => om.Organization)
+                        .ThenInclude(o => o.TokenUsages)
                 .FirstOrDefaultAsync(u => u.GitHubUsername == username);
 
             if (user != null)
@@ -253,6 +344,26 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 
                 ViewBag.TokensUsedThisMonth = tokensUsedThisMonth;
                 ViewBag.TokensRemaining = Math.Max(0, user.TokensAllowedPerMonth - tokensUsedThisMonth);
+
+                // Prepare organization data
+                var orgData = new List<dynamic>();
+                foreach (var membership in user.OrganizationMemberships)
+                {
+                    var org = membership.Organization;
+                    var orgTokensUsed = await _context.TokenUsages
+                        .Where(t => t.OrganizationId == org.Id && t.UsageDate >= firstDayOfMonth)
+                        .SumAsync(t => t.TokensUsed);
+
+                    orgData.Add(new
+                    {
+                        Name = org.GitHubLogin,
+                        AvatarUrl = org.AvatarUrl,
+                        TokensAllowed = org.TokensAllowedPerMonth,
+                        TokensUsed = orgTokensUsed,
+                        TokensRemaining = Math.Max(0, org.TokensAllowedPerMonth - orgTokensUsed)
+                    });
+                }
+                ViewBag.Organizations = orgData;
             }
             else
             {
@@ -282,6 +393,9 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
             var tokensAllowed = await _sponsorshipService.DetermineTokenAllowance(accessToken);
             await CreateOrUpdateUser(username, accessToken, tokensAllowed);
+
+            // Also update organization memberships
+            await UpdateOrganizationMemberships(username, accessToken);
 
             return RedirectToAction("Dashboard");
         }

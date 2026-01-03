@@ -47,8 +47,10 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
                 var userApiKey = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Validate API key and get user
+                // Validate API key and get user with organization memberships
                 var user = await _context.Users
+                    .Include(u => u.OrganizationMemberships)
+                        .ThenInclude(om => om.Organization)
                     .FirstOrDefaultAsync(u => u.ApiKey == userApiKey);
 
                 if (user == null)
@@ -85,18 +87,43 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     }
                 }
 
-                // Check remaining credits
+                // Check remaining personal credits
                 var tokensUsedThisMonth = await _context.TokenUsages
                     .Where(t => t.UserId == user.Id && t.UsageDate >= firstDayOfMonth)
                     .SumAsync(t => t.TokensUsed);
 
                 var tokensRemaining = user.TokensAllowedPerMonth - tokensUsedThisMonth;
 
+                // If personal credits exhausted, check organization credits
+                int? selectedOrgId = null;
                 if (tokensRemaining <= 0)
                 {
-                    _logger.LogWarning($"User {user.GitHubUsername} has no remaining credits");
-                    return StatusCode(429, new { error = new { message = "Insufficient credits. Please upgrade your sponsorship tier.", type = "insufficient_quota" } });
+                    foreach (var membership in user.OrganizationMemberships)
+                    {
+                        var org = membership.Organization;
+                        var orgTokensUsed = await _context.TokenUsages
+                            .Where(t => t.OrganizationId == org.Id && t.UsageDate >= firstDayOfMonth)
+                            .SumAsync(t => t.TokensUsed);
+
+                        var orgTokensRemaining = org.TokensAllowedPerMonth - orgTokensUsed;
+                        if (orgTokensRemaining > 0)
+                        {
+                            tokensRemaining = orgTokensRemaining;
+                            selectedOrgId = org.Id;
+                            _logger.LogInformation($"User {user.GitHubUsername} will use organization {org.GitHubLogin} credits ({orgTokensRemaining} remaining)");
+                            break;
+                        }
+                    }
                 }
+
+                if (tokensRemaining <= 0)
+                {
+                    _logger.LogWarning($"User {user.GitHubUsername} has no remaining credits (personal or organizational)");
+                    return StatusCode(429, new { error = new { message = "Insufficient credits. Please upgrade your sponsorship tier or contact your organization admin.", type = "insufficient_quota" } });
+                }
+
+                // Store selected org ID for token recording
+                HttpContext.Items["SelectedOrgId"] = selectedOrgId;
 
                 // Read the request body
                 string requestBody;
@@ -186,8 +213,18 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             // Record token usage
             if (tokensUsed > 0)
             {
-                await RecordTokenUsage(user.Id, tokensUsed, model);
-                _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens");
+                var selectedOrgId = HttpContext.Items["SelectedOrgId"] as int?;
+                await RecordTokenUsage(user.Id, tokensUsed, model, selectedOrgId);
+                
+                if (selectedOrgId.HasValue)
+                {
+                    var org = user.OrganizationMemberships.FirstOrDefault(m => m.OrganizationId == selectedOrgId)?.Organization;
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from organization {org?.GitHubLogin ?? "Unknown"}");
+                }
+                else
+                {
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from personal credits");
+                }
             }
 
             // Return the response
@@ -256,8 +293,18 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             // Record token usage if we captured it
             if (tokensUsed > 0)
             {
-                await RecordTokenUsage(user.Id, tokensUsed, model);
-                _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens (streaming)");
+                var selectedOrgId = HttpContext.Items["SelectedOrgId"] as int?;
+                await RecordTokenUsage(user.Id, tokensUsed, model, selectedOrgId);
+                
+                if (selectedOrgId.HasValue)
+                {
+                    var org = user.OrganizationMemberships.FirstOrDefault(m => m.OrganizationId == selectedOrgId)?.Organization;
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from organization {org?.GitHubLogin ?? "Unknown"} (streaming)");
+                }
+                else
+                {
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from personal credits (streaming)");
+                }
             }
             else
             {
@@ -269,7 +316,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return new EmptyResult();
         }
 
-        private async Task RecordTokenUsage(int userId, int tokensUsed, string model)
+        private async Task RecordTokenUsage(int userId, int tokensUsed, string model, int? organizationId = null)
         {
             var creditsUsed = tokensUsed;
 
@@ -279,42 +326,87 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var now = DateTime.UtcNow;
 
-            // Try to update existing record first (atomic operation)
-            var rowsAffected = await _context.TokenUsages
-                .Where(t => t.UserId == userId && t.UsageDate == today)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
-                    .SetProperty(t => t.LastUpdatedAt, now));
-
-            if (rowsAffected > 0)
+            if (organizationId.HasValue)
             {
-                // Successfully updated existing record
-                return;
-            }
+                // Record against organization credit pool
+                // Try to update existing record first (atomic operation)
+                var rowsAffected = await _context.TokenUsages
+                    .Where(t => t.OrganizationId == organizationId && t.UsageDate == today)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
+                        .SetProperty(t => t.LastUpdatedAt, now));
 
-            // No existing record - try to insert
-            try
-            {
-                var usage = new TokenUsage
+                if (rowsAffected > 0)
                 {
-                    UserId = userId,
-                    TokensUsed = creditsUsed,
-                    UsageDate = today,
-                    CreatedAt = now,
-                    LastUpdatedAt = now
-                };
-                _context.TokenUsages.Add(usage);
-                await _context.SaveChangesAsync();
+                    // Successfully updated existing record
+                    return;
+                }
+
+                // No existing record - try to insert
+                try
+                {
+                    var usage = new TokenUsage
+                    {
+                        OrganizationId = organizationId,
+                        TokensUsed = creditsUsed,
+                        UsageDate = today,
+                        CreatedAt = now,
+                        LastUpdatedAt = now
+                    };
+                    _context.TokenUsages.Add(usage);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // Race condition: another thread inserted between our update and insert
+                    // Try update again
+                    await _context.TokenUsages
+                        .Where(t => t.OrganizationId == organizationId && t.UsageDate == today)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
+                            .SetProperty(t => t.LastUpdatedAt, DateTime.UtcNow));
+                }
             }
-            catch (DbUpdateException)
+            else
             {
-                // Race condition: another thread inserted between our update and insert
-                // Try update again
-                await _context.TokenUsages
+                // Record against user's personal credits
+                // Try to update existing record first (atomic operation)
+                var rowsAffected = await _context.TokenUsages
                     .Where(t => t.UserId == userId && t.UsageDate == today)
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
-                        .SetProperty(t => t.LastUpdatedAt, DateTime.UtcNow));
+                        .SetProperty(t => t.LastUpdatedAt, now));
+
+                if (rowsAffected > 0)
+                {
+                    // Successfully updated existing record
+                    return;
+                }
+
+                // No existing record - try to insert
+                try
+                {
+                    var usage = new TokenUsage
+                    {
+                        UserId = userId,
+                        TokensUsed = creditsUsed,
+                        UsageDate = today,
+                        CreatedAt = now,
+                        LastUpdatedAt = now
+                    };
+                    _context.TokenUsages.Add(usage);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // Race condition: another thread inserted between our update and insert
+                    // Try update again
+                    await _context.TokenUsages
+                        .Where(t => t.UserId == userId && t.UsageDate == today)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
+                            .SetProperty(t => t.LastUpdatedAt, DateTime.UtcNow));
+                }
             }
         }
     }

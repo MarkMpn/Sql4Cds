@@ -140,6 +140,76 @@
                             </div>
                         </div>
                     }
+
+                    @{
+                        var organizations = ViewBag.Organizations as List<dynamic> ?? new List<dynamic>();
+                    }
+                    @if (organizations.Any())
+                    {
+                        <h3 class="h4 mb-3 mt-5">Organization Credits</h3>
+                        <p class="text-muted mb-3">You have access to shared credit pools from these sponsoring organizations:</p>
+                        
+                        @foreach (var org in organizations)
+                        {
+                            <div class="card mb-3" style="background: linear-gradient(135deg, rgba(245, 87, 108, 0.1) 0%, rgba(247, 120, 186, 0.1) 100%); border: 1px solid rgba(245, 87, 108, 0.3);">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-center mb-3">
+                                        @if (!string.IsNullOrEmpty(org.AvatarUrl))
+                                        {
+                                            <img src="@org.AvatarUrl" alt="@org.Name" style="width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; border: 2px solid var(--gh-sponsor-pink);">
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-building me-3" style="font-size: 2.5rem; color: var(--gh-sponsor-pink);"></i>
+                                        }
+                                        <div>
+                                            <h4 class="h5 mb-0">@org.Name</h4>
+                                            <small class="text-muted">Sponsoring Organization</small>
+                                        </div>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <div class="card" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span class="text-muted small">Shared Pool Available</span>
+                                                        <i class="bi bi-stars" style="color: var(--gh-sponsor-pink);"></i>
+                                                    </div>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-sponsor-pink);">@org.TokensRemaining</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span class="text-muted small">Used This Month</span>
+                                                        <i class="bi bi-graph-up" style="color: var(--gh-accent-green);"></i>
+                                                    </div>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-green);">@org.TokensUsed</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span class="text-muted small">Monthly Allowance</span>
+                                                        <i class="bi bi-trophy" style="color: var(--gh-accent-purple);"></i>
+                                                    </div>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-purple);">@org.TokensAllowed</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        <p class="text-muted small mt-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Organization credits are shared among all members. Your personal credits are used first, then organization credits when personal credits are exhausted.
+                        </p>
+                    }
                 </div>
             </div>
 
