@@ -35,8 +35,15 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Data
             // Configure TokenUsage entity
             modelBuilder.Entity<TokenUsage>(entity =>
             {
-                entity.HasIndex(e => new { e.UserId, e.UsageDate }).IsUnique(false);
-                entity.HasIndex(e => new { e.OrganizationId, e.UsageDate }).IsUnique(false);
+                // Unique index on UserId + UsageDate where UserId is not null
+                entity.HasIndex(e => new { e.UserId, e.UsageDate })
+                    .IsUnique()
+                    .HasFilter("[UserId] IS NOT NULL");
+                
+                // Unique index on OrganizationId + UsageDate where OrganizationId is not null
+                entity.HasIndex(e => new { e.OrganizationId, e.UsageDate })
+                    .IsUnique()
+                    .HasFilter("[OrganizationId] IS NOT NULL");
                 
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("GETUTCDATE()");
