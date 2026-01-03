@@ -99,7 +99,17 @@ footer {
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.card:hover {
+/* Hover effect only for nested/inner cards */
+.card .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Hover effect for tier selection cards on index page */
+.tier-bronze:hover,
+.tier-silver:hover,
+.tier-gold:hover,
+.tier-organization:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
