@@ -106,10 +106,10 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
         public static int MapTierToTokens(int monthlyPriceInCents)
         {
             // Map sponsorship tiers to AI credits per month
-            // Bronze: $5 -> 1,000; Silver: $15 -> 5,000; Gold: $50 -> 25,000
-            if (monthlyPriceInCents >= 5000) return 25000;
-            if (monthlyPriceInCents >= 1500) return 5000;
-            if (monthlyPriceInCents >= 500) return 1000;
+            // Bronze: $5 -> 5M; Silver: $15 -> 20M; Gold: $50 -> 100M
+            if (monthlyPriceInCents >= 5000) return 100_000_000;
+            if (monthlyPriceInCents >= 1500) return 20_000_000;
+            if (monthlyPriceInCents >= 500) return 5_000_000;
             return 0;
         }
 
@@ -117,9 +117,9 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
         {
             return tokensAllowed switch
             {
-                >= 25000 => "Gold ($50/mo) - 25,000 credits",
-                >= 5000 => "Silver ($15/mo) - 5,000 credits",
-                >= 1000 => "Bronze ($5/mo) - 1,000 credits",
+                >= 25000 => "Gold ($50/mo) - 100M credits",
+                >= 5000 => "Silver ($15/mo) - 20M credits",
+                >= 1000 => "Bronze ($5/mo) - 5M credits",
                 _ => "Not a sponsor yet"
             };
         }

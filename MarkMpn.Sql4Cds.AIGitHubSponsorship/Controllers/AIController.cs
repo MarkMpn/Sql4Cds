@@ -154,11 +154,11 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
                 if (isStreaming)
                 {
-                    return await HandleStreamingResponse(response, user);
+                    return await HandleStreamingResponse(response, user, modelName);
                 }
                 else
                 {
-                    return await HandleNonStreamingResponse(response, user);
+                    return await HandleNonStreamingResponse(response, user, modelName);
                 }
             }
             catch (Exception ex)
@@ -168,7 +168,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             }
         }
 
-        private async Task<IActionResult> HandleNonStreamingResponse(HttpResponseMessage response, User user)
+        private async Task<IActionResult> HandleNonStreamingResponse(HttpResponseMessage response, User user, string model)
         {
             var responseContent = await response.Content.ReadAsStringAsync();
             var responseJson = JsonSerializer.Deserialize<JsonElement>(responseContent);
@@ -186,7 +186,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             // Record token usage
             if (tokensUsed > 0)
             {
-                await RecordTokenUsage(user.Id, tokensUsed);
+                await RecordTokenUsage(user.Id, tokensUsed, model);
                 _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens");
             }
 
@@ -195,7 +195,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return Content(responseContent, "application/json");
         }
 
-        private async Task<IActionResult> HandleStreamingResponse(HttpResponseMessage response, User user)
+        private async Task<IActionResult> HandleStreamingResponse(HttpResponseMessage response, User user, string model)
         {
             Response.ContentType = "text/event-stream";
             Response.Headers.CacheControl = "no-cache";
@@ -256,7 +256,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             // Record token usage if we captured it
             if (tokensUsed > 0)
             {
-                await RecordTokenUsage(user.Id, tokensUsed);
+                await RecordTokenUsage(user.Id, tokensUsed, model);
                 _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens (streaming)");
             }
             else
@@ -269,8 +269,13 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return new EmptyResult();
         }
 
-        private async Task RecordTokenUsage(int userId, int tokensUsed)
+        private async Task RecordTokenUsage(int userId, int tokensUsed, string model)
         {
+            var creditsUsed = tokensUsed;
+
+            if (model == "gpt-5")
+                creditsUsed *= 25; // gpt-5 costs 25 credits per token
+
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var now = DateTime.UtcNow;
 
@@ -278,7 +283,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             var rowsAffected = await _context.TokenUsages
                 .Where(t => t.UserId == userId && t.UsageDate == today)
                 .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(t => t.TokensUsed, t => t.TokensUsed + tokensUsed)
+                    .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
                     .SetProperty(t => t.LastUpdatedAt, now));
 
             if (rowsAffected > 0)
@@ -293,7 +298,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 var usage = new TokenUsage
                 {
                     UserId = userId,
-                    TokensUsed = tokensUsed,
+                    TokensUsed = creditsUsed,
                     UsageDate = today,
                     CreatedAt = now,
                     LastUpdatedAt = now
@@ -308,7 +313,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 await _context.TokenUsages
                     .Where(t => t.UserId == userId && t.UsageDate == today)
                     .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(t => t.TokensUsed, t => t.TokensUsed + tokensUsed)
+                        .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
                         .SetProperty(t => t.LastUpdatedAt, DateTime.UtcNow));
             }
         }
