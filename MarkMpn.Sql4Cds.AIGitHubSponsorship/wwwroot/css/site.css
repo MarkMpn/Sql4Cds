@@ -168,6 +168,24 @@ footer {
   background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%);
 }
 
+.tier-organization {
+  border: 2px solid transparent;
+  background: var(--gh-bg-secondary) padding-box,
+              linear-gradient(135deg, #f5576c 0%, #f778ba 100%) border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+.tier-organization::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #f5576c 0%, #f778ba 100%);
+}
+
 .tier-card-title {
   font-size: 1.5rem;
   font-weight: 700;
