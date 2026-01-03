@@ -294,12 +294,11 @@
                         Using Your API Key
                     </h3>
                     <p class="mb-3">Once you have your API key, you can use it to access AI-powered features in SQL 4 CDS:</p>
-                    <div class="bg-dark p-3 rounded" style="background-color: var(--gh-bg-tertiary) !important;">
-                        <code style="color: var(--gh-text-primary);">
-                            <span style="color: var(--gh-accent-purple);">// Configure your API key in SQL 4 CDS</span><br/>
-                            <span style="color: var(--gh-accent-blue);">Settings</span>.<span style="color: var(--gh-accent-green);">AIApiKey</span> = <span style="color: #f778ba);">"your-api-key-here"</span>;
-                        </code>
-                    </div>
+                    <img src="/img/copilot-settings.png" alt="SQL 4 CDS Copilot Settings screen" class="mb-3" />
+                    <p>
+                        In SQL 4 CDS, open the Settings screen and go to the Copilot tab. Select "Sponsorship" in the Provider list,
+                        and paste in your API key from above.
+                    </p>
                 </div>
             </div>
         </div>
@@ -317,6 +316,13 @@
         background-color: var(--gh-bg-tertiary) !important;
         border-color: var(--gh-accent-blue);
         color: var(--gh-text-primary);
+    }
+    
+    /* Responsive image in API key section */
+    img {
+        max-width: 100%;
+        height: auto;
+        display: block;
     }
 </style>
 
