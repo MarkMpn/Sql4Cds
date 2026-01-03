@@ -237,5 +237,10 @@ namespace MarkMpn.Sql4Cds.XTB
             aiAPIKeyTextBox.Enabled = provider != null;
             aiModelTextBox.Enabled = provider != null;
         }
+
+        private void sponsorshipLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            helpIcon_Click(sender, e);
+        }
     }
 }

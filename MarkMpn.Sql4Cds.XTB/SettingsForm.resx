@@ -218,6 +218,9 @@
         8E/f/uUAs/b/gP/Z2/8AHAnkbvbnpSIAAAAASUVORK5CYII=
 </value>
   </data>
+  <data name="sponsorshipLinkLabel.Text" xml:space="preserve">
+    <value>Copilot features require access to an AI service to work. If you already have access to an OpenAI or Anthropic account, select that and enter the API key details below. Otherwise, please consider sponsoring this project to receive free AI credits!</value>
+  </data>
   <data name="nativeSqlScintilla.Text" xml:space="preserve">
     <value>select
 "account0".Name as "name"

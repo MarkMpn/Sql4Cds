@@ -111,6 +111,8 @@
             this.label22 = new System.Windows.Forms.Label();
             this.aiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
+            this.pictureBox5 = new System.Windows.Forms.PictureBox();
+            this.sponsorshipLinkLabel = new System.Windows.Forms.LinkLabel();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -136,6 +138,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.resultsGridFontSizeNumericUpDown)).BeginInit();
             this.tabPage4.SuspendLayout();
             this.tabPage5.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).BeginInit();
             this.SuspendLayout();
             // 
             // topPanel
@@ -179,7 +182,7 @@
             this.panel2.Controls.Add(this.cancelButton);
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel2.Location = new System.Drawing.Point(0, 367);
+            this.panel2.Location = new System.Drawing.Point(0, 428);
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(441, 45);
@@ -493,7 +496,8 @@
             // 
             // tabControl1
             // 
-            this.tabControl1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.tabControl1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.tabControl1.Controls.Add(this.tabPage1);
             this.tabControl1.Controls.Add(this.tabPage2);
@@ -504,8 +508,8 @@
             this.tabControl1.Location = new System.Drawing.Point(12, 57);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(417, 295);
-            this.tabControl1.TabIndex = 1;
+            this.tabControl1.Size = new System.Drawing.Size(417, 356);
+            this.tabControl1.TabIndex = 0;
             // 
             // tabPage1
             // 
@@ -950,6 +954,8 @@
             // 
             // tabPage5
             // 
+            this.tabPage5.Controls.Add(this.sponsorshipLinkLabel);
+            this.tabPage5.Controls.Add(this.pictureBox5);
             this.tabPage5.Controls.Add(this.label28);
             this.tabPage5.Controls.Add(this.aiAutocompleteCheckBox);
             this.tabPage5.Controls.Add(this.aiProviderComboBox);
@@ -966,7 +972,7 @@
             this.tabPage5.Margin = new System.Windows.Forms.Padding(2);
             this.tabPage5.Name = "tabPage5";
             this.tabPage5.Padding = new System.Windows.Forms.Padding(2);
-            this.tabPage5.Size = new System.Drawing.Size(409, 269);
+            this.tabPage5.Size = new System.Drawing.Size(409, 330);
             this.tabPage5.TabIndex = 4;
             this.tabPage5.Text = "Copilot";
             this.tabPage5.UseVisualStyleBackColor = true;
@@ -974,7 +980,7 @@
             // label28
             // 
             this.label28.AutoSize = true;
-            this.label28.Location = new System.Drawing.Point(26, 252);
+            this.label28.Location = new System.Drawing.Point(26, 306);
             this.label28.Name = "label28";
             this.label28.Size = new System.Drawing.Size(308, 13);
             this.label28.TabIndex = 11;
@@ -983,7 +989,7 @@
             // aiAutocompleteCheckBox
             // 
             this.aiAutocompleteCheckBox.AutoSize = true;
-            this.aiAutocompleteCheckBox.Location = new System.Drawing.Point(7, 232);
+            this.aiAutocompleteCheckBox.Location = new System.Drawing.Point(7, 286);
             this.aiAutocompleteCheckBox.Name = "aiAutocompleteCheckBox";
             this.aiAutocompleteCheckBox.Size = new System.Drawing.Size(266, 17);
             this.aiAutocompleteCheckBox.TabIndex = 10;
@@ -1003,7 +1009,7 @@
             this.aiProviderComboBox.Location = new System.Drawing.Point(5, 18);
             this.aiProviderComboBox.Name = "aiProviderComboBox";
             this.aiProviderComboBox.Size = new System.Drawing.Size(205, 21);
-            this.aiProviderComboBox.TabIndex = 9;
+            this.aiProviderComboBox.TabIndex = 1;
             this.aiProviderComboBox.SelectedIndexChanged += new System.EventHandler(this.aiProviderComboBox_SelectedIndexChanged);
             // 
             // label25
@@ -1012,81 +1018,108 @@
             this.label25.Location = new System.Drawing.Point(4, 2);
             this.label25.Name = "label25";
             this.label25.Size = new System.Drawing.Size(59, 13);
-            this.label25.TabIndex = 8;
+            this.label25.TabIndex = 0;
             this.label25.Text = "AI Provider";
             // 
             // label24
             // 
-            this.label24.Location = new System.Drawing.Point(26, 197);
+            this.label24.Location = new System.Drawing.Point(26, 251);
             this.label24.Name = "label24";
             this.label24.Size = new System.Drawing.Size(378, 32);
-            this.label24.TabIndex = 7;
+            this.label24.TabIndex = 9;
             this.label24.Text = "This option allows Copilot to execute a SELECT query to retrieve information with" +
     "out first showing the query.";
             // 
             // allowCopilotSelectQueriesCheckBox
             // 
             this.allowCopilotSelectQueriesCheckBox.AutoSize = true;
-            this.allowCopilotSelectQueriesCheckBox.Location = new System.Drawing.Point(7, 177);
+            this.allowCopilotSelectQueriesCheckBox.Location = new System.Drawing.Point(7, 231);
             this.allowCopilotSelectQueriesCheckBox.Name = "allowCopilotSelectQueriesCheckBox";
             this.allowCopilotSelectQueriesCheckBox.Size = new System.Drawing.Size(289, 17);
-            this.allowCopilotSelectQueriesCheckBox.TabIndex = 6;
+            this.allowCopilotSelectQueriesCheckBox.TabIndex = 8;
             this.allowCopilotSelectQueriesCheckBox.Text = "Allow Copilot to execute SELECT queries independently";
             this.allowCopilotSelectQueriesCheckBox.UseVisualStyleBackColor = true;
             // 
             // aiModelTextBox
             // 
-            this.aiModelTextBox.Location = new System.Drawing.Point(7, 143);
+            this.aiModelTextBox.Location = new System.Drawing.Point(7, 197);
             this.aiModelTextBox.Margin = new System.Windows.Forms.Padding(2);
             this.aiModelTextBox.Name = "aiModelTextBox";
             this.aiModelTextBox.Size = new System.Drawing.Size(397, 20);
-            this.aiModelTextBox.TabIndex = 5;
+            this.aiModelTextBox.TabIndex = 7;
             // 
             // label23
             // 
             this.label23.AutoSize = true;
-            this.label23.Location = new System.Drawing.Point(4, 127);
+            this.label23.Location = new System.Drawing.Point(4, 181);
             this.label23.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label23.Name = "label23";
             this.label23.Size = new System.Drawing.Size(36, 13);
-            this.label23.TabIndex = 4;
+            this.label23.TabIndex = 6;
             this.label23.Text = "Model";
             // 
             // aiAPIKeyTextBox
             // 
-            this.aiAPIKeyTextBox.Location = new System.Drawing.Point(7, 96);
+            this.aiAPIKeyTextBox.Location = new System.Drawing.Point(7, 150);
             this.aiAPIKeyTextBox.Margin = new System.Windows.Forms.Padding(2);
             this.aiAPIKeyTextBox.Name = "aiAPIKeyTextBox";
             this.aiAPIKeyTextBox.Size = new System.Drawing.Size(397, 20);
-            this.aiAPIKeyTextBox.TabIndex = 3;
+            this.aiAPIKeyTextBox.TabIndex = 5;
             // 
             // label22
             // 
             this.label22.AutoSize = true;
-            this.label22.Location = new System.Drawing.Point(4, 80);
+            this.label22.Location = new System.Drawing.Point(4, 134);
             this.label22.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label22.Name = "label22";
             this.label22.Size = new System.Drawing.Size(45, 13);
-            this.label22.TabIndex = 2;
+            this.label22.TabIndex = 4;
             this.label22.Text = "API Key";
             // 
             // aiEndpointTextBox
             // 
-            this.aiEndpointTextBox.Location = new System.Drawing.Point(7, 58);
+            this.aiEndpointTextBox.Location = new System.Drawing.Point(7, 112);
             this.aiEndpointTextBox.Margin = new System.Windows.Forms.Padding(2);
             this.aiEndpointTextBox.Name = "aiEndpointTextBox";
             this.aiEndpointTextBox.Size = new System.Drawing.Size(397, 20);
-            this.aiEndpointTextBox.TabIndex = 1;
+            this.aiEndpointTextBox.TabIndex = 3;
             // 
             // label21
             // 
             this.label21.AutoSize = true;
-            this.label21.Location = new System.Drawing.Point(4, 42);
+            this.label21.Location = new System.Drawing.Point(4, 96);
             this.label21.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label21.Name = "label21";
             this.label21.Size = new System.Drawing.Size(49, 13);
-            this.label21.TabIndex = 0;
+            this.label21.TabIndex = 2;
             this.label21.Text = "Endpoint";
+            // 
+            // pictureBox5
+            // 
+            this.pictureBox5.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox5.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
+            this.pictureBox5.Location = new System.Drawing.Point(216, 21);
+            this.pictureBox5.Name = "pictureBox5";
+            this.pictureBox5.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox5.TabIndex = 29;
+            this.pictureBox5.TabStop = false;
+            this.pictureBox5.Tag = "https://ai.markcarrington.dev";
+            this.pictureBox5.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // sponsorshipLinkLabel
+            // 
+            this.sponsorshipLinkLabel.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.sponsorshipLinkLabel.LinkArea = new System.Windows.Forms.LinkArea(196, 23);
+            this.sponsorshipLinkLabel.Location = new System.Drawing.Point(5, 42);
+            this.sponsorshipLinkLabel.Name = "sponsorshipLinkLabel";
+            this.sponsorshipLinkLabel.Size = new System.Drawing.Size(399, 54);
+            this.sponsorshipLinkLabel.TabIndex = 30;
+            this.sponsorshipLinkLabel.TabStop = true;
+            this.sponsorshipLinkLabel.Tag = "https://ai.markcarrington.dev";
+            this.sponsorshipLinkLabel.Text = resources.GetString("sponsorshipLinkLabel.Text");
+            this.sponsorshipLinkLabel.UseCompatibleTextRendering = true;
+            this.sponsorshipLinkLabel.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.sponsorshipLinkLabel_LinkClicked);
             // 
             // SettingsForm
             // 
@@ -1094,7 +1127,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(441, 412);
+            this.ClientSize = new System.Drawing.Size(441, 473);
             this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.panel2);
             this.Controls.Add(this.topPanel);
@@ -1139,6 +1172,7 @@
             this.tabPage4.PerformLayout();
             this.tabPage5.ResumeLayout(false);
             this.tabPage5.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -1227,5 +1261,7 @@
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.Label label28;
         private System.Windows.Forms.CheckBox aiAutocompleteCheckBox;
+        private System.Windows.Forms.PictureBox pictureBox5;
+        private System.Windows.Forms.LinkLabel sponsorshipLinkLabel;
     }
 }
