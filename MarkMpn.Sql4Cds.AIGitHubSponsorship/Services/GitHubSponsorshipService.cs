@@ -228,7 +228,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
             if (isOrganization)
             {
                 // Organization tiers - minimum $100/month
-                if (monthlyPriceInCents >= 10000) return 500_000_000; // $100+ -> 500M shared
+                if (monthlyPriceInCents >= 10000) return 250_000_000; // $100+ -> 250M shared
                 return 0;
             }
             else

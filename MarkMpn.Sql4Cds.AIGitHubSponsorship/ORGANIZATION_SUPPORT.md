@@ -9,7 +9,7 @@ The application now supports organization-level sponsorships where organizations
 ## Key Features
 
 ### 1. Organization Credit Pools
-- **Minimum Tier**: $100/month = 500M shared tokens
+- **Minimum Tier**: $100/month = 250M shared tokens
 - Credits are shared among all organization members
 - No duplication of credits per user
 
@@ -150,12 +150,12 @@ Enhanced credit checking:
 1. **Login with account that belongs to organizations** (both sponsoring and non-sponsoring)
 2. **Verify all organizations appear** in database after login (check TokensAllowedPerMonth values)
 3. **Confirm dashboard separates** sponsoring vs non-sponsoring organizations into different sections
-4. **Test non-sponsoring org display** shows "Encourage Sponsorship" CTA
-5. **Verify sponsoring org display** shows credit pools and usage statistics
+4. **Test non-sponsoring org display** shows "Encourage Sponsorship" CTA with correct credit info (250M)
+5. **Verify sponsoring org display** shows correct credit pools (250M) and usage statistics
 6. **Confirm multiple users** in same org see shared pool for sponsoring orgs
 7. **Test credit consumption** from org pool when personal credits exhausted
 8. **Verify membership removal** when user leaves org
-9. **Test organization that changes** from non-sponsoring to sponsoring (TokensAllowedPerMonth updates from 0 to tier value)
+9. **Test organization that changes** from non-sponsoring to sponsoring (TokensAllowedPerMonth updates from 0 to 250M)
 
 ## Migration History
 
