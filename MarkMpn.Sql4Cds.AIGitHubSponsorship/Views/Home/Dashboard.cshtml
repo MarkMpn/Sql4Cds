@@ -143,13 +143,18 @@
 
                     @{
                         var organizations = ViewBag.Organizations as List<dynamic> ?? new List<dynamic>();
+                        var sponsoringOrgs = organizations.Where(o => o.TokensAllowed > 0).ToList();
+                        var nonSponsoringOrgs = organizations.Where(o => o.TokensAllowed == 0).ToList();
                     }
-                    @if (organizations.Any())
+                    @if (sponsoringOrgs.Any())
                     {
-                        <h3 class="h4 mb-3 mt-5">Organization Credits</h3>
+                        <h3 class="h4 mb-3 mt-5">
+                            <i class="bi bi-building-check me-2" style="color: var(--gh-sponsor-pink);"></i>
+                            Sponsoring Organizations
+                        </h3>
                         <p class="text-muted mb-3">You have access to shared credit pools from these sponsoring organizations:</p>
                         
-                        @foreach (var org in organizations)
+                        @foreach (var org in sponsoringOrgs)
                         {
                             <div class="card mb-3" style="background: linear-gradient(135deg, rgba(245, 87, 108, 0.1) 0%, rgba(247, 120, 186, 0.1) 100%); border: 1px solid rgba(245, 87, 108, 0.3);">
                                 <div class="card-body p-4">
@@ -209,6 +214,57 @@
                             <i class="bi bi-info-circle me-1"></i>
                             Organization credits are shared among all members. Your personal credits are used first, then organization credits when personal credits are exhausted.
                         </p>
+                    }
+                    
+                    @if (nonSponsoringOrgs.Any())
+                    {
+                        <h3 class="h4 mb-3 mt-5">
+                            <i class="bi bi-building me-2" style="color: var(--gh-text-secondary);"></i>
+                            Your Organizations
+                        </h3>
+                        <p class="text-muted mb-3">Encourage these organizations to sponsor and unlock shared AI credits for all members!</p>
+                        
+                        @foreach (var org in nonSponsoringOrgs)
+                        {
+                            <div class="card mb-3" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            @if (!string.IsNullOrEmpty(org.AvatarUrl))
+                                            {
+                                                <img src="@org.AvatarUrl" alt="@org.Name" style="width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; border: 2px solid var(--gh-border); opacity: 0.7;">
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-building me-3" style="font-size: 2.5rem; color: var(--gh-text-secondary); opacity: 0.7;"></i>
+                                            }
+                                            <div>
+                                                <h4 class="h5 mb-1">@org.Name</h4>
+                                                <small class="text-muted">
+                                                    <i class="bi bi-x-circle me-1"></i>
+                                                    Not sponsoring
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <a href="https://github.com/sponsors/MarkMpn" target="_blank" class="btn btn-sm btn-sponsor-gradient">
+                                                <i class="bi bi-heart me-1"></i> Encourage Sponsorship
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-info mt-3 mb-0 d-flex align-items-start" style="background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(188, 140, 255, 0.1) 100%); border: 1px solid rgba(88, 166, 255, 0.3);">
+                                        <i class="bi bi-lightbulb me-2 mt-1" style="color: var(--gh-accent-blue);"></i>
+                                        <div>
+                                            <strong>Unlock Shared Credits!</strong><br/>
+                                            <small>
+                                                Organization sponsorships starting at <strong>$100/month</strong> provide <strong>500M shared tokens</strong> for all members. 
+                                                Share this opportunity with your team leads and decision makers!
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
                     }
                 </div>
             </div>

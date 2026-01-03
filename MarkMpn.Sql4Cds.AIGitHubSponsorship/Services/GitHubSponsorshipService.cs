@@ -12,6 +12,12 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
         public string AvatarUrl { get; set; } = string.Empty;
     }
 
+    public class OrganizationInfo
+    {
+        public string Login { get; set; } = string.Empty;
+        public string AvatarUrl { get; set; } = string.Empty;
+    }
+
     public class GitHubSponsorshipService
     {
         private readonly ILogger<GitHubSponsorshipService> _logger;
@@ -148,7 +154,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
             return userSponsorship?.TokensAllowed ?? 0;
         }
 
-        public async Task<List<string>> GetOrganizationMemberships(string accessToken)
+        public async Task<List<OrganizationInfo>> GetOrganizationMemberships(string accessToken)
         {
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -161,6 +167,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
                     organizations(first: 100) {
                         nodes {
                             login
+                            avatarUrl
                         }
                     }
                 }
@@ -174,7 +181,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning($"GitHub organizations query failed with status {response.StatusCode}");
-                return new List<string>();
+                return new List<OrganizationInfo>();
             }
 
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -182,7 +189,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
             if (doc.RootElement.TryGetProperty("errors", out var errorsElement))
             {
                 _logger.LogWarning("GitHub organizations API returned errors: {Errors}", errorsElement.ToString());
-                return new List<string>();
+                return new List<OrganizationInfo>();
             }
 
             if (!doc.RootElement.TryGetProperty("data", out var data) ||
@@ -191,23 +198,29 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Services
                 !orgs.TryGetProperty("nodes", out var nodes))
             {
                 _logger.LogWarning("Unexpected organizations API response shape");
-                return new List<string>();
+                return new List<OrganizationInfo>();
             }
 
-            var orgLogins = new List<string>();
+            var organizations = new List<OrganizationInfo>();
             foreach (var node in nodes.EnumerateArray())
             {
                 if (node.TryGetProperty("login", out var loginProp))
                 {
                     var login = loginProp.GetString();
+                    var avatarUrl = node.TryGetProperty("avatarUrl", out var avatarProp) ? avatarProp.GetString() : "";
+                    
                     if (!string.IsNullOrEmpty(login))
                     {
-                        orgLogins.Add(login);
+                        organizations.Add(new OrganizationInfo
+                        {
+                            Login = login,
+                            AvatarUrl = avatarUrl ?? ""
+                        });
                     }
                 }
             }
 
-            return orgLogins;
+            return organizations;
         }
 
         public static int MapTierToTokens(int monthlyPriceInCents, bool isOrganization)

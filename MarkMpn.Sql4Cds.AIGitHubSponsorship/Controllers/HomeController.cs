@@ -167,42 +167,42 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
             // Get all sponsorships including organizations
             var allSponsorships = await _sponsorshipService.GetAllSponsorships(accessToken);
-            var orgSponsorships = allSponsorships.Where(s => s.IsOrganization).ToList();
+            var orgSponsorships = allSponsorships.Where(s => s.IsOrganization).ToDictionary(s => s.Login, StringComparer.OrdinalIgnoreCase);
 
             // Get user's organization memberships from GitHub
-            var userOrgLogins = await _sponsorshipService.GetOrganizationMemberships(accessToken);
+            var userOrgs = await _sponsorshipService.GetOrganizationMemberships(accessToken);
 
-            // Find organizations that are both sponsoring and user is a member of
-            var relevantOrgLogins = orgSponsorships
-                .Where(os => userOrgLogins.Contains(os.Login, StringComparer.OrdinalIgnoreCase))
-                .ToList();
-
-            // Create or update organizations in database
-            foreach (var orgSponsorship in relevantOrgLogins)
+            // Process ALL organizations user is a member of (sponsoring or not)
+            foreach (var userOrg in userOrgs)
             {
+                // Check if this organization is sponsoring
+                var isSponsoring = orgSponsorships.TryGetValue(userOrg.Login, out var orgSponsorship);
+                var tokensAllowed = isSponsoring ? orgSponsorship.TokensAllowed : 0;
+                var avatarUrl = userOrg.AvatarUrl;
+
                 var org = await _context.Organizations
-                    .FirstOrDefaultAsync(o => o.GitHubLogin == orgSponsorship.Login);
+                    .FirstOrDefaultAsync(o => o.GitHubLogin == userOrg.Login);
 
                 if (org == null)
                 {
                     org = new Organization
                     {
-                        GitHubLogin = orgSponsorship.Login,
-                        AvatarUrl = orgSponsorship.AvatarUrl,
-                        TokensAllowedPerMonth = orgSponsorship.TokensAllowed,
+                        GitHubLogin = userOrg.Login,
+                        AvatarUrl = avatarUrl,
+                        TokensAllowedPerMonth = tokensAllowed,
                         CreatedAt = DateTime.UtcNow,
                         LastUpdatedAt = DateTime.UtcNow
                     };
                     _context.Organizations.Add(org);
                     await _context.SaveChangesAsync(); // Save to get the ID
-                    _logger.LogInformation($"Created organization: {org.GitHubLogin} with {org.TokensAllowedPerMonth} tokens/month");
+                    _logger.LogInformation($"Created organization: {org.GitHubLogin} with {org.TokensAllowedPerMonth} tokens/month (sponsoring: {isSponsoring})");
                 }
                 else
                 {
-                    org.TokensAllowedPerMonth = orgSponsorship.TokensAllowed;
-                    org.AvatarUrl = orgSponsorship.AvatarUrl;
+                    org.TokensAllowedPerMonth = tokensAllowed;
+                    org.AvatarUrl = avatarUrl;
                     org.LastUpdatedAt = DateTime.UtcNow;
-                    _logger.LogInformation($"Updated organization: {org.GitHubLogin} with {org.TokensAllowedPerMonth} tokens/month");
+                    _logger.LogInformation($"Updated organization: {org.GitHubLogin} with {org.TokensAllowedPerMonth} tokens/month (sponsoring: {isSponsoring})");
                 }
 
                 // Add membership if not exists
@@ -222,9 +222,10 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 }
             }
 
-            // Remove memberships for organizations user is no longer part of or not sponsoring
+            // Remove memberships for organizations user is no longer part of
+            var userOrgLogins = userOrgs.Select(o => o.Login).ToList();
             var relevantOrgIds = await _context.Organizations
-                .Where(o => relevantOrgLogins.Select(r => r.Login).Contains(o.GitHubLogin))
+                .Where(o => userOrgLogins.Contains(o.GitHubLogin))
                 .Select(o => o.Id)
                 .ToListAsync();
 

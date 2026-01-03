@@ -4,6 +4,8 @@
 
 The application now supports organization-level sponsorships where organizations that sponsor at **$100+/month** get shared credit pools that all organization members can access. This prevents credit duplication and provides a centralized credit management system for teams.
 
+**Additionally, ALL organizations that a user belongs to are tracked and displayed on the dashboard**, even if they're not currently sponsoring. This encourages users to reach out to their organization decision makers and promote sponsorship opportunities.
+
 ## Key Features
 
 ### 1. Organization Credit Pools
@@ -20,10 +22,17 @@ The application now supports organization-level sponsorships where organizations
 Organization memberships are synced automatically:
 - When user logs in via GitHub OAuth
 - When user manually refreshes their sponsorship status
-- System queries GitHub GraphQL API for organization memberships
-- Creates/updates Organizations table with sponsorship details
+- System queries GitHub GraphQL API for ALL organization memberships
+- Creates/updates Organizations table with sponsorship details (or TokensAllowedPerMonth=0 for non-sponsors)
 - Manages OrganizationMember junction records
-- Removes stale memberships when users leave organizations or organizations stop sponsoring
+- Removes stale memberships when users leave organizations
+
+### 4. Non-Sponsoring Organizations
+All organizations are tracked regardless of sponsorship status:
+- Organizations with TokensAllowedPerMonth = 0 represent non-sponsoring organizations
+- Dashboard displays these separately with calls-to-action to encourage sponsorship
+- Provides visibility into potential sponsorship opportunities
+- Helps users advocate for organizational support
 
 ## Database Schema
 
@@ -86,13 +95,24 @@ Shows user's personal sponsorship:
 - Personal monthly allowance
 - API key with copy button
 
-### Organization Section
-Dynamically displays all organizations:
+### Sponsoring Organizations Section
+Dynamically displays organizations with active sponsorships:
 - Organization avatar and name
 - Shared pool available
 - Shared pool used this month
 - Shared pool monthly allowance
 - Pink sponsor gradient styling to distinguish from personal credits
+- Info message about credit priority system
+
+### Your Organizations Section (Non-Sponsoring)
+Displays organizations user belongs to that aren't sponsoring:
+- Organization avatar and name (muted styling)
+- "Not sponsoring" status indicator
+- "Encourage Sponsorship" call-to-action button
+- Information alert explaining organization sponsorship benefits:
+  - $100/month minimum tier
+  - 500M shared tokens for all members
+  - Encouragement to share with team leads and decision makers
 
 ## Implementation Details
 
@@ -104,12 +124,13 @@ New methods:
 
 ### HomeController
 New method:
-- `UpdateOrganizationMemberships(username, accessToken)`: Syncs organization sponsorships and memberships
+- `UpdateOrganizationMemberships(username, accessToken)`: Syncs ALL organization memberships (sponsoring and non-sponsoring)
   - Fetches all sponsorships including organizations
-  - Filters to organizations where user is a member
-  - Creates/updates Organizations table
-  - Manages OrganizationMember junction records
-  - Removes stale memberships
+  - Fetches ALL organizations where user is a member (via GitHub Organizations API)
+  - Creates/updates Organizations table with TokensAllowedPerMonth set based on sponsorship status
+  - Non-sponsoring organizations get TokensAllowedPerMonth = 0
+  - Manages OrganizationMember junction records for all memberships
+  - Removes stale memberships when user leaves organization
 
 Integration points:
 - Called in `GitHubCallback` action after user creation
@@ -126,12 +147,15 @@ Enhanced credit checking:
 
 ## Testing Recommendations
 
-1. **Create test organization sponsorship** at $100/month
-2. **Verify organization appears** in database after login
-3. **Confirm multiple users** in same org see shared pool
-4. **Test credit consumption** from org pool when personal credits exhausted
-5. **Verify membership removal** when user leaves org or org stops sponsoring
-6. **Check dashboard display** shows all linked organizations correctly
+1. **Login with account that belongs to organizations** (both sponsoring and non-sponsoring)
+2. **Verify all organizations appear** in database after login (check TokensAllowedPerMonth values)
+3. **Confirm dashboard separates** sponsoring vs non-sponsoring organizations into different sections
+4. **Test non-sponsoring org display** shows "Encourage Sponsorship" CTA
+5. **Verify sponsoring org display** shows credit pools and usage statistics
+6. **Confirm multiple users** in same org see shared pool for sponsoring orgs
+7. **Test credit consumption** from org pool when personal credits exhausted
+8. **Verify membership removal** when user leaves org
+9. **Test organization that changes** from non-sponsoring to sponsoring (TokensAllowedPerMonth updates from 0 to tier value)
 
 ## Migration History
 
