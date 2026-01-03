@@ -227,7 +227,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
             if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(username))
             {
-                return RedirectToAction("Index");
+                return RedirectToAction(nameof(GitHubLogin));
             }
 
             // Get user from database
