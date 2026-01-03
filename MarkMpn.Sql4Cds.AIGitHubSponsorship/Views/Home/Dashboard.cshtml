@@ -1,5 +1,23 @@
 @{
     ViewData["Title"] = "Dashboard - SQL 4 CDS AI Credits";
+    
+    string FormatCredits(long credits)
+    {
+        if (credits >= 1000000)
+        {
+            double millions = credits / 1000000.0;
+            return millions % 1 == 0 ? $"{millions:F0}M" : $"{millions:F1}M";
+        }
+        else if (credits >= 1000)
+        {
+            double thousands = credits / 1000.0;
+            return thousands % 1 == 0 ? $"{thousands:F0}K" : $"{thousands:F1}K";
+        }
+        else
+        {
+            return credits.ToString();
+        }
+    }
 }
 
 <div class="container mt-5">
@@ -94,7 +112,7 @@
                                         <span class="text-muted">Available Credits</span>
                                         <i class="bi bi-stars" style="color: var(--gh-accent-blue);"></i>
                                     </div>
-                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-blue);">@ViewBag.TokensRemaining</h3>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-blue);">@FormatCredits(ViewBag.TokensRemaining ?? 0)</h3>
                                 </div>
                             </div>
                         </div>
@@ -105,7 +123,7 @@
                                         <span class="text-muted">Used This Month</span>
                                         <i class="bi bi-graph-up" style="color: var(--gh-accent-green);"></i>
                                     </div>
-                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-green);">@ViewBag.TokensUsedThisMonth</h3>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-green);">@FormatCredits(ViewBag.TokensUsedThisMonth ?? 0)</h3>
                                 </div>
                             </div>
                         </div>
@@ -116,7 +134,7 @@
                                         <span class="text-muted">Monthly Allowance</span>
                                         <i class="bi bi-trophy" style="color: var(--gh-accent-purple);"></i>
                                     </div>
-                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-purple);">@ViewBag.TokensAllowed</h3>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-purple);">@FormatCredits(ViewBag.TokensAllowed ?? 0)</h3>
                                 </div>
                             </div>
                         </div>
@@ -180,7 +198,7 @@
                                                         <span class="text-muted small">Shared Pool Available</span>
                                                         <i class="bi bi-stars" style="color: var(--gh-sponsor-pink);"></i>
                                                     </div>
-                                                    <h4 class="h3 mb-0" style="color: var(--gh-sponsor-pink);">@org.TokensRemaining</h4>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-sponsor-pink);">@FormatCredits(org.TokensRemaining)</h4>
                                                 </div>
                                             </div>
                                         </div>
@@ -191,7 +209,7 @@
                                                         <span class="text-muted small">Used This Month</span>
                                                         <i class="bi bi-graph-up" style="color: var(--gh-accent-green);"></i>
                                                     </div>
-                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-green);">@org.TokensUsed</h4>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-green);">@FormatCredits(org.TokensUsed)</h4>
                                                 </div>
                                             </div>
                                         </div>
@@ -202,7 +220,7 @@
                                                         <span class="text-muted small">Monthly Allowance</span>
                                                         <i class="bi bi-trophy" style="color: var(--gh-accent-purple);"></i>
                                                     </div>
-                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-purple);">@org.TokensAllowed</h4>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-purple);">@FormatCredits(org.TokensAllowed)</h4>
                                                 </div>
                                             </div>
                                         </div>
