@@ -401,6 +401,31 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             return RedirectToAction("Dashboard");
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RegenerateApiKey()
+        {
+            var username = HttpContext.Session.GetString("GitHubUsername");
+
+            if (string.IsNullOrEmpty(username))
+            {
+                return RedirectToAction("Index");
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.GitHubUsername == username);
+
+            if (user == null)
+            {
+                return RedirectToAction("Index");
+            }
+
+            user.ApiKey = GenerateApiKey();
+            user.LastUpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return RedirectToAction("Dashboard");
+        }
+
         public IActionResult Logout()
         {
             HttpContext.Session.Clear();
