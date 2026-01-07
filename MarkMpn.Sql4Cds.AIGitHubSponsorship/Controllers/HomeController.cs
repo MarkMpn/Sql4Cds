@@ -331,8 +331,10 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
             {
                 ViewBag.Username = username;
                 ViewBag.AvatarUrl = user.AvatarUrl;
-                ViewBag.TokensAllowed = user.TokensAllowedPerMonth;
-                ViewBag.SponsorshipLevel = GitHubSponsorshipService.DescribeSponsorship(user.TokensAllowedPerMonth);
+                var manualUser = await _context.ManualCreditAssignments.FirstOrDefaultAsync(m => m.UserId == user.Id);
+                var effectiveUserAllowance = manualUser?.TokensAllowedPerMonth ?? user.TokensAllowedPerMonth;
+                ViewBag.TokensAllowed = effectiveUserAllowance;
+                ViewBag.SponsorshipLevel = GitHubSponsorshipService.DescribeSponsorship(effectiveUserAllowance);
                 ViewBag.ApiKey = user.ApiKey;
                 
                 // Calculate tokens used this month
@@ -344,7 +346,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     .SumAsync(t => t.TokensUsed);
                 
                 ViewBag.TokensUsedThisMonth = tokensUsedThisMonth;
-                ViewBag.TokensRemaining = Math.Max(0, user.TokensAllowedPerMonth - tokensUsedThisMonth);
+                ViewBag.TokensRemaining = Math.Max(0, effectiveUserAllowance - tokensUsedThisMonth);
 
                 // Prepare organization data
                 var orgData = new List<dynamic>();
@@ -355,13 +357,15 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                         .Where(t => t.OrganizationId == org.Id && t.UsageDate >= firstDayOfMonth)
                         .SumAsync(t => t.TokensUsed);
 
+                    var manualOrg = await _context.ManualCreditAssignments.FirstOrDefaultAsync(m => m.OrganizationId == org.Id);
+                    var effectiveOrgAllowance = manualOrg?.TokensAllowedPerMonth ?? org.TokensAllowedPerMonth;
                     orgData.Add(new
                     {
                         Name = org.GitHubLogin,
                         AvatarUrl = org.AvatarUrl,
-                        TokensAllowed = org.TokensAllowedPerMonth,
+                        TokensAllowed = effectiveOrgAllowance,
                         TokensUsed = orgTokensUsed,
-                        TokensRemaining = Math.Max(0, org.TokensAllowedPerMonth - orgTokensUsed)
+                        TokensRemaining = Math.Max(0, effectiveOrgAllowance - orgTokensUsed)
                     });
                 }
                 ViewBag.Organizations = orgData;

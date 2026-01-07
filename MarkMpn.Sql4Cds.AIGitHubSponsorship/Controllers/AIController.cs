@@ -92,7 +92,9 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     .Where(t => t.UserId == user.Id && t.UsageDate >= firstDayOfMonth)
                     .SumAsync(t => t.TokensUsed);
 
-                var tokensRemaining = user.TokensAllowedPerMonth - tokensUsedThisMonth;
+                var manualUser = await _context.ManualCreditAssignments.FirstOrDefaultAsync(m => m.UserId == user.Id);
+                var effectiveUserAllowance = manualUser?.TokensAllowedPerMonth ?? user.TokensAllowedPerMonth;
+                var tokensRemaining = effectiveUserAllowance - tokensUsedThisMonth;
 
                 // If personal credits exhausted, check organization credits
                 int? selectedOrgId = null;
@@ -105,7 +107,9 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                             .Where(t => t.OrganizationId == org.Id && t.UsageDate >= firstDayOfMonth)
                             .SumAsync(t => t.TokensUsed);
 
-                        var orgTokensRemaining = org.TokensAllowedPerMonth - orgTokensUsed;
+                        var manualOrg = await _context.ManualCreditAssignments.FirstOrDefaultAsync(m => m.OrganizationId == org.Id);
+                        var effectiveOrgAllowance = manualOrg?.TokensAllowedPerMonth ?? org.TokensAllowedPerMonth;
+                        var orgTokensRemaining = effectiveOrgAllowance - orgTokensUsed;
                         if (orgTokensRemaining > 0)
                         {
                             tokensRemaining = orgTokensRemaining;

@@ -14,6 +14,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Data
         public DbSet<TokenUsage> TokenUsages { get; set; }
         public DbSet<Organization> Organizations { get; set; }
         public DbSet<OrganizationMember> OrganizationMembers { get; set; }
+        public DbSet<ManualCreditAssignment> ManualCreditAssignments { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -89,6 +90,36 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Data
 
                 entity.HasOne(e => e.Organization)
                     .WithMany(o => o.Members)
+                    .HasForeignKey(e => e.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure ManualCreditAssignment entity
+            modelBuilder.Entity<ManualCreditAssignment>(entity =>
+            {
+                // One manual assignment per user (optional)
+                entity.HasIndex(e => e.UserId)
+                    .IsUnique()
+                    .HasFilter("[UserId] IS NOT NULL");
+
+                // One manual assignment per organization (optional)
+                entity.HasIndex(e => e.OrganizationId)
+                    .IsUnique()
+                    .HasFilter("[OrganizationId] IS NOT NULL");
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                entity.Property(e => e.LastUpdatedAt)
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Organization)
+                    .WithMany()
                     .HasForeignKey(e => e.OrganizationId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
