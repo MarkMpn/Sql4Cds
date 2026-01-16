@@ -32,7 +32,7 @@ namespace AutocompleteMenuNS
         private ITextBoxWrapper targetControlWrapper;
         private readonly Timer timer = new Timer();
 
-        private IEnumerable<AutocompleteItem> sourceItems = new List<AutocompleteItem>();
+        private IAutocompleteItemSource sourceItems;
         [Browsable(false)]
         public IList<AutocompleteItem> VisibleItems { get { return Host.ListView.VisibleItems; } private set { Host.ListView.VisibleItems = value;} }
         private Size maximumSize;
@@ -263,21 +263,6 @@ namespace AutocompleteMenuNS
         [Description("Interval of menu appear (ms)")]
         [DefaultValue(500)]
         public int AppearInterval { get; set; }
-
-        [DefaultValue(null)]
-        public string[] Items
-        {
-            get
-            {
-                if (sourceItems == null)
-                    return null;
-                var list = new List<string>();
-                foreach (AutocompleteItem item in sourceItems)
-                    list.Add(item.ToString());
-                return list.ToArray();
-            }
-            set { SetAutocompleteItems(value); }
-        }
 
         /// <summary>
         /// The control for menu displaying.
@@ -660,7 +645,7 @@ namespace AutocompleteMenuNS
             {
                 Fragment = fragment;
                 //build popup menu
-                foreach (AutocompleteItem item in sourceItems)
+                foreach (AutocompleteItem item in sourceItems.GetItems(forced))
                 {
                     item.Parent = this;
                     CompareResult res = item.Compare(text);
@@ -734,38 +719,9 @@ namespace AutocompleteMenuNS
             forcedOpened = false;
         }
 
-        public void SetAutocompleteItems(IEnumerable<string> items)
-        {
-            var list = new List<AutocompleteItem>();
-            if (items == null)
-            {
-                sourceItems = null;
-                return;
-            }
-            foreach (string item in items)
-                list.Add(new AutocompleteItem(item));
-            SetAutocompleteItems(list);
-        }
-
-        public void SetAutocompleteItems(IEnumerable<AutocompleteItem> items)
+        public void SetAutocompleteItems(IAutocompleteItemSource items)
         {
             sourceItems = items;
-        }
-
-        public void AddItem(string item)
-        {
-            AddItem(new AutocompleteItem(item));
-        }
-
-        public void AddItem(AutocompleteItem item)
-        {
-            if (sourceItems == null)
-                sourceItems = new List<AutocompleteItem>();
-
-            if (sourceItems is IList)
-                (sourceItems as IList).Add(item);
-            else
-                throw new Exception("Current autocomplete items does not support adding");
         }
 
         /// <summary>

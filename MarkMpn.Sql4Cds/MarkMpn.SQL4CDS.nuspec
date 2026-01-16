@@ -24,11 +24,13 @@ Queries can also run using the preview TDS Endpoint. A wide range of SQL functio
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
     <releaseNotes>New features:
-* Added setting for results grid font size
-* Allow updating `importsequencenumber` attribute
+* Updated Copilot feature to work with latest XrmToolBox changes
+* Enabled use of Anthropic AI service
+* Added AI-driven autocomplete suggestions
+* New AI service option for sponsors
 
 Bug fixes:
-* Fixed connection timeout issue after executing 100 queries against TDS Endpoint
+* Fixed sorting on virtual name attribute of polymorphic lookup columns
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

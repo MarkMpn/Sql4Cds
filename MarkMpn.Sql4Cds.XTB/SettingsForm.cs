@@ -18,7 +18,6 @@ namespace MarkMpn.Sql4Cds.XTB
         private readonly Settings _settings;
         private readonly FetchXml2SqlOptions _fetchXml2SqlOptions;
         private readonly PluginControl _pluginControl;
-        private string _assistantVersion;
 
         public SettingsForm(Settings settings, PluginControl plugin)
         {
@@ -53,10 +52,12 @@ namespace MarkMpn.Sql4Cds.XTB
             schemaColumnOrderingCheckbox.Checked = settings.ColumnOrdering == ColumnOrdering.Strict;
             fontComboBox.SelectedValue = Settings.Instance.EditorFontName;
             fontSizeNumericUpDown.Value = Settings.Instance.EditorFontSize;
-            openAiEndpointTextBox.Text = settings.OpenAIEndpoint;
-            openAiKeyTextBox.Text = settings.OpenAIKey;
-            assistantIdTextBox.Text = settings.AssistantID;
+            aiProviderComboBox.SelectedIndex = settings.AIProvider.HasValue ? (int)settings.AIProvider.Value + 1 : 0;
+            aiEndpointTextBox.Text = settings.AIEndpoint;
+            aiAPIKeyTextBox.Text = settings.AIAPIKey;
+            aiModelTextBox.Text = settings.AIModel;
             allowCopilotSelectQueriesCheckBox.Checked = settings.AllowCopilotSelectQueries;
+            aiAutocompleteCheckBox.Checked = settings.UseAIAutocomplete;
             resultsGridFontSizeNumericUpDown.Value = (decimal)(settings.ResultGridFontSize ?? SystemFonts.DefaultFont.Size);
 
             SetSqlStyle(simpleSqlScintilla);
@@ -140,14 +141,13 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.ColumnOrdering = schemaColumnOrderingCheckbox.Checked ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
                 _settings.EditorFontName = (string)fontComboBox.SelectedValue ?? "Courier New";
                 _settings.EditorFontSize = (int) fontSizeNumericUpDown.Value;
-                _settings.OpenAIEndpoint = openAiEndpointTextBox.Text;
-                _settings.OpenAIKey = openAiKeyTextBox.Text;
-                _settings.AssistantID = assistantIdTextBox.Text;
+                _settings.AIProvider = aiProviderComboBox.SelectedIndex == 0 ? null : (AIProvider)aiProviderComboBox.SelectedIndex - 1;
+                _settings.AIEndpoint = aiEndpointTextBox.Text;
+                _settings.AIAPIKey = aiAPIKeyTextBox.Text;
+                _settings.AIModel = aiModelTextBox.Text;
                 _settings.AllowCopilotSelectQueries = allowCopilotSelectQueriesCheckBox.Checked;
+                _settings.UseAIAutocomplete = aiAutocompleteCheckBox.Checked;
                 _settings.ResultGridFontSize = resultsGridFontSizeNumericUpDown.Value == (decimal)SystemFonts.DefaultFont.Size ? null : (float)resultsGridFontSizeNumericUpDown.Value;
-
-                if (_assistantVersion != null)
-                    _settings.AssistantVersion = _assistantVersion;
             }
         }
 
@@ -224,21 +224,23 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
-        private void createAssistantbutton_Click(object sender, EventArgs e)
-        {
-            using (var form = new CreateCopilotAssistantForm(openAiEndpointTextBox.Text, openAiKeyTextBox.Text))
-            {
-                if (form.ShowDialog(this) == DialogResult.OK)
-                {
-                    assistantIdTextBox.Text = form.AssistantId;
-                    _assistantVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
-                }
-            }
-        }
-
         private void rememberSessionCheckbox_CheckedChanged(object sender, EventArgs e)
         {
             rememberSessionConnectionsCheckBox.Enabled = rememberSessionCheckbox.Checked;
+        }
+
+        private void aiProviderComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            AIProvider? provider = aiProviderComboBox.SelectedIndex == 0 ? null : (AIProvider)aiProviderComboBox.SelectedIndex - 1;
+
+            aiEndpointTextBox.Enabled = provider == AIProvider.AzureOpenAI;
+            aiAPIKeyTextBox.Enabled = provider != null;
+            aiModelTextBox.Enabled = provider != null;
+        }
+
+        private void sponsorshipLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            helpIcon_Click(sender, e);
         }
     }
 }
