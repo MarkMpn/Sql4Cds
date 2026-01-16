@@ -260,3 +260,7 @@ paket-files/
 __pycache__/
 *.pyc
 /MarkMpn.Sql4Cds.SSMS.Setup/HeatGeneratedFileList.wxs
+/MarkMpn.Sql4Cds.AIGitHubSponsorship/Properties/ServiceDependencies/aimarkcarringtondev - Zip Deploy/profile.arm.json
+/MarkMpn.Sql4Cds.AIGitHubSponsorship/appsettings.Development.json
+/MarkMpn.Sql4Cds.AIGitHubSponsorship/Properties/PublishProfiles/aimarkcarringtondev - Zip Deploy.pubxml
+/MarkMpn.Sql4Cds.AIGitHubSponsorship/appsettings.Development.json
