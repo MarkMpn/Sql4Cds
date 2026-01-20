@@ -96,8 +96,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
                         if (lastSuggestion == null)
                             lastSuggestion = line.Substring(2);
-                        else
+                        else if (line.StartsWith("  "))
                             lastSuggestion += "\r\n" + line.Substring(2);
+                        else
+                            lastSuggestion += "\r\n" + line;
                     }
                 }
 
@@ -115,7 +117,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
             public override string MenuText
             {
-                get => Text.Replace("\r\n", " ");
+                get => Text.Replace("\r\n", " ").Replace("\r", " ").Replace("\n", " ");
                 set { }
             }
 
