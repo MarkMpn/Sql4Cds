@@ -73,6 +73,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _options.Tools.Add(AIFunctionFactory.Create((Func<string>)GetCurrentQuery, name: "get_current_query", serializerOptions: aiFunctions.JsonSerializerOptions));
             _options.Tools.Add(AIFunctionFactory.Create((Func<string, Task<string[]>>)ExecuteQueryAsync, name: "execute_query", serializerOptions: aiFunctions.JsonSerializerOptions));
             _options.Tools.Add(AIFunctionFactory.Create((Func<string, QueryValidationResult>)ValidateQuery, name: "validate_query", serializerOptions: aiFunctions.JsonSerializerOptions));
+            _options.Tools.Add(AIFunctionFactory.Create((Func<string, bool>)SetCurrentQuery, name: "set_query", serializerOptions: aiFunctions.JsonSerializerOptions));
 
             _options.AllowMultipleToolCalls = true;
 
@@ -237,8 +238,11 @@ namespace MarkMpn.Sql4Cds.XTB
                                 var text = messageText.AddOrUpdate(update.MessageId, messageContentUpdate.Text, (_, existing) => existing + messageContentUpdate.Text);
                                 _lastMessage = text;
 
-                                var html = Markdown.ToHtml(text, _markdownPipeline);
-                                await ShowMessageAsync(update.MessageId, html);
+                                if (!String.IsNullOrWhiteSpace(text))
+                                {
+                                    var html = Markdown.ToHtml(text, _markdownPipeline);
+                                    await ShowMessageAsync(update.MessageId, html);
+                                }
                             }
                         }
 
@@ -323,6 +327,13 @@ namespace MarkMpn.Sql4Cds.XTB
         private string GetCurrentQuery()
         {
             return _control.Sql;
+        }
+
+        [Description("Displays a new query in the editor for the user, replacing the previously selected query")]
+        public bool SetCurrentQuery(string sql)
+        {
+            _control.InsertText(sql, true);
+            return true;
         }
 
         [Description("Runs a SQL query and returns the result. Only queries which have previously been shown to the user will be run")]

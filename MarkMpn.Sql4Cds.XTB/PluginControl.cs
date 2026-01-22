@@ -264,7 +264,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql)
         {
             var query = new SqlQueryControl(this, con, _dataSources, _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
-            query.InsertText(sql);
+            query.InsertText(sql, false);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
 

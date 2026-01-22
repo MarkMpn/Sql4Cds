@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Models;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Services;
@@ -154,7 +155,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 // Get Azure OpenAI configuration
                 var azureApiKey = _configuration["AzureOpenAI:ApiKey"];
                 var azureEndpoint = _configuration["AzureOpenAI:Endpoint"];
-                var azureApiVersion = _configuration["AzureOpenAI:ApiVersion"] ?? "2024-02-15-preview";
+                var azureApiVersion = _configuration["AzureOpenAI:ApiVersion"] ?? "2024-08-01-preview";
 
                 if (string.IsNullOrEmpty(azureApiKey) || string.IsNullOrEmpty(azureEndpoint))
                 {
@@ -164,7 +165,13 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
                 var targetUrl = $"{azureEndpoint.TrimEnd('/')}/openai/deployments/{modelName}/chat/completions?api-version={azureApiVersion}";
 
-                // Forward request to Azure OpenAI
+                // Forward request to Azure OpenAI. Remove the stream_options property if it is present
+                if (requestJson.TryGetProperty("stream_options", out _))
+                {
+                    var editedRequest = JsonNode.Parse(requestBody);
+                    ((JsonObject)editedRequest.Root).Remove("stream_options");
+                    requestBody = editedRequest.ToJsonString();
+                }
                 var client = _httpClientFactory.CreateClient();
                 var request = new HttpRequestMessage(HttpMethod.Post, targetUrl);
                 request.Headers.Add("api-key", azureApiKey);

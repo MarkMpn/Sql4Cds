@@ -1,15 +1,18 @@
 ﻿using System;
+using System.ClientModel;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using AutocompleteMenuNS;
 using Microsoft.Extensions.AI;
 using OpenAI.Chat;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using ChatResponseFormat = Microsoft.Extensions.AI.ChatResponseFormat;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -20,20 +23,31 @@ namespace MarkMpn.Sql4Cds.XTB
         private IChatClient _chatClient;
         private ChatOptions _chatOptions;
 
+        private static readonly string _systemPrompt;
+        private static ChatResponseFormat _responseFormat;
+
+        static AIAutocomplete()
+        {
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.XTB.Resources.AIAutocompleteInstructions.txt"))
+            using (var reader = new StreamReader(stream))
+            {
+                _systemPrompt = reader.ReadToEnd();
+            }
+
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.XTB.Resources.AIAutocompleteResponseSchema.json"))
+            using (var reader = new StreamReader(stream))
+            {
+                var json = reader.ReadToEnd();
+                var jsonReader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
+                var responseSchema = JsonElement.ParseValue(ref jsonReader);
+                _responseFormat = ChatResponseFormat.ForJsonSchema(responseSchema);
+            }
+        }
+
         public AIAutocomplete(SqlQueryControl control)
         {
             _control = control;
             _messages = new List<ChatMessage>();
-
-            string systemPrompt;
-
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkMpn.Sql4Cds.XTB.Resources.AIAutocompleteInstructions.txt"))
-            using (var reader = new StreamReader(stream))
-            {
-                systemPrompt = reader.ReadToEnd();
-            }
-
-            _messages.Add(new ChatMessage(ChatRole.System, systemPrompt));
         }
 
         public IEnumerable<AutocompleteItem> GetSuggestions(string text, int pos)
@@ -45,10 +59,13 @@ namespace MarkMpn.Sql4Cds.XTB
             if (_chatOptions == null)
             {
                 _chatOptions = new ChatOptions();
-                _chatOptions.RawRepresentationFactory = _ => new ChatCompletionOptions { ReasoningEffortLevel = ChatReasoningEffortLevel.Low };
+
+                if (Settings.Instance.AIModel.StartsWith("gpt-5"))
+                    _chatOptions.RawRepresentationFactory = _ => new ChatCompletionOptions { ReasoningEffortLevel = ChatReasoningEffortLevel.Low };
 
                 var aiFunctions = new AIFunctions(_control);
                 _chatOptions.Tools = new List<AITool>(aiFunctions.GetTools());
+                _chatOptions.ResponseFormat = _responseFormat;
             }
 
             var prompt = text.Insert(pos + 1, "|");
@@ -67,45 +84,57 @@ namespace MarkMpn.Sql4Cds.XTB
 
             if (response == null)
             {
+                _messages.Clear();
+                _messages.Add(new ChatMessage(ChatRole.System, _systemPrompt));
                 _messages.Add(new ChatMessage(ChatRole.User, prompt));
-                response = Task.Run(async () => _chatClient.GetResponseAsync(_messages, _chatOptions)).Unwrap().ConfigureAwait(false).GetAwaiter().GetResult().Messages.Last();
-                _messages.Add(response);
+                try
+                {
+                    response = Task.Run(async () => _chatClient.GetResponseAsync(_messages, _chatOptions)).Unwrap().ConfigureAwait(false).GetAwaiter().GetResult().Messages.Last();
+                    _messages.Add(response);
+                }
+                catch (Exception ex)
+                {
+                    _messages.RemoveAt(_messages.Count - 1);
+                    return new[] { new AIAutocompleteErrorItem(ex) };
+                }
             }
 
             var suggestion = response.Contents.OfType<TextContent>().Where(t => !String.IsNullOrWhiteSpace(t.Text)).FirstOrDefault();
 
-            if (suggestion != null)
+            if (suggestion == null)
+                return Enumerable.Empty<AutocompleteItem>();
+
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(suggestion.Text));
+
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return Enumerable.Empty<AutocompleteItem>();
+
+            if (!reader.Read() || reader.TokenType != JsonTokenType.PropertyName || reader.GetString() != "completions")
+                return Enumerable.Empty<AutocompleteItem>();
+
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                return Enumerable.Empty<AutocompleteItem>();
+
+            var items = new List<AutocompleteItem>();
+
+            while (true)
             {
-                string lastSuggestion = null;
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                    return items;
 
-                using (var reader = new StringReader(suggestion.Text))
-                {
-                    string line;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        if (line.Length == 0)
-                            continue;
+                if (!reader.Read() || reader.TokenType != JsonTokenType.PropertyName || reader.GetString() != "sql")
+                    return items;
 
-                        if (line.StartsWith("- "))
-                        {
-                            if (lastSuggestion != null)
-                                yield return new AIAutocompleteItem(lastSuggestion);
+                if (!reader.Read() || reader.TokenType != JsonTokenType.String)
+                    return items;
 
-                            lastSuggestion = null;
-                        }
+                items.Add(new AIAutocompleteItem(reader.GetString()));
 
-                        if (lastSuggestion == null)
-                            lastSuggestion = line.Substring(2);
-                        else if (line.StartsWith("  "))
-                            lastSuggestion += "\r\n" + line.Substring(2);
-                        else
-                            lastSuggestion += "\r\n" + line;
-                    }
-                }
-
-                if (lastSuggestion != null)
-                    yield return new AIAutocompleteItem(lastSuggestion);
+                if (!reader.Read() || reader.TokenType != JsonTokenType.EndObject)
+                    return items;
             }
+
+            return items;
 #pragma warning restore OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
         }
 
@@ -131,6 +160,48 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 get => "This suggestion was generated by AI, review it carefully before use";
                 set { }
+            }
+        }
+
+        class AIAutocompleteErrorItem : AutocompleteItem
+        {
+            public AIAutocompleteErrorItem(Exception ex) : base(GetMessage(ex), 28)
+            {
+            }
+
+            private static string GetMessage(Exception ex)
+            {
+                if (ex is ClientResultException cre)
+                {
+                    var firstLineStripped = cre.Message.IndexOf("\r\n\r\n");
+                    if (firstLineStripped != -1)
+                        return cre.Message.Substring(firstLineStripped + 4).Trim();
+                }
+
+                return ex.Message;
+            }
+
+            public override string MenuText
+            {
+                get => "AI Error: " + Text.Replace("\r\n", " ").Replace("\r", " ").Replace("\n", " ");
+                set { }
+            }
+
+            public override string ToolTipTitle
+            {
+                get => "AI Error";
+                set { }
+            }
+
+            public override string ToolTipText
+            {
+                get => "An error was encountered generating AI autocomplete suggestions";
+                set { }
+            }
+
+            public override string GetTextForReplace()
+            {
+                return string.Empty;
             }
         }
     }

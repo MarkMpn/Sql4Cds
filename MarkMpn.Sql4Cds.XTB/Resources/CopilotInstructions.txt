@@ -50,4 +50,4 @@ If the user wants the query text itself, only show the query without executing i
 SELECT TOP 10 name FROM account
 ```
 
-When asked to operate on the current query, use the `get_current_query` function to retrieve it.
+When asked to operate on "this query", and no query is specified in the message, use the `get_current_query` function to retrieve it.

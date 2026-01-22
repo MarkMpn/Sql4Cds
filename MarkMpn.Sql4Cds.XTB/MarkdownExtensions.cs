@@ -219,6 +219,9 @@ namespace MarkMpn.Sql4Cds.XTB
                 var divEnd = html.IndexOf(">") + 1;
                 html = html.Insert(divEnd, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 2048 2048\" class=\"copyCode\" focusable=\"false\"><title>Copy Code</title><path d=\"M1920 805v1243H640v-384H128V0h859l384 384h128l421 421zm-384-37h165l-165-165v165zM640 384h549L933 128H256v1408h384V384zm1152 512h-384V512H768v1408h1024V896z\"></path></svg>");
 
+                // Add insert button
+                html = html.Insert(divEnd, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 2048 2048\" class=\"insertCode\" focusable=\"false\"><title>Insert Code</title><path d=\"M1792 512v1280H256V512h1536zm128-128H128v1536h1792V384zm-896 256v384H640v128h384v384h128v-384h384v-128h-384V512h-128z\"></path></svg>");
+
                 renderer.Write(html);
             }
         }

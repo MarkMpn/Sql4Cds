@@ -512,7 +512,7 @@ namespace MarkMpn.Sql4Cds.XTB
 INNER JOIN {oneToMany.ReferencedEntity}
     ON {oneToMany.ReferencingEntity.Split('.').Last()}.{oneToMany.ReferencingAttribute} = {oneToMany.ReferencedEntity.Split('.').Last()}.{oneToMany.ReferencedAttribute}";
 
-                query.InsertText(join);
+                query.InsertText(join, false);
             }
             else if (e.Node.Tag is ManyToManyRelationshipMetadata manyToMany)
             {
@@ -548,16 +548,16 @@ INNER JOIN {manyToMany.IntersectEntityName}
 INNER JOIN {manyToMany.Entity2LogicalName}
     ON {manyToMany.Entity2LogicalName}.{entity2.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity2IntersectAttribute}";
 
-                query.InsertText(join);
+                query.InsertText(join, false);
             }
             else if (e.Node.Tag is EntityMetadata)
             {
                 // Use schema name when adding table to ensure we use live or retained data as appropriate
-                query.InsertText((string)e.Node.Parent.Tag + "." + e.Node.Text);
+                query.InsertText((string)e.Node.Parent.Tag + "." + e.Node.Text, false);
             }
             else
             {
-                query.InsertText(e.Node.Text);
+                query.InsertText(e.Node.Text, false);
             }
         }
 

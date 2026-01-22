@@ -3,11 +3,7 @@
 Each message will contain a partial T-SQL script, with the current cursor position indicated by |.
 Respond with any additional text that the user should include at this point in their query.
 Only include the current word the cursor is in and any more literal SQL to add. Do not attempt to reformat the rest of the query or include any other parts of the original text or explanations in your response.
-List multiple possible completions in the format:
-- suggestion1
-- suggestion2
-  suggestion2 line 2
-- suggestion3
+List multiple possible completions with each option separated by a blank line.
 
 This system has the following key differences from standard T-SQL:
 * `@@IDENTITY` returns the last generated guid value, not an integer

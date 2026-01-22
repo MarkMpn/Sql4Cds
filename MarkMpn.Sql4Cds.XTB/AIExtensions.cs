@@ -25,20 +25,20 @@ namespace MarkMpn.Sql4Cds.XTB
             switch (settings.AIProvider)
             {
                 case AIProvider.Sponsorship:
-                    chatClient = new ChatClient(settings.AIModel, new ApiKeyCredential(settings.AIAPIKey), new OpenAI.OpenAIClientOptions { Endpoint = new Uri("https://ai.markcarrington.dev/api/ai") }).AsIChatClient();
+                    chatClient = new ChatClient(settings.AIModel, new ApiKeyCredential(settings.AIAPIKey), new OpenAI.OpenAIClientOptions { Endpoint = new Uri("https://localhost:7140/api/ai") }).AsIChatClient();
                     break;
 
                 case AIProvider.Anthropic:
-                    chatClient = new AnthropicClient(Settings.Instance.AIAPIKey);
+                    chatClient = new AnthropicClient(settings.AIAPIKey);
                     break;
 
                 case AIProvider.OpenAI:
-                    chatClient = new ChatClient(Settings.Instance.AIModel, new ApiKeyCredential(Settings.Instance.AIAPIKey)).AsIChatClient();
+                    chatClient = new ChatClient(settings.AIModel, new ApiKeyCredential(settings.AIAPIKey)).AsIChatClient();
                     break;
 
                 case AIProvider.AzureOpenAI:
-                    chatClient = new AzureOpenAIClient(new Uri(Settings.Instance.AIEndpoint), new ApiKeyCredential(Settings.Instance.AIAPIKey))
-                        .GetChatClient(Settings.Instance.AIModel)
+                    chatClient = new AzureOpenAIClient(new Uri(settings.AIEndpoint), new ApiKeyCredential(settings.AIAPIKey))
+                        .GetChatClient(settings.AIModel)
                         .AsIChatClient();
                     break;
 
@@ -49,7 +49,7 @@ namespace MarkMpn.Sql4Cds.XTB
             var builder = chatClient.AsBuilder()
                 .ConfigureOptions(options =>
                 {
-                    options.ModelId = Settings.Instance.AIModel;
+                    options.ModelId = settings.AIModel;
                 });
 
             if (builderConfig != null)

@@ -356,10 +356,13 @@ namespace MarkMpn.Sql4Cds.XTB
 
         string ISaveableDocumentWindow.Filter => "SQL Scripts (*.sql)|*.sql";
 
-        public void InsertText(string text)
+        public void InsertText(string text, bool select)
         {
             _editor.ReplaceSelection(text);
             _editor.Focus();
+
+            if (select)
+                _editor.AddSelection(_editor.SelectionStart, _editor.SelectionStart - text.Length);
         }
 
         public void Format(bool addDisplayNames)

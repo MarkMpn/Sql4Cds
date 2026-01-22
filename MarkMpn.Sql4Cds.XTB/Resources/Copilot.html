@@ -136,6 +136,16 @@
             z-index: 1;
         }
 
+        .insertCode {
+            fill: white;
+            position: absolute;
+            right: 20px;
+            height: 16px;
+            width: 16px;
+            cursor: pointer;
+            z-index: 1;
+        }
+
         #processing {
             color: #0078d4;
             display: flex;
@@ -226,9 +236,21 @@
                 block.scrollIntoView(false);
 
             block.querySelectorAll(".copyCode").forEach(c => c.addEventListener('click', e => {
-                const code = e.target.parentNode.querySelector("pre").textContent;
+                const code = getDiv(e.target).querySelector("pre").textContent;
                 navigator.clipboard.writeText(code);
             }));
+
+            block.querySelectorAll(".insertCode").forEach(c => c.addEventListener('click', async e => {
+                const code = getDiv(e.target).querySelector("pre").textContent;
+                await window.chrome.webview.hostObjects.sql4cds.SetCurrentQuery(code);
+            }));
+        }
+
+        getDiv = function (element) {
+            while (element.nodeName !== 'DIV')
+                element = element.parentNode;
+
+            return element;
         }
 
         showPromptSuggestion = function (type, title, action, message) {
