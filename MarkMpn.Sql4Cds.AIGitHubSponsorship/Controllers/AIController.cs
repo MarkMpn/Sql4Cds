@@ -7,6 +7,7 @@ using MarkMpn.Sql4Cds.AIGitHubSponsorship.Models;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 {
@@ -15,20 +16,20 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
     public class AIController : ControllerBase
     {
         private readonly ILogger<AIController> _logger;
-        private readonly IConfiguration _configuration;
+        private readonly AzureOpenAIOptions _azureOpenAIOptions;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ApplicationDbContext _context;
         private readonly GitHubSponsorshipService _sponsorshipService;
 
         public AIController(
             ILogger<AIController> logger,
-            IConfiguration configuration,
+            IOptions<AzureOpenAIOptions> azureOpenAIOptions,
             IHttpClientFactory httpClientFactory,
             ApplicationDbContext context,
             GitHubSponsorshipService sponsorshipService)
         {
             _logger = logger;
-            _configuration = configuration;
+            _azureOpenAIOptions = azureOpenAIOptions.Value;
             _httpClientFactory = httpClientFactory;
             _context = context;
             _sponsorshipService = sponsorshipService;
@@ -152,10 +153,24 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                     return BadRequest(new { error = new { message = "Model must be provided" } });
                 }
 
+                // Validate model against configured models
+                var modelConfig = _azureOpenAIOptions.ModelTokenCosts
+                    .FirstOrDefault(m => m.Model.Equals(modelName, StringComparison.OrdinalIgnoreCase));
+                
+                if (modelConfig == null)
+                {
+                    var availableModels = string.Join(", ", _azureOpenAIOptions.ModelTokenCosts.Select(m => m.Model));
+                    _logger.LogWarning($"User {user.GitHubUsername} requested unavailable model: {modelName}");
+                    return BadRequest(new { error = new { message = $"Model '{modelName}' is not available. Available models: {availableModels}" } });
+                }
+
+                // Store model config for token recording
+                HttpContext.Items["ModelConfig"] = modelConfig;
+
                 // Get Azure OpenAI configuration
-                var azureApiKey = _configuration["AzureOpenAI:ApiKey"];
-                var azureEndpoint = _configuration["AzureOpenAI:Endpoint"];
-                var azureApiVersion = _configuration["AzureOpenAI:ApiVersion"] ?? "2024-08-01-preview";
+                var azureApiKey = _azureOpenAIOptions.ApiKey;
+                var azureEndpoint = _azureOpenAIOptions.Endpoint;
+                var azureApiVersion = _azureOpenAIOptions.ApiVersion;
 
                 if (string.IsNullOrEmpty(azureApiKey) || string.IsNullOrEmpty(azureEndpoint))
                 {
@@ -329,10 +344,10 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 
         private async Task RecordTokenUsage(int userId, int tokensUsed, string model, int? organizationId = null)
         {
-            var creditsUsed = tokensUsed;
-
-            if (model == "gpt-5")
-                creditsUsed *= 25; // gpt-5 costs 25 credits per token
+            // Get model config from HttpContext to calculate credits
+            var modelConfig = HttpContext.Items["ModelConfig"] as ModelTokenCost;
+            var creditsPerToken = modelConfig?.CreditsPerToken ?? 1; // Default to 1 if not found
+            var creditsUsed = tokensUsed * creditsPerToken;
 
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var now = DateTime.UtcNow;

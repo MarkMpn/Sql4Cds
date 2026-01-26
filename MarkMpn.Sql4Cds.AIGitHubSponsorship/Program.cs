@@ -1,4 +1,5 @@
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
+using MarkMpn.Sql4Cds.AIGitHubSponsorship.Models;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,9 @@ builder.Services.AddHttpClient();
 // Add DbContext
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Configure options
+builder.Services.Configure<AzureOpenAIOptions>(builder.Configuration.GetSection("AzureOpenAI"));
 
 // Add custom services
 builder.Services.AddScoped<GitHubSponsorshipService>();
