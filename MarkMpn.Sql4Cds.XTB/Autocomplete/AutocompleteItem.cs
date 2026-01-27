@@ -119,7 +119,7 @@ namespace AutocompleteMenuNS
         /// </summary>
         public override string ToString()
         {
-            return menuText ?? Text;
+            return MenuText ?? Text;
         }
 
         /// <summary>

@@ -421,7 +421,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                         if (fetchSort.attribute == null)
                                             return this;
 
-                                        var virtualAttribute = meta.Attributes.SingleOrDefault(a => a.AttributeOf == attribute.LogicalName);
+                                        var virtualAttribute = meta.Attributes
+                                            .OfType<StringAttributeMetadata>()
+                                            .SingleOrDefault(a => a.AttributeOf == attribute.LogicalName && a.AttributeType == AttributeTypeCode.String && a.YomiOf == null);
 
                                         if (virtualAttribute == null)
                                         {

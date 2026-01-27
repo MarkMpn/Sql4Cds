@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 
 namespace MarkMpn.Sql4Cds.XTB
@@ -71,19 +67,21 @@ namespace MarkMpn.Sql4Cds.XTB
 
         public int EditorFontSize { get; set; } = 10;
 
-        public string OpenAIEndpoint { get; set; }
-
-        public string OpenAIKey { get; set; }
-
-        public string AssistantID { get; set; }
-
         public bool AllowCopilotSelectQueries { get; set; }
-
-        public string AssistantVersion { get; set; }
 
         public bool RememberSessionConnections { get; set; } = true;
 
         public float? ResultGridFontSize { get; set; }
+
+        public AIProvider? AIProvider { get; set; }
+
+        public string AIEndpoint { get; set; }
+
+        public string AIAPIKey { get; set; }
+
+        public string AIModel { get; set; }
+
+        public bool UseAIAutocomplete { get; set; } = true;
     }
 
     public class TabContent
@@ -95,5 +93,13 @@ namespace MarkMpn.Sql4Cds.XTB
         public string Query { get; set; }
 
         public Guid? Connection { get; set; }
+    }
+
+    public enum AIProvider
+    {
+        Sponsorship,
+        Anthropic,
+        OpenAI,
+        AzureOpenAI,
     }
 }

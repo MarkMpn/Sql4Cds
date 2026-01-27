@@ -1,0 +1,394 @@
+@{
+    ViewData["Title"] = "Dashboard - SQL 4 CDS AI Credits";
+    
+    string FormatCredits(long credits)
+    {
+        if (credits >= 1000000)
+        {
+            double millions = credits / 1000000.0;
+            return millions % 1 == 0 ? $"{millions:F0}M" : $"{millions:F1}M";
+        }
+        else if (credits >= 1000)
+        {
+            double thousands = credits / 1000.0;
+            return thousands % 1 == 0 ? $"{thousands:F0}K" : $"{thousands:F1}K";
+        }
+        else
+        {
+            return credits.ToString();
+        }
+    }
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="mb-4 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    @if (!string.IsNullOrEmpty(ViewBag.AvatarUrl))
+                    {
+                        <img src="@ViewBag.AvatarUrl" alt="@ViewBag.Username" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 2px solid var(--gh-accent-blue);">
+                    }
+                    else
+                    {
+                        <i class="bi bi-person-circle me-3" style="font-size: 3rem; color: var(--gh-accent-blue);"></i>
+                    }
+                    <h1 class="display-5 fw-bold mb-0">
+                        Welcome, @ViewBag.Username!
+                    </h1>
+                </div>
+                <div>
+                    <a asp-controller="Home" asp-action="Logout" class="btn btn-outline-secondary">
+                        <i class="bi bi-box-arrow-right me-2"></i>Sign Out
+                    </a>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-5">
+                    <div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+                        <i class="bi bi-check-circle-fill me-2" style="font-size: 1.5rem;"></i>
+                        <div>
+                            <strong>Successfully authenticated!</strong><br/>
+                            <small>Your GitHub account has been verified.</small>
+                        </div>
+                    </div>
+
+                    <h2 class="h3 mb-4">Your Sponsorship Status</h2>
+                    
+                    <div class="row mb-4 g-3">
+                        <div class="col-md-6">
+                            <div class="card h-100" style="background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(188, 140, 255, 0.1) 100%); border: 1px solid rgba(88, 166, 255, 0.3);">
+                                <div class="card-body p-4 d-flex flex-column justify-content-between">
+                                    <div class="text-center">
+                                        <i class="bi bi-award" style="font-size: 3rem; color: var(--gh-accent-blue);"></i>
+                                        <h3 class="h4 mt-3 mb-2">Sponsorship Level</h3>
+                                        <p class="mb-1 fw-semibold" style="color: var(--gh-text-primary);">@ViewBag.SponsorshipLevel</p>
+                                        <p class="text-muted mb-0 small">Free AI credits are based on your active GitHub sponsorship</p>
+                                    </div>
+                                    <div class="mt-3 text-center">
+                                        <div style="max-width: 300px; margin-left: auto; margin-right: auto;">
+                                            <a href="https://github.com/sponsors/MarkMpn?sponsor=@(ViewBag.Username)" target="_blank" class="btn btn-sm btn-sponsor-gradient btn-sponsor-wide" style="padding: 0.5rem 1.25rem; width: 100%;">
+                                                <i class="bi bi-heart me-1"></i> Update sponsorship level
+                                            </a>
+                                            <form asp-controller="Home" asp-action="RefreshSponsorship" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm mt-3" style="width: 100%;">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh sponsorship status
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-body p-4">
+                                    <h4 class="h5 mb-3">
+                                        <i class="bi bi-key-fill me-2" style="color: var(--gh-accent-purple);"></i>
+                                        Your API Key
+                                    </h4>
+                                    <div class="mb-3">
+                                        <p class="text-muted small mb-2">Use this key to access AI services. Keep it secret.</p>
+                                        <div class="input-group">
+                                            <input type="text" id="apiKeyInput" class="form-control" value="@ViewBag.ApiKey" readonly style="background-color: var(--gh-bg-tertiary); color: var(--gh-text-secondary); border: 1px solid var(--gh-border);">
+                                            <button id="apiKeyCopyBtn" class="btn btn-outline-secondary" type="button" @(ViewBag.ApiKey == "sk_pending_verification" ? "disabled" : "") title="Copy to clipboard">
+                                                <i class="bi bi-clipboard"></i>
+                                            </button>
+                                        </div>
+                                        <form asp-action="RegenerateApiKey" method="post" class="mt-2">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" @(ViewBag.ApiKey == "sk_pending_verification" ? "disabled" : "") onclick="return confirm('Generate a new API key? This will revoke the old one.');">
+                                                <i class="bi bi-arrow-repeat me-1"></i> Generate new key
+                                            </button>
+                                            <div class="form-text text-muted">Replaces your current key immediately. Update any clients using the old key.</div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="h4 mb-3">AI Credits Overview</h3>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Available Credits</span>
+                                        <i class="bi bi-stars" style="color: var(--gh-accent-blue);"></i>
+                                    </div>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-blue);">@FormatCredits(ViewBag.TokensRemaining ?? 0)</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Used This Month</span>
+                                        <i class="bi bi-graph-up" style="color: var(--gh-accent-green);"></i>
+                                    </div>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-green);">@FormatCredits(ViewBag.TokensUsedThisMonth ?? 0)</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Monthly Allowance</span>
+                                        <i class="bi bi-trophy" style="color: var(--gh-accent-purple);"></i>
+                                    </div>
+                                    <h3 class="h2 mb-0" style="color: var(--gh-accent-purple);">@FormatCredits(ViewBag.TokensAllowed ?? 0)</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="h4 mt-4 mb-3">Available AI Models</h3>
+                    <p class="mb-3">The following models are available for use with your AI credits:</p>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Credits per Token</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (ViewBag.ModelTokenCosts != null)
+                                {
+                                    foreach (var aiModel in ViewBag.ModelTokenCosts)
+                                    {
+                                        <tr>
+                                            <td><code>@aiModel.Model</code></td>
+                                            <td>@aiModel.CreditsPerToken</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @{ var tokensAllowed = ViewBag.TokensAllowed as int? ?? 0; }
+                    @if (tokensAllowed == 0)
+                    {
+                        <div class="alert alert-info d-flex align-items-start" role="alert">
+                            <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+                            <div>
+                                <strong>Not a sponsor yet?</strong><br/>
+                                <small>
+                                    Become a GitHub Sponsor to unlock AI credits and support the SQL 4 CDS project.
+                                    <a href="https://github.com/sponsors/MarkMpn?sponsor=@(ViewBag.Username)" target="_blank" style="color: #f5576c; font-weight: 600;">Sponsor now</a>
+                                </small>
+                            </div>
+                        </div>
+                    }
+
+                    @{
+                        var organizations = ViewBag.Organizations as List<dynamic> ?? new List<dynamic>();
+                        var sponsoringOrgs = organizations.Where(o => o.TokensAllowed > 0).ToList();
+                        var nonSponsoringOrgs = organizations.Where(o => o.TokensAllowed == 0).ToList();
+                    }
+                    @if (sponsoringOrgs.Any())
+                    {
+                        <h3 class="h4 mb-3 mt-5">
+                            <i class="bi bi-building-check me-2" style="color: var(--gh-sponsor-pink);"></i>
+                            Sponsoring Organizations
+                        </h3>
+                        <p class="text-muted mb-3">You have access to shared credit pools from these sponsoring organizations:</p>
+                        
+                        @foreach (var org in sponsoringOrgs)
+                        {
+                            <div class="card mb-3" style="background: linear-gradient(135deg, rgba(245, 87, 108, 0.1) 0%, rgba(247, 120, 186, 0.1) 100%); border: 1px solid rgba(245, 87, 108, 0.3);">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-center mb-3">
+                                        @if (!string.IsNullOrEmpty(org.AvatarUrl))
+                                        {
+                                            <img src="@org.AvatarUrl" alt="@org.Name" style="width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; border: 2px solid var(--gh-sponsor-pink);">
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-building me-3" style="font-size: 2.5rem; color: var(--gh-sponsor-pink);"></i>
+                                        }
+                                        <div>
+                                            <h4 class="h5 mb-0">@org.Name</h4>
+                                            <small class="text-muted">Sponsoring Organization</small>
+                                        </div>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <div class="card" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span class="text-muted small">Shared Pool Available</span>
+                                                        <i class="bi bi-stars" style="color: var(--gh-sponsor-pink);"></i>
+                                                    </div>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-sponsor-pink);">@FormatCredits(org.TokensRemaining)</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span class="text-muted small">Used This Month</span>
+                                                        <i class="bi bi-graph-up" style="color: var(--gh-accent-green);"></i>
+                                                    </div>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-green);">@FormatCredits(org.TokensUsed)</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span class="text-muted small">Monthly Allowance</span>
+                                                        <i class="bi bi-trophy" style="color: var(--gh-accent-purple);"></i>
+                                                    </div>
+                                                    <h4 class="h3 mb-0" style="color: var(--gh-accent-purple);">@FormatCredits(org.TokensAllowed)</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        <p class="text-muted small mt-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Organization credits are shared among all members. Your personal credits are used first, then organization credits when personal credits are exhausted.
+                        </p>
+                    }
+                    
+                    @if (nonSponsoringOrgs.Any())
+                    {
+                        <h3 class="h4 mb-3 mt-5">
+                            <i class="bi bi-building me-2" style="color: var(--gh-text-secondary);"></i>
+                            Your Organizations
+                        </h3>
+                        <p class="text-muted mb-3">Encourage these organizations to sponsor and unlock shared AI credits for all members!</p>
+                        
+                        @foreach (var org in nonSponsoringOrgs)
+                        {
+                            <div class="card mb-3" style="background-color: var(--gh-bg-secondary); border: 1px solid var(--gh-border);">
+                                <div class="card-body p-4">
+                                    <div class="row align-items-center">
+                                        <div class="col-12 col-md-8">
+                                            <div class="d-flex align-items-center">
+                                                @if (!string.IsNullOrEmpty(org.AvatarUrl))
+                                                {
+                                                    <img src="@org.AvatarUrl" alt="@org.Name" style="width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; border: 2px solid var(--gh-border); opacity: 0.7;">
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-building me-3" style="font-size: 2.5rem; color: var(--gh-text-secondary); opacity: 0.7;"></i>
+                                                }
+                                                <div>
+                                                    <h4 class="h5 mb-1">@org.Name</h4>
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-x-circle me-1"></i>
+                                                        Not sponsoring
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 text-md-end mt-2 mt-md-0">
+                                            <a href="https://github.com/sponsors/MarkMpn?sponsor=@(org.Name)" target="_blank" class="btn btn-sm btn-sponsor-gradient w-100 w-md-auto">
+                                                <i class="bi bi-heart me-1"></i> Sponsor as @org.Name
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-info mt-3 mb-0 d-flex align-items-start" style="background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(188, 140, 255, 0.1) 100%); border: 1px solid rgba(88, 166, 255, 0.3);">
+                                        <i class="bi bi-lightbulb me-2 mt-1" style="color: var(--gh-accent-blue);"></i>
+                                        <div>
+                                            <strong>Unlock Shared Credits!</strong><br/>
+                                            <small>
+                                                Organization sponsorships starting at <strong>$100/month</strong> provide <strong>250M shared tokens</strong> for all members. 
+                                                Share this opportunity with your team leads and decision makers!
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <h3 class="h5 mb-3">
+                        <i class="bi bi-book me-2"></i>
+                        Using Your API Key
+                    </h3>
+                    <p class="mb-3">Once you have your API key, you can use it to access AI-powered features in SQL 4 CDS:</p>
+                    <img src="/img/copilot-settings.png" alt="SQL 4 CDS Copilot Settings screen" class="mb-3" />
+                    <p>
+                        In SQL 4 CDS, open the Settings screen and go to the Copilot tab. Select "Sponsorship" in the Provider list,
+                        and paste in your API key from above.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .alert-success {
+        background: linear-gradient(135deg, rgba(63, 185, 80, 0.1) 0%, rgba(88, 166, 255, 0.1) 100%);
+        border: 1px solid rgba(63, 185, 80, 0.3);
+        color: var(--gh-accent-green);
+    }
+    
+    .form-control:focus {
+        background-color: var(--gh-bg-tertiary) !important;
+        border-color: var(--gh-accent-blue);
+        color: var(--gh-text-primary);
+    }
+    
+    /* Responsive image in API key section */
+    img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const copyBtn = document.getElementById('apiKeyCopyBtn');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        
+        if (copyBtn && apiKeyInput) {
+            copyBtn.addEventListener('click', function() {
+                const apiKey = apiKeyInput.value;
+                
+                // Use the modern Clipboard API
+                navigator.clipboard.writeText(apiKey).then(function() {
+                    // Show success feedback
+                    const originalIcon = copyBtn.innerHTML;
+                    const originalTitle = copyBtn.title;
+                    
+                    copyBtn.innerHTML = '<i class="bi bi-check"></i>';
+                    copyBtn.title = 'Copied!';
+                    copyBtn.classList.add('btn-success');
+                    copyBtn.classList.remove('btn-outline-secondary');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(function() {
+                        copyBtn.innerHTML = originalIcon;
+                        copyBtn.title = originalTitle;
+                        copyBtn.classList.remove('btn-success');
+                        copyBtn.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }).catch(function(err) {
+                    // Fallback for clipboard API failure
+                    console.error('Failed to copy:', err);
+                    alert('Failed to copy API key. Please copy manually.');
+                });
+            });
+        }
+    });
+</script>

@@ -27,16 +27,20 @@ using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.Export.DataStorage;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
-using Microsoft.Identity.Client;
+using Microsoft.Extensions.AI;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using Newtonsoft.Json;
+using OpenAI.Chat;
 using ScintillaNET;
+using Windows.Storage.Provider;
 using xrmtb.XrmToolBox.Controls.Controls;
+using XrmToolBox;
 using XrmToolBox.Controls;
 using XrmToolBox.Extensibility;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -186,7 +190,7 @@ namespace MarkMpn.Sql4Cds.XTB
             splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
 
             // Show/hide the copilot panel
-            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
+            copilotSplitContainer.Panel2Collapsed = Settings.Instance.AIProvider == null;
 
             Connect();
 
@@ -228,7 +232,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _autocomplete.Font = new Font(Settings.Instance.EditorFontName, Settings.Instance.EditorFontSize);
 
             // Show/hide the copilot panel
-            copilotSplitContainer.Panel2Collapsed = String.IsNullOrEmpty(Settings.Instance.OpenAIKey) || String.IsNullOrEmpty(Settings.Instance.AssistantID);
+            copilotSplitContainer.Panel2Collapsed = Settings.Instance.AIProvider == null;
         }
 
         protected override void OnClosing(CancelEventArgs e)
@@ -352,10 +356,13 @@ namespace MarkMpn.Sql4Cds.XTB
 
         string ISaveableDocumentWindow.Filter => "SQL Scripts (*.sql)|*.sql";
 
-        public void InsertText(string text)
+        public void InsertText(string text, bool select)
         {
             _editor.ReplaceSelection(text);
             _editor.Focus();
+
+            if (select)
+                _editor.AddSelection(_editor.SelectionStart, _editor.SelectionStart - text.Length);
         }
 
         public void Format(bool addDisplayNames)
@@ -630,17 +637,18 @@ namespace MarkMpn.Sql4Cds.XTB
             return menu;
         }
 
-        class AutocompleteMenuItems : IEnumerable<AutocompleteItem>
+        class AutocompleteMenuItems : IAutocompleteItemSource
         {
             private readonly SqlQueryControl _control;
+            private AIAutocomplete _aiAutocomplete;
 
             public AutocompleteMenuItems(SqlQueryControl control)
             {
                 _control = control;
             }
 
-            public IEnumerator<AutocompleteItem> GetEnumerator()
-            {
+            public IEnumerable<AutocompleteItem> GetItems(bool forced)
+            { 
                 if (_control._con == null)
                     yield break;
 
@@ -650,6 +658,15 @@ namespace MarkMpn.Sql4Cds.XTB
                     yield break;
 
                 var text = _control._editor.Text;
+
+                if (forced && Settings.Instance.AIProvider != null && Settings.Instance.UseAIAutocomplete)
+                {
+                    if (_aiAutocomplete == null)
+                        _aiAutocomplete = new AIAutocomplete(_control);
+
+                    foreach (var suggestion in _aiAutocomplete.GetSuggestions(text, pos))
+                        yield return suggestion;
+                }
 
                 var autocompleteDataSources = _control.DataSources.Values
                     .Cast<XtbDataSource>()
@@ -664,16 +681,8 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 var suggestions = new Autocomplete(autocompleteDataSources, _control.Connection.ConnectionName, Settings.Instance.ColumnOrdering).GetSuggestions(text, pos).ToList();
 
-                if (suggestions.Count == 0)
-                    yield break;
-
                 foreach (var suggestion in suggestions)
                     yield return suggestion;
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return this.GetEnumerator();
             }
         }
 

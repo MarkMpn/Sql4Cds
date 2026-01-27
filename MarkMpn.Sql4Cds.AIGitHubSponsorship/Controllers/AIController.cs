@@ -1,0 +1,439 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using MarkMpn.Sql4Cds.AIGitHubSponsorship.Data;
+using MarkMpn.Sql4Cds.AIGitHubSponsorship.Models;
+using MarkMpn.Sql4Cds.AIGitHubSponsorship.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AIController : ControllerBase
+    {
+        private readonly ILogger<AIController> _logger;
+        private readonly AzureOpenAIOptions _azureOpenAIOptions;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ApplicationDbContext _context;
+        private readonly GitHubSponsorshipService _sponsorshipService;
+
+        public AIController(
+            ILogger<AIController> logger,
+            IOptions<AzureOpenAIOptions> azureOpenAIOptions,
+            IHttpClientFactory httpClientFactory,
+            ApplicationDbContext context,
+            GitHubSponsorshipService sponsorshipService)
+        {
+            _logger = logger;
+            _azureOpenAIOptions = azureOpenAIOptions.Value;
+            _httpClientFactory = httpClientFactory;
+            _context = context;
+            _sponsorshipService = sponsorshipService;
+        }
+
+        [HttpPost("chat/completions")]
+        public async Task<IActionResult> ChatCompletions()
+        {
+            try
+            {
+                // Extract API key from Authorization header
+                var authHeader = Request.Headers.Authorization.ToString();
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                {
+                    return Unauthorized(new { error = new { message = "Missing or invalid Authorization header" } });
+                }
+
+                var userApiKey = authHeader.Substring("Bearer ".Length).Trim();
+
+                // Validate API key and get user with organization memberships
+                var user = await _context.Users
+                    .Include(u => u.OrganizationMemberships)
+                        .ThenInclude(om => om.Organization)
+                    .FirstOrDefaultAsync(u => u.ApiKey == userApiKey);
+
+                if (user == null)
+                {
+                    _logger.LogWarning($"Invalid API key attempted: {userApiKey.Substring(0, Math.Min(10, userApiKey.Length))}...");
+                    return Unauthorized(new { error = new { message = "Invalid API key" } });
+                }
+
+                // Check if this is the first request of the month and refresh sponsorship status if needed
+                var currentMonth = DateOnly.FromDateTime(DateTime.UtcNow);
+                var firstDayOfMonth = new DateOnly(currentMonth.Year, currentMonth.Month, 1);
+
+                var hasUsageThisMonth = await _context.TokenUsages
+                    .AnyAsync(t => t.UserId == user.Id && t.UsageDate >= firstDayOfMonth);
+
+                if (!hasUsageThisMonth)
+                {
+                    // First request of the month - refresh sponsorship status
+                    try
+                    {
+                        var newTokensAllowed = await _sponsorshipService.DetermineTokenAllowance(user.AccessToken);
+                        if (newTokensAllowed != user.TokensAllowedPerMonth)
+                        {
+                            user.TokensAllowedPerMonth = newTokensAllowed;
+                            user.LastUpdatedAt = DateTime.UtcNow;
+                            await _context.SaveChangesAsync();
+                            _logger.LogInformation($"Updated sponsorship for user {user.GitHubUsername}: {newTokensAllowed} tokens/month");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, $"Failed to refresh sponsorship status for user {user.GitHubUsername}");
+                        // Continue with existing allowance if refresh fails
+                    }
+                }
+
+                // Check remaining personal credits
+                var tokensUsedThisMonth = await _context.TokenUsages
+                    .Where(t => t.UserId == user.Id && t.UsageDate >= firstDayOfMonth)
+                    .SumAsync(t => t.TokensUsed);
+
+                var manualUser = await _context.ManualCreditAssignments.FirstOrDefaultAsync(m => m.UserId == user.Id);
+                var effectiveUserAllowance = manualUser?.TokensAllowedPerMonth ?? user.TokensAllowedPerMonth;
+                var tokensRemaining = effectiveUserAllowance - tokensUsedThisMonth;
+
+                // If personal credits exhausted, check organization credits
+                int? selectedOrgId = null;
+                if (tokensRemaining <= 0)
+                {
+                    foreach (var membership in user.OrganizationMemberships)
+                    {
+                        var org = membership.Organization;
+                        var orgTokensUsed = await _context.TokenUsages
+                            .Where(t => t.OrganizationId == org.Id && t.UsageDate >= firstDayOfMonth)
+                            .SumAsync(t => t.TokensUsed);
+
+                        var manualOrg = await _context.ManualCreditAssignments.FirstOrDefaultAsync(m => m.OrganizationId == org.Id);
+                        var effectiveOrgAllowance = manualOrg?.TokensAllowedPerMonth ?? org.TokensAllowedPerMonth;
+                        var orgTokensRemaining = effectiveOrgAllowance - orgTokensUsed;
+                        if (orgTokensRemaining > 0)
+                        {
+                            tokensRemaining = orgTokensRemaining;
+                            selectedOrgId = org.Id;
+                            _logger.LogInformation($"User {user.GitHubUsername} will use organization {org.GitHubLogin} credits ({orgTokensRemaining} remaining)");
+                            break;
+                        }
+                    }
+                }
+
+                if (tokensRemaining <= 0)
+                {
+                    _logger.LogWarning($"User {user.GitHubUsername} has no remaining credits (personal or organizational)");
+                    return StatusCode(429, new { error = new { message = "Insufficient credits. Please upgrade your sponsorship tier or contact your organization admin.", type = "insufficient_quota" } });
+                }
+
+                // Store selected org ID for token recording
+                HttpContext.Items["SelectedOrgId"] = selectedOrgId;
+
+                // Read the request body
+                string requestBody;
+                using (var reader = new StreamReader(Request.Body))
+                {
+                    requestBody = await reader.ReadToEndAsync();
+                }
+
+                // Parse request to extract model/deployment
+                using var requestDoc = JsonDocument.Parse(requestBody);
+                var requestJson = requestDoc.RootElement.Clone();
+
+                if (!requestJson.TryGetProperty("model", out var modelProp) || modelProp.ValueKind != JsonValueKind.String)
+                {
+                    return BadRequest(new { error = new { message = "Missing model in request body" } });
+                }
+
+                var modelName = modelProp.GetString();
+                if (string.IsNullOrWhiteSpace(modelName))
+                {
+                    return BadRequest(new { error = new { message = "Model must be provided" } });
+                }
+
+                // Validate model against configured models
+                var modelConfig = _azureOpenAIOptions.ModelTokenCosts
+                    .FirstOrDefault(m => m.Model.Equals(modelName, StringComparison.OrdinalIgnoreCase));
+                
+                if (modelConfig == null)
+                {
+                    var availableModels = string.Join(", ", _azureOpenAIOptions.ModelTokenCosts.Select(m => m.Model));
+                    _logger.LogWarning($"User {user.GitHubUsername} requested unavailable model: {modelName}");
+                    return BadRequest(new { error = new { message = $"Model '{modelName}' is not available. Available models: {availableModels}" } });
+                }
+
+                // Store model config for token recording
+                HttpContext.Items["ModelConfig"] = modelConfig;
+
+                // Get Azure OpenAI configuration
+                var azureApiKey = _azureOpenAIOptions.ApiKey;
+                var azureEndpoint = _azureOpenAIOptions.Endpoint;
+                var azureApiVersion = _azureOpenAIOptions.ApiVersion;
+
+                if (string.IsNullOrEmpty(azureApiKey) || string.IsNullOrEmpty(azureEndpoint))
+                {
+                    _logger.LogError("Azure OpenAI configuration is missing ApiKey or Endpoint");
+                    return StatusCode(500, new { error = new { message = "AI service not configured" } });
+                }
+
+                var targetUrl = $"{azureEndpoint.TrimEnd('/')}/openai/deployments/{modelName}/chat/completions?api-version={azureApiVersion}";
+
+                // Forward request to Azure OpenAI. Remove the stream_options property if it is present
+                if (requestJson.TryGetProperty("stream_options", out _))
+                {
+                    var editedRequest = JsonNode.Parse(requestBody);
+                    ((JsonObject)editedRequest.Root).Remove("stream_options");
+                    requestBody = editedRequest.ToJsonString();
+                }
+                var client = _httpClientFactory.CreateClient();
+                var request = new HttpRequestMessage(HttpMethod.Post, targetUrl);
+                request.Headers.Add("api-key", azureApiKey);
+                request.Headers.Add("User-Agent", "SQL4CDS-AI-Sponsorship");
+                request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+
+                var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError($"Azure OpenAI API error: {response.StatusCode} - {errorContent}");
+                    return StatusCode((int)response.StatusCode, errorContent);
+                }
+
+                // Check if it's a streaming response
+                var isStreaming = requestJson.TryGetProperty("stream", out var streamProp) && streamProp.GetBoolean();
+
+                if (isStreaming)
+                {
+                    return await HandleStreamingResponse(response, user, modelName);
+                }
+                else
+                {
+                    return await HandleNonStreamingResponse(response, user, modelName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing AI request");
+                return StatusCode(500, new { error = new { message = "Internal server error" } });
+            }
+        }
+
+        private async Task<IActionResult> HandleNonStreamingResponse(HttpResponseMessage response, User user, string model)
+        {
+            var responseContent = await response.Content.ReadAsStringAsync();
+            var responseJson = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+            // Extract token usage
+            int tokensUsed = 0;
+            if (responseJson.TryGetProperty("usage", out var usage))
+            {
+                if (usage.TryGetProperty("total_tokens", out var totalTokens))
+                {
+                    tokensUsed = totalTokens.GetInt32();
+                }
+            }
+
+            // Record token usage
+            if (tokensUsed > 0)
+            {
+                var selectedOrgId = HttpContext.Items["SelectedOrgId"] as int?;
+                await RecordTokenUsage(user.Id, tokensUsed, model, selectedOrgId);
+                
+                if (selectedOrgId.HasValue)
+                {
+                    var org = user.OrganizationMemberships.FirstOrDefault(m => m.OrganizationId == selectedOrgId)?.Organization;
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from organization {org?.GitHubLogin ?? "Unknown"}");
+                }
+                else
+                {
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from personal credits");
+                }
+            }
+
+            // Return the response
+            Response.ContentType = "application/json";
+            return Content(responseContent, "application/json");
+        }
+
+        private async Task<IActionResult> HandleStreamingResponse(HttpResponseMessage response, User user, string model)
+        {
+            Response.ContentType = "text/event-stream";
+            Response.Headers.CacheControl = "no-cache";
+            Response.Headers.Add("X-Accel-Buffering", "no");
+
+            var responseStream = await response.Content.ReadAsStreamAsync();
+            var reader = new StreamReader(responseStream);
+            var writer = Response.Body;
+
+            int tokensUsed = 0;
+            string line;
+
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    await writer.WriteAsync(Encoding.UTF8.GetBytes("\n"));
+                    await writer.FlushAsync();
+                    continue;
+                }
+
+                // Parse SSE data
+                if (line.StartsWith("data: "))
+                {
+                    var data = line.Substring(6);
+
+                    if (data == "[DONE]")
+                    {
+                        await writer.WriteAsync(Encoding.UTF8.GetBytes(line + "\n\n"));
+                        await writer.FlushAsync();
+                        break;
+                    }
+
+                    try
+                    {
+                        var json = JsonSerializer.Deserialize<JsonElement>(data);
+
+                        // Extract usage information if available (usually in the last chunk)
+                        if (json.TryGetProperty("usage", out var usage))
+                        {
+                            if (usage.TryGetProperty("total_tokens", out var totalTokens))
+                            {
+                                tokensUsed = totalTokens.GetInt32();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore parsing errors for individual chunks
+                    }
+                }
+
+                // Stream the line to the client
+                await writer.WriteAsync(Encoding.UTF8.GetBytes(line + "\n"));
+                await writer.FlushAsync();
+            }
+
+            // Record token usage if we captured it
+            if (tokensUsed > 0)
+            {
+                var selectedOrgId = HttpContext.Items["SelectedOrgId"] as int?;
+                await RecordTokenUsage(user.Id, tokensUsed, model, selectedOrgId);
+                
+                if (selectedOrgId.HasValue)
+                {
+                    var org = user.OrganizationMemberships.FirstOrDefault(m => m.OrganizationId == selectedOrgId)?.Organization;
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from organization {org?.GitHubLogin ?? "Unknown"} (streaming)");
+                }
+                else
+                {
+                    _logger.LogInformation($"User {user.GitHubUsername} used {tokensUsed} tokens from personal credits (streaming)");
+                }
+            }
+            else
+            {
+                // For streaming responses, OpenAI may not include usage in the stream
+                // We'll need to estimate or make a separate API call to get usage
+                _logger.LogWarning($"Could not determine token usage for streaming request from user {user.GitHubUsername}");
+            }
+
+            return new EmptyResult();
+        }
+
+        private async Task RecordTokenUsage(int userId, int tokensUsed, string model, int? organizationId = null)
+        {
+            // Get model config from HttpContext to calculate credits
+            var modelConfig = HttpContext.Items["ModelConfig"] as ModelTokenCost;
+            var creditsPerToken = modelConfig?.CreditsPerToken ?? 1; // Default to 1 if not found
+            var creditsUsed = tokensUsed * creditsPerToken;
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var now = DateTime.UtcNow;
+
+            if (organizationId.HasValue)
+            {
+                // Record against organization credit pool
+                // Try to update existing record first (atomic operation)
+                var rowsAffected = await _context.TokenUsages
+                    .Where(t => t.OrganizationId == organizationId && t.UsageDate == today)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
+                        .SetProperty(t => t.LastUpdatedAt, now));
+
+                if (rowsAffected > 0)
+                {
+                    // Successfully updated existing record
+                    return;
+                }
+
+                // No existing record - try to insert
+                try
+                {
+                    var usage = new TokenUsage
+                    {
+                        OrganizationId = organizationId,
+                        TokensUsed = creditsUsed,
+                        UsageDate = today,
+                        CreatedAt = now,
+                        LastUpdatedAt = now
+                    };
+                    _context.TokenUsages.Add(usage);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // Race condition: another thread inserted between our update and insert
+                    // Try update again
+                    await _context.TokenUsages
+                        .Where(t => t.OrganizationId == organizationId && t.UsageDate == today)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
+                            .SetProperty(t => t.LastUpdatedAt, DateTime.UtcNow));
+                }
+            }
+            else
+            {
+                // Record against user's personal credits
+                // Try to update existing record first (atomic operation)
+                var rowsAffected = await _context.TokenUsages
+                    .Where(t => t.UserId == userId && t.UsageDate == today)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
+                        .SetProperty(t => t.LastUpdatedAt, now));
+
+                if (rowsAffected > 0)
+                {
+                    // Successfully updated existing record
+                    return;
+                }
+
+                // No existing record - try to insert
+                try
+                {
+                    var usage = new TokenUsage
+                    {
+                        UserId = userId,
+                        TokensUsed = creditsUsed,
+                        UsageDate = today,
+                        CreatedAt = now,
+                        LastUpdatedAt = now
+                    };
+                    _context.TokenUsages.Add(usage);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // Race condition: another thread inserted between our update and insert
+                    // Try update again
+                    await _context.TokenUsages
+                        .Where(t => t.UserId == userId && t.UsageDate == today)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(t => t.TokensUsed, t => t.TokensUsed + creditsUsed)
+                            .SetProperty(t => t.LastUpdatedAt, DateTime.UtcNow));
+                }
+            }
+        }
+    }
+}
