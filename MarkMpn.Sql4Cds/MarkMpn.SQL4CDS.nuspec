@@ -49,9 +49,15 @@ Bug fixes:
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.SqlServer.TransactSql.ScriptDom.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.SqlServer.TransactSql.ScriptDom.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\SkiaSharp.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\SkiaSharp.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\System.Text.Encoding.CodePages.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\System.Text.Encoding.CodePages.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Anthropic.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Anthropic.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\XPath2.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\XPath2.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\XPath2.Extensions.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\XPath2.Extensions.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Azure.Core.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Azure.Core.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\CSharpToJsonSchema.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\CSharpToJsonSchema.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Extensions.AI.Abstractions.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Extensions.AI.Abstractions.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Extensions.AI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Extensions.AI.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Extensions.AI.OpenAI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Extensions.AI.OpenAI.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Extensions.Logging.Abstractions.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Extensions.Logging.Abstractions.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Azure.Identity.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Azure.Identity.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Azure.AI.OpenAI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Azure.AI.OpenAI.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\OpenAI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\OpenAI.dll" />
