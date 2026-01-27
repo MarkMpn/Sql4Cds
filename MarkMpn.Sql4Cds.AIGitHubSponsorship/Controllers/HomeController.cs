@@ -9,6 +9,7 @@ using MarkMpn.Sql4Cds.AIGitHubSponsorship.Models;
 using MarkMpn.Sql4Cds.AIGitHubSponsorship.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
 {
@@ -19,23 +20,27 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ApplicationDbContext _context;
         private readonly GitHubSponsorshipService _sponsorshipService;
+        private readonly AzureOpenAIOptions _azureOpenAIOptions;
 
         public HomeController(
             ILogger<HomeController> logger, 
             IConfiguration configuration, 
             IHttpClientFactory httpClientFactory,
             ApplicationDbContext context,
-            GitHubSponsorshipService sponsorshipService)
+            GitHubSponsorshipService sponsorshipService,
+            IOptions<AzureOpenAIOptions> azureOpenAIOptions)
         {
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _context = context;
             _sponsorshipService = sponsorshipService;
+            _azureOpenAIOptions = azureOpenAIOptions.Value;
         }
 
         public IActionResult Index()
         {
+            ViewBag.ModelTokenCosts = _azureOpenAIOptions.ModelTokenCosts.OrderBy(m => m.CreditsPerToken);
             return View();
         }
 
@@ -381,6 +386,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 ViewBag.ApiKey = "sk_pending_verification";
             }
 
+            ViewBag.ModelTokenCosts = _azureOpenAIOptions.ModelTokenCosts.OrderBy(m => m.CreditsPerToken);
             return View();
         }
 

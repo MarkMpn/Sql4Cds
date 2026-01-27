@@ -147,9 +147,30 @@
                         </div>
                     </div>
 
-                    <p class="mb-4">
-                        Each credit is equivalent to 1 <code>gpt-5-nano</code> token. <code>gpt-5</code> tokens consume 25 credits each.
-                    </p>
+                    <h3 class="h4 mt-4 mb-3">Available AI Models</h3>
+                    <p class="mb-3">The following models are available for use with your AI credits:</p>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Credits per Token</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (ViewBag.ModelTokenCosts != null)
+                                {
+                                    foreach (var aiModel in ViewBag.ModelTokenCosts)
+                                    {
+                                        <tr>
+                                            <td><code>@aiModel.Model</code></td>
+                                            <td>@aiModel.CreditsPerToken</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
 
                     @{ var tokensAllowed = ViewBag.TokensAllowed as int? ?? 0; }
                     @if (tokensAllowed == 0)

@@ -270,7 +270,12 @@ strong {
 
 /* Lists */
 ol li, ul li {
-  color: var(--gh-text-primary);
+    color: var(--gh-text-primary);
+}
+
+/* Tables */
+th, td {
+    color: var(--gh-text-primary);
 }
 
 /* Links */
