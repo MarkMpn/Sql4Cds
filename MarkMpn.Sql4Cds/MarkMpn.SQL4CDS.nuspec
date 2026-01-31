@@ -58,7 +58,6 @@ Bug fixes:
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Extensions.AI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Extensions.AI.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Extensions.AI.OpenAI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Extensions.AI.OpenAI.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Extensions.Logging.Abstractions.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Extensions.Logging.Abstractions.dll" />
-    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Azure.Identity.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Azure.Identity.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Azure.AI.OpenAI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Azure.AI.OpenAI.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\OpenAI.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\OpenAI.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.Bcl.AsyncInterfaces.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.Bcl.AsyncInterfaces.dll" />
