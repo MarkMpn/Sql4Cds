@@ -845,7 +845,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             //       -> FetchXml
             if (FoldNestedLoopFiltersToJoins(Source as BaseJoinNode, context, hints, out var foldedJoin))
             {
-                Source = foldedJoin;
+                Source = foldedJoin.FoldQuery(context, hints);
                 return true;
             }
 
