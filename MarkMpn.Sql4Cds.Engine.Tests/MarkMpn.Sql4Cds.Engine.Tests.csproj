@@ -78,6 +78,7 @@
   <ItemGroup>
     <Compile Include="CollationTests.cs" />
     <Compile Include="CursorTests.cs" />
+    <Compile Include="OpenRowsetBulkTests.cs" />
     <Compile Include="SerializerTests.cs" />
     <Compile Include="SqlDateTests.cs" />
     <Compile Include="ExecutionPlanNodeTests.cs" />
@@ -119,6 +120,9 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="Key.snk" />
+    <Content Include="Resources\OPENROWSET.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Dapper.StrongName">
