@@ -938,5 +938,53 @@ SELECT * FROM account;";
                 }
             }
         }
+
+        [TestMethod]
+        public void ErrorUsingUnnamedColumnInSubquery()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+UPDATE a
+SET employees = rownum
+FROM (SELECT ROW_NUMBER() OVER (ORDER BY createdon) FROM account) AS a";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8155, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ErrorUsingRowNumberInUpdateWithoutTargetColumn()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+UPDATE a
+SET employees = rownum
+FROM (SELECT ROW_NUMBER() OVER (ORDER BY createdon) AS rownum FROM account) AS a";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(207, ex.Number);
+                }
+            }
+        }
     }
 }

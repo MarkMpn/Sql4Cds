@@ -3107,5 +3107,28 @@ end";
                 Assert.AreEqual("Run Update", result);
             }
         }
+
+        [TestMethod]
+        public void ErrorUsingUnnamedColumnInSubquery()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+SELECT *
+FROM (SELECT name, '' FROM account) AS a";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8155, ex.Number);
+                }
+            }
+        }
     }
 }
