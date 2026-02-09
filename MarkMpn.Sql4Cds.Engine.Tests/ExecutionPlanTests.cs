@@ -6759,7 +6759,7 @@ FROM   account AS r;";
         {
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, this), this);
 
-            var query = "UPDATE account SET name = 'foo' FROM account INNER JOIN (SELECT name, MIN(createdon) FROM account GROUP BY name HAVING COUNT(*) > 1) AS dupes ON account.name = dupes.name";
+            var query = "UPDATE account SET name = 'foo' FROM account INNER JOIN (SELECT name, MIN(createdon) AS earliestcreatedon FROM account GROUP BY name HAVING COUNT(*) > 1) AS dupes ON account.name = dupes.name";
 
             var plans = planBuilder.Build(query, null, out _);
 
@@ -6768,10 +6768,10 @@ FROM   account AS r;";
             var update = AssertNode<UpdateNode>(plans[0]);
             Assert.AreEqual("account", update.LogicalName);
             Assert.AreEqual("account.accountid", update.PrimaryIdAccessors.Single().SourceAttributes.Single());
-            Assert.AreEqual("Expr2", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
+            Assert.AreEqual("Expr1", update.NewValueAccessors.Single(a => a.TargetAttribute == "name").SourceAttributes.Single());
             var distinct = AssertNode<DistinctNode>(update.Source);
             var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
-            Assert.AreEqual("'foo'", computeScalar.Columns["Expr2"].ToSql());
+            Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
             var merge = AssertNode<MergeJoinNode>(computeScalar.Source);
             var sort = AssertNode<SortNode>(merge.LeftSource);
             var subquery = AssertNode<AliasNode>(sort.Source);
@@ -7915,7 +7915,7 @@ where not exists (
 
             var query = @"
 select top 10 * from (
-select fullname, (select name from account where accountid = parentcustomerid) from contact
+select fullname, (select name from account where accountid = parentcustomerid) as accountname from contact
 ) a";
 
             var plans = planBuilder.Build(query, null, out _);
@@ -7930,7 +7930,7 @@ select fullname, (select name from account where accountid = parentcustomerid) f
   <entity name='contact'>
     <attribute name='fullname' />
     <link-entity name='account' to='parentcustomerid' from='accountid' alias='Expr2' link-type='outer'>
-      <attribute name='name' alias='Expr3' />
+      <attribute name='name' alias='accountname' />
     </link-entity>
   </entity>
 </fetch>");

@@ -430,11 +430,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         plan.ColumnSet[i].OutputColumn = cte.Columns[i].Value;
                 }
 
-                for (var i = 0; i < plan.ColumnSet.Count; i++)
-                {
-                    if (plan.ColumnSet[i].OutputColumn == null)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.CteUnnamedColumn(cte.ExpressionName, i + 1));
-                }
+                EnsureNamedSubqueryColumns(plan, cte.ExpressionName);
 
                 var anchorQuery = new AliasNode(plan, cte.ExpressionName, _nodeContext);
                 _cteSubplans.Add(cte.ExpressionName.Value, anchorQuery);
@@ -608,6 +604,24 @@ namespace MarkMpn.Sql4Cds.Engine
                     anchorQuery.Source = recurseIndexStack;
                     _cteSubplans[cte.ExpressionName.Value] = anchorQuery;
                 }
+            }
+        }
+
+        private void EnsureNamedSubqueryColumns(SelectNode plan, Identifier expressionName)
+        {
+            if (plan.ColumnSet.Any(col => !col.AllColumns && col.OutputColumn == null))
+            {
+                plan.ExpandWildcardColumns(_nodeContext);
+                var errors = new List<Sql4CdsError>();
+
+                for (var i = 0; i < plan.ColumnSet.Count; i++)
+                {
+                    if (plan.ColumnSet[i].OutputColumn == null &&
+                        !plan.ColumnSet[i].AllColumns)
+                        errors.Add(Sql4CdsError.CteUnnamedColumn(expressionName, i + 1));
+                }
+
+                throw new NotSupportedQueryFragmentException(errors.ToArray(), null);
             }
         }
 
@@ -2254,6 +2268,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 var schema = selectNode.Source.GetSchema(_nodeContext);
                 target = null;
 
+                var errors = new List<Sql4CdsError>();
+
                 foreach (var set in update.UpdateSpecification.SetClauses)
                 {
                     if (!(set is AssignmentSetClause assignment))
@@ -2265,7 +2281,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     var targetCol = assignment.Column.GetColumnName();
 
                     if (!schema.ContainsColumn(targetCol, out targetCol))
+                    {
+                        errors.Add(Sql4CdsError.InvalidColumnName(assignment.Column));
                         continue;
+                    }
 
                     var colDetails = schema.Schema[targetCol];
 
@@ -2302,6 +2321,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     // The subquery might expose the column as a different name - track the name mappings we're interested in
                     columnRenamings[colDetails.SourceColumn] = targetCol.SplitMultiPartIdentifier().Last();
                 }
+
+                if (errors.Count > 0)
+                    throw new NotSupportedQueryFragmentException(errors.ToArray(), null);
 
                 var dataSourceName = target.SchemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource.Name;
                 if (!Session.DataSources.TryGetValue(dataSourceName, out dataSource))
@@ -5715,6 +5737,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(queryDerivedTable, "query-derived table column list"));
 
                 var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, hints, outerSchema, outerReferences, context);
+
+                EnsureNamedSubqueryColumns(select, queryDerivedTable.Alias);
+
                 var alias = new AliasNode(select, queryDerivedTable.Alias, context);
 
                 return alias;
