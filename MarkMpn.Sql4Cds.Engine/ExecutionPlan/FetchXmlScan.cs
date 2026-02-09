@@ -778,6 +778,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
             {
                 var aliasedValue = (AliasedValue)attribute.Value;
+                var colNameParts = attribute.Key.SplitMultiPartIdentifier();
+                var colName = String.Join(".", colNameParts.Select(c => c.EscapeIdentifier()));
 
                 // When grouping by EntityName attributes the value is converted from the normal string value to an OptionSetValue
                 // Convert it back now for consistency
@@ -792,11 +794,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException($"Expected ObjectTypeCode value, got {aliasedValue.Value} ({aliasedValue.Value?.GetType()})");
 
                     var meta = dataSource.Metadata[otc];
-                    entity[attribute.Key] = meta.LogicalName;
+                    entity[colName] = meta.LogicalName;
                 }
                 else
                 {
-                    entity[attribute.Key] = aliasedValue.Value;
+                    entity[colName] = aliasedValue.Value;
                 }
             }
 
