@@ -95,6 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool _isVirtualEntity;
         private List<string> _lookupFieldsWithVirtualNameField;
         private List<string> _lookupFieldsWithVirtualTypeField;
+        private Dictionary<string, string> _escapedColumnNames;
 
         public FetchXmlScan()
         {
@@ -767,9 +768,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Prefix all attributes of the main entity with the expected alias
-            var escapedAlias = Alias.EscapeIdentifier();
+            var escapedAlias = EscapeSingle(Alias);
             foreach (var attribute in entity.Attributes.Where(attr => !attr.Key.Contains('.') && !(attr.Value is AliasedValue)).ToList())
-                entity[$"{escapedAlias}.{attribute.Key.EscapeIdentifier()}"] = attribute.Value;
+                entity[$"{escapedAlias}.{EscapeSingle(attribute.Key)}"] = attribute.Value;
 
             // Only prefix aliased values if they're not aggregates
             PrefixAliasedScalarAttributes(entity, Entity.Items, escapedAlias);
@@ -778,8 +779,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
             {
                 var aliasedValue = (AliasedValue)attribute.Value;
-                var colNameParts = attribute.Key.SplitMultiPartIdentifier();
-                var colName = String.Join(".", colNameParts.Select(c => c.EscapeIdentifier()));
+                var colName = EscapeMulti(attribute.Key);
 
                 // When grouping by EntityName attributes the value is converted from the normal string value to an OptionSetValue
                 // Convert it back now for consistency
@@ -961,6 +961,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var pagingField in _pagingFields)
                     _lastPageValues.Add((INullable)entity[pagingField.Value]);
             }
+        }
+
+        private string EscapeSingle(string alias)
+        {
+            if (_escapedColumnNames == null)
+                _escapedColumnNames = new Dictionary<string, string>();
+
+            if (!_escapedColumnNames.TryGetValue(alias, out var escaped))
+            {
+                escaped = alias.EscapeIdentifier();
+                _escapedColumnNames[alias] = escaped;
+            }
+
+            return escaped;
+        }
+
+        private string EscapeMulti(string alias)
+        {
+            if (_escapedColumnNames == null)
+                _escapedColumnNames = new Dictionary<string, string>();
+
+            if (!_escapedColumnNames.TryGetValue(alias, out var escaped))
+            {
+                 var colNameParts = alias.SplitMultiPartIdentifier();
+                 escaped = String.Join(".", colNameParts.Select(c => EscapeSingle(c)));
+                _escapedColumnNames[alias] = escaped;
+            }
+
+            return escaped;
         }
 
         private void RemoveUnknownAttributes(Entity entity, DataSource dataSource)
