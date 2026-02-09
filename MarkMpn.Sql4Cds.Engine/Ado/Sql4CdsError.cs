@@ -951,6 +951,26 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(4418, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
         }
 
+        internal static Sql4CdsError OpenRowsetBulkMissingCorrelationName(BulkOpenRowset openRowset)
+        {
+            return Create(491, openRowset);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkMultipleSingleOptions(BulkOpenRowset openRowset)
+        {
+            return Create(471, openRowset);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkCombinedFormatAndSingleOption(BulkOpenRowset openRowset)
+        {
+            return Create(5338, openRowset);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkMissingSchema(BulkOpenRowset openRowset, string format)
+        {
+            return Create(15808, openRowset, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)
