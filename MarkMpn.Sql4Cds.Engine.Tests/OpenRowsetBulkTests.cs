@@ -232,11 +232,11 @@ WITH (
             using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
-                cmd.CommandText = $"SELECT * FROM OPENROWSET(BULK '{path}', SINGLE_BLOB)  AS t";
+                cmd.CommandText = $"SELECT * FROM OPENROWSET(BULK '{path}', SINGLE_BLOB) AS t";
                 using (var reader = cmd.ExecuteReader())
                 {
                     // Check column names
-                    Assert.AreEqual("value", reader.GetName(0));
+                    Assert.AreEqual("BulkColumn", reader.GetName(0));
 
                     // Check data
                     Assert.IsTrue(reader.Read());
@@ -252,7 +252,7 @@ WITH (
 
                     // Check that we have read all data
                     Assert.AreEqual(0, reader.GetBytes(0, read, actual, 0, 1));
-                    Assert.AreEqual(expected, actual);
+                    CollectionAssert.AreEqual(expected, actual);
 
                     Assert.IsFalse(reader.Read());
                 }
@@ -266,11 +266,11 @@ WITH (
             using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
-                cmd.CommandText = $"SELECT * FROM OPENROWSET(BULK '{path}', SINGLE_CLOB)  AS t";
+                cmd.CommandText = $"SELECT * FROM OPENROWSET(BULK '{path}', SINGLE_CLOB) AS t";
                 using (var reader = cmd.ExecuteReader())
                 {
                     // Check column names
-                    Assert.AreEqual("value", reader.GetName(0));
+                    Assert.AreEqual("BulkColumn", reader.GetName(0));
 
                     // Check data
                     Assert.IsTrue(reader.Read());
@@ -299,6 +299,22 @@ WITH (
                     Assert.AreEqual(File.ReadAllText(path), reader.GetString(0));
 
                     Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ErrorReadingSingleBLOBWithWildcard()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "*.csv");
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT * FROM OPENROWSET(BULK '{path}', SINGLE_NCLOB) AS t";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var ex = Assert.ThrowsException<Sql4CdsException>(() => reader.Read());
+                    Assert.AreEqual(4860, ex.Number);
                 }
             }
         }

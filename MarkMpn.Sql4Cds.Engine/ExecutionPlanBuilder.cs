@@ -5963,6 +5963,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(option, option.OptionKind.ToString().ToUpperInvariant()));
                 }
 
+                if (openRowset.DataFiles.Count != 1)
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(openRowset)) { Suggestion = "Only a single data file is supported" };
+
                 // Check we have the required information
                 if (openRowset.Alias == null)
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.OpenRowsetBulkMissingCorrelationName(openRowset));
@@ -5988,6 +5991,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(Sql4CdsError.OpenRowsetBulkMissingSchema(openRowset, ""));
 
                 var source = new OpenRowsetBulkNode();
+                source.Filename = openRowset.DataFiles[0].Value;
                 source.Alias = openRowset.Alias.Value;
                 source.Format = format?.Value.Value;
                 source.SingleOption = singleOptions.Count == 0 ? (BulkInsertOptionKind?)null : singleOptions[0].OptionKind;

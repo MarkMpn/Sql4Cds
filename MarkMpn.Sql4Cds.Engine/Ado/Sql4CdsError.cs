@@ -971,6 +971,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(15808, openRowset, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
         }
 
+        internal static Sql4CdsError OpenRowsetBulkFileDoesNotExist(string filename)
+        {
+            return Create(4860, null, (SqlInt32)filename.Length, Collation.USEnglish.ToSqlString(filename));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

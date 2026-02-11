@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,6 +13,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class OpenRowsetBulkNode : BaseDataNode
     {
+        private const string BulkColumnName = "BulkColumn";
+
+        /// <summary>
+        /// The path of the file to open
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("The path of the file to open")]
+        public string Filename { get; set; }
+
         /// <summary>
         /// The alias to apply to the results of the OPENROWSET function
         /// </summary>
@@ -43,7 +54,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            throw new NotImplementedException();
+            var schema = new ColumnList();
+            var alias = Alias.EscapeIdentifier();
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+            if (SingleOption == BulkInsertOptionKind.SingleBlob)
+            {
+                schema.Add(alias + "." + BulkColumnName, new ColumnDefinition(DataTypeHelpers.VarBinary(Int32.MaxValue), false, false, isWildcardable: true));
+                aliases.Add(BulkColumnName, new[] { alias + "." + BulkColumnName });
+            }
+            else if (SingleOption == BulkInsertOptionKind.SingleClob)
+            {
+                schema.Add(alias + "." + BulkColumnName, new ColumnDefinition(DataTypeHelpers.VarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false, isWildcardable: true));
+                aliases.Add(BulkColumnName, new[] { alias + "." + BulkColumnName });
+            }
+            else if (SingleOption == BulkInsertOptionKind.SingleNClob)
+            {
+                schema.Add(alias + "." + BulkColumnName, new ColumnDefinition(DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false, isWildcardable: true));
+                aliases.Add(BulkColumnName, new[] { alias + "." + BulkColumnName });
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+
+            return new NodeSchema(
+                schema,
+                aliases,
+                null,
+                null);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -58,12 +97,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            throw new NotImplementedException();
+            var escapedAlias = Alias.EscapeIdentifier();
+
+            if (SingleOption != null)
+            {
+                var record = new Entity();
+
+                using (var stream = OpenFile(Filename))
+                {
+                    if (SingleOption == BulkInsertOptionKind.SingleBlob)
+                    {
+                        using (var memoryStream = new MemoryStream())
+                        {
+                            stream.CopyTo(memoryStream);
+                            record[escapedAlias + "." + BulkColumnName] = new SqlBinary(memoryStream.ToArray());
+                        }
+                    }
+                    else
+                    {
+                        var type = SingleOption == BulkInsertOptionKind.SingleClob 
+                            ? DataTypeHelpers.VarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault) 
+                            : DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+
+                        using (var reader = new StreamReader(stream))
+                        {
+                            var value = reader.ReadToEnd();
+                            var sqlString = SqlTypeConverter.NetToSqlType(context.PrimaryDataSource, value, type);
+                            record[escapedAlias + "." + BulkColumnName] = sqlString;
+                        }
+                    }
+                }
+
+                yield return record;
+            }
+        }
+
+        private Stream OpenFile(string filename)
+        {
+            try
+            {
+                return File.OpenRead(filename);
+            }
+            catch
+            {
+                throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkFileDoesNotExist(Filename));
+            }
         }
 
         public override object Clone()
         {
             var clone = new OpenRowsetBulkNode();
+            clone.Filename = Filename;
             clone.Alias = Alias;
             clone.Format = Format;
             clone.SingleOption = SingleOption;
