@@ -43,6 +43,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("Indicates if the file is to be read as a single value")]
         public BulkInsertOptionKind? SingleOption { get; set; }
 
+        /// <summary>
+        /// The types of values to be returned
+        /// </summary>
+        [Browsable(false)]
+        public IList<OpenRowsetColumnDefinition> Schema { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
@@ -75,7 +81,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else
             {
-                throw new NotImplementedException();
+                foreach (var col in Schema)
+                {
+                    var escapedName = col.ColumnIdentifier.Value.EscapeIdentifier();
+                    schema.Add(alias + "." + escapedName, new ColumnDefinition(col.DataType, true, false, isWildcardable: true));
+                    aliases.Add(escapedName, new[] { alias + "." + escapedName });
+                }
             }
 
             return new NodeSchema(
@@ -151,6 +162,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.Alias = Alias;
             clone.Format = Format;
             clone.SingleOption = SingleOption;
+            clone.Schema = Schema;
             return clone;
         }
     }

@@ -5995,6 +5995,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 source.Alias = openRowset.Alias.Value;
                 source.Format = format?.Value.Value;
                 source.SingleOption = singleOptions.Count == 0 ? (BulkInsertOptionKind?)null : singleOptions[0].OptionKind;
+                source.Schema = openRowset.WithColumns;
 
                 return source;
             }
