@@ -86,7 +86,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void InvalidFilename()
         {
-
             using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
@@ -97,10 +96,14 @@ WITH (
     Latitude float,
     Longitude float,
     Address varchar(max),
-    Icon varchar(100),
+    Icon varchar(100)
 ) AS t";
-                var ex = Assert.ThrowsException<Sql4CdsException>(() => cmd.ExecuteReader());
-                Assert.AreEqual(13822, ex.Number);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var ex = Assert.ThrowsException<Sql4CdsException>(() => reader.Read());
+                    Assert.AreEqual(13822, ex.Number);
+                }
             }
         }
 
@@ -118,7 +121,7 @@ WITH (
     Latitude float,
     Longitude float,
     Address varchar(max),
-    Icon varchar(100),
+    Icon varchar(100)
 ) AS t";
                 using (var reader = cmd.ExecuteReader())
                 {
@@ -163,7 +166,7 @@ WITH (
     Latitude float,
     Longitude float,
     Address varchar(max),
-    Icon varchar(100),
+    Icon varchar(100)
 ) AS t";
                 using (var reader = cmd.ExecuteReader())
                 {
@@ -201,7 +204,7 @@ WITH (
     Latitude float,
     Longitude float,
     Address varchar(max),
-    Icon varchar(100),
+    Icon varchar(100)
 ) AS t";
                 using (var reader = cmd.ExecuteReader())
                 {
@@ -292,7 +295,7 @@ WITH (
                 using (var reader = cmd.ExecuteReader())
                 {
                     // Check column names
-                    Assert.AreEqual("value", reader.GetName(0));
+                    Assert.AreEqual("BulkColumn", reader.GetName(0));
 
                     // Check data
                     Assert.IsTrue(reader.Read());
