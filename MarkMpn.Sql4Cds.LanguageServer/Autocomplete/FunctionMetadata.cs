@@ -211,6 +211,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Creates a unique value of type uniqueidentifier")]
             public abstract Guid newid();
+
+            [Description("Returns the absolute (positive) value of the specified numeric expression")]
+            public abstract double abs(double expression);
         }
     }
 }

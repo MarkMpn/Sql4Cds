@@ -1840,6 +1840,90 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return Guid.NewGuid();
         }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Abs(SqlInt32 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return System.Math.Abs(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt64 Abs(SqlInt64 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt64.Null;
+
+            return System.Math.Abs(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDecimal Abs(SqlDecimal expression)
+        {
+            if (expression.IsNull)
+                return SqlDecimal.Null;
+
+            return SqlDecimal.Abs(expression);
+        }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Abs(SqlDouble expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return System.Math.Abs(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlMoney Abs(SqlMoney expression)
+        {
+            if (expression.IsNull)
+                return SqlMoney.Null;
+
+            return new SqlMoney(System.Math.Abs(expression.Value));
+        }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlSingle Abs(SqlSingle expression)
+        {
+            if (expression.IsNull)
+                return SqlSingle.Null;
+
+            return System.Math.Abs(expression.Value);
+        }
     }
 
     /// <summary>
