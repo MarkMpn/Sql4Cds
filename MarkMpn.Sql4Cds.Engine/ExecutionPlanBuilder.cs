@@ -5936,7 +5936,6 @@ namespace MarkMpn.Sql4Cds.Engine
                         option.OptionKind == BulkInsertOptionKind.CodePage ||
                         option.OptionKind == BulkInsertOptionKind.DataFileType ||
                         option.OptionKind == BulkInsertOptionKind.FieldTerminator ||
-                        option.OptionKind == BulkInsertOptionKind.FirstRow ||
                         option.OptionKind == BulkInsertOptionKind.FireTriggers ||
                         option.OptionKind == BulkInsertOptionKind.FormatFile ||
                         option.OptionKind == BulkInsertOptionKind.KeepIdentity ||
@@ -5996,6 +5995,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 source.Format = format?.Value.Value;
                 source.SingleOption = singleOptions.Count == 0 ? (BulkInsertOptionKind?)null : singleOptions[0].OptionKind;
                 source.Schema = openRowset.WithColumns;
+
+                var firstRow = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.FirstRow);
+
+                if (firstRow != null)
+                    source.FirstRow = Int32.Parse(firstRow.Value.Value);
 
                 return source;
             }

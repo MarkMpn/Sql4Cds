@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using CsvHelper;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -48,6 +50,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Browsable(false)]
         public IList<OpenRowsetColumnDefinition> Schema { get; set; }
+
+        /// <summary>
+        /// The first row to read from the file (1-based)
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("The first row to read from the file (1-based)")]
+        public int FirstRow { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -141,6 +150,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 yield return record;
             }
+            else
+            {
+                var dir = Path.GetDirectoryName(Filename);
+                var file = Path.GetFileName(Filename);
+                var nvarcharmax = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                var eec = new ExpressionExecutionContext(context);
+
+                foreach (var filename in Directory.EnumerateFiles(dir, file))
+                {
+                    using (var reader = new StreamReader(OpenFile(filename)))
+                    using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                    {
+                        var rowNum = 0;
+
+                        while (csv.Read())
+                        {
+                            rowNum++;
+
+                            if (rowNum < FirstRow)
+                                continue;
+
+                            var record = new Entity();
+
+                            for (var i = 0; i < Schema.Count; i++)
+                            {
+                                var col = Schema[i];
+                                var escapedName = col.ColumnIdentifier.Value.EscapeIdentifier();
+                                var value = csv.GetField(i);
+
+                                // Convert the value to a SqlString, then to the target type
+                                var sqlValue = SqlTypeConverter.NetToSqlType(context.PrimaryDataSource, value, nvarcharmax);
+                                sqlValue = SqlTypeConverter.GetConversion(nvarcharmax, col.DataType)(sqlValue, eec);
+                                record[escapedAlias + "." + escapedName] = sqlValue;
+                            }
+
+                            yield return record;
+                        }
+                    }
+                }
+            }
         }
 
         private Stream OpenFile(string filename)
@@ -163,6 +212,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.Format = Format;
             clone.SingleOption = SingleOption;
             clone.Schema = Schema;
+            clone.FirstRow = FirstRow;
             return clone;
         }
     }
