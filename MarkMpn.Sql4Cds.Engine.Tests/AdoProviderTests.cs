@@ -3171,5 +3171,29 @@ SELECT ABS(@f), ABS(@r), ABS(@d), ABS(@i), ABS(@si), ABS(@ti), ABS(@bi), ABS(@m)
                 }
             }
         }
+
+        [TestMethod]
+        public void AbsOverflow()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+DECLARE @i INT;  
+SET @i = -2147483648;  
+SELECT ABS(@i);";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Number);
+                }
+            }
+        }
     }
 }

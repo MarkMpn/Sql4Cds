@@ -1852,7 +1852,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return SqlInt32.Null;
 
-            return System.Math.Abs(expression.Value);
+            try
+            {
+                return System.Math.Abs(expression.Value);
+            }
+            catch (OverflowException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow("expression", DataTypeHelpers.Int, null));
+            }
         }
 
         /// <summary>
@@ -1866,7 +1873,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return SqlInt32.Null;
 
-            return System.Math.Abs(expression.Value);
+            try
+            {
+                return System.Math.Abs((int)expression.Value);
+            }
+            catch (OverflowException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow("expression", DataTypeHelpers.Int, null));
+            }
         }
 
         /// <summary>
@@ -1880,7 +1894,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return SqlInt32.Null;
 
-            return System.Math.Abs(expression.Value);
+            try
+            {
+                return System.Math.Abs((int)expression.Value);
+            }
+            catch (OverflowException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow("expression", DataTypeHelpers.Int, null));
+            }
         }
 
         /// <summary>
@@ -1894,7 +1915,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return SqlInt64.Null;
 
-            return System.Math.Abs(expression.Value);
+            try
+            {
+                return System.Math.Abs(expression.Value);
+            }
+            catch (OverflowException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow("expression", DataTypeHelpers.BigInt, null));
+            }
         }
 
         /// <summary>
