@@ -358,5 +358,57 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var actual = ExpressionFunctions.DateDiff("hour", new SqlDateTime(dateTime), new SqlDateTimeOffset(offset), DataTypeHelpers.DateTime, DataTypeHelpers.DateTimeOffset(7));
             Assert.AreEqual(-1, actual);
         }
+
+        [DataTestMethod]
+        [DataRow(5, 5)]
+        [DataRow(-5, 5)]
+        [DataRow(0, 0)]
+        [DataRow(int.MinValue + 1, int.MaxValue)]
+        public void Abs_Int(int input, int expected)
+        {
+            var actual = ExpressionFunctions.Abs((SqlInt32)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [TestMethod]
+        public void Abs_Int_Null()
+        {
+            var actual = ExpressionFunctions.Abs(SqlInt32.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5L, 5L)]
+        [DataRow(-5L, 5L)]
+        [DataRow(0L, 0L)]
+        public void Abs_BigInt(long input, long expected)
+        {
+            var actual = ExpressionFunctions.Abs((SqlInt64)input);
+            Assert.AreEqual(expected, (long)actual);
+        }
+
+        [TestMethod]
+        public void Abs_BigInt_Null()
+        {
+            var actual = ExpressionFunctions.Abs(SqlInt64.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5.5, 5.5)]
+        [DataRow(-5.5, 5.5)]
+        [DataRow(0.0, 0.0)]
+        public void Abs_Float(double input, double expected)
+        {
+            var actual = ExpressionFunctions.Abs((SqlDouble)input);
+            Assert.AreEqual(expected, (double)actual, 1e-10);
+        }
+
+        [TestMethod]
+        public void Abs_Float_Null()
+        {
+            var actual = ExpressionFunctions.Abs(SqlDouble.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
     }
 }

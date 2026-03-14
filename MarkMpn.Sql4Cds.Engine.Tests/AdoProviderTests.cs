@@ -3130,5 +3130,70 @@ FROM (SELECT name, '' FROM account) AS a";
                 }
             }
         }
+
+        [TestMethod]
+        public void OverloadedFunctionResolution()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+DECLARE @f float = -1
+DECLARE @r real = -1
+DECLARE @d decimal(10, 2) = -1.23
+DECLARE @i int = -1
+DECLARE @si smallint = -1
+DECLARE @ti tinyint = 1
+DECLARE @bi bigint = -1
+DECLARE @m money = -1
+DECLARE @sm smallmoney = -1
+DECLARE @b bit = 1
+
+SELECT ABS(@f), ABS(@r), ABS(@d), ABS(@i), ABS(@si), ABS(@ti), ABS(@bi), ABS(@m), ABS(@sm), ABS(@b)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual("float", reader.GetDataTypeName(0));
+                    Assert.AreEqual("float", reader.GetDataTypeName(1));
+                    Assert.AreEqual("decimal", reader.GetDataTypeName(2));
+                    Assert.AreEqual("int", reader.GetDataTypeName(3));
+                    Assert.AreEqual("int", reader.GetDataTypeName(4));
+                    Assert.AreEqual("int", reader.GetDataTypeName(5));
+                    Assert.AreEqual("bigint", reader.GetDataTypeName(6));
+                    Assert.AreEqual("money", reader.GetDataTypeName(7));
+                    Assert.AreEqual("money", reader.GetDataTypeName(8));
+                    Assert.AreEqual("float", reader.GetDataTypeName(9));
+
+                    var schema = reader.GetSchemaTable();
+                    Assert.AreEqual((short)38, schema.Rows[2]["NumericPrecision"]);
+                    Assert.AreEqual((short)2, schema.Rows[2]["NumericScale"]);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void AbsOverflow()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+DECLARE @i INT;  
+SET @i = -2147483648;  
+SELECT ABS(@i);";
+
+                try
+                {
+                    cmd.ExecuteNonQuery();
+                    Assert.Fail();
+                }
+                catch (Sql4CdsException ex)
+                {
+                    Assert.AreEqual(8115, ex.Number);
+                }
+            }
+        }
     }
 }

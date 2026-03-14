@@ -1190,21 +1190,49 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (correctParameterCount.Count == 0)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidFunctionParameterCount(func.FunctionName, methods[0].GetParameters().Length));
 
-            if (correctParameterCount.Count > 1)
-                throw new NotSupportedQueryFragmentException("Ambiguous method", func);
+            var overloadCheckRequired = correctParameterCount.Count > 1;
 
-            var method = correctParameterCount[0].Method;
-            var parameters = correctParameterCount[0].Parameters;
+            foreach (var candidate in correctParameterCount)
+            {
+                var method = candidate.Method;
+                var parameters = candidate.Parameters;
+                BindParameters(context, targetType, primaryDataSource, func, paramTypes, paramCacheKeys, contextParam, createExpression || overloadCheckRequired, ref paramExpressions, out sqlType, out cacheKey, ref method, ref parameters);
+
+                if (overloadCheckRequired)
+                {
+                    var requiresConversion = false;
+
+                    for (var i = 0; i < parameters.Length; i++)
+                    {
+                        if (parameters[i].ParameterType != paramExpressions[i].Type)
+                        {
+                            requiresConversion = true;
+                            break;
+                        }
+                    }
+
+                    if (requiresConversion)
+                        continue;
+                }
+
+                return method;
+            }
+
+            throw new NotSupportedQueryFragmentException("Ambiguous method", func);
+        }
+
+        private static void BindParameters(ExpressionCompilationContext context, Type targetType, DataSource primaryDataSource, FunctionCall func, DataTypeReference[] paramTypes, string[] paramCacheKeys, ParameterExpression contextParam, bool createExpression, ref Expression[] paramExpressions, out DataTypeReference sqlType, out string cacheKey, ref MethodInfo method, ref ParameterInfo[] parameters)
+        {
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             cacheKey = method.Name;
 
-            if (correctParameterCount[0].Method.IsGenericMethodDefinition)
+            if (method.IsGenericMethodDefinition)
             {
                 // Create the generic method based on the type of the generic arguments
-                var genericArguments = correctParameterCount[0].Method.GetGenericArguments();
+                var genericArguments = method.GetGenericArguments();
                 var genericArgumentValues = new Type[genericArguments.Length];
 
-                foreach (var param in correctParameterCount[0].Parameters)
+                foreach (var param in parameters)
                 {
                     for (var i = 0; i < genericArguments.Length; i++)
                     {
@@ -1329,7 +1357,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!DataTypeHelpers.TryParse(context, typeLiteral.Value, out var parsedType))
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidDataTypeForXmlValueMethod(typeLiteral));
 
-                        cacheKey +=$"(TYPE:{parsedType.ToSql()})";
+                        cacheKey += $"(TYPE:{parsedType.ToSql()})";
 
                         if (createExpression)
                             paramExpressions[i] = Expression.Constant(parsedType);
@@ -1395,6 +1423,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (sqlType == null)
                 sqlType = method.ReturnType.ToSqlType(primaryDataSource);
+
+            if (sqlType is SqlDataTypeReference sqlSqlType && sqlSqlType.SqlDataTypeOption == SqlDataTypeOption.Decimal)
+            {
+                var p = sqlSqlType.GetPrecision();
+                var s = sqlSqlType.GetScale();
+
+                // Use the [DecimalPrecision(value)] attribute from the method where available
+                var methodDecimalPrecision = method.GetCustomAttribute<DecimalPrecisionAttribute>();
+
+                if (methodDecimalPrecision != null)
+                    p = methodDecimalPrecision.Precision;
+
+                // Use the [SourceScale] attribute from the parameters where available to calculate the scale for the output
+                var sourceScaleParam = parameters
+                    .Select((param, index) => new { Parameter = param, Index = index })
+                    .Where(param => param.Parameter.GetCustomAttribute<SourceScaleAttribute>() != null)
+                    .Select(param => paramTypes[param.Index])
+                    .FirstOrDefault();
+
+                if (sourceScaleParam != null)
+                    s = sourceScaleParam.GetScale();
+
+                sqlType = DataTypeHelpers.Decimal(p, s);
+            }
 
             if (method.GetCustomAttribute(typeof(CollationSensitiveAttribute)) != null)
             {
@@ -1470,8 +1522,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     outputCollation.CollationLabel = collation.CollationLabel;
                 }
             }
-
-            return method;
         }
 
         private static Expression ToExpression(this FunctionCall func, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)

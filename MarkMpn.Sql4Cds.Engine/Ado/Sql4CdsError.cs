@@ -145,6 +145,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(8115, fragment, GetTypeName(sourceType), GetTypeName(targetType));
         }
 
+        internal static Sql4CdsError ArithmeticOverflow(string source, DataTypeReference targetType, TSqlFragment fragment)
+        {
+            return Create(8115, fragment, source, GetTypeName(targetType));
+        }
+
         internal static Sql4CdsError ArithmeticOverflow(DataTypeReference targetType, SqlInt32 value)
         {
             return Create(220, targetType, Collation.USEnglish.ToSqlString(GetTypeName(targetType)), value);
