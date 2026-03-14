@@ -1522,8 +1522,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     outputCollation.CollationLabel = collation.CollationLabel;
                 }
             }
-
-            return method;
         }
 
         private static Expression ToExpression(this FunctionCall func, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
