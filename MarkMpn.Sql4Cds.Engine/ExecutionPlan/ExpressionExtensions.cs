@@ -1208,7 +1208,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             requiresConversion = true;
                             break;
-                    }
+                        }
                     }
 
                     if (requiresConversion)
@@ -1218,7 +1218,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return method;
             }
 
-                throw new NotSupportedQueryFragmentException("Ambiguous method", func);
+            throw new NotSupportedQueryFragmentException("Ambiguous method", func);
         }
 
         private static void BindParameters(ExpressionCompilationContext context, Type targetType, DataSource primaryDataSource, FunctionCall func, DataTypeReference[] paramTypes, string[] paramCacheKeys, ParameterExpression contextParam, bool createExpression, ref Expression[] paramExpressions, out DataTypeReference sqlType, out string cacheKey, ref MethodInfo method, ref ParameterInfo[] parameters)

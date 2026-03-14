@@ -1861,6 +1861,34 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="expression">A numeric expression</param>
         /// <returns></returns>
         [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Abs(SqlInt16 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return System.Math.Abs(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Abs(SqlByte expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return System.Math.Abs(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
         public static SqlInt64 Abs(SqlInt64 expression)
         {
             if (expression.IsNull)
@@ -1918,10 +1946,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="expression">A numeric expression</param>
         /// <returns></returns>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlSingle Abs(SqlSingle expression)
+        public static SqlDouble Abs(SqlSingle expression)
         {
             if (expression.IsNull)
-                return SqlSingle.Null;
+                return SqlDouble.Null;
 
             return System.Math.Abs(expression.Value);
         }
@@ -2260,7 +2288,7 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         public SourceScaleAttribute()
         {
-    }
+        }
     }
 
     /// <summary>
