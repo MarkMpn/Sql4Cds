@@ -1953,6 +1953,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return System.Math.Abs(expression.Value);
         }
+
+        /// <summary>
+        /// Returns the absolute (positive) value of the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Abs(SqlBoolean expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return expression.Value ? 1 : 0;
+        }
     }
 
     /// <summary>
