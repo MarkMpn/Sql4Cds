@@ -1875,12 +1875,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="expression">A numeric expression</param>
         /// <returns></returns>
         [SqlFunction(IsDeterministic = true)]
-        public static SqlDecimal Abs(SqlDecimal expression)
+        [DecimalPrecision(38)]
+        public static SqlDecimal Abs([SourceScale] SqlDecimal expression)
         {
             if (expression.IsNull)
                 return SqlDecimal.Null;
 
-            return SqlDecimal.Abs(expression);
+            return SqlDecimal.ConvertToPrecScale(SqlDecimal.Abs(expression), 38, expression.Scale);
         }
 
         /// <summary>
@@ -2235,6 +2236,31 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Method)]
     class CollationSensitiveAttribute : Attribute
     {
+    }
+
+    /// <summary>
+    /// Indicates that a function returns a decimal value with a fixed precision
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    class DecimalPrecisionAttribute : Attribute
+    {
+        public DecimalPrecisionAttribute(short precision)
+        {
+            Precision = precision;
+        }
+
+        public short Precision { get; }
+    }
+
+    /// <summary>
+    /// Indicates that the parameter gives the scale of a decimal return value
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter)]
+    class SourceScaleAttribute : Attribute
+    {
+        public SourceScaleAttribute()
+        {
+    }
     }
 
     /// <summary>

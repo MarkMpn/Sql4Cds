@@ -1424,6 +1424,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (sqlType == null)
                 sqlType = method.ReturnType.ToSqlType(primaryDataSource);
 
+            if (sqlType is SqlDataTypeReference sqlSqlType && sqlSqlType.SqlDataTypeOption == SqlDataTypeOption.Decimal)
+            {
+                var p = sqlSqlType.GetPrecision();
+                var s = sqlSqlType.GetScale();
+
+                // Use the [DecimalPrecision(value)] attribute from the method where available
+                var methodDecimalPrecision = method.GetCustomAttribute<DecimalPrecisionAttribute>();
+
+                if (methodDecimalPrecision != null)
+                    p = methodDecimalPrecision.Precision;
+
+                // Use the [SourceScale] attribute from the parameters where available to calculate the scale for the output
+                var sourceScaleParam = parameters
+                    .Select((param, index) => new { Parameter = param, Index = index })
+                    .Where(param => param.Parameter.GetCustomAttribute<SourceScaleAttribute>() != null)
+                    .Select(param => paramTypes[param.Index])
+                    .FirstOrDefault();
+
+                if (sourceScaleParam != null)
+                    s = sourceScaleParam.GetScale();
+
+                sqlType = DataTypeHelpers.Decimal(p, s);
+            }
+
             if (method.GetCustomAttribute(typeof(CollationSensitiveAttribute)) != null)
             {
                 // If method is collation sensitive:
