@@ -1995,6 +1995,133 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return expression.Value ? 1 : 0;
         }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Ceiling(SqlInt32 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return expression;
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Ceiling(SqlInt16 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return expression.Value;
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Ceiling(SqlByte expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return expression.Value;
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt64 Ceiling(SqlInt64 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt64.Null;
+
+            return expression;
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        [DecimalPrecision(38, 0)]
+        public static SqlDecimal Ceiling(SqlDecimal expression)
+        {
+            if (expression.IsNull)
+                return SqlDecimal.Null;
+
+            return SqlDecimal.ConvertToPrecScale(new SqlDecimal(System.Math.Ceiling(expression.Value)), 38, 0);
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Ceiling(SqlDouble expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return System.Math.Ceiling(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlMoney Ceiling(SqlMoney expression)
+        {
+            if (expression.IsNull)
+                return SqlMoney.Null;
+
+            return new SqlMoney(System.Math.Ceiling(expression.Value));
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Ceiling(SqlSingle expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return System.Math.Ceiling(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the smallest integer greater than, or equal to, the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Ceiling(SqlBoolean expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return expression.Value ? 1 : 0;
+        }
     }
 
     /// <summary>
@@ -2309,7 +2436,7 @@ namespace MarkMpn.Sql4Cds.Engine
     }
 
     /// <summary>
-    /// Indicates that a function returns a decimal value with a fixed precision
+    /// Indicates that a function returns a decimal value with a fixed precision and optionally a fixed scale
     /// </summary>
     [AttributeUsage(AttributeTargets.Method)]
     class DecimalPrecisionAttribute : Attribute
@@ -2319,7 +2446,15 @@ namespace MarkMpn.Sql4Cds.Engine
             Precision = precision;
         }
 
+        public DecimalPrecisionAttribute(short precision, short scale)
+        {
+            Precision = precision;
+            Scale = scale;
+        }
+
         public short Precision { get; }
+
+        public short? Scale { get; }
     }
 
     /// <summary>

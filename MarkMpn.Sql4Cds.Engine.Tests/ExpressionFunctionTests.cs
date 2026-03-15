@@ -410,5 +410,71 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var actual = ExpressionFunctions.Abs(SqlDouble.Null);
             Assert.IsTrue(actual.IsNull);
         }
+
+        [DataTestMethod]
+        [DataRow(4.1, 5.0)]
+        [DataRow(4.9, 5.0)]
+        [DataRow(-4.1, -4.0)]
+        [DataRow(-4.9, -4.0)]
+        [DataRow(5.0, 5.0)]
+        [DataRow(0.0, 0.0)]
+        [DataRow(-0.1, 0.0)]
+        public void Ceiling_Float(double input, double expected)
+        {
+            var actual = ExpressionFunctions.Ceiling((SqlDouble)input);
+            Assert.AreEqual(expected, (double)actual, 1e-10);
+        }
+
+        [TestMethod]
+        public void Ceiling_Float_Null()
+        {
+            var actual = ExpressionFunctions.Ceiling(SqlDouble.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5, 5)]
+        [DataRow(-5, -5)]
+        [DataRow(0, 0)]
+        public void Ceiling_Int(int input, int expected)
+        {
+            var actual = ExpressionFunctions.Ceiling((SqlInt32)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [TestMethod]
+        public void Ceiling_Int_Null()
+        {
+            var actual = ExpressionFunctions.Ceiling(SqlInt32.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5L, 5L)]
+        [DataRow(-5L, -5L)]
+        [DataRow(0L, 0L)]
+        public void Ceiling_BigInt(long input, long expected)
+        {
+            var actual = ExpressionFunctions.Ceiling((SqlInt64)input);
+            Assert.AreEqual(expected, (long)actual);
+        }
+
+        [DataTestMethod]
+        [DataRow((short)5, 5)]
+        [DataRow((short)-5, -5)]
+        public void Ceiling_SmallInt(short input, int expected)
+        {
+            var actual = ExpressionFunctions.Ceiling((SqlInt16)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [DataTestMethod]
+        [DataRow((byte)5, 5)]
+        [DataRow((byte)0, 0)]
+        public void Ceiling_TinyInt(byte input, int expected)
+        {
+            var actual = ExpressionFunctions.Ceiling((SqlByte)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
     }
 }
