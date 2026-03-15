@@ -214,6 +214,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Returns the absolute (positive) value of the specified numeric expression")]
             public abstract double abs(double expression);
+
+            [Description("Returns the positive (+1), zero (0), or negative (-1) sign of the specified numeric expression")]
+            public abstract double sign(double expression);
         }
     }
 }
