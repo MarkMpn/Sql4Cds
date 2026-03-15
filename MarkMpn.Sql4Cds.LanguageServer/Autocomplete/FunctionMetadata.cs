@@ -214,6 +214,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Returns the absolute (positive) value of the specified numeric expression")]
             public abstract double abs(double expression);
+
+            [Description("Returns the largest integer less than or equal to the specified numeric expression")]
+            public abstract double floor(double expression);
         }
     }
 }

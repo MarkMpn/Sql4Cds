@@ -410,5 +410,71 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var actual = ExpressionFunctions.Abs(SqlDouble.Null);
             Assert.IsTrue(actual.IsNull);
         }
+
+        [DataTestMethod]
+        [DataRow(4.1, 4.0)]
+        [DataRow(4.9, 4.0)]
+        [DataRow(-4.1, -5.0)]
+        [DataRow(-4.9, -5.0)]
+        [DataRow(5.0, 5.0)]
+        [DataRow(0.0, 0.0)]
+        [DataRow(-0.1, -1.0)]
+        public void Floor_Float(double input, double expected)
+        {
+            var actual = ExpressionFunctions.Floor((SqlDouble)input);
+            Assert.AreEqual(expected, (double)actual, 1e-10);
+        }
+
+        [TestMethod]
+        public void Floor_Float_Null()
+        {
+            var actual = ExpressionFunctions.Floor(SqlDouble.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5, 5)]
+        [DataRow(-5, -5)]
+        [DataRow(0, 0)]
+        public void Floor_Int(int input, int expected)
+        {
+            var actual = ExpressionFunctions.Floor((SqlInt32)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [TestMethod]
+        public void Floor_Int_Null()
+        {
+            var actual = ExpressionFunctions.Floor(SqlInt32.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5L, 5L)]
+        [DataRow(-5L, -5L)]
+        [DataRow(0L, 0L)]
+        public void Floor_BigInt(long input, long expected)
+        {
+            var actual = ExpressionFunctions.Floor((SqlInt64)input);
+            Assert.AreEqual(expected, (long)actual);
+        }
+
+        [DataTestMethod]
+        [DataRow((short)5, 5)]
+        [DataRow((short)-5, -5)]
+        public void Floor_SmallInt(short input, int expected)
+        {
+            var actual = ExpressionFunctions.Floor((SqlInt16)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [DataTestMethod]
+        [DataRow((byte)5, 5)]
+        [DataRow((byte)0, 0)]
+        public void Floor_TinyInt(byte input, int expected)
+        {
+            var actual = ExpressionFunctions.Floor((SqlByte)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
     }
 }

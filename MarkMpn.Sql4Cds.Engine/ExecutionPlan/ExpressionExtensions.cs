@@ -1433,7 +1433,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var methodDecimalPrecision = method.GetCustomAttribute<DecimalPrecisionAttribute>();
 
                 if (methodDecimalPrecision != null)
+                {
                     p = methodDecimalPrecision.Precision;
+
+                    if (methodDecimalPrecision.Scale != null)
+                        s = methodDecimalPrecision.Scale.Value;
+                }
 
                 // Use the [SourceScale] attribute from the parameters where available to calculate the scale for the output
                 var sourceScaleParam = parameters

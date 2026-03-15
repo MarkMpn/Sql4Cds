@@ -1995,6 +1995,133 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return expression.Value ? 1 : 0;
         }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Floor(SqlInt32 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return expression;
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Floor(SqlInt16 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return expression.Value;
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Floor(SqlByte expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return expression.Value;
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt64 Floor(SqlInt64 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt64.Null;
+
+            return expression;
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        [DecimalPrecision(38, 0)]
+        public static SqlDecimal Floor(SqlDecimal expression)
+        {
+            if (expression.IsNull)
+                return SqlDecimal.Null;
+
+            return SqlDecimal.ConvertToPrecScale(new SqlDecimal(System.Math.Floor(expression.Value)), 38, 0);
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Floor(SqlDouble expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return System.Math.Floor(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlMoney Floor(SqlMoney expression)
+        {
+            if (expression.IsNull)
+                return SqlMoney.Null;
+
+            return new SqlMoney(System.Math.Floor(expression.Value));
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Floor(SqlSingle expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return System.Math.Floor(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the largest integer less than or equal to the specified numeric expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Floor(SqlBoolean expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return expression.Value ? 1 : 0;
+        }
     }
 
     /// <summary>
@@ -2309,7 +2436,7 @@ namespace MarkMpn.Sql4Cds.Engine
     }
 
     /// <summary>
-    /// Indicates that a function returns a decimal value with a fixed precision
+    /// Indicates that a function returns a decimal value with a fixed precision and optionally a fixed scale
     /// </summary>
     [AttributeUsage(AttributeTargets.Method)]
     class DecimalPrecisionAttribute : Attribute
@@ -2319,7 +2446,15 @@ namespace MarkMpn.Sql4Cds.Engine
             Precision = precision;
         }
 
+        public DecimalPrecisionAttribute(short precision, short scale)
+        {
+            Precision = precision;
+            Scale = scale;
+        }
+
         public short Precision { get; }
+
+        public short? Scale { get; }
     }
 
     /// <summary>
