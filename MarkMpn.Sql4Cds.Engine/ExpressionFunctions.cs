@@ -2108,7 +2108,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return (double)System.Math.Sign(expression.Value);
         }
-    }
 
         /// <summary>
         /// Returns the smallest integer greater than, or equal to, the specified numeric expression
