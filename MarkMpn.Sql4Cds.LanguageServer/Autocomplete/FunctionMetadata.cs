@@ -217,6 +217,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Returns the positive (+1), zero (0), or negative (-1) sign of the specified numeric expression")]
             public abstract double sign(double expression);
+
+            [Description("Returns the smallest integer greater than, or equal to, the specified numeric expression")]
+            public abstract double ceiling(double expression);
         }
     }
 }
