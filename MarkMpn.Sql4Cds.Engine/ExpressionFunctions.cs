@@ -1997,6 +1997,120 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Sign(SqlInt32 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return System.Math.Sign(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Sign(SqlInt16 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return System.Math.Sign(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Sign(SqlByte expression)
+        {
+            if (expression.IsNull)
+                return SqlInt32.Null;
+
+            return expression.Value == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt64 Sign(SqlInt64 expression)
+        {
+            if (expression.IsNull)
+                return SqlInt64.Null;
+
+            return (long)System.Math.Sign(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        [DecimalPrecision(38)]
+        public static SqlDecimal Sign([SourceScale] SqlDecimal expression)
+        {
+            if (expression.IsNull)
+                return SqlDecimal.Null;
+
+            return SqlDecimal.ConvertToPrecScale(new SqlDecimal(System.Math.Sign(expression.Value)), 38, expression.Scale);
+        }
+
+        /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Sign(SqlDouble expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return (double)System.Math.Sign(expression.Value);
+        }
+
+        /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlMoney Sign(SqlMoney expression)
+        {
+            if (expression.IsNull)
+                return SqlMoney.Null;
+
+            return new SqlMoney(System.Math.Sign(expression.Value));
+        }
+
+        /// <summary>
+        /// Returns the positive (+1), zero (0), or negative (-1) sign of the specified expression
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Sign(SqlSingle expression)
+        {
+            if (expression.IsNull)
+                return SqlDouble.Null;
+
+            return (double)System.Math.Sign(expression.Value);
+        }
+    }
+
+        /// <summary>
         /// Returns the smallest integer greater than, or equal to, the specified numeric expression
         /// </summary>
         /// <param name="expression">A numeric expression</param>
