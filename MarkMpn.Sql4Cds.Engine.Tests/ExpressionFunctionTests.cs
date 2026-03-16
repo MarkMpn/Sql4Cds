@@ -410,5 +410,77 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var actual = ExpressionFunctions.Abs(SqlDouble.Null);
             Assert.IsTrue(actual.IsNull);
         }
+
+        [DataTestMethod]
+        [DataRow(5, 1)]
+        [DataRow(-5, -1)]
+        [DataRow(0, 0)]
+        [DataRow(int.MaxValue, 1)]
+        [DataRow(int.MinValue, -1)]
+        public void Sign_Int(int input, int expected)
+        {
+            var actual = ExpressionFunctions.Sign((SqlInt32)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [TestMethod]
+        public void Sign_Int_Null()
+        {
+            var actual = ExpressionFunctions.Sign(SqlInt32.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5L, 1L)]
+        [DataRow(-5L, -1L)]
+        [DataRow(0L, 0L)]
+        public void Sign_BigInt(long input, long expected)
+        {
+            var actual = ExpressionFunctions.Sign((SqlInt64)input);
+            Assert.AreEqual(expected, (long)actual);
+        }
+
+        [TestMethod]
+        public void Sign_BigInt_Null()
+        {
+            var actual = ExpressionFunctions.Sign(SqlInt64.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(3.14, 1.0)]
+        [DataRow(-3.14, -1.0)]
+        [DataRow(0.0, 0.0)]
+        public void Sign_Float(double input, double expected)
+        {
+            var actual = ExpressionFunctions.Sign((SqlDouble)input);
+            Assert.AreEqual(expected, (double)actual, 1e-10);
+        }
+
+        [TestMethod]
+        public void Sign_Float_Null()
+        {
+            var actual = ExpressionFunctions.Sign(SqlDouble.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow((short)5, 1)]
+        [DataRow((short)-5, -1)]
+        [DataRow((short)0, 0)]
+        public void Sign_SmallInt(short input, int expected)
+        {
+            var actual = ExpressionFunctions.Sign((SqlInt16)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [DataTestMethod]
+        [DataRow((byte)5, 1)]
+        [DataRow((byte)0, 0)]
+        public void Sign_TinyInt(byte input, int expected)
+        {
+            var actual = ExpressionFunctions.Sign((SqlByte)input);
+            Assert.AreEqual(expected, (int)actual);
+        }
     }
 }
