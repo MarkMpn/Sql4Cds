@@ -160,7 +160,7 @@ WITH (
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = $@"
-SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', FIRSTROW=2) 
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', FIRSTROW=3) 
 WITH (
     Name varchar(100),
     Latitude float,
@@ -180,8 +180,8 @@ WITH (
                     // Check data
                     Assert.IsTrue(reader.Read());
                     Assert.AreEqual("Statue of Liberty", reader.GetString(0));
-                    Assert.AreEqual(40.689247f, reader.GetFloat(1));
-                    Assert.AreEqual(-74.044502f, reader.GetFloat(2));
+                    Assert.AreEqual(40.689247, reader.GetDouble(1));
+                    Assert.AreEqual(-74.044502, reader.GetDouble(2));
                     Assert.AreEqual("Liberty Island, New York, NY 10004", reader.GetString(3));
                     Assert.AreEqual("\\icons\\sol.png", reader.GetString(4));
 
@@ -198,7 +198,7 @@ WITH (
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = $@"
-SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', LASTROW=1) 
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', FIRSTROW=2, LASTROW=2) 
 WITH (
     Name varchar(100),
     Latitude float,
@@ -218,8 +218,8 @@ WITH (
                     // Check data
                     Assert.IsTrue(reader.Read());
                     Assert.AreEqual("Empire State Building", reader.GetString(0));
-                    Assert.AreEqual(40.748817f, reader.GetFloat(1));
-                    Assert.AreEqual(-73.985428f, reader.GetFloat(2));
+                    Assert.AreEqual(40.748817, reader.GetDouble(1));
+                    Assert.AreEqual(-73.985428, reader.GetDouble(2));
                     Assert.AreEqual("20 W 34th St, New York, NY 10118", reader.GetString(3));
                     Assert.AreEqual("\\icons\\sol.png", reader.GetString(4));
 

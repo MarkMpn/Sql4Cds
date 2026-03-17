@@ -5941,7 +5941,6 @@ namespace MarkMpn.Sql4Cds.Engine
                         option.OptionKind == BulkInsertOptionKind.KeepIdentity ||
                         option.OptionKind == BulkInsertOptionKind.KeepNulls ||
                         option.OptionKind == BulkInsertOptionKind.KilobytesPerBatch ||
-                        option.OptionKind == BulkInsertOptionKind.LastRow ||
                         option.OptionKind == BulkInsertOptionKind.MaxErrors ||
                         option.OptionKind == BulkInsertOptionKind.RowsPerBatch ||
                         option.OptionKind == BulkInsertOptionKind.RowTerminator ||
@@ -6000,6 +5999,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (firstRow != null)
                     source.FirstRow = Int32.Parse(firstRow.Value.Value);
+
+                var lastRow = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.LastRow);
+
+                if (lastRow != null)
+                    source.LastRow = Int32.Parse(lastRow.Value.Value);
 
                 return source;
             }

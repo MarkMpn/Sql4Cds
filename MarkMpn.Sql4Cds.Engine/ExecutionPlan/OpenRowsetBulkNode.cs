@@ -58,6 +58,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The first row to read from the file (1-based)")]
         public int FirstRow { get; set; }
 
+        /// <summary>
+        /// The last row to read from the file (1-based)
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("The last row to read from the file (1-based)")]
+        public int LastRow { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
@@ -172,6 +179,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (rowNum < FirstRow)
                                 continue;
 
+                            if (LastRow > 0 && rowNum > LastRow)
+                                break;
+
                             var record = new Entity();
 
                             for (var i = 0; i < Schema.Count; i++)
@@ -237,6 +247,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.SingleOption = SingleOption;
             clone.Schema = Schema;
             clone.FirstRow = FirstRow;
+            clone.LastRow = LastRow;
             return clone;
         }
     }
