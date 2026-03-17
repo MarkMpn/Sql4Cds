@@ -1429,16 +1429,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var p = sqlSqlType.GetPrecision();
                 var s = sqlSqlType.GetScale();
 
-                // Use the [DecimalPrecision(value)] attribute from the method where available
-                var methodDecimalPrecision = method.GetCustomAttribute<DecimalPrecisionAttribute>();
+                // Use the [DecimalPrecisionScale] attribute from the method where available
+                var methodDecimalPrecisionScale = method.GetCustomAttribute<DecimalPrecisionScaleAttribute>();
 
-                if (methodDecimalPrecision != null)
+                if (methodDecimalPrecisionScale != null)
                 {
-                    p = methodDecimalPrecision.Precision;
+                    if (methodDecimalPrecisionScale.Precision != -1)
+                        p = methodDecimalPrecisionScale.Precision;
 
-                    if (methodDecimalPrecision.Scale != null)
-                        s = methodDecimalPrecision.Scale.Value;
+                    if (methodDecimalPrecisionScale.Scale != -1)
+                        s = methodDecimalPrecisionScale.Scale;
                 }
+
+                // Use the [SourcePrecision] attribute from the parameters where available to calculate the precision for the output
+                var sourcePrecisionParam = parameters
+                    .Select((param, index) => new { Parameter = param, Index = index })
+                    .Where(param => param.Parameter.GetCustomAttribute<SourcePrecisionAttribute>() != null)
+                    .Select(param => paramTypes[param.Index])
+                    .FirstOrDefault();
+
+                if (sourcePrecisionParam != null)
+                    p = sourcePrecisionParam.GetPrecision();
 
                 // Use the [SourceScale] attribute from the parameters where available to calculate the scale for the output
                 var sourceScaleParam = parameters

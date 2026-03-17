@@ -220,6 +220,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Returns the smallest integer greater than, or equal to, the specified numeric expression")]
             public abstract double ceiling(double expression);
+
+            [Description("Returns the largest integer less than or equal to the specified numeric expression")]
+            public abstract double floor(double expression);
         }
     }
 }
