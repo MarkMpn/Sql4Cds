@@ -154,10 +154,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var dir = Path.GetDirectoryName(Filename);
                 var file = Path.GetFileName(Filename);
+                dir = Path.Combine(Environment.CurrentDirectory, dir);
                 var nvarcharmax = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
                 var eec = new ExpressionExecutionContext(context);
 
-                foreach (var filename in Directory.EnumerateFiles(dir, file))
+                foreach (var filename in EnumerateFiles(dir, file))
                 {
                     using (var reader = new StreamReader(OpenFile(filename)))
                     using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
@@ -192,15 +193,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private IEnumerable<string> EnumerateFiles(string dir, string file)
+        {
+            if (!file.Contains("*"))
+                return new[] { Path.Combine(dir, file) };
+            
+            try
+            {
+                return Directory.EnumerateFiles(dir, file);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkFileDoesNotExist(Filename), ex);
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkFileDoesNotExistOrOpen(Filename), ex);
+            }
+        }
+
         private Stream OpenFile(string filename)
         {
             try
             {
                 return File.OpenRead(filename);
             }
-            catch
+            catch (ArgumentException ex)
             {
-                throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkFileDoesNotExist(Filename));
+                throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkFileDoesNotExist(Filename), ex);
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkFileDoesNotExistOrOpen(Filename), ex);
             }
         }
 
