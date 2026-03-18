@@ -614,5 +614,63 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var actual = ExpressionFunctions.Floor((SqlByte)input);
             Assert.AreEqual(expected, (int)actual);
         }
+
+        [DataTestMethod]
+        [DataRow(123.9994, 3, 123.999)]
+        [DataRow(123.9995, 3, 124.000)]
+        [DataRow(150.75, 0, 151.0)]
+        [DataRow(748.58, -1, 750.0)]
+        [DataRow(748.58, -2, 700.0)]
+        [DataRow(748.58, -4, 0.0)]
+        public void Round_Float(double input, int length, double expected)
+        {
+            var actual = ExpressionFunctions.Round((SqlDouble)input, (SqlInt32)length, SqlInt32.Null);
+            Assert.AreEqual(expected, (double)actual, 1e-10);
+        }
+
+        [TestMethod]
+        public void Round_Float_Null()
+        {
+            var actual = ExpressionFunctions.Round(SqlDouble.Null, (SqlInt32)2, SqlInt32.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(150.75, 0, 150.0)]
+        [DataRow(150.35, 1, 150.3)]
+        public void Round_Float_Truncate(double input, int length, double expected)
+        {
+            var actual = ExpressionFunctions.Round((SqlDouble)input, (SqlInt32)length, (SqlInt32)1);
+            Assert.AreEqual(expected, (double)actual, 1e-10);
+        }
+
+        [DataTestMethod]
+        [DataRow(748, 2, 748)]
+        [DataRow(748, 0, 748)]
+        [DataRow(748, -1, 750)]
+        [DataRow(748, -2, 700)]
+        [DataRow(744, -1, 740)]
+        public void Round_Int(int input, int length, int expected)
+        {
+            var actual = ExpressionFunctions.Round((SqlInt32)input, (SqlInt32)length, SqlInt32.Null);
+            Assert.AreEqual(expected, (int)actual);
+        }
+
+        [TestMethod]
+        public void Round_Int_Null()
+        {
+            var actual = ExpressionFunctions.Round(SqlInt32.Null, (SqlInt32)2, SqlInt32.Null);
+            Assert.IsTrue(actual.IsNull);
+        }
+
+        [DataTestMethod]
+        [DataRow(5L, 0, 5L)]
+        [DataRow(748L, -1, 750L)]
+        [DataRow(748L, -2, 700L)]
+        public void Round_BigInt(long input, int length, long expected)
+        {
+            var actual = ExpressionFunctions.Round((SqlInt64)input, (SqlInt32)length, SqlInt32.Null);
+            Assert.AreEqual(expected, (long)actual);
+        }
     }
 }
