@@ -65,6 +65,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The last row to read from the file (1-based)")]
         public int LastRow { get; set; }
 
+        /// <summary>
+        /// Specifies the code page of the data in the data file
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("Specifies the code page of the data in the data file")]
+        public string CodePage { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
@@ -146,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             ? DataTypeHelpers.VarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault) 
                             : DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
-                        using (var reader = new StreamReader(stream))
+                        using (var reader = new StreamReader(stream, GetEncoding()))
                         {
                             var value = reader.ReadToEnd();
                             var sqlString = SqlTypeConverter.NetToSqlType(context.PrimaryDataSource, value, type);
@@ -167,7 +174,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var filename in EnumerateFiles(dir, file))
                 {
-                    using (var reader = new StreamReader(OpenFile(filename)))
+                    using (var reader = new StreamReader(OpenFile(filename), GetEncoding()))
                     using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
                     {
                         var rowNum = 0;
@@ -190,9 +197,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var escapedName = col.ColumnIdentifier.Value.EscapeIdentifier();
                                 var value = csv.GetField(i);
 
+                                // TODO: If we're using the RAW code page and loading into a string column, we need to
+                                // re-interpret the bytes we've loaded into the string using the encoding for this column.
+
                                 // Convert the value to a SqlString, then to the target type
                                 var sqlValue = SqlTypeConverter.NetToSqlType(context.PrimaryDataSource, value, nvarcharmax);
                                 sqlValue = SqlTypeConverter.GetConversion(nvarcharmax, col.DataType)(sqlValue, eec);
+
                                 record[escapedAlias + "." + escapedName] = sqlValue;
                             }
 
@@ -238,6 +249,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private Encoding GetEncoding()
+        {
+            switch (CodePage)
+            {
+                case "ACP":
+                    return Encoding.GetEncoding(1252);
+
+                case "OEM":
+                case null:
+                    return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+
+                case "RAW":
+                    return Encoding.ASCII;
+
+                default:
+                    return Encoding.GetEncoding(Int32.Parse(CodePage));
+            }
+        }
+
         public override object Clone()
         {
             var clone = new OpenRowsetBulkNode();
@@ -248,6 +278,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.Schema = Schema;
             clone.FirstRow = FirstRow;
             clone.LastRow = LastRow;
+            clone.CodePage = CodePage;
             return clone;
         }
     }

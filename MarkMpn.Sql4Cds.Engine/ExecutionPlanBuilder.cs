@@ -5933,7 +5933,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (option.OptionKind == BulkInsertOptionKind.BatchSize ||
                         option.OptionKind == BulkInsertOptionKind.CheckConstraints ||
-                        option.OptionKind == BulkInsertOptionKind.CodePage ||
                         option.OptionKind == BulkInsertOptionKind.DataFileType ||
                         option.OptionKind == BulkInsertOptionKind.FieldTerminator ||
                         option.OptionKind == BulkInsertOptionKind.FireTriggers ||
@@ -6004,6 +6003,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (lastRow != null)
                     source.LastRow = Int32.Parse(lastRow.Value.Value);
+
+                var codePage = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.CodePage);
+
+                if (codePage != null)
+                    source.CodePage = codePage.Value.Value;
 
                 return source;
             }

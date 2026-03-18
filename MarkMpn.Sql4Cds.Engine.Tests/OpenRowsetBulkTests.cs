@@ -321,5 +321,65 @@ WITH (
                 }
             }
         }
+
+        [TestMethod]
+        public void CodePageACP()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_Latin1.csv");
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', CODEPAGE='ACP') 
+WITH (
+    Name varchar(100)
+) AS t";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("£", reader.GetString(0));
+                }
+            }
+        }
+
+        [TestMethod]
+        public void CodePage1252()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_Latin1.csv");
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', CODEPAGE='1252') 
+WITH (
+    Name varchar(100)
+) AS t";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("£", reader.GetString(0));
+                }
+            }
+        }
+
+        [TestMethod]
+        public void CodePage65001()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_UTF8.csv");
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', CODEPAGE='65001') 
+WITH (
+    Name varchar(100)
+) AS t";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("£", reader.GetString(0));
+                }
+            }
+        }
     }
 }
