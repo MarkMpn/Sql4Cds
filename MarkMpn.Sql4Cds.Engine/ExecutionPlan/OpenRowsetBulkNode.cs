@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using CsvHelper;
+using CsvHelper.Configuration;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -71,6 +72,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("OpenRowset")]
         [Description("Specifies the code page of the data in the data file")]
         public string CodePage { get; set; }
+
+        /// <summary>
+        /// Specifies the row terminator to be used
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("Specifies the row terminator to be used")]
+        public string RowTerminator { get; set; } = "\r\n";
+
+        /// <summary>
+        /// Specifies the field terminator to be used
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("Specifies the field terminator to be used")]
+        public string FieldTerminator { get; set; } = ",";
+
+        /// <summary>
+        /// Specifies a character that is used as the quote character in the CSV file
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("Specifies a character that is used as the quote character in the CSV file")]
+        public string FieldQuote { get; set; } = "\"";
+
+        /// <summary>
+        /// Specifies a character that is used to escape the quote character in the CSV file
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("Specifies a character that is used to escape the quote character in the CSV file")]
+        public string EscapeChar { get; set; } = "\"";
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -172,10 +201,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var nvarcharmax = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
                 var eec = new ExpressionExecutionContext(context);
 
+                var csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture);
+                csvConfig.NewLine = ParseTerminator(RowTerminator);
+                csvConfig.Delimiter = ParseTerminator(FieldTerminator);
+                csvConfig.Quote = FieldQuote[0];
+                csvConfig.Escape = EscapeChar[0];
+
                 foreach (var filename in EnumerateFiles(dir, file))
                 {
                     using (var reader = new StreamReader(OpenFile(filename), GetEncoding()))
-                    using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                    using (var csv = new CsvReader(reader, csvConfig))
                     {
                         var rowNum = 0;
 
@@ -268,6 +303,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private string ParseTerminator(string terminator)
+        {
+            return terminator
+                .Replace("\\t", "\t")
+                .Replace("\\n", "\n")
+                .Replace("\\r", "\r")
+                .Replace("\\0", "\0");
+        }
+
         public override object Clone()
         {
             var clone = new OpenRowsetBulkNode();
@@ -279,6 +323,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.FirstRow = FirstRow;
             clone.LastRow = LastRow;
             clone.CodePage = CodePage;
+            clone.RowTerminator = RowTerminator;
+            clone.FieldTerminator = FieldTerminator;
+            clone.FieldQuote = FieldQuote;
+            clone.EscapeChar = EscapeChar;
             return clone;
         }
     }

@@ -5929,12 +5929,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (reference is BulkOpenRowset openRowset)
             {
                 // Check for any options that we don't support
+                var errors = new List<Sql4CdsError>();
+                var suggestion = (string)null;
+
                 foreach (var option in openRowset.Options)
                 {
                     if (option.OptionKind == BulkInsertOptionKind.BatchSize ||
                         option.OptionKind == BulkInsertOptionKind.CheckConstraints ||
                         option.OptionKind == BulkInsertOptionKind.DataFileType ||
-                        option.OptionKind == BulkInsertOptionKind.FieldTerminator ||
                         option.OptionKind == BulkInsertOptionKind.FireTriggers ||
                         option.OptionKind == BulkInsertOptionKind.FormatFile ||
                         option.OptionKind == BulkInsertOptionKind.KeepIdentity ||
@@ -5942,7 +5944,6 @@ namespace MarkMpn.Sql4Cds.Engine
                         option.OptionKind == BulkInsertOptionKind.KilobytesPerBatch ||
                         option.OptionKind == BulkInsertOptionKind.MaxErrors ||
                         option.OptionKind == BulkInsertOptionKind.RowsPerBatch ||
-                        option.OptionKind == BulkInsertOptionKind.RowTerminator ||
                         option.OptionKind == BulkInsertOptionKind.TabLock ||
                         option.OptionKind == BulkInsertOptionKind.ErrorFile ||
                         option.OptionKind == BulkInsertOptionKind.NoTriggers ||
@@ -5951,21 +5952,24 @@ namespace MarkMpn.Sql4Cds.Engine
                         option.OptionKind == BulkInsertOptionKind.DataSource ||
                         option.OptionKind == BulkInsertOptionKind.FormatDataSource ||
                         option.OptionKind == BulkInsertOptionKind.ErrorDataSource ||
-                        option.OptionKind == BulkInsertOptionKind.FieldQuote ||
-                        option.OptionKind == BulkInsertOptionKind.EscapeChar ||
                         option.OptionKind == BulkInsertOptionKind.DataCompression ||
                         option.OptionKind == BulkInsertOptionKind.ParserVersion ||
                         option.OptionKind == BulkInsertOptionKind.HeaderRow ||
                         option.OptionKind == BulkInsertOptionKind.RowsetOptions)
-                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(option, option.OptionKind.ToString().ToUpperInvariant()));
+                    {
+                        errors.Add(Sql4CdsError.NotSupported(option, option.OptionKind.ToString().ToUpperInvariant()));
+                    }
                 }
 
                 if (openRowset.DataFiles.Count != 1)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(openRowset)) { Suggestion = "Only a single data file is supported" };
+                {
+                    errors.Add(Sql4CdsError.NotSupported(openRowset));
+                    suggestion = "Only a single data file is supported";
+                }
 
                 // Check we have the required information
                 if (openRowset.Alias == null)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.OpenRowsetBulkMissingCorrelationName(openRowset));
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMissingCorrelationName(openRowset));
 
                 var format = openRowset.Options
                     .OfType<LiteralBulkInsertOption>()
@@ -5976,16 +5980,19 @@ namespace MarkMpn.Sql4Cds.Engine
                     .ToList();
 
                 if (singleOptions.Count > 1)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.OpenRowsetBulkMultipleSingleOptions(openRowset));
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMultipleSingleOptions(openRowset));
 
-                if (format != null && singleOptions.Count == 1)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.OpenRowsetBulkCombinedFormatAndSingleOption(openRowset));
+                if (format != null && singleOptions.Count > 0)
+                    errors.Add(Sql4CdsError.OpenRowsetBulkCombinedFormatAndSingleOption(openRowset));
 
                 if (format != null && (openRowset.WithColumns == null || openRowset.WithColumns.Count == 0))
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.OpenRowsetBulkMissingSchema(openRowset, format.Value.Value));
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMissingSchema(openRowset, format.Value.Value));
 
                 if (format == null && singleOptions.Count == 0)
-                    throw new NotSupportedQueryFragmentException(Sql4CdsError.OpenRowsetBulkMissingSchema(openRowset, ""));
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMissingSchema(openRowset, ""));
+
+                if (errors.Count > 0)
+                    throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = suggestion };
 
                 var source = new OpenRowsetBulkNode();
                 source.Filename = openRowset.DataFiles[0].Value;
@@ -6008,6 +6015,26 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (codePage != null)
                     source.CodePage = codePage.Value.Value;
+
+                var rowTerminator = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.RowTerminator);
+
+                if (rowTerminator != null)
+                    source.RowTerminator = rowTerminator.Value.Value;
+
+                var fieldTerminator = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.FieldTerminator);
+
+                if (fieldTerminator != null)
+                    source.FieldTerminator = fieldTerminator.Value.Value;
+
+                var fieldQuote = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.FieldQuote);
+
+                if (fieldQuote != null)
+                    source.FieldQuote = fieldQuote.Value.Value;
+
+                var escapeChar = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.EscapeChar);
+
+                if (escapeChar != null)
+                    source.EscapeChar = escapeChar.Value.Value;
 
                 return source;
             }
