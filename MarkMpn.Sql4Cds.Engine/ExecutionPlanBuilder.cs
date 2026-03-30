@@ -5942,10 +5942,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         option.OptionKind == BulkInsertOptionKind.KeepIdentity ||
                         option.OptionKind == BulkInsertOptionKind.KeepNulls ||
                         option.OptionKind == BulkInsertOptionKind.KilobytesPerBatch ||
-                        option.OptionKind == BulkInsertOptionKind.MaxErrors ||
                         option.OptionKind == BulkInsertOptionKind.RowsPerBatch ||
                         option.OptionKind == BulkInsertOptionKind.TabLock ||
-                        option.OptionKind == BulkInsertOptionKind.ErrorFile ||
                         option.OptionKind == BulkInsertOptionKind.NoTriggers ||
                         option.OptionKind == BulkInsertOptionKind.Order ||
                         option.OptionKind == BulkInsertOptionKind.IncludeHidden ||
@@ -5997,44 +5995,35 @@ namespace MarkMpn.Sql4Cds.Engine
                 var source = new OpenRowsetBulkNode();
                 source.Filename = openRowset.DataFiles[0].Value;
                 source.Alias = openRowset.Alias.Value;
-                source.Format = format?.Value.Value;
                 source.SingleOption = singleOptions.Count == 0 ? (BulkInsertOptionKind?)null : singleOptions[0].OptionKind;
                 source.Schema = openRowset.WithColumns;
 
-                var firstRow = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.FirstRow);
+                // Set other properties from the options dynamically.
+                foreach (var option in openRowset.Options.OfType<LiteralBulkInsertOption>())
+                {
+                    if (option.OptionKind == BulkInsertOptionKind.SingleBlob ||
+                        option.OptionKind == BulkInsertOptionKind.SingleClob ||
+                        option.OptionKind == BulkInsertOptionKind.SingleNClob)
+                    {
+                        // These properties are handled as special cases above
+                        continue;
+                    }
 
-                if (firstRow != null)
-                    source.FirstRow = Int32.Parse(firstRow.Value.Value);
-
-                var lastRow = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.LastRow);
-
-                if (lastRow != null)
-                    source.LastRow = Int32.Parse(lastRow.Value.Value);
-
-                var codePage = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.CodePage);
-
-                if (codePage != null)
-                    source.CodePage = codePage.Value.Value;
-
-                var rowTerminator = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.RowTerminator);
-
-                if (rowTerminator != null)
-                    source.RowTerminator = rowTerminator.Value.Value;
-
-                var fieldTerminator = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.FieldTerminator);
-
-                if (fieldTerminator != null)
-                    source.FieldTerminator = fieldTerminator.Value.Value;
-
-                var fieldQuote = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.FieldQuote);
-
-                if (fieldQuote != null)
-                    source.FieldQuote = fieldQuote.Value.Value;
-
-                var escapeChar = openRowset.Options.OfType<LiteralBulkInsertOption>().SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.EscapeChar);
-
-                if (escapeChar != null)
-                    source.EscapeChar = escapeChar.Value.Value;
+                    var prop = source.GetType().GetProperty(option.OptionKind.ToString());
+                    if (prop != null)
+                    {
+                        if (prop.PropertyType == typeof(string))
+                            prop.SetValue(source, option.Value.Value);
+                        else if (prop.PropertyType == typeof(int))
+                            prop.SetValue(source, Int32.Parse(option.Value.Value));
+                        else
+                            throw new NotImplementedException($"Cannot set property of type '{prop.PropertyType}'");
+                    }
+                    else
+                    {
+                        throw new NotImplementedException($"Property not found '{option.OptionKind}'");
+                    }
+                }
 
                 return source;
             }

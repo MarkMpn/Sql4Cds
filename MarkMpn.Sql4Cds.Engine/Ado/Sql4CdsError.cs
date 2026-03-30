@@ -981,6 +981,16 @@ namespace MarkMpn.Sql4Cds.Engine
             return Create(13822, null, Collation.USEnglish.ToSqlString(filename));
         }
 
+        internal static Sql4CdsError OpenRowsetBulkMaxErrorsReached(int maxErrors)
+        {
+            return Create(4865, null, (SqlInt32)maxErrors);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkErrorWritingFile(string filename, string error)
+        {
+            return Create(4870, null, Collation.USEnglish.ToSqlString(filename), Collation.USEnglish.ToSqlString(error));
+        }
+
         private static string GetTypeName(DataTypeReference type)
         {
             if (type is SqlDataTypeReference sqlType)

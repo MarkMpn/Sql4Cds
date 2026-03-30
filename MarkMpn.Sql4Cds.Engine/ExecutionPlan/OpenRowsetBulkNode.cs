@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("OpenRowset")]
         [Description("The format of the file to load")]
-        public string Format { get; set; }
+        public string DataFileFormat { get; set; }
 
         /// <summary>
         /// Indicates if the file is to be read as a single value
@@ -100,6 +100,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("OpenRowset")]
         [Description("Specifies a character that is used to escape the quote character in the CSV file")]
         public string EscapeChar { get; set; } = "\"";
+
+        /// <summary>
+        /// Specifies the maximum number of syntax errors or nonconforming rows, which can occur before OPENROWSET throws an exception
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("Specifies the maximum number of syntax errors or nonconforming rows, which can occur before OPENROWSET throws an exception")]
+        public int MaxErrors { get; set; } = 10;
+
+        /// <summary>
+        /// Specifies the file used to collect rows that have formatting errors
+        /// </summary>
+        [Category("OpenRowset")]
+        [Description("Specifies the file used to collect rows that have formatting errors")]
+        public string ErrorFile { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -207,42 +221,67 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 csvConfig.Quote = FieldQuote[0];
                 csvConfig.Escape = EscapeChar[0];
 
-                foreach (var filename in EnumerateFiles(dir, file))
+                var errors = 0;
+
+                using (var errorsWriter = OpenWriter(ErrorFile))
+                using (var logWriter = OpenWriter(String.IsNullOrEmpty(ErrorFile) ? ErrorFile : Path.ChangeExtension(ErrorFile, ".ERROR.txt")))
                 {
-                    using (var reader = new StreamReader(OpenFile(filename), GetEncoding()))
-                    using (var csv = new CsvReader(reader, csvConfig))
+                    foreach (var filename in EnumerateFiles(dir, file))
                     {
-                        var rowNum = 0;
-
-                        while (csv.Read())
+                        using (var reader = new StreamReader(OpenFile(filename), GetEncoding()))
+                        using (var csv = new CsvParser(reader, csvConfig))
                         {
-                            rowNum++;
+                            var rowNum = 0;
 
-                            if (rowNum < FirstRow)
-                                continue;
-
-                            if (LastRow > 0 && rowNum > LastRow)
-                                break;
-
-                            var record = new Entity();
-
-                            for (var i = 0; i < Schema.Count; i++)
+                            while (csv.Read())
                             {
-                                var col = Schema[i];
-                                var escapedName = col.ColumnIdentifier.Value.EscapeIdentifier();
-                                var value = csv.GetField(i);
+                                rowNum++;
 
-                                // TODO: If we're using the RAW code page and loading into a string column, we need to
-                                // re-interpret the bytes we've loaded into the string using the encoding for this column.
+                                if (rowNum < FirstRow)
+                                    continue;
 
-                                // Convert the value to a SqlString, then to the target type
-                                var sqlValue = SqlTypeConverter.NetToSqlType(context.PrimaryDataSource, value, nvarcharmax);
-                                sqlValue = SqlTypeConverter.GetConversion(nvarcharmax, col.DataType)(sqlValue, eec);
+                                if (LastRow > 0 && rowNum > LastRow)
+                                    break;
 
-                                record[escapedAlias + "." + escapedName] = sqlValue;
+                                var record = new Entity();
+                                var valid = true;
+
+                                try
+                                {
+                                    for (var i = 0; i < Schema.Count; i++)
+                                    {
+                                        var col = Schema[i];
+                                        var escapedName = col.ColumnIdentifier.Value.EscapeIdentifier();
+                                        var value = csv[i];
+
+                                        // TODO: If we're using the RAW code page and loading into a string column, we need to
+                                        // re-interpret the bytes we've loaded into the string using the encoding for this column.
+
+                                        // Convert the value to a SqlString, then to the target type
+                                        var sqlValue = SqlTypeConverter.NetToSqlType(context.PrimaryDataSource, value, nvarcharmax);
+                                        sqlValue = SqlTypeConverter.GetConversion(nvarcharmax, col.DataType)(sqlValue, eec);
+
+                                        record[escapedAlias + "." + escapedName] = sqlValue;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    errors++;
+                                    valid = false;
+
+                                    if (errorsWriter != null)
+                                        errorsWriter.Write(csv.RawRecord);
+
+                                    if (logWriter != null)
+                                        logWriter.WriteLine($"File: {filename}, Row: {rowNum}, Error: {ex.Message}");
+
+                                    if (errors == MaxErrors)
+                                        throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkMaxErrorsReached(MaxErrors), ex);
+                                }
+
+                                if (valid)
+                                    yield return record;
                             }
-
-                            yield return record;
                         }
                     }
                 }
@@ -284,6 +323,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private StreamWriter OpenWriter(string filename)
+        {
+            if (String.IsNullOrEmpty(filename))
+                return null;
+
+            try
+            {
+                var stream = File.Open(filename, FileMode.CreateNew, FileAccess.Write);
+                return new StreamWriter(stream, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(Sql4CdsError.OpenRowsetBulkErrorWritingFile(filename, ex.Message), ex);
+            }
+        }
+
         private Encoding GetEncoding()
         {
             switch (CodePage)
@@ -317,7 +372,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var clone = new OpenRowsetBulkNode();
             clone.Filename = Filename;
             clone.Alias = Alias;
-            clone.Format = Format;
+            clone.DataFileFormat = DataFileFormat;
             clone.SingleOption = SingleOption;
             clone.Schema = Schema;
             clone.FirstRow = FirstRow;
@@ -327,6 +382,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.FieldTerminator = FieldTerminator;
             clone.FieldQuote = FieldQuote;
             clone.EscapeChar = EscapeChar;
+            clone.MaxErrors = MaxErrors;
+            clone.ErrorFile = ErrorFile;
             return clone;
         }
     }

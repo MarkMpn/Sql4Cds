@@ -426,5 +426,140 @@ WITH (
                 }
             }
         }
+
+        [TestMethod]
+        public void ReadCsvSkipsErrors()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_Errors.csv");
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', FIRSTROW=2) 
+WITH (
+    Name varchar(100),
+    Latitude float,
+    Longitude float,
+    Address varchar(max),
+    Icon varchar(100)
+) AS t";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    // Check column names
+                    Assert.AreEqual("Name", reader.GetName(0));
+                    Assert.AreEqual("Latitude", reader.GetName(1));
+                    Assert.AreEqual("Longitude", reader.GetName(2));
+                    Assert.AreEqual("Address", reader.GetName(3));
+                    Assert.AreEqual("Icon", reader.GetName(4));
+
+                    // Both data rows should be skipped due to default MAXERRORS=10
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MaxErrors()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_Errors.csv");
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', FIRSTROW=2, MAXERRORS=1) 
+WITH (
+    Name varchar(100),
+    Latitude float,
+    Longitude float,
+    Address varchar(max),
+    Icon varchar(100)
+) AS t";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    // Check column names
+                    Assert.AreEqual("Name", reader.GetName(0));
+                    Assert.AreEqual("Latitude", reader.GetName(1));
+                    Assert.AreEqual("Longitude", reader.GetName(2));
+                    Assert.AreEqual("Address", reader.GetName(3));
+                    Assert.AreEqual("Icon", reader.GetName(4));
+
+                    var ex = Assert.Throws<Sql4CdsException>(() => reader.Read());
+                    Assert.AreEqual(4865, ex.Number);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void LogErrors()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_Errors.csv");
+            var errorFile = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_Errors.Errors.csv");
+            var errorLog = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources", "OPENROWSET_Errors.Errors.ERROR.txt");
+
+            if (File.Exists(errorFile))
+                File.Delete(errorFile);
+
+            if (File.Exists(errorLog))
+                File.Delete(errorLog);
+
+            try
+            {
+                using (var con = new Sql4CdsConnection(_localDataSources))
+                using (var cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = $@"
+SELECT * FROM OPENROWSET(BULK '{path}', FORMAT='CSV', FIRSTROW=2, ERRORFILE='{errorFile}') 
+WITH (
+    Name varchar(100),
+    Latitude float,
+    Longitude float,
+    Address varchar(max),
+    Icon varchar(100)
+) AS t";
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        // Check column names
+                        Assert.AreEqual("Name", reader.GetName(0));
+                        Assert.AreEqual("Latitude", reader.GetName(1));
+                        Assert.AreEqual("Longitude", reader.GetName(2));
+                        Assert.AreEqual("Address", reader.GetName(3));
+                        Assert.AreEqual("Icon", reader.GetName(4));
+
+                        // Both data rows should be skipped due to default MAXERRORS=10
+                        Assert.IsFalse(reader.Read());
+                    }
+                }
+
+                // Error file should contain the same rows as the input file except for the header line
+                using (var reader = new StreamReader(path))
+                {
+                    // Skip the first line
+                    reader.ReadLine();
+
+                    Assert.AreEqual(reader.ReadToEnd(), File.ReadAllText(errorFile));
+                }
+
+                // Error log should contain two lines with the source line numbers and error details
+                using (var reader = new StreamReader(errorLog))
+                {
+                    var line = reader.ReadLine();
+                    Assert.AreEqual($"File: {path}, Row: 2, Error: Error converting data type nvarchar to float.", line);
+
+                    line = reader.ReadLine();
+                    Assert.AreEqual($"File: {path}, Row: 3, Error: Error converting data type nvarchar to float.", line);
+
+                    line = reader.ReadLine();
+                    Assert.IsNull(line);
+                }
+            }
+            finally
+            {
+                if (File.Exists(errorFile))
+                    File.Delete(errorFile);
+
+                if (File.Exists(errorLog))
+                    File.Delete(errorLog);
+            }
+        }
     }
 }
