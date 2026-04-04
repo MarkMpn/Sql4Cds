@@ -43,6 +43,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }.AsReadOnly()
             };
+            _cache["ExpandoMessage"] = new Message
+            {
+                Name = "ExpandoMessage",
+                InputParameters = new List<MessageParameter>().AsReadOnly(),
+                OutputParameters = new List<MessageParameter>
+                {
+                    new MessageParameter
+                    {
+                        Name = "Results",
+                        Position = 0,
+                        Type = typeof(EntityCollection),
+                        OTC = null
+                    }
+                }.AsReadOnly()
+            };
             _cache["SetState"] = new Message
             {
                 Name = "SetState",
