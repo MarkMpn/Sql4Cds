@@ -1840,6 +1840,16 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return Guid.NewGuid();
         }
+
+        [SqlFunction(IsDeterministic = false)]
+        [MaxLength(1024)]
+        public static SqlString Filename(OpenRowsetBulkContext context, ExpressionExecutionContext eec)
+        {
+            if (context.IsNull)
+                return SqlString.Null;
+
+            return new SqlString(context.Filename, eec.PrimaryDataSource.DefaultCollation.LCID, eec.PrimaryDataSource.DefaultCollation.CompareOptions);
+        }
     }
 
     /// <summary>

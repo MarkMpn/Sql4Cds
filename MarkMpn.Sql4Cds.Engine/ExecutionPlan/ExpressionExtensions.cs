@@ -188,6 +188,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = ToExpression(callTarget, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             else if (expr is DistinctPredicate distinct)
                 expression = ToExpression(distinct, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
+            else if (expr is MultiPartIdentifierCallTarget mpiCallTarget)
+                expression = ToExpression(mpiCallTarget, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey);
             else
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(expr)) { Suggestion = "Unhandled expression type" };
 
@@ -1549,6 +1551,62 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return expr;
         }
 
+        private static Expression ToExpression(this MultiPartIdentifierCallTarget mpiCallTarget, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
+        {
+            // Used for calling functions on a result set returned by OPENROWSET (BULK)
+            // Ensure the context defines the results of the expected name
+            var name = GetContextColumn(mpiCallTarget);
+
+            if (context.Schema == null || !context.Schema.ContainsColumn(name, out var normalizedName))
+            {
+                if (context.Schema == null || !context.Schema.Aliases.TryGetValue(name, out var normalized))
+                {
+                    if (context.NonAggregateSchema != null && context.NonAggregateSchema.ContainsColumn(name, out var nonAggregateName))
+                        throw new NotSupportedQueryFragmentException(Sql4CdsError.NonAggregateColumnReference(mpiCallTarget.MultiPartIdentifier, mpiCallTarget));
+
+                    throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidColumnName(mpiCallTarget.MultiPartIdentifier.ToSql()));
+                }
+
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.AmbiguousColumnName(mpiCallTarget.MultiPartIdentifier.ToSql(), mpiCallTarget))
+                {
+                    Suggestion = $"Did you mean:\r\n{String.Join("\r\n", normalized.Select(c => $"* {c}"))}"
+                };
+            }
+
+            // Update the column reference to use the normalized name
+            if (name != normalizedName)
+            {
+                var normalizedCol = normalizedName.ToColumnReference();
+                mpiCallTarget.MultiPartIdentifier.Identifiers.Clear();
+
+                foreach (var part in normalizedCol.MultiPartIdentifier.Identifiers)
+                    mpiCallTarget.MultiPartIdentifier.Identifiers.Add(part);
+
+                // Final identifier is always @CONTEXT, so remove it
+                mpiCallTarget.MultiPartIdentifier.Identifiers.Remove(mpiCallTarget.MultiPartIdentifier.Identifiers.Last());
+            }
+
+            sqlType = context.Schema.Schema[normalizedName].Type;
+            var returnType = sqlType.ToNetType(out _);
+            cacheKey = $"({GetTypeKey(sqlType, false)})<MultiPartIdentifierCallTarget>";
+
+            if (!createExpression)
+                return null;
+
+            var entity = Expression.Property(contextParam, nameof(ExpressionExecutionContext.Entity));
+            var attr = Expr.Call(
+                () => GetContextColumn(Expr.Arg<MultiPartIdentifierCallTarget>()),
+                Expression.Convert(exprParam, typeof(MultiPartIdentifierCallTarget)));
+            var expr = Expression.Property(entity, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, attr);
+            return Expression.Convert(expr, returnType);
+        }
+
+        private static string GetContextColumn(MultiPartIdentifierCallTarget mpiCallTarget)
+        {
+            var name = mpiCallTarget.MultiPartIdentifier.ToSql() + ".@CONTEXT";
+            return name;
+        }
+
         private static Expression ToExpression(this Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
         {
             var value = unary.InvokeSubExpression(x => x.Expression, x => x.Expression, context, contextParam, exprParam, createExpression, out sqlType, out cacheKey, out var ex);
@@ -2225,6 +2283,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return typeof(SqlXml);
                 }
 
+                if (type is NetUserDataTypeReference netType)
+                {
+                    sqlDataType = null;
+                    return netType.NetType;
+                }
+
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidDataType(type));
             }
 
@@ -2283,7 +2347,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (type == typeof(SqlString))
                 return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource?.DefaultCollation ?? Collation.USEnglish, dataSource?.DefaultCollation != null ? CollationLabel.Implicit : CollationLabel.CoercibleDefault);
 
-            return _netTypeMapping[type];
+            if (_netTypeMapping.TryGetValue(type, out var dtr))
+                return dtr;
+
+            return DataTypeHelpers.Object(type);
         }
 
         private static Expression ToExpression(this ConvertCall convert, ExpressionCompilationContext context, ParameterExpression contextParam, ParameterExpression exprParam, bool createExpression, out DataTypeReference sqlType, out string cacheKey)
@@ -2598,6 +2665,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         /// <summary>
+        /// Gets a list of table call targets referenced in an expression, e.g. <code>t</code> in <code>t.filename()</code> from an OPENROWSET BULK query
+        /// </summary>
+        /// <param name="fragment">The expression to get the list of table call targets from</param>
+        /// <returns>A list of table call target names referenced in the <paramref name="fragment"/></returns>
+        public static IEnumerable<string> GetTableCallTargets(this TSqlFragment fragment)
+        {
+            var visitor = new MultiPartIdentifierCallTargetCollectingVisitor();
+            fragment.Accept(visitor);
+
+            return visitor.CallTargets
+                .Select(target => String.Join(".", target.MultiPartIdentifier.Identifiers.Select(id => id.Value.EscapeIdentifier())))
+                .Distinct();
+        }
+
+        /// <summary>
         /// Parses a column name into a <see cref="ColumnReferenceExpression"/>
         /// </summary>
         /// <param name="colName">The column name to parse</param>
@@ -2711,6 +2793,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (functionVisitor.Functions.Any(f => !f.IsDeterministic(context)))
                 return false;
 
+            if (expr.GetTableCallTargets().Any())
+                return false;
+
             var evaluationContext = new ExpressionExecutionContext(context);
             var value = expr.Compile(context)(evaluationContext);
 
@@ -2763,6 +2848,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             expr.Accept(parameterlessVisitor);
 
             if (parameterlessVisitor.ParameterlessCalls.Any(p => p.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp))
+                return false;
+
+            // Check if all functions in the expression are deterministic
+            var functionVisitor = new FunctionCollectingVisitor();
+            expr.Accept(functionVisitor);
+
+            if (functionVisitor.Functions.Any(f => !f.IsDeterministic(context)))
+                return false;
+
+            if (expr.GetTableCallTargets().Any())
                 return false;
 
             var evaluationContext = new ExpressionExecutionContext(context);

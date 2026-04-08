@@ -17,6 +17,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     class OpenRowsetBulkNode : BaseDataNode
     {
         private const string BulkColumnName = "BulkColumn";
+        private const string ContextColumnName = "@CONTEXT";
+        private static readonly DataTypeReference ContextColumnType = DataTypeHelpers.Object(typeof(OpenRowsetBulkContext));
 
         /// <summary>
         /// The path of the file to open
@@ -155,6 +157,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            // Add a hidden @CONTEXT column to expose filename information to subsequent nodes
+            schema.Add(alias + "." + ContextColumnName, new ColumnDefinition(ContextColumnType, false, false, isVisible: false));
+
             return new NodeSchema(
                 schema,
                 aliases,
@@ -205,6 +210,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
+                record[escapedAlias + "." + ContextColumnName] = new OpenRowsetBulkContext { Filename = Filename, FilenamePattern = Filename };
+
                 yield return record;
             }
             else
@@ -228,6 +235,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     foreach (var filename in EnumerateFiles(dir, file))
                     {
+                        var filenameContext = new OpenRowsetBulkContext { Filename = filename, FilenamePattern = Filename };
+
                         using (var reader = new StreamReader(OpenFile(filename), GetEncoding()))
                         using (var csv = new CsvParser(reader, csvConfig))
                         {
@@ -280,7 +289,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
 
                                 if (valid)
+                                {
+                                    record[escapedAlias + "." + ContextColumnName] = filenameContext;
                                     yield return record;
+                                }
                             }
                         }
                     }
@@ -386,5 +398,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.ErrorFile = ErrorFile;
             return clone;
         }
+    }
+
+    class OpenRowsetBulkContext : INullable
+    {
+        public string Filename { get; set; }
+
+        public string FilenamePattern { get; set; }
+
+        public bool IsNull { get; set; }
+
+        public static OpenRowsetBulkContext Null => new OpenRowsetBulkContext { IsNull = true };
     }
 }

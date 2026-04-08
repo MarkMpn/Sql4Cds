@@ -172,8 +172,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal static Sql4CdsError NonAggregateColumnReference(ColumnReferenceExpression column)
         {
-            var tableName = column.MultiPartIdentifier.Identifiers.Count == 1 ? "" : column.MultiPartIdentifier.Identifiers[column.MultiPartIdentifier.Identifiers.Count - 2].Value;
-            var columnName = column.MultiPartIdentifier.Identifiers[column.MultiPartIdentifier.Identifiers.Count - 1].Value;
+            return NonAggregateColumnReference(column.MultiPartIdentifier, column);
+        }
+
+        internal static Sql4CdsError NonAggregateColumnReference(MultiPartIdentifier identifier, TSqlFragment column)
+        {
+            var tableName = identifier.Identifiers.Count == 1 ? "" : identifier.Identifiers[identifier.Identifiers.Count - 2].Value;
+            var columnName = identifier.Identifiers[identifier.Identifiers.Count - 1].Value;
 
             return Create(8120, column, (SqlInt32)tableName.Length, Collation.USEnglish.ToSqlString(tableName), (SqlInt32)columnName.Length, Collation.USEnglish.ToSqlString(columnName));
         }
@@ -222,6 +227,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError AmbiguousColumnName(ColumnReferenceExpression column)
         {
             var name = column.GetColumnName();
+            return AmbiguousColumnName(name, column);
+        }
+
+        internal static Sql4CdsError AmbiguousColumnName(string name, TSqlFragment column)
+        {
             return Create(209, column, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 

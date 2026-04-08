@@ -561,5 +561,60 @@ WITH (
                     File.Delete(errorLog);
             }
         }
+
+        [TestMethod]
+        public void ReadCsvMultiple()
+        {
+            var basePath = Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "Resources");
+            var path = Path.Combine(basePath, "OPENROWSET*.csv");
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = $@"
+SELECT *, t.filename() AS Filename FROM OPENROWSET(BULK '{path}', FORMAT='CSV', FIRSTROW=2, MAXERRORS=100) 
+WITH (
+    Name varchar(100),
+    Latitude float,
+    Longitude float,
+    Address varchar(max),
+    Icon varchar(100)
+) AS t
+WHERE t.filename() LIKE '%\OPENROWSET.csv' OR t.filename() LIKE '%\OPENROWSET2.csv'";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    // Check column names
+                    Assert.AreEqual("Name", reader.GetName(0));
+                    Assert.AreEqual("Latitude", reader.GetName(1));
+                    Assert.AreEqual("Longitude", reader.GetName(2));
+                    Assert.AreEqual("Address", reader.GetName(3));
+                    Assert.AreEqual("Icon", reader.GetName(4));
+                    Assert.AreEqual("Filename", reader.GetName(5));
+
+                    var filenames = new[] { "OPENROWSET.csv", "OPENROWSET2.csv" };
+
+                    foreach (var filename in filenames)
+                    {
+                        // Check data
+                        Assert.IsTrue(reader.Read());
+                        Assert.AreEqual("Empire State Building", reader.GetString(0));
+                        Assert.AreEqual(40.748817, reader.GetDouble(1));
+                        Assert.AreEqual(-73.985428, reader.GetDouble(2));
+                        Assert.AreEqual("20 W 34th St, New York, NY 10118", reader.GetString(3));
+                        Assert.AreEqual("\\icons\\sol.png", reader.GetString(4));
+                        Assert.AreEqual(Path.Combine(basePath, filename), reader.GetString(5));
+
+                        Assert.IsTrue(reader.Read());
+                        Assert.AreEqual("Statue of Liberty", reader.GetString(0));
+                        Assert.AreEqual(40.689247, reader.GetDouble(1));
+                        Assert.AreEqual(-74.044502, reader.GetDouble(2));
+                        Assert.AreEqual("Liberty Island, New York, NY 10004", reader.GetString(3));
+                        Assert.AreEqual("\\icons\\sol.png", reader.GetString(4));
+                        Assert.AreEqual(Path.Combine(basePath, filename), reader.GetString(5));
+                    }
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }
