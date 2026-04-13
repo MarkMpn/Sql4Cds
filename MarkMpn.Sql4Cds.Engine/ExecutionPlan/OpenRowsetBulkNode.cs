@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using CsvHelper;
 using CsvHelper.Configuration;
@@ -402,9 +403,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
     class OpenRowsetBulkContext : INullable
     {
+        private Regex _filenameRegex;
+
         public string Filename { get; set; }
 
         public string FilenamePattern { get; set; }
+
+        public Regex FilenameRegex
+        {
+            get
+            {
+                if (_filenameRegex == null)
+                {
+                    var regex = Regex.Escape(FilenamePattern)
+                        .Replace("\\*\\*$", "(.*)")
+                        .Replace("\\*", "(.*)");
+
+                    _filenameRegex = new Regex("^" + regex + "$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                }
+
+                return _filenameRegex;
+            }
+        }
 
         public bool IsNull { get; set; }
 
