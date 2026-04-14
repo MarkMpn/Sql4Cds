@@ -949,10 +949,13 @@ namespace MarkMpn.Sql4Cds.XTB
                     if (plan == null)
                         plan = GetRootNode(queryExecution.Node);
 
-                    messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
-                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan?.Sql }, null, null, queryExecution);
-                    index = _params.Offset + plan.Index;
-                    length = plan.Length;
+                    if (plan != null)
+                    {
+                        messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
+                        ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan?.Sql }, null, null, queryExecution);
+                        index = _params.Offset + plan.Index;
+                        length = plan.Length;
+                    }
 
                     if (queryExecution.InnerException != null)
                         error = queryExecution.InnerException;
