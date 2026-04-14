@@ -2362,6 +2362,41 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return expression.Value ? 1 : 0;
         }
+
+        [SqlFunction(IsDeterministic = false)]
+        [MaxLength(1024)]
+        public static SqlString Filename(OpenRowsetBulkContext context, ExpressionExecutionContext eec)
+        {
+            if (context.IsNull)
+                return SqlString.Null;
+
+            return new SqlString(Path.GetFileName(context.Filename), eec.PrimaryDataSource.DefaultCollation.LCID, eec.PrimaryDataSource.DefaultCollation.CompareOptions);
+        }
+
+        [SqlFunction(IsDeterministic = false)]
+        [MaxLength(1024)]
+        public static SqlString FilePath(OpenRowsetBulkContext context, ExpressionExecutionContext eec)
+        {
+            if (context.IsNull)
+                return SqlString.Null;
+
+            return new SqlString(context.Filename, eec.PrimaryDataSource.DefaultCollation.LCID, eec.PrimaryDataSource.DefaultCollation.CompareOptions);
+        }
+
+        [SqlFunction(IsDeterministic = false)]
+        [MaxLength(1024)]
+        public static SqlString FilePath(OpenRowsetBulkContext context, SqlInt32 index, ExpressionExecutionContext eec)
+        {
+            if (context.IsNull || index.IsNull)
+                return SqlString.Null;
+
+            var match = context.FilenameRegex.Match(context.Filename);
+
+            if (!match.Success || match.Groups.Count <= index.Value)
+                return SqlString.Null;
+
+            return new SqlString(match.Groups[index.Value].Value, eec.PrimaryDataSource.DefaultCollation.LCID, eec.PrimaryDataSource.DefaultCollation.CompareOptions);
+        }
     }
 
     /// <summary>

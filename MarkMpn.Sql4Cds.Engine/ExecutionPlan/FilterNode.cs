@@ -484,7 +484,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool CheckStartupExpression()
         {
             // We only need to apply the filter expression to individual rows if it references any fields
-            if (Filter.GetColumns().Any())
+            if (Filter.GetColumns().Any() || Filter.GetTableCallTargets().Any())
                 return false;
 
             return true;
