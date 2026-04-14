@@ -77,6 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
             _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
             _context.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
+            _context.AddGenericFakeMessageExecutor(ExpandoMessageExecutor.MessageName, new ExpandoMessageExecutor());
 
             _service = _context.GetOrganizationService();
             _dataSource = new FakeXrmDataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
