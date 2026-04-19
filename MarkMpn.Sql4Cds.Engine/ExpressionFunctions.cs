@@ -2363,6 +2363,210 @@ namespace MarkMpn.Sql4Cds.Engine
             return expression.Value ? 1 : 0;
         }
 
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Round(SqlInt32 expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlInt32.Null;
+
+            var l = length.Value;
+            var truncate = !function.IsNull && function.Value != 0;
+
+            if (l >= 0)
+                return expression;
+
+            try
+            {
+                var factor = 1m;
+                for (var i = 0; i < -l; i++) factor *= 10m;
+
+                if (truncate)
+                    return checked((int)(System.Math.Truncate(expression.Value / factor) * factor));
+
+                return checked((int)(System.Math.Round(expression.Value / factor, MidpointRounding.AwayFromZero) * factor));
+            }
+            catch (OverflowException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow("expression", DataTypeHelpers.Int, null));
+            }
+        }
+
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Round(SqlInt16 expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlInt32.Null;
+
+            return Round((SqlInt32)expression.Value, length, function);
+        }
+
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt32 Round(SqlByte expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlInt32.Null;
+
+            return Round((SqlInt32)expression.Value, length, function);
+        }
+
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlInt64 Round(SqlInt64 expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlInt64.Null;
+
+            var l = length.Value;
+            var truncate = !function.IsNull && function.Value != 0;
+
+            if (l >= 0)
+                return expression;
+
+            try
+            {
+                var factor = 1m;
+                for (var i = 0; i < -l; i++) factor *= 10m;
+
+                if (truncate)
+                    return checked((long)(System.Math.Truncate(expression.Value / factor) * factor));
+
+                return checked((long)(System.Math.Round(expression.Value / factor, MidpointRounding.AwayFromZero) * factor));
+            }
+            catch (OverflowException)
+            {
+                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow("expression", DataTypeHelpers.BigInt, null));
+            }
+        }
+
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDecimal Round([SourcePrecision][SourceScale] SqlDecimal expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlDecimal.Null;
+
+            return SqlDecimal.Round(expression, length.Value);
+        }
+
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Round(SqlDouble expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlDouble.Null;
+
+            var l = length.Value;
+            var truncate = !function.IsNull && function.Value != 0;
+
+            if (l >= 0)
+            {
+                var factor = System.Math.Pow(10, l);
+
+                return truncate
+                    ? System.Math.Truncate(expression.Value * factor) / factor
+                    : System.Math.Round(expression.Value * factor, MidpointRounding.AwayFromZero) / factor;
+            }
+            else
+            {
+                var factor = System.Math.Pow(10, -l);
+
+                return truncate
+                    ? System.Math.Truncate(expression.Value / factor) * factor
+                    : System.Math.Round(expression.Value / factor, MidpointRounding.AwayFromZero) * factor;
+            }
+        }
+
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlMoney Round(SqlMoney expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlMoney.Null;
+
+            var l = length.Value;
+            var truncate = !function.IsNull && function.Value != 0;
+
+            if (l >= 0)
+            {
+                var factor = 1m;
+                for (var i = 0; i < l; i++) factor *= 10m;
+
+                return new SqlMoney(truncate
+                    ? System.Math.Truncate(expression.Value * factor) / factor
+                    : System.Math.Round(expression.Value * factor, MidpointRounding.AwayFromZero) / factor);
+            }
+            else
+            {
+                var factor = 1m;
+                for (var i = 0; i < -l; i++) factor *= 10m;
+
+                return new SqlMoney(truncate
+                    ? System.Math.Truncate(expression.Value / factor) * factor
+                    : System.Math.Round(expression.Value / factor, MidpointRounding.AwayFromZero) * factor);
+            }
+        }
+
+        /// <summary>
+        /// Returns a numeric value, rounded to the specified length or precision
+        /// </summary>
+        /// <param name="expression">A numeric expression</param>
+        /// <param name="length">The precision to which numeric_expression is to be rounded. Positive rounds decimal places; negative rounds left of the decimal point.</param>
+        /// <param name="function">When 0 or omitted, numeric_expression is rounded. When non-zero, numeric_expression is truncated.</param>
+        /// <returns></returns>
+        [SqlFunction(IsDeterministic = true)]
+        public static SqlDouble Round(SqlSingle expression, SqlInt32 length, [Optional] SqlInt32 function)
+        {
+            if (expression.IsNull || length.IsNull)
+                return SqlDouble.Null;
+
+            return Round((SqlDouble)expression.Value, length, function);
+        }
+
         [SqlFunction(IsDeterministic = false)]
         [MaxLength(1024)]
         public static SqlString Filename(OpenRowsetBulkContext context, ExpressionExecutionContext eec)

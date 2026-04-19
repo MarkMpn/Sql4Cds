@@ -223,6 +223,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Returns the largest integer less than or equal to the specified numeric expression")]
             public abstract double floor(double expression);
+
+            [Description("Returns a numeric value, rounded to the specified length or precision")]
+            public abstract double round(double expression, int length, int function = 0);
         }
     }
 }
