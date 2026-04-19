@@ -179,5 +179,45 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
                 Assert.AreEqual(true, cmd.ExecuteScalar());
             }
         }
+
+        [TestMethod]
+        public void ExpandoMessageNestedEntitySerializesAsWebApiJson()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT Results FROM ExpandoMessage()";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    var json1 = reader.GetString(0);
+
+                    // Should produce flat WebAPI-style JSON, not verbose .NET format with Attributes[]
+                    Assert.IsFalse(json1.Contains("\"Attributes\""), "Row 1: should not contain verbose .NET Entity serialization");
+
+                    var doc1 = System.Text.Json.JsonDocument.Parse(json1);
+                    Assert.AreEqual(false, doc1.RootElement.GetProperty("OneDriveRoot_Error").GetBoolean());
+
+                    // Nested Entity should appear as a JSON object, not serialized with Attributes[]
+                    var user1 = doc1.RootElement.GetProperty("user");
+                    Assert.AreEqual(System.Text.Json.JsonValueKind.Object, user1.ValueKind);
+                    Assert.AreEqual("systemuser", user1.GetProperty("@odata.type").GetString());
+                    Assert.AreEqual("John Doe", user1.GetProperty("__DisplayName__").GetString());
+
+                    Assert.IsTrue(reader.Read());
+                    var json2 = reader.GetString(0);
+
+                    Assert.IsFalse(json2.Contains("\"Attributes\""), "Row 2: should not contain verbose .NET Entity serialization");
+
+                    var doc2 = System.Text.Json.JsonDocument.Parse(json2);
+                    var user2 = doc2.RootElement.GetProperty("user");
+                    Assert.AreEqual(System.Text.Json.JsonValueKind.Object, user2.ValueKind);
+                    Assert.AreEqual("Jane Doe", user2.GetProperty("__DisplayName__").GetString());
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

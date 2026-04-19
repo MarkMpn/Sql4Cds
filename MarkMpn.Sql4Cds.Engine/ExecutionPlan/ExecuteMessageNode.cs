@@ -439,6 +439,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (entity == null)
                 return null;
 
+            return JsonConvert.SerializeObject(BuildAttributeDictionary(entity));
+        }
+
+        private Dictionary<string, object> BuildAttributeDictionary(Entity entity)
+        {
+            if (entity == null)
+                return null;
+
             var values = new Dictionary<string, object>();
 
             if (!String.IsNullOrEmpty(entity.LogicalName))
@@ -465,6 +473,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         values[attribute.Key + "name"] = er.Name;
                         values[attribute.Key + "type"] = er.LogicalName;
                     }
+                    else if (attribute.Value is Entity nestedEntity)
+                    {
+                        values[attribute.Key] = BuildAttributeDictionary(nestedEntity);
+                        continue;
+                    }
+                    else if (attribute.Value is EntityCollection nestedCollection)
+                    {
+                        values[attribute.Key] = nestedCollection.Entities
+                            .Select(e => BuildAttributeDictionary(e))
+                            .ToList();
+                        continue;
+                    }
                     else
                     {
                         values[attribute.Key] = attribute.Value;
@@ -476,7 +496,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            return JsonConvert.SerializeObject(values);
+            return values;
         }
 
         private Entity DeserializeAttributeValues(string s)
