@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlTypes;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -5923,6 +5924,108 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
 
                 return loop;
+            }
+
+            if (reference is BulkOpenRowset openRowset)
+            {
+                // Check for any options that we don't support
+                var errors = new List<Sql4CdsError>();
+                var suggestion = (string)null;
+
+                foreach (var option in openRowset.Options)
+                {
+                    if (option.OptionKind == BulkInsertOptionKind.BatchSize ||
+                        option.OptionKind == BulkInsertOptionKind.CheckConstraints ||
+                        option.OptionKind == BulkInsertOptionKind.DataFileType ||
+                        option.OptionKind == BulkInsertOptionKind.FireTriggers ||
+                        option.OptionKind == BulkInsertOptionKind.FormatFile ||
+                        option.OptionKind == BulkInsertOptionKind.KeepIdentity ||
+                        option.OptionKind == BulkInsertOptionKind.KeepNulls ||
+                        option.OptionKind == BulkInsertOptionKind.KilobytesPerBatch ||
+                        option.OptionKind == BulkInsertOptionKind.RowsPerBatch ||
+                        option.OptionKind == BulkInsertOptionKind.TabLock ||
+                        option.OptionKind == BulkInsertOptionKind.NoTriggers ||
+                        option.OptionKind == BulkInsertOptionKind.Order ||
+                        option.OptionKind == BulkInsertOptionKind.IncludeHidden ||
+                        option.OptionKind == BulkInsertOptionKind.DataSource ||
+                        option.OptionKind == BulkInsertOptionKind.FormatDataSource ||
+                        option.OptionKind == BulkInsertOptionKind.ErrorDataSource ||
+                        option.OptionKind == BulkInsertOptionKind.DataCompression ||
+                        option.OptionKind == BulkInsertOptionKind.ParserVersion ||
+                        option.OptionKind == BulkInsertOptionKind.HeaderRow ||
+                        option.OptionKind == BulkInsertOptionKind.RowsetOptions)
+                    {
+                        errors.Add(Sql4CdsError.NotSupported(option, option.OptionKind.ToString().ToUpperInvariant()));
+                    }
+                }
+
+                if (openRowset.DataFiles.Count != 1)
+                {
+                    errors.Add(Sql4CdsError.NotSupported(openRowset));
+                    suggestion = "Only a single data file is supported";
+                }
+
+                // Check we have the required information
+                if (openRowset.Alias == null)
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMissingCorrelationName(openRowset));
+
+                var format = openRowset.Options
+                    .OfType<LiteralBulkInsertOption>()
+                    .SingleOrDefault(o => o.OptionKind == BulkInsertOptionKind.DataFileFormat);
+
+                var singleOptions = openRowset.Options
+                    .Where(o => o.OptionKind == BulkInsertOptionKind.SingleBlob || o.OptionKind == BulkInsertOptionKind.SingleClob || o.OptionKind == BulkInsertOptionKind.SingleNClob)
+                    .ToList();
+
+                if (singleOptions.Count > 1)
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMultipleSingleOptions(openRowset));
+
+                if (format != null && singleOptions.Count > 0)
+                    errors.Add(Sql4CdsError.OpenRowsetBulkCombinedFormatAndSingleOption(openRowset));
+
+                if (format != null && (openRowset.WithColumns == null || openRowset.WithColumns.Count == 0))
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMissingSchema(openRowset, format.Value.Value));
+
+                if (format == null && singleOptions.Count == 0)
+                    errors.Add(Sql4CdsError.OpenRowsetBulkMissingSchema(openRowset, ""));
+
+                if (errors.Count > 0)
+                    throw new NotSupportedQueryFragmentException(errors.ToArray(), null) { Suggestion = suggestion };
+
+                var source = new OpenRowsetBulkNode();
+                source.Filename = openRowset.DataFiles[0].Value;
+                source.Alias = openRowset.Alias.Value;
+                source.SingleOption = singleOptions.Count == 0 ? (BulkInsertOptionKind?)null : singleOptions[0].OptionKind;
+                source.Schema = openRowset.WithColumns;
+
+                // Set other properties from the options dynamically.
+                foreach (var option in openRowset.Options.OfType<LiteralBulkInsertOption>())
+                {
+                    if (option.OptionKind == BulkInsertOptionKind.SingleBlob ||
+                        option.OptionKind == BulkInsertOptionKind.SingleClob ||
+                        option.OptionKind == BulkInsertOptionKind.SingleNClob)
+                    {
+                        // These properties are handled as special cases above
+                        continue;
+                    }
+
+                    var prop = source.GetType().GetProperty(option.OptionKind.ToString());
+                    if (prop != null)
+                    {
+                        if (prop.PropertyType == typeof(string))
+                            prop.SetValue(source, option.Value.Value);
+                        else if (prop.PropertyType == typeof(int))
+                            prop.SetValue(source, Int32.Parse(option.Value.Value));
+                        else
+                            throw new NotImplementedException($"Cannot set property of type '{prop.PropertyType}'");
+                    }
+                    else
+                    {
+                        throw new NotImplementedException($"Property not found '{option.OptionKind}'");
+                    }
+                }
+
+                return source;
             }
 
             throw new NotSupportedQueryFragmentException(Sql4CdsError.SyntaxError(reference)) { Suggestion = "Unhandled table reference" };

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
+using System.Xml.Linq;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -77,7 +78,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static UserDataTypeReference Object(Type type)
         {
-            return Object(type.FullName);
+            return new NetUserDataTypeReference
+            {
+                Name = new SchemaObjectName { Identifiers = { new Identifier { Value = type.FullName } } },
+                NetType = type
+            };
         }
 
         private static UserDataTypeReference Object(string name)
@@ -842,5 +847,10 @@ namespace MarkMpn.Sql4Cds.Engine
         Binary,
         Other,
         Custom
+    }
+
+    class NetUserDataTypeReference : UserDataTypeReference
+    {
+        public Type NetType { get; set; }
     }
 }

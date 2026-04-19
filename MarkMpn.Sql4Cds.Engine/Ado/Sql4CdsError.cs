@@ -177,8 +177,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal static Sql4CdsError NonAggregateColumnReference(ColumnReferenceExpression column)
         {
-            var tableName = column.MultiPartIdentifier.Identifiers.Count == 1 ? "" : column.MultiPartIdentifier.Identifiers[column.MultiPartIdentifier.Identifiers.Count - 2].Value;
-            var columnName = column.MultiPartIdentifier.Identifiers[column.MultiPartIdentifier.Identifiers.Count - 1].Value;
+            return NonAggregateColumnReference(column.MultiPartIdentifier, column);
+        }
+
+        internal static Sql4CdsError NonAggregateColumnReference(MultiPartIdentifier identifier, TSqlFragment column)
+        {
+            var tableName = identifier.Identifiers.Count == 1 ? "" : identifier.Identifiers[identifier.Identifiers.Count - 2].Value;
+            var columnName = identifier.Identifiers[identifier.Identifiers.Count - 1].Value;
 
             return Create(8120, column, (SqlInt32)tableName.Length, Collation.USEnglish.ToSqlString(tableName), (SqlInt32)columnName.Length, Collation.USEnglish.ToSqlString(columnName));
         }
@@ -227,6 +232,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError AmbiguousColumnName(ColumnReferenceExpression column)
         {
             var name = column.GetColumnName();
+            return AmbiguousColumnName(name, column);
+        }
+
+        internal static Sql4CdsError AmbiguousColumnName(string name, TSqlFragment column)
+        {
             return Create(209, column, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
@@ -954,6 +964,46 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError DerivedTableContainsAggregatesDistinctOrGroupBy(QueryDerivedTable table)
         {
             return Create(4418, table, (SqlInt32)table.Alias.Value.Length, Collation.USEnglish.ToSqlString(table.Alias.Value));
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkMissingCorrelationName(BulkOpenRowset openRowset)
+        {
+            return Create(491, openRowset);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkMultipleSingleOptions(BulkOpenRowset openRowset)
+        {
+            return Create(471, openRowset);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkCombinedFormatAndSingleOption(BulkOpenRowset openRowset)
+        {
+            return Create(5338, openRowset);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkMissingSchema(BulkOpenRowset openRowset, string format)
+        {
+            return Create(15808, openRowset, (SqlInt32)format.Length, Collation.USEnglish.ToSqlString(format));
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkFileDoesNotExist(string filename)
+        {
+            return Create(4860, null, Collation.USEnglish.ToSqlString(filename));
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkFileDoesNotExistOrOpen(string filename)
+        {
+            return Create(13822, null, Collation.USEnglish.ToSqlString(filename));
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkMaxErrorsReached(int maxErrors)
+        {
+            return Create(4865, null, (SqlInt32)maxErrors);
+        }
+
+        internal static Sql4CdsError OpenRowsetBulkErrorWritingFile(string filename, string error)
+        {
+            return Create(4870, null, Collation.USEnglish.ToSqlString(filename), Collation.USEnglish.ToSqlString(error));
         }
 
         private static string GetTypeName(DataTypeReference type)
