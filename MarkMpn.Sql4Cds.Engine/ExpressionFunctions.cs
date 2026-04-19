@@ -2384,7 +2384,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             try
             {
-                var factor = (double)System.Math.Pow(10, -l);
+                var factor = 1m;
+                for (var i = 0; i < -l; i++) factor *= 10m;
 
                 if (truncate)
                     return checked((int)(System.Math.Truncate(expression.Value / factor) * factor));
@@ -2450,7 +2451,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             try
             {
-                var factor = (double)System.Math.Pow(10, -l);
+                var factor = 1m;
+                for (var i = 0; i < -l; i++) factor *= 10m;
 
                 if (truncate)
                     return checked((long)(System.Math.Truncate(expression.Value / factor) * factor));
@@ -2476,48 +2478,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull || length.IsNull)
                 return SqlDecimal.Null;
 
-            var l = length.Value;
-            var truncate = !function.IsNull && function.Value != 0;
-            var value = expression.Value;
-
-            decimal rounded;
-
-            if (l >= 0)
-            {
-                // C# decimal supports at most 28 decimal places; clamp l to avoid ArgumentOutOfRangeException
-                var clampedL = System.Math.Min(l, 28);
-
-                if (truncate)
-                {
-                    // Build the power of 10 using decimal arithmetic to avoid double precision loss
-                    var factor = 1m;
-                    for (var i = 0; i < clampedL; i++) factor *= 10m;
-
-                    rounded = System.Math.Truncate(value * factor) / factor;
-                }
-                else
-                {
-                    rounded = System.Math.Round(value, clampedL, MidpointRounding.AwayFromZero);
-                }
-            }
-            else
-            {
-                var factor = 1m;
-                for (var i = 0; i < -l; i++) factor *= 10m;
-
-                rounded = truncate
-                    ? System.Math.Truncate(value / factor) * factor
-                    : System.Math.Round(value / factor, MidpointRounding.AwayFromZero) * factor;
-            }
-
-            try
-            {
-                return SqlDecimal.ConvertToPrecScale(new SqlDecimal(rounded), expression.Precision, expression.Scale);
-            }
-            catch (OverflowException)
-            {
-                throw new QueryExecutionException(Sql4CdsError.ArithmeticOverflow("expression", DataTypeHelpers.Decimal(expression.Precision, expression.Scale), null));
-            }
+            return SqlDecimal.Round(expression, length.Value);
         }
 
         /// <summary>
