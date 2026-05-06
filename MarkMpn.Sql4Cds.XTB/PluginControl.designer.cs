@@ -51,8 +51,12 @@
             this.powerBIMToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbIncludeFetchXml = new System.Windows.Forms.ToolStripButton();
+            this.toolStripSeparator5 = new System.Windows.Forms.ToolStripSeparator();
+            this.tsbResultsToText = new System.Windows.Forms.ToolStripButton();
+            this.tsbResultsToGrid = new System.Windows.Forms.ToolStripButton();
             this.tssSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbFormat = new System.Windows.Forms.ToolStripSplitButton();
+            this.addDisplayNamesToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.tsbSettings = new System.Windows.Forms.ToolStripButton();
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
             this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
@@ -66,7 +70,6 @@
             this.toolStripSeparator4 = new System.Windows.Forms.ToolStripSeparator();
             this.copyFullPathToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.openContainingFolderToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.addDisplayNamesToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenu.SuspendLayout();
             this.tabContextMenuStrip.SuspendLayout();
             this.SuspendLayout();
@@ -90,14 +93,17 @@
             this.tsbConvertToFetchXMLSplitButton,
             this.toolStripSeparator3,
             this.tsbIncludeFetchXml,
+            this.toolStripSeparator5,
+            this.tsbResultsToText,
+            this.tsbResultsToGrid,
             this.tssSeparator1,
             this.tsbFormat,
             this.tsbSettings,
             this.tslAboutLink});
             this.toolStripMenu.Location = new System.Drawing.Point(0, 0);
             this.toolStripMenu.Name = "toolStripMenu";
-            this.toolStripMenu.Padding = new System.Windows.Forms.Padding(0, 0, 2, 0);
-            this.toolStripMenu.Size = new System.Drawing.Size(861, 25);
+            this.toolStripMenu.Padding = new System.Windows.Forms.Padding(0, 0, 3, 0);
+            this.toolStripMenu.Size = new System.Drawing.Size(1148, 25);
             this.toolStripMenu.TabIndex = 4;
             this.toolStripMenu.Text = "toolStrip1";
             // 
@@ -135,7 +141,7 @@
             this.tscbConnection.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
             this.tscbConnection.Enabled = false;
             this.tscbConnection.Name = "tscbConnection";
-            this.tscbConnection.Size = new System.Drawing.Size(121, 25);
+            this.tscbConnection.Size = new System.Drawing.Size(160, 25);
             this.tscbConnection.ToolTipText = "Available Databases (Ctrl+U)";
             this.tscbConnection.SelectedIndexChanged += new System.EventHandler(this.tscbConnection_SelectedIndexChanged);
             // 
@@ -293,6 +299,35 @@
             this.tsbIncludeFetchXml.ToolTipText = "Display Actual Execution Plan (Ctrl+M)";
             this.tsbIncludeFetchXml.Click += new System.EventHandler(this.tsbIncludeFetchXml_Click);
             // 
+            // toolStripSeparator5
+            // 
+            this.toolStripSeparator5.Name = "toolStripSeparator5";
+            this.toolStripSeparator5.Size = new System.Drawing.Size(6, 25);
+            // 
+            // tsbResultsToText
+            // 
+            this.tsbResultsToText.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbResultsToText.Enabled = false;
+            this.tsbResultsToText.Image = ((System.Drawing.Image)(resources.GetObject("tsbResultsToText.Image")));
+            this.tsbResultsToText.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbResultsToText.Name = "tsbResultsToText";
+            this.tsbResultsToText.Size = new System.Drawing.Size(23, 22);
+            this.tsbResultsToText.Text = "Results to Text";
+            this.tsbResultsToText.Click += new System.EventHandler(this.ToggleResultsOutputType);
+            // 
+            // tsbResultsToGrid
+            // 
+            this.tsbResultsToGrid.Checked = true;
+            this.tsbResultsToGrid.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.tsbResultsToGrid.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbResultsToGrid.Enabled = false;
+            this.tsbResultsToGrid.Image = ((System.Drawing.Image)(resources.GetObject("tsbResultsToGrid.Image")));
+            this.tsbResultsToGrid.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbResultsToGrid.Name = "tsbResultsToGrid";
+            this.tsbResultsToGrid.Size = new System.Drawing.Size(23, 22);
+            this.tsbResultsToGrid.Text = "Results to Grid";
+            this.tsbResultsToGrid.Click += new System.EventHandler(this.ToggleResultsOutputType);
+            // 
             // tssSeparator1
             // 
             this.tssSeparator1.Name = "tssSeparator1";
@@ -311,6 +346,13 @@
             this.tsbFormat.ToolTipText = "Reformat SQL Query";
             this.tsbFormat.ButtonClick += new System.EventHandler(this.tsbFormat_Click);
             // 
+            // addDisplayNamesToolStripMenuItem
+            // 
+            this.addDisplayNamesToolStripMenuItem.Name = "addDisplayNamesToolStripMenuItem";
+            this.addDisplayNamesToolStripMenuItem.Size = new System.Drawing.Size(177, 22);
+            this.addDisplayNamesToolStripMenuItem.Text = "Add Display Names";
+            this.addDisplayNamesToolStripMenuItem.Click += new System.EventHandler(this.addDisplayNamesToolStripMenuItem_Click);
+            // 
             // tsbSettings
             // 
             this.tsbSettings.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.Settings_16x;
@@ -326,7 +368,7 @@
             this.tslAboutLink.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.SQL4CDS_Icon_16;
             this.tslAboutLink.IsLink = true;
             this.tslAboutLink.Name = "tslAboutLink";
-            this.tslAboutLink.Size = new System.Drawing.Size(184, 16);
+            this.tslAboutLink.Size = new System.Drawing.Size(184, 22);
             this.tslAboutLink.Text = "SQL 4 CDS by Mark Carrington";
             this.tslAboutLink.ToolTipText = "Documentation";
             this.tslAboutLink.Click += new System.EventHandler(this.tslAboutLink_Click);
@@ -336,8 +378,9 @@
             this.dockPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.dockPanel.DocumentStyle = WeifenLuo.WinFormsUI.Docking.DocumentStyle.DockingWindow;
             this.dockPanel.Location = new System.Drawing.Point(0, 25);
+            this.dockPanel.Margin = new System.Windows.Forms.Padding(4);
             this.dockPanel.Name = "dockPanel";
-            this.dockPanel.Size = new System.Drawing.Size(861, 478);
+            this.dockPanel.Size = new System.Drawing.Size(1148, 594);
             this.dockPanel.TabIndex = 5;
             this.dockPanel.ActiveDocumentChanged += new System.EventHandler(this.dockPanel_ActiveDocumentChanged);
             // 
@@ -415,22 +458,15 @@
             this.openContainingFolderToolStripMenuItem.Text = "Open Containing Folder";
             this.openContainingFolderToolStripMenuItem.Click += new System.EventHandler(this.openContainingFolderToolStripMenuItem_Click);
             // 
-            // addDisplayNamesToolStripMenuItem
-            // 
-            this.addDisplayNamesToolStripMenuItem.Name = "addDisplayNamesToolStripMenuItem";
-            this.addDisplayNamesToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
-            this.addDisplayNamesToolStripMenuItem.Text = "Add Display Names";
-            this.addDisplayNamesToolStripMenuItem.Click += new System.EventHandler(this.addDisplayNamesToolStripMenuItem_Click);
-            // 
             // PluginControl
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.Controls.Add(this.dockPanel);
             this.Controls.Add(this.toolStripMenu);
-            this.Margin = new System.Windows.Forms.Padding(2, 3, 2, 3);
+            this.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.Name = "PluginControl";
-            this.Size = new System.Drawing.Size(861, 503);
+            this.Size = new System.Drawing.Size(1148, 619);
             this.Load += new System.EventHandler(this.PluginControl_Load);
             this.toolStripMenu.ResumeLayout(false);
             this.toolStripMenu.PerformLayout();
@@ -478,5 +514,8 @@
         private System.Windows.Forms.ToolStripMenuItem saveAsToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem saveAllToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem addDisplayNamesToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator5;
+        private System.Windows.Forms.ToolStripButton tsbResultsToText;
+        private System.Windows.Forms.ToolStripButton tsbResultsToGrid;
     }
 }
