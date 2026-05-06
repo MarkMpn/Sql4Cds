@@ -521,7 +521,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             using (var con = new Sql4CdsConnection(_localDataSources))
             using (var cmd = con.CreateCommand())
             {
-                cmd.CommandText = "SELECT accountid, name, name + 'foo', employees, left(name, 2) FROM account";
+                cmd.CommandText = "SELECT accountid, name, name + 'foo', employees, left(name, 2), left(name, 2) + char(10) FROM account";
 
                 using (var reader = cmd.ExecuteReader(CommandBehavior.SchemaOnly))
                 {
@@ -531,12 +531,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     var stringContcatSize = schema.Rows[2]["ColumnSize"];
                     var employeesSize = schema.Rows[3]["ColumnSize"];
                     var leftSize = schema.Rows[4]["ColumnSize"];
+                    var leftPlusCharSize = schema.Rows[5]["ColumnSize"];
 
                     Assert.AreEqual(16, accountIdSize);
                     Assert.AreEqual(100, nameSize);
                     Assert.AreEqual(103, stringContcatSize);
                     Assert.AreEqual(4, employeesSize);
                     Assert.AreEqual(2, leftSize);
+                    Assert.AreEqual(3, leftPlusCharSize);
                 }
             }
         }

@@ -1103,6 +1103,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
         [SqlFunction(IsDeterministic = true)]
+        [MaxLength(1)]
         public static SqlString Char(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 255)
@@ -1117,6 +1118,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
         [SqlFunction(IsDeterministic = true)]
+        [MaxLength(1)]
         public static SqlString NChar(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 0x10FFFF)
