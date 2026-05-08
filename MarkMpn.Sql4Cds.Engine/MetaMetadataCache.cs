@@ -162,7 +162,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private static OneToManyRelationshipMetadata[] GetAllRelationships()
         {
-
             var attrRelationship = new OneToManyRelationshipMetadata
             {
                 SchemaName = "entity_attributes",
