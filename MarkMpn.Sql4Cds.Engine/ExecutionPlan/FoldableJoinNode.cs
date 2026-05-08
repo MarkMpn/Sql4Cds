@@ -918,7 +918,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var outerReference = $"@Cond{++_nestedLoopCount}";
             var filteredRightSource = new FilterNode
             {
-                Source = rightSource,
+                Source = (IDataExecutionPlanNodeInternal)rightSource.Clone(),
                 Filter = new BooleanComparisonExpression
                 {
                     FirstExpression = rightAttribute,
@@ -934,7 +934,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // If we can't fold the filter down to the data source, there's no benefit from doing this so stick with the
             // original join type
-            if (foldedRightSource == filteredRightSource)
+            if (foldedRightSource == filteredRightSource && !filteredRightSource.HasFoldedToVirtualDataSource)
                 return false;
 
             var nestedLoop = new NestedLoopNode
