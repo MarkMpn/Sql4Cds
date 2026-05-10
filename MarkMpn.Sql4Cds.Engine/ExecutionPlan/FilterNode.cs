@@ -4,8 +4,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -41,6 +39,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
+
+        internal bool HasFoldedToVirtualDataSource { get; private set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
@@ -1580,7 +1580,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Virtual entity providers are unreliable - fold the filters to the FetchXML but keep this
                     // node to filter again if necessary
                     if (originalFilter != null)
+                    {
                         Filter = originalFilter;
+
+                        // Track that we've done this folding so that the FoldableJoinNode.FoldSingleRowJoinToNestedLoop method can know
+                        // we've (potentially) done some optimization here so it can be worth converting the join to a nested loop.
+                        // We can't be sure whether the data source will honour the requested filter, but if it does it can be a large
+                        // performance saving.
+                        HasFoldedToVirtualDataSource = true;
+                    }
                 }
 
                 if (source is MetadataQueryNode meta)
@@ -2412,7 +2420,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 Filter = Filter,
                 StartupExpression = StartupExpression,
-                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                HasFoldedToVirtualDataSource = HasFoldedToVirtualDataSource,
             };
 
             clone.Source.Parent = clone;
