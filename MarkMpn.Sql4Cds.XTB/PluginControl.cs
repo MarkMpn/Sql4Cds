@@ -48,6 +48,9 @@ namespace MarkMpn.Sql4Cds.XTB
             
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
+
+            tsbResultsToGrid.Checked = Settings.Instance.ResultsOutputType == ResultType.Grid;
+            tsbResultsToText.Checked = Settings.Instance.ResultsOutputType == ResultType.Text;
         }
 
         private void ConnectObjectExplorer()
@@ -229,7 +232,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 return;
 
             var query = (SqlQueryControl)dockPanel.ActiveDocument;
-            query.Execute(true, tsbIncludeFetchXml.Checked);
+            query.Execute(true, tsbIncludeFetchXml.Checked, tsbResultsToGrid.Checked ? ResultType.Grid : ResultType.Text);
         }
 
         private void tsbPreviewFetchXml_Click(object sender, EventArgs e)
@@ -238,7 +241,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 return;
 
             var query = (SqlQueryControl)dockPanel.ActiveDocument;
-            query.Execute(false, true);
+            query.Execute(false, true, ResultType.Grid);
         }
 
         private void tsbConnect_Click(object sender, EventArgs e)
@@ -503,6 +506,8 @@ namespace MarkMpn.Sql4Cds.XTB
             tsbChangeConnection.Enabled = sql != null && sql.Connection != null;
             tsbFetchXMLBuilder.Enabled = xml != null;
             tsbFormat.Enabled = formatable != null;
+            tsbResultsToGrid.Enabled = sql != null;
+            tsbResultsToText.Enabled = sql != null;
             SyncStopButton(sender, e);
             SyncExecuteButton(sender, e);
 
@@ -957,6 +962,13 @@ in
         {
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _properties.Show(dockPanel, DockState.DockRightAutoHide);
+        }
+
+        private void ToggleResultsOutputType(object sender, EventArgs e)
+        {
+            tsbResultsToGrid.Checked = sender == tsbResultsToGrid;
+            tsbResultsToText.Checked = sender == tsbResultsToText;
+            Settings.Instance.ResultsOutputType = tsbResultsToGrid.Checked ? ResultType.Grid : ResultType.Text;
         }
     }
 }
