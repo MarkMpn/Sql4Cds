@@ -1193,7 +1193,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             var scriptGenerator = (Func<string>)selectTop1000RowsToolStripMenuItem.Tag;
             var script = scriptGenerator();
             var window = _newQuery(GetService(treeView.SelectedNode), script);
-            window.Execute(true, Settings.Instance.IncludeFetchXml);
+            window.Execute(true, Settings.Instance.IncludeFetchXml, ResultType.Grid);
         }
     }
 }

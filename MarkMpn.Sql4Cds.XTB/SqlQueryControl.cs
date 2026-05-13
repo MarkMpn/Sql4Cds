@@ -18,7 +18,6 @@ using System.Threading.Tasks;
 using System.Web;
 using System.Windows.Forms;
 using AutocompleteMenuNS;
-using Azure.Core;
 using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
@@ -27,20 +26,15 @@ using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.Export.DataStorage;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
-using Microsoft.Extensions.AI;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using Newtonsoft.Json;
-using OpenAI.Chat;
 using ScintillaNET;
-using Windows.Storage.Provider;
 using xrmtb.XrmToolBox.Controls.Controls;
-using XrmToolBox;
 using XrmToolBox.Controls;
 using XrmToolBox.Extensibility;
-using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -52,6 +46,7 @@ namespace MarkMpn.Sql4Cds.XTB
             public bool Execute { get; set; }
             public bool IncludeFetchXml { get; set; }
             public int Offset { get; set; }
+            public ResultType ResultType { get; set; }
             public ManualResetEventSlim Event { get; set; }
             public List<string> Result { get; set; }
         }
@@ -146,6 +141,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private Font _linkFont;
         private BackgroundWorker _exportBackgroundWorker;
         private WebView2 _copilotWebView;
+        private IResultOutput _latestResultOutput;
 
         static SqlQueryControl()
         {
@@ -686,7 +682,7 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
-        public void Execute(bool execute, bool includeFetchXml)
+        public void Execute(bool execute, bool includeFetchXml, ResultType resultType)
         {
             if (Connection == null)
                 return;
@@ -703,7 +699,7 @@ namespace MarkMpn.Sql4Cds.XTB
             if (String.IsNullOrEmpty(sql))
                 sql = _editor.Text;
 
-            _params = new ExecuteParams { Sql = sql, Execute = execute, IncludeFetchXml = includeFetchXml, Offset = offset };
+            _params = new ExecuteParams { Sql = sql, Execute = execute, IncludeFetchXml = includeFetchXml, Offset = offset, ResultType = resultType };
             backgroundWorker.RunWorkerAsync(_params);
         }
 
@@ -761,7 +757,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _command.Cancel();
         }
 
-        private void AddResult(Control results, int rowCount)
+        private void AddResult(Control results)
         {
             if (!tabControl.TabPages.Contains(resultsTabPage))
             {
@@ -770,13 +766,6 @@ namespace MarkMpn.Sql4Cds.XTB
             }
 
             AddControl(results, resultsTabPage);
-
-            _rowCount += rowCount;
-
-            if (_rowCount == 1)
-                rowsLabel.Text = "1 row";
-            else
-                rowsLabel.Text = $"{_rowCount:N0} rows";
         }
 
         private void AddExecutionPlan(Control executionPlan)
@@ -1116,6 +1105,14 @@ namespace MarkMpn.Sql4Cds.XTB
                 action();
         }
 
+        private T Execute<T>(Func<T> action)
+        {
+            if (InvokeRequired)
+                return (T)Invoke(action);
+            else
+                return action();
+        }
+
         private void backgroundWorker_DoWork(object sender, DoWorkEventArgs e)
         {
             BusyChanged?.Invoke(this, EventArgs.Empty);
@@ -1124,6 +1121,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
             Execute(() =>
             {
+                _latestResultOutput = null;
                 _progressHost.Visible = true;
                 timerLabel.Text = "00:00:00";
                 _stopwatch.Restart();
@@ -1184,46 +1182,25 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     using (var reader = cmd.ExecuteReader())
                     {
-                        while (!reader.IsClosed)
+                        do
                         {
-                            var columnNames = new List<string>();
-                            for (var i = 0; i < reader.FieldCount; i++)
-                                columnNames.Add(reader.GetName(i));
+                            var resultOutput = StartResultOutput(reader, args.ResultType);
+                            _latestResultOutput = resultOutput;
 
-                            var dataTable = new DataTable();
-                            var schemaTable = reader.GetSchemaTable();
-                            var constraintError = false;
-
-                            try
+                            while (reader.Read())
                             {
-                                dataTable.Load(reader);
-                            }
-                            catch (ConstraintException ex)
-                            {
-                                constraintError = true;
-                                foreach (DataRow row in dataTable.Rows)
-                                {
-                                    if (row.HasErrors && row.RowError != null)
-                                        throw new ConstraintException(row.RowError, ex);
-                                }
+                                var row = new object[reader.FieldCount];
+                                reader.GetValues(row);
+                                resultOutput.AddRow(row);
 
-                                throw;
+                                _rowCount++;
                             }
-                            finally
-                            {
-                                if (!constraintError)
-                                {
-                                    for (var i = 0; i < schemaTable.Rows.Count; i++)
-                                        dataTable.Columns[i].ExtendedProperties["Schema"] = schemaTable.Rows[i];
 
-                                    for (var i = 0; i < columnNames.Count; i++)
-                                        dataTable.Columns[i].Caption = String.IsNullOrEmpty(columnNames[i]) ? "(No column name)" : columnNames[i];
-
-                                    Execute(() => ShowResult(null, args, dataTable, null, null));
-                                }
-                            }
-                        }
+                            resultOutput.Complete();
+                        } while (reader.NextResult());
                     }
+
+                    Execute(() => ShowRowCount());
                 }
                 else
                 {
@@ -1232,6 +1209,366 @@ namespace MarkMpn.Sql4Cds.XTB
                     foreach (var query in plan)
                         Execute(() => ShowResult(query, args, null, null, null));
                 }
+            }
+        }
+
+        private IResultOutput StartResultOutput(IDataReader reader, ResultType resultType)
+        {
+            var schema = reader.GetSchemaTable();
+
+            if (resultType == ResultType.Grid)
+            {
+                return new DataGridViewResultOutput(this, schema);
+            }
+            else
+            {
+                return new DataTextResultOutput(this, schema);
+            }
+        }
+
+        class DataGridViewResultOutput : IResultOutput
+        {
+            private readonly SqlQueryControl _query;
+            private readonly DataGridView _grid;
+            private readonly List<object[]> _values;
+            private bool _resizedColumns;
+
+            public DataGridViewResultOutput(SqlQueryControl query, DataTable schema)
+            {
+                _query = query;
+                _values = new List<object[]>();
+                _grid = query.Execute(() =>
+                {
+                    var grid = new DataGridView();
+
+                    grid.AllowUserToAddRows = false;
+                    grid.AllowUserToDeleteRows = false;
+                    grid.AllowUserToOrderColumns = true;
+                    grid.AllowUserToResizeRows = false;
+                    grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
+                    grid.AutoGenerateColumns = false;
+                    grid.BackgroundColor = SystemColors.Window;
+                    grid.BorderStyle = BorderStyle.None;
+                    grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
+                    grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
+                    grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+                    grid.EnableHeadersVisualStyles = false;
+                    grid.ReadOnly = true;
+                    grid.RowHeadersWidth = 24;
+                    grid.ShowEditingIcon = false;
+                    grid.ContextMenuStrip = query.gridContextMenuStrip;
+                    grid.VirtualMode = true;
+                    grid.Tag = _values;
+
+                    if (Settings.Instance.ResultGridFontSize != null)
+                        grid.Font = new Font(grid.Font.FontFamily, Settings.Instance.ResultGridFontSize.Value);
+
+                    for (var i = 0; i < schema.Rows.Count; i++)
+                    {
+                        var header = schema.Rows[i]["ColumnName"] as string;
+
+                        if (String.IsNullOrEmpty(header))
+                            header = "(No column name)";
+
+                        grid.Columns.Add(new DataGridViewTextBoxColumn
+                        {
+                            HeaderText = header,
+                            FillWeight = 1,
+                            Tag = schema.Rows[i],
+                        });
+                    }
+
+                    if (query._linkFont == null)
+                        query._linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
+
+                    grid.CellFormatting += query.FormatCell;
+
+                    var specialPaintingChars = new[] { '\r', '\n', '\t' };
+                    grid.CellPainting += (s, e) =>
+                    {
+                        if (e.Value is string str && str.IndexOfAny(specialPaintingChars) != -1)
+                        {
+                            e.PaintBackground(e.ClipBounds, true);
+
+                            var gv = (DataGridView)s;
+                            var text = str.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
+                            var rect = e.CellBounds;
+                            rect.X += BorderThickness(e.AdvancedBorderStyle.Left);
+                            rect.Y += BorderThickness(e.AdvancedBorderStyle.Top);
+                            rect.Width -= BorderThickness(e.AdvancedBorderStyle.Right) + BorderThickness(e.AdvancedBorderStyle.Left) + gv.Columns[e.ColumnIndex].DividerWidth;
+                            rect.Height -= BorderThickness(e.AdvancedBorderStyle.Bottom) + BorderThickness(e.AdvancedBorderStyle.Top) + gv.Rows[e.RowIndex].DividerHeight;
+                            rect.X += e.CellStyle.Padding.Left;
+                            rect.Y += e.CellStyle.Padding.Top;
+                            rect.Width -= e.CellStyle.Padding.Horizontal + e.CellStyle.Padding.Left;
+                            rect.Height -= e.CellStyle.Padding.Vertical + e.CellStyle.Padding.Top;
+                            var selected = (e.State & DataGridViewElementStates.Selected) != 0;
+                            var textFormatFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.EndEllipsis;
+                            TextRenderer.DrawText(e.Graphics, text, e.CellStyle.Font, rect, selected ? e.CellStyle.SelectionForeColor : e.CellStyle.ForeColor, textFormatFlags);
+                            e.Handled = true;
+                        }
+                    };
+
+                    grid.CellMouseEnter += (s, e) =>
+                    {
+                        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                            return;
+
+                        var gv = (DataGridView)s;
+                        var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                        if (cell.Value is SqlEntityReference er && !er.IsNull ||
+                            cell.Value is SqlXml xml && !xml.IsNull)
+                            gv.Cursor = Cursors.Hand;
+                        else
+                            gv.Cursor = Cursors.Default;
+                    };
+
+                    grid.CellMouseLeave += (s, e) =>
+                    {
+                        var gv = (DataGridView)s;
+                        gv.Cursor = Cursors.Default;
+                    };
+
+                    grid.CellMouseDown += (s, e) =>
+                    {
+                        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                            return;
+
+                        if (e.Button != MouseButtons.Right)
+                            return;
+
+                        var gv = (DataGridView)s;
+                        var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                        if (cell.Selected)
+                            return;
+
+                        gv.CurrentCell = cell;
+                    };
+
+                    grid.CellContentDoubleClick += (s, e) =>
+                    {
+                        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                            return;
+
+                        var gv = (DataGridView)s;
+                        var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                        if (cell.Value is SqlEntityReference er && !er.IsNull)
+                            query.OpenRecord(er);
+                        else if (cell.Value is SqlXml xml && !xml.IsNull)
+                            query.ShowFetchXML(xml.Value);
+                    };
+
+                    grid.RowPostPaint += (s, e) =>
+                    {
+                        var rowIdx = (e.RowIndex + 1).ToString();
+
+                        var centerFormat = new System.Drawing.StringFormat()
+                        {
+                            Alignment = StringAlignment.Far,
+                            LineAlignment = StringAlignment.Center,
+                            FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
+                            Trimming = StringTrimming.EllipsisCharacter
+                        };
+
+                        var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth - 2, e.RowBounds.Height);
+                        e.Graphics.DrawString(rowIdx, query.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
+                    };
+
+                    grid.CellValueNeeded += (s, e) =>
+                    {
+                        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                            return;
+
+                        if (e.RowIndex >= _values.Count)
+                            return;
+
+                        var row = _values[e.RowIndex];
+
+                        if (e.ColumnIndex >= row.Length)
+                            return;
+
+                        e.Value = row[e.ColumnIndex];
+                    };
+
+                    query.AddResult(grid);
+
+                    return grid;
+                });
+            }
+
+            private int BorderThickness(DataGridViewAdvancedCellBorderStyle style)
+            {
+                switch (style)
+                {
+                    case DataGridViewAdvancedCellBorderStyle.None:
+                        return 0;
+                    case DataGridViewAdvancedCellBorderStyle.InsetDouble:
+                    case DataGridViewAdvancedCellBorderStyle.OutsetDouble:
+                        return 2;
+                    default:
+                        return 1;
+                }
+            }
+
+            public void AddRow(object[] values)
+            {
+                _values.Add(values);
+            }
+
+            public void Update()
+            {
+                _query.Execute(() =>
+                {
+                    _grid.RowCount = _values.Count;
+                    if (!_resizedColumns && Settings.Instance.AutoSizeColumns)
+                    {
+                        _grid.AutoResizeColumns();
+                        _resizedColumns = true;
+                    }
+                });
+            }
+
+            public void Complete()
+            {
+                Update();
+            }
+        }
+
+        class DataTextResultOutput : IResultOutput
+        {
+            private readonly SqlQueryControl _query;
+            private readonly DataTable _schema;
+            private readonly int[] _colWidths;
+
+            public DataTextResultOutput(SqlQueryControl query, DataTable schemaTable)
+            {
+                _query = query;
+                _schema = schemaTable;
+
+                // Determine the number of characters that each column requires based on the data type
+                // Limit text columns to 256 characters to follow SSMS defaults
+                _colWidths = new int[schemaTable.Rows.Count];
+
+                for (var i = 0; i < schemaTable.Rows.Count; i++)
+                {
+                    var schema = schemaTable.Rows[i];
+                    var type = (string)schema["DataTypeName"];
+                    var scale = (short)schema["NumericScale"];
+                    var maxLength = schema["ColumnSize"] as int?;
+                    var precision = schema["NumericPrecision"] as short?;
+                    var name = schema["ColumnName"] as string;
+                    int width;
+
+                    switch (type)
+                    {
+                        case "nvarchar":
+                        case "varchar":
+                        case "nchar":
+                        case "char":
+                            width = Math.Min(256, maxLength.Value);
+                            break;
+
+                        case "xml":
+                            width = 256;
+                            break;
+
+                        case "bit":
+                            width = 1;
+                            break;
+
+                        case "date":
+                            width = 10;
+                            break;
+
+                        case "smalldatetime":
+                        case "datetime":
+                            width = 23;
+                            break;
+
+                        case "datetime2":
+                            width = 19 + (scale > 0 ? 1 + scale : 0);
+                            break;
+
+                        case "datetimeoffset":
+                            width = 19 + (scale > 0 ? 1 + scale : 0) + 4;
+                            break;
+
+                        case "time":
+                            width = 8 + (scale > 0 ? 1 + scale : 0);
+                            break;
+
+                        case "numeric":
+                        case "decimal":
+                            width = precision.Value + (scale > 0 ? 1 : 0);
+                            break;
+
+                        case "uniqueidentifier":
+                            width = 36;
+                            break;
+
+                        case "int":
+                            width = 11;
+                            break;
+
+                        case "bigint":
+                            width = 20;
+                            break;
+
+                        case "float":
+                            width = 22;
+                            break;
+
+                        case "money":
+                        case "smallmoney":
+                            width = 21;
+                            break;
+
+                        case "rowversion":
+                            width = 18;
+                            break;
+
+                        default:
+                            throw new NotSupportedException();
+                    }
+
+                    if (name != null)
+                        width = Math.Max(width, name.Length);
+
+                    _colWidths[i] = width;
+                }
+
+                WriteLine(schemaTable.Rows.Cast<DataRow>().Select(c => c["ColumnName"] as string));
+                WriteLine(_colWidths.Select(w => new string('-', w)));
+            }
+
+            public void AddRow(object[] values)
+            {
+                WriteLine(values.Zip(_schema.Rows.Cast<DataRow>(), (v, s) =>
+                {
+                    var dataType = (string)s["DataTypeName"];
+                    var scale = (short)s["NumericScale"];
+                    var cell = ValueFormatter.Format(v, dataType, scale, Settings.Instance.LocalFormatDates);
+                    var str = cell.DisplayValue ?? "";
+                    return str;
+                }));
+            }
+
+            private void WriteLine(IEnumerable<string> values)
+            {
+                _query.Execute(() =>
+                {
+                    _query.AddMessage(-1, 0, String.Join(" ", values.Zip(_colWidths, (v, w) => (v ?? string.Empty).PadRight(w).Substring(0, w))), MessageType.Info);
+                });
+            }
+
+            public void Update()
+            {
+            }
+
+            public void Complete()
+            {
             }
         }
 
@@ -1262,145 +1599,6 @@ namespace MarkMpn.Sql4Cds.XTB
                     var json = JsonConvert.SerializeObject(rows);
                     _params.Result.Add(json);
                 }
-                
-                var grid = new DataGridView();
-
-                grid.AllowUserToAddRows = false;
-                grid.AllowUserToDeleteRows = false;
-                grid.AllowUserToOrderColumns = true;
-                grid.AllowUserToResizeRows = false;
-                grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
-                grid.AutoGenerateColumns = false;
-                grid.BackgroundColor = SystemColors.Window;
-                grid.BorderStyle = BorderStyle.None;
-                grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
-                grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
-                grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-                grid.EnableHeadersVisualStyles = false;
-                grid.ReadOnly = true;
-                grid.RowHeadersWidth = 24;
-                grid.ShowEditingIcon = false;
-                grid.ContextMenuStrip = gridContextMenuStrip;
-                grid.DataSource = results;
-
-                if (Settings.Instance.ResultGridFontSize != null)
-                    grid.Font = new Font(grid.Font.FontFamily, Settings.Instance.ResultGridFontSize.Value);
-
-                foreach (DataColumn col in results.Columns)
-                {
-                    grid.Columns.Add(new DataGridViewTextBoxColumn
-                    {
-                        DataPropertyName = col.ColumnName,
-                        HeaderText = col.Caption,
-                        ValueType = col.DataType,
-                        FillWeight = 1,
-                    });
-                }
-
-                if (_linkFont == null)
-                    _linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
-
-                grid.CellFormatting += FormatCell;
-
-                var specialPaintingChars = new[] { '\r', '\n', '\t' };
-                grid.CellPainting += (s, e) =>
-                {
-                    if (e.Value is string str && str.IndexOfAny(specialPaintingChars) != -1)
-                    {
-                        e.PaintBackground(e.ClipBounds, true);
-
-                        var gv = (DataGridView)s;
-                        var text = str.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
-                        var rect = e.CellBounds;
-                        rect.X += BorderThickness(e.AdvancedBorderStyle.Left);
-                        rect.Y += BorderThickness(e.AdvancedBorderStyle.Top);
-                        rect.Width -= BorderThickness(e.AdvancedBorderStyle.Right) + BorderThickness(e.AdvancedBorderStyle.Left) + gv.Columns[e.ColumnIndex].DividerWidth;
-                        rect.Height -= BorderThickness(e.AdvancedBorderStyle.Bottom) + BorderThickness(e.AdvancedBorderStyle.Top) + gv.Rows[e.RowIndex].DividerHeight;
-                        rect.X += e.CellStyle.Padding.Left;
-                        rect.Y += e.CellStyle.Padding.Top;
-                        rect.Width -= e.CellStyle.Padding.Horizontal + e.CellStyle.Padding.Left;
-                        rect.Height -= e.CellStyle.Padding.Vertical + e.CellStyle.Padding.Top;
-                        var selected = (e.State & DataGridViewElementStates.Selected) != 0;
-                        var textFormatFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.EndEllipsis;
-                        TextRenderer.DrawText(e.Graphics, text, e.CellStyle.Font, rect, selected ? e.CellStyle.SelectionForeColor : e.CellStyle.ForeColor, textFormatFlags);
-                        e.Handled = true;
-                    }
-                };
-
-                grid.CellMouseEnter += (s, e) =>
-                {
-                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
-                        return;
-
-                    var gv = (DataGridView)s;
-                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
-
-                    if (cell.Value is SqlEntityReference er && !er.IsNull ||
-                        cell.Value is SqlXml xml && !xml.IsNull)
-                        gv.Cursor = Cursors.Hand;
-                    else
-                        gv.Cursor = Cursors.Default;
-                };
-
-                grid.CellMouseLeave += (s, e) =>
-                {
-                    var gv = (DataGridView)s;
-                    gv.Cursor = Cursors.Default;
-                };
-
-                grid.CellMouseDown += (s, e) =>
-                {
-                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
-                        return;
-
-                    if (e.Button != MouseButtons.Right)
-                        return;
-
-                    var gv = (DataGridView)s;
-                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
-
-                    if (cell.Selected)
-                        return;
-
-                    gv.CurrentCell = cell;
-                };
-
-                grid.CellContentDoubleClick += (s, e) =>
-                {
-                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
-                        return;
-
-                    var gv = (DataGridView)s;
-                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
-
-                    if (cell.Value is SqlEntityReference er && !er.IsNull)
-                        OpenRecord(er);
-                    else if (cell.Value is SqlXml xml && !xml.IsNull)
-                        ShowFetchXML(xml.Value);
-                };
-
-                if (Settings.Instance.AutoSizeColumns)
-                    grid.DataBindingComplete += (s, e) => ((DataGridView)s).AutoResizeColumns();
-
-                grid.RowPostPaint += (s, e) =>
-                {
-                    var rowIdx = (e.RowIndex + 1).ToString();
-
-                    var centerFormat = new System.Drawing.StringFormat()
-                    {
-                        Alignment = StringAlignment.Far,
-                        LineAlignment = StringAlignment.Center,
-                        FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
-                        Trimming = StringTrimming.EllipsisCharacter
-                    };
-
-                    var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth - 2, e.RowBounds.Height);
-                    e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
-                };
-
-                var rowCount = results.Rows.Count;
-
-                AddResult(grid, rowCount);
             }
             else if (msg != null)
             {
@@ -1461,13 +1659,9 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private void FormatCell(object sender, DataGridViewCellFormattingEventArgs e)
         {
-            var results = sender as DataTable;
-
-            if (sender is DataGridView grid)
-                results = (DataTable)grid.DataSource;
-
-            var col = results.Columns[e.ColumnIndex];
-            var schema = (DataRow)col.ExtendedProperties["Schema"];
+            var grid = (DataGridView)sender;
+            var col = grid.Columns[e.ColumnIndex];
+            var schema = (DataRow)col.Tag;
             var type = (string)schema["DataTypeName"];
             var scale = (short)schema["NumericScale"];
             var cell = ValueFormatter.Format(e.Value, type, scale, Settings.Instance.LocalFormatDates);
@@ -1487,20 +1681,6 @@ namespace MarkMpn.Sql4Cds.XTB
                     e.CellStyle.ForeColor = SystemColors.HotTrack;
                     e.CellStyle.Font = _linkFont;
                 }
-            }
-        }
-
-        private int BorderThickness(DataGridViewAdvancedCellBorderStyle style)
-        {
-            switch (style)
-            {
-                case DataGridViewAdvancedCellBorderStyle.None:
-                    return 0;
-                case DataGridViewAdvancedCellBorderStyle.InsetDouble:
-                case DataGridViewAdvancedCellBorderStyle.OutsetDouble:
-                    return 2;
-                default:
-                    return 1;
             }
         }
 
@@ -1534,6 +1714,16 @@ namespace MarkMpn.Sql4Cds.XTB
         private void timer_Tick(object sender, EventArgs e)
         {
             timerLabel.Text = _stopwatch.Elapsed.ToString(@"hh\:mm\:ss");
+            _latestResultOutput?.Update();
+            ShowRowCount();
+        }
+
+        private void ShowRowCount()
+        {
+            if (_rowCount == 1)
+                rowsLabel.Text = "1 row";
+            else
+                rowsLabel.Text = $"{_rowCount:N0} rows";
         }
 
         private void ResizeLayoutPanel(object sender, EventArgs e)
@@ -1565,18 +1755,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private int GetMinHeight(Control control, int max)
         {
             if (control is DataGridView grid)
-            {
-                var rowCount = grid.Rows.Count;
-
-                if (rowCount == 0 && grid.DataSource is EntityCollection entities)
-                    rowCount = entities.Entities.Count;
-                else if (rowCount == 0 && grid.DataSource is DataTable table)
-                    rowCount = table.Rows.Count;
-                else if (rowCount == 0 && grid.DataSource == null)
-                    grid.DataBindingComplete += (sender, args) => grid.Height = Math.Min(Math.Max(grid.Height, GetMinHeight(grid, max)), max);
-
-                return Math.Min(Math.Max(2, rowCount + 1) * grid.ColumnHeadersHeight + SystemInformation.HorizontalScrollBarHeight, max);
-            }
+                return Math.Min(Math.Max(2, grid.RowCount + 1) * grid.ColumnHeadersHeight + SystemInformation.HorizontalScrollBarHeight, max);
 
             if (control is Scintilla scintilla)
                 return (int)((scintilla.Lines.Count + 1) * scintilla.Styles[Style.Default].Size * 1.6) + 20;
@@ -1738,7 +1917,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _ctrlK = true;
                 return true;
             }
-            else if (keyData == (Keys.Control | Keys.C) && GetFocusedControl(this) is DataGridView grid && grid.DataSource is DataTable table)
+            else if (keyData == (Keys.Control | Keys.C) && GetFocusedControl(this) is DataGridView grid)
             {
                 var data = CopyGrid(grid);
 
@@ -1791,200 +1970,193 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private DataObject CopyGrid(DataGridView grid)
         {
-            if (!(grid.DataSource is DataTable table) ||
-                grid.SortedColumn != null)
+            // The standard ways for getting the selection are very slow for large data sets as the DataGridView copies a lot of
+            // settings on each property access and spends a lot of time setting up formatting etc. that we don't care about for
+            // accessing the raw data. Use reflection to access the internal state of the grid instead. This is made up of two
+            // parts - selectedBandIndexes is a list of row indexes for rows that are completely selected, and individualSelectedCells
+            // are the additional cells that are selected not as part of a full row. Combine these to work out if each individual
+            // cell is selected
+            var allSelected = grid.AreAllCellsSelected(true);
+            var selectedRows = allSelected ? null : (IEnumerable)grid.GetType().GetField("selectedBandIndexes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(grid);
+            var rowIndexes = selectedRows
+                ?.Cast<int>()
+                ?.ToList();
+            rowIndexes?.Sort();
+            var individualSelectedCells = allSelected ? null : (IEnumerable)grid.GetType().GetField("individualSelectedCells", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(grid);
+            var cellCoords = individualSelectedCells
+                ?.Cast<DataGridViewCell>()
+                ?.Select(c => new CellCoordinate { RowIndex = c.RowIndex, ColumnIndex = c.ColumnIndex })
+                ?.ToList();
+            cellCoords?.Sort();
+
+            // Work out the min and max column and row indexes for the bounds of the selection
+            var minRow = allSelected ? 0 : Math.Min(cellCoords == null || cellCoords.Count == 0 ? Int32.MaxValue : cellCoords.Min(c => c.RowIndex), rowIndexes == null || rowIndexes.Count == 0 ? Int32.MaxValue : rowIndexes[0]);
+            var maxRow = allSelected ? grid.RowCount - 1 : Math.Max(cellCoords == null || cellCoords.Count == 0 ? Int32.MinValue : cellCoords.Max(c => c.RowIndex), rowIndexes == null || rowIndexes.Count == 0 ? Int32.MinValue : rowIndexes[rowIndexes.Count - 1]);
+            var minCol = allSelected || rowIndexes.Count > 0 ? 0 : cellCoords == null || cellCoords.Count == 0 ? Int32.MaxValue : cellCoords.Min(c => c.ColumnIndex);
+            var maxCol = allSelected || rowIndexes.Count > 0 ? grid.Columns.Count - 1 : cellCoords == null || cellCoords.Count == 0 ? Int32.MinValue : cellCoords.Max(c => c.ColumnIndex);
+
+            // If nothing is selected, exit early
+            if (minRow > maxRow || minCol > maxCol)
+                return null;
+
+            // Build up the data in three different formats for pasting into different apps
+            var txt = new StringBuilder();
+            var csv = new StringBuilder();
+            var html = new StringBuilder();
+            var specialCsvChars = new[] { '"', ',', '\r', '\n' };
+
+            html.Append("<TABLE>");
+            var firstRow = true;
+
+            if (grid.ClipboardCopyMode == DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText)
             {
-                // The data source should be a data table. If not, use the default logic
-                return grid.GetClipboardContent();
-            }
-            else
-            {
-                // The standard ways for getting the selection are very slow for large data sets as the DataGridView copies a lot of
-                // settings on each property access and spends a lot of time setting up formatting etc. that we don't care about for
-                // accessing the raw data. Use reflection to access the internal state of the grid instead. This is made up of two
-                // parts - selectedBandIndexes is a list of row indexes for rows that are completely selected, and individualSelectedCells
-                // are the additional cells that are selected not as part of a full row. Combine these to work out if each individual
-                // cell is selected
-                var allSelected = grid.AreAllCellsSelected(true);
-                var selectedRows = allSelected ? null : (IEnumerable)grid.GetType().GetField("selectedBandIndexes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(grid);
-                var rowIndexes = selectedRows
-                    ?.Cast<int>()
-                    ?.ToList();
-                rowIndexes?.Sort();
-                var individualSelectedCells = allSelected ? null : (IEnumerable)grid.GetType().GetField("individualSelectedCells", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(grid);
-                var cellCoords = individualSelectedCells
-                    ?.Cast<DataGridViewCell>()
-                    ?.Select(c => new CellCoordinate { RowIndex = c.RowIndex, ColumnIndex = c.ColumnIndex })
-                    ?.ToList();
-                cellCoords?.Sort();
+                // Add the column headers
+                html.Append("<TR>");
 
-                // Work out the min and max column and row indexes for the bounds of the selection
-                var minRow = allSelected ? 0 : Math.Min(cellCoords == null || cellCoords.Count == 0 ? Int32.MaxValue : cellCoords.Min(c => c.RowIndex), rowIndexes == null || rowIndexes.Count == 0 ? Int32.MaxValue : rowIndexes[0]);
-                var maxRow = allSelected ? table.Rows.Count - 1 : Math.Max(cellCoords == null || cellCoords.Count == 0 ? Int32.MinValue : cellCoords.Max(c => c.RowIndex), rowIndexes == null || rowIndexes.Count == 0 ? Int32.MinValue : rowIndexes[rowIndexes.Count - 1]);
-                var minCol = allSelected || rowIndexes.Count > 0 ? 0 : cellCoords == null || cellCoords.Count == 0 ? Int32.MaxValue : cellCoords.Min(c => c.ColumnIndex);
-                var maxCol = allSelected || rowIndexes.Count > 0 ? table.Columns.Count - 1 : cellCoords == null || cellCoords.Count == 0 ? Int32.MinValue : cellCoords.Max(c => c.ColumnIndex);
-
-                // If nothing is selected, exit early
-                if (minRow > maxRow || minCol > maxCol)
-                    return null;
-
-                // Build up the data in three different formats for pasting into different apps
-                var txt = new StringBuilder();
-                var csv = new StringBuilder();
-                var html = new StringBuilder();
-                var specialCsvChars = new[] { '"', ',', '\r', '\n' };
-
-                html.Append("<TABLE>");
-                var firstRow = true;
-
-                if (grid.ClipboardCopyMode == DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText)
+                for (var col = minCol; col <= maxCol; col++)
                 {
-                    // Add the column headers
-                    html.Append("<TR>");
-
-                    for (var col = minCol; col <= maxCol; col++)
+                    if (col > minCol)
                     {
-                        if (col > minCol)
-                        {
-                            txt.Append('\t');
-                            csv.Append(',');
-                        }
-
-                        html.Append("<TH>");
-
-                        var isSelected = allSelected;
-                        if (!isSelected)
-                            isSelected = rowIndexes.Count > 0;
-                        if (!isSelected)
-                            isSelected = cellCoords.Any(c => c.ColumnIndex == col);
-
-                        if (isSelected)
-                        {
-                            var str = grid.Columns[col].HeaderText;
-                            txt.Append(str.Replace('\t', ' '));
-
-                            var requiresCsvEncoding = str.IndexOfAny(specialCsvChars) != -1;
-
-                            if (requiresCsvEncoding)
-                            {
-                                csv.Append('"');
-                                csv.Append(str.Replace("\"", "\"\""));
-                                csv.Append('"');
-                            }
-                            else
-                            {
-                                csv.Append(str);
-                            }
-
-                            html.Append(HttpUtility.HtmlEncode(str));
-                        }
-
-                        html.Append("</TH>");
+                        txt.Append('\t');
+                        csv.Append(',');
                     }
 
-                    html.Append("</TR>");
-                    firstRow = false;
-                }
+                    html.Append("<TH>");
 
-                for (var i = minRow; i <= maxRow; i++)
-                {
-                    var row = table.Rows[i];
-                    html.Append("<TR>");
+                    var isSelected = allSelected;
+                    if (!isSelected)
+                        isSelected = rowIndexes.Count > 0;
+                    if (!isSelected)
+                        isSelected = cellCoords.Any(c => c.ColumnIndex == col);
 
-                    for (var j = minCol; j <= maxCol; j++)
+                    if (isSelected)
                     {
-                        if (j == minCol && !firstRow)
+                        var str = grid.Columns[col].HeaderText;
+                        txt.Append(str.Replace('\t', ' '));
+
+                        var requiresCsvEncoding = str.IndexOfAny(specialCsvChars) != -1;
+
+                        if (requiresCsvEncoding)
                         {
-                            txt.Append(Environment.NewLine);
-                            csv.Append(Environment.NewLine);
+                            csv.Append('"');
+                            csv.Append(str.Replace("\"", "\"\""));
+                            csv.Append('"');
                         }
-                        else if (j > minCol)
+                        else
                         {
-                            txt.Append('\t');
-                            csv.Append(',');
-                        }
-
-                        html.Append("<TD>");
-
-                        var isSelected = allSelected;
-                        if (!isSelected)
-                            isSelected = rowIndexes.BinarySearch(i) >= 0;
-                        if (!isSelected)
-                            isSelected = cellCoords.BinarySearch(new CellCoordinate { RowIndex = i, ColumnIndex = j }) >= 0;
-
-                        if (isSelected)
-                        {
-                            var args = new DataGridViewCellFormattingEventArgs(j, i, row[j], typeof(string), null);
-                            FormatCell(grid, args);
-
-                            var str = args.Value.ToString();
-
-                            // Copying a single cell - don't replace any special characters, just extract the raw text
-                            if (minCol == maxCol && minRow == maxRow)
-                                txt.Append(str);
-                            else
-                                txt.Append(str.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '));
-
-                            var requiresCsvEncoding = str.IndexOfAny(specialCsvChars) != -1;
-
-                            if (requiresCsvEncoding)
-                            {
-                                csv.Append('"');
-                                csv.Append(str.Replace("\"", "\"\""));
-                                csv.Append('"');
-                            }
-                            else
-                            {
-                                csv.Append(str);
-                            }
-
-                            var isLink = false;
-
-                            if (row[j] is SqlEntityReference entityReference && !entityReference.IsNull)
-                            {
-                                var url = GetRecordUrl(entityReference, out _);
-                                html.Append($"<A HREF=\"{url}\">");
-                                isLink = true;
-                            }
-
-                            html.Append(HttpUtility.HtmlEncode(str));
-
-                            if (isLink)
-                                html.Append("</A>");
+                            csv.Append(str);
                         }
 
-                        html.Append("</TD>");
+                        html.Append(HttpUtility.HtmlEncode(str));
                     }
 
-                    html.Append("</TR>");
-                    firstRow = false;
+                    html.Append("</TH>");
                 }
 
-                html.Append("</TABLE>");
-
-                // Add the magic header for copying HTML
-                var htmlBytes = Encoding.UTF8.GetByteCount(html.ToString());
-                var header = "Version:1.0\r\nStartHTML:aaaaaaaaa\r\nEndHTML:bbbbbbbbb\r\nStartFragment:ccccccccc\r\nEndFragment:ddddddddd\r\n";
-                var fragmentHeader = "<HTML>\r\n<BODY>\r\n<!--StartFragment-->";
-                var trailer = "\r\n<!--EndFragment-->\r\n</BODY>\r\n</HTML>";
-
-                header = header.Replace("aaaaaaaaa", header.Length.ToString("000000000", CultureInfo.InvariantCulture));
-                header = header.Replace("bbbbbbbbb", (header.Length + fragmentHeader.Length + htmlBytes + trailer.Length).ToString("000000000", CultureInfo.InvariantCulture));
-                header = header.Replace("ccccccccc", (header.Length + fragmentHeader.Length).ToString("000000000", CultureInfo.InvariantCulture));
-                header = header.Replace("ddddddddd", (header.Length + fragmentHeader.Length + htmlBytes).ToString("000000000", CultureInfo.InvariantCulture));
-
-                html.Insert(0, fragmentHeader);
-                html.Insert(0, header);
-                html.Append(trailer);
-
-                var data = new DataObject();
-                data.SetText(txt.ToString(), TextDataFormat.Text);
-                data.SetText(txt.ToString(), TextDataFormat.UnicodeText);
-                data.SetText(csv.ToString(), TextDataFormat.CommaSeparatedValue);
-                data.SetText(html.ToString(), TextDataFormat.Html);
-
-                return data;
+                html.Append("</TR>");
+                firstRow = false;
             }
+
+            var values = (List<object[]>)grid.Tag;
+
+            for (var i = minRow; i <= maxRow; i++)
+            {
+                var row = values[i];
+                html.Append("<TR>");
+
+                for (var j = minCol; j <= maxCol; j++)
+                {
+                    if (j == minCol && !firstRow)
+                    {
+                        txt.Append(Environment.NewLine);
+                        csv.Append(Environment.NewLine);
+                    }
+                    else if (j > minCol)
+                    {
+                        txt.Append('\t');
+                        csv.Append(',');
+                    }
+
+                    html.Append("<TD>");
+
+                    var isSelected = allSelected;
+                    if (!isSelected)
+                        isSelected = rowIndexes.BinarySearch(i) >= 0;
+                    if (!isSelected)
+                        isSelected = cellCoords.BinarySearch(new CellCoordinate { RowIndex = i, ColumnIndex = j }) >= 0;
+
+                    if (isSelected)
+                    {
+                        var args = new DataGridViewCellFormattingEventArgs(j, i, row[j], typeof(string), null);
+                        FormatCell(grid, args);
+
+                        var str = args.Value.ToString();
+
+                        // Copying a single cell - don't replace any special characters, just extract the raw text
+                        if (minCol == maxCol && minRow == maxRow)
+                            txt.Append(str);
+                        else
+                            txt.Append(str.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '));
+
+                        var requiresCsvEncoding = str.IndexOfAny(specialCsvChars) != -1;
+
+                        if (requiresCsvEncoding)
+                        {
+                            csv.Append('"');
+                            csv.Append(str.Replace("\"", "\"\""));
+                            csv.Append('"');
+                        }
+                        else
+                        {
+                            csv.Append(str);
+                        }
+
+                        var isLink = false;
+
+                        if (row[j] is SqlEntityReference entityReference && !entityReference.IsNull)
+                        {
+                            var url = GetRecordUrl(entityReference, out _);
+                            html.Append($"<A HREF=\"{url}\">");
+                            isLink = true;
+                        }
+
+                        html.Append(HttpUtility.HtmlEncode(str));
+
+                        if (isLink)
+                            html.Append("</A>");
+                    }
+
+                    html.Append("</TD>");
+                }
+
+                html.Append("</TR>");
+                firstRow = false;
+            }
+
+            html.Append("</TABLE>");
+
+            // Add the magic header for copying HTML
+            var htmlBytes = Encoding.UTF8.GetByteCount(html.ToString());
+            var header = "Version:1.0\r\nStartHTML:aaaaaaaaa\r\nEndHTML:bbbbbbbbb\r\nStartFragment:ccccccccc\r\nEndFragment:ddddddddd\r\n";
+            var fragmentHeader = "<HTML>\r\n<BODY>\r\n<!--StartFragment-->";
+            var trailer = "\r\n<!--EndFragment-->\r\n</BODY>\r\n</HTML>";
+
+            header = header.Replace("aaaaaaaaa", header.Length.ToString("000000000", CultureInfo.InvariantCulture));
+            header = header.Replace("bbbbbbbbb", (header.Length + fragmentHeader.Length + htmlBytes + trailer.Length).ToString("000000000", CultureInfo.InvariantCulture));
+            header = header.Replace("ccccccccc", (header.Length + fragmentHeader.Length).ToString("000000000", CultureInfo.InvariantCulture));
+            header = header.Replace("ddddddddd", (header.Length + fragmentHeader.Length + htmlBytes).ToString("000000000", CultureInfo.InvariantCulture));
+
+            html.Insert(0, fragmentHeader);
+            html.Insert(0, header);
+            html.Append(trailer);
+
+            var data = new DataObject();
+            data.SetText(txt.ToString(), TextDataFormat.Text);
+            data.SetText(txt.ToString(), TextDataFormat.UnicodeText);
+            data.SetText(csv.ToString(), TextDataFormat.CommaSeparatedValue);
+            data.SetText(html.ToString(), TextDataFormat.Html);
+
+            return data;
         }
 
         public static Control GetFocusedControl(Control control)
