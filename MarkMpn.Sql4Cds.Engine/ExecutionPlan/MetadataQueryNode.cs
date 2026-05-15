@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public IComparable[] DataMemberOrder { get; set; }
         }
 
-        class AttributeProperty
+        class PolymorphicMetadataProperty
         {
             public string SqlName { get; set; }
             public string PropertyName { get; set; }
@@ -44,21 +44,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         private IDictionary<string, MetadataProperty> _entityCols;
-        private IDictionary<string, AttributeProperty> _attributeCols;
+        private IDictionary<string, PolymorphicMetadataProperty> _attributeCols;
         private IDictionary<string, MetadataProperty> _oneToManyRelationshipCols;
         private IDictionary<string, MetadataProperty> _manyToOneRelationshipCols;
         private IDictionary<string, MetadataProperty> _manyToManyRelationshipCols;
         private IDictionary<string, MetadataProperty> _keyCols;
-        private IDictionary<string, MetadataProperty> _valueCols;
+        private IDictionary<string, PolymorphicMetadataProperty> _valueCols;
 
         private static readonly Dictionary<string, MetadataProperty> _entityProps;
         private static readonly Dictionary<string, MetadataProperty> _oneToManyRelationshipProps;
         private static readonly Dictionary<string, MetadataProperty> _manyToManyRelationshipProps;
         private static readonly Dictionary<string, MetadataProperty> _keyProps;
-        private static readonly Dictionary<string, MetadataProperty> _valueProps;
-        private static readonly MetadataProperty _attributeIdProp;
-        private static readonly Type[] _attributeTypes;
-        private static readonly Dictionary<string, AttributeProperty> _attributeProps;
+        private static readonly Dictionary<string, PolymorphicMetadataProperty> _valueProps;
+        private static readonly Dictionary<string, PolymorphicMetadataProperty> _attributeProps;
         private static readonly string[] _entityNotNullProps;
         private static readonly string[] _attributeNotNullProps;
         private static readonly string[] _oneToManyRelationshipNotNullProps;
@@ -120,13 +118,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
-            _attributeTypes = typeof(AttributeMetadata).Assembly
+            var attributeTypes = typeof(AttributeMetadata).Assembly
                 .GetTypes()
                 .Where(t => typeof(AttributeMetadata).IsAssignableFrom(t) && !t.IsAbstract)
                 .ToArray();
 
             // Combine the properties available from each attribute type
-            _attributeProps = _attributeTypes
+            _attributeProps = attributeTypes
                 .SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => new { Type = t, Property = p }))
                 .Where(p => p.Property.Name != nameof(AttributeMetadata.ExtensionData))
                 .GroupBy(p => p.Property.Name, p => p, StringComparer.OrdinalIgnoreCase)
@@ -134,7 +132,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     // Work out the consistent type for each property
                     DataTypeReference type = null;
-                    var isNullable = g.Count() < _attributeTypes.Length;
+                    var isNullable = g.Count() < attributeTypes.Length;
 
                     foreach (var prop in g)
                     {
@@ -158,7 +156,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var netType = type.ToNetType(out _);
 
-                    return new AttributeProperty
+                    return new PolymorphicMetadataProperty
                     {
                         SqlName = g.Key.ToLowerInvariant(),
                         PropertyName = g.Key,
@@ -172,28 +170,60 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(p => p != null)
                 .ToDictionary(p => p.SqlName, StringComparer.OrdinalIgnoreCase);
 
-            _valueProps = typeof(OptionMetadata)
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.Name != nameof(AttributeMetadata.ExtensionData) && p.PropertyType != typeof(int[]))
-                .Select(p =>
+            // Get a list of all option types
+            var optionTypes = typeof(OptionMetadata).Assembly
+                .GetTypes()
+                .Where(t => typeof(OptionMetadata).IsAssignableFrom(t) && !t.IsAbstract)
+                .ToArray();
+
+            _valueProps = optionTypes
+                .SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => new { Type = t, Property = p }))
+                .Where(p => p.Property.Name != nameof(AttributeMetadata.ExtensionData) && p.Property.PropertyType != typeof(int[]))
+                .GroupBy(p => p.Property.Name, p => p, StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
                 {
-                    var type = GetPropertyType(p.PropertyType);
+                    // Work out the consistent type for each property
+                    DataTypeReference type = null;
+                    var isNullable = g.Count() < optionTypes.Length;
+
+                    foreach (var prop in g)
+                    {
+                        if (type == null)
+                        {
+                            type = GetPropertyType(prop.Property.PropertyType);
+                        }
+                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, GetPropertyType(prop.Property.PropertyType), null, null, null, out type))
+                        {
+                            // Can't make a consistent type for this property, so we can't use it
+                            type = null;
+                            break;
+                        }
+
+                        if (!isNullable && IsNullable(prop.Property.PropertyType))
+                            isNullable = true;
+                    }
+
+                    if (type == null)
+                        return null;
+
                     var netType = type.ToNetType(out _);
 
-                    return new MetadataProperty
+                    return new PolymorphicMetadataProperty
                     {
-                        SqlName = p.Name.ToLowerInvariant(),
-                        PropertyName = p.Name,
-                        Type = p.PropertyType,
+                        SqlName = g.Key.ToLowerInvariant(),
+                        PropertyName = g.Key,
                         SqlType = type,
-                        Accessor = GetPropertyAccessor(p, netType),
-                        DataMemberOrder = GetDataMemberOrder(p)
+                        Type = netType,
+                        Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, netType)),
+                        IsNullable = isNullable,
+                        DataMemberOrder = GetDataMemberOrder(g.First().Property)
                     };
                 })
+                .Where(p => p != null)
                 .ToDictionary(p => p.SqlName, StringComparer.OrdinalIgnoreCase);
 
             // Create a fake property to allow joining options to the parent attribute
-            _attributeIdProp = new MetadataProperty
+            var attributeIdProp = new PolymorphicMetadataProperty
             {
                 DataMemberOrder = new IComparable[]
                 {
@@ -205,7 +235,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SqlType = DataTypeHelpers.UniqueIdentifier,
                 Type = DataTypeHelpers.UniqueIdentifier.ToNetType(out _),
             };
-            _valueProps[_attributeIdProp.SqlName] = _attributeIdProp;
+            _valueProps[attributeIdProp.SqlName] = attributeIdProp;
 
             _entityNotNullProps = _entityProps.Values
                 .Where(p => !IsNullable(p.Type))
@@ -238,7 +268,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToArray();
 
             _valueNotNullProps = _valueProps.Values
-                .Where(p => !IsNullable(p.Type))
+                .Where(p => !p.IsNullable)
                 .Select(p => p.PropertyName)
                 .Union(new[] { nameof(OptionMetadata.Value) })
                 .ToArray();
@@ -347,12 +377,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             _entityCols = new Dictionary<string, MetadataProperty>();
-            _attributeCols = new Dictionary<string, AttributeProperty>();
+            _attributeCols = new Dictionary<string, PolymorphicMetadataProperty>();
             _oneToManyRelationshipCols = new Dictionary<string, MetadataProperty>();
             _manyToOneRelationshipCols = new Dictionary<string, MetadataProperty>();
             _manyToManyRelationshipCols = new Dictionary<string, MetadataProperty>();
             _keyCols = new Dictionary<string, MetadataProperty>();
-            _valueCols = new Dictionary<string, MetadataProperty>();
+            _valueCols = new Dictionary<string, PolymorphicMetadataProperty>();
 
             if (MetadataSource.HasFlag(MetadataSource.Entity))
                 Query.Properties = Query.Properties ?? new MetadataPropertiesExpression();
@@ -660,7 +690,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {
-                var attributeProps = (IEnumerable<AttributeProperty>) _attributeProps.Values;
+                var attributeProps = (IEnumerable<PolymorphicMetadataProperty>) _attributeProps.Values;
 
                 if (Query.AttributeQuery?.Properties != null)
                     attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.AllProperties || Query.AttributeQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
@@ -845,7 +875,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (MetadataSource.HasFlag(MetadataSource.Value))
             {
-                var valueProps = (IEnumerable<MetadataProperty>)_valueProps.Values;
+                var valueProps = (IEnumerable<PolymorphicMetadataProperty>)_valueProps.Values;
 
                 if (_valueCols != null)
                     valueProps = _valueCols.Values;
@@ -1109,6 +1139,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (query.AttributeQuery == null)
                     query.AttributeQuery = new AttributeQueryExpression();
 
+                if (!query.AttributeQuery.Properties.AllProperties && !query.AttributeQuery.Properties.PropertyNames.Contains(nameof(AttributeMetadata.MetadataId)))
+                    query.AttributeQuery.Properties.PropertyNames.Add(nameof(AttributeMetadata.MetadataId));
+
                 if (!query.AttributeQuery.Properties.AllProperties && !query.AttributeQuery.Properties.PropertyNames.Contains(nameof(EnumAttributeMetadata.OptionSet)))
                     query.AttributeQuery.Properties.PropertyNames.Add(nameof(EnumAttributeMetadata.OptionSet));
             }
@@ -1225,7 +1258,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     converted.Id = result.Value.MetadataId ?? Guid.Empty;
 
                     foreach (var prop in _valueCols)
-                        converted[prop.Key] = prop.Value.Accessor(result.Value, eec);
+                    {
+                        if (prop.Value.Accessors == null)
+                        {
+                            converted[prop.Key] = new SqlGuid(result.Attribute.MetadataId.Value);
+                            continue;
+                        }
+
+                        if (!prop.Value.Accessors.TryGetValue(result.Value.GetType(), out var accessor))
+                        {
+                            converted[prop.Key] = SqlTypeConverter.GetNullValue(prop.Value.Type);
+                            continue;
+                        }
+
+                        converted[prop.Key] = accessor(result.Value, eec);
+                    }
                 }
 
                 foreach (var attr in converted.Attributes.ToList())

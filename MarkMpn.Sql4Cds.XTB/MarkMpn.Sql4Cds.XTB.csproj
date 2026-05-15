@@ -75,6 +75,7 @@
     <Compile Include="CopilotScriptObject.cs" />
     <Compile Include="Formatter.cs" />
     <Compile Include="IconColorizer.cs" />
+    <Compile Include="IResultOutput.cs" />
     <Compile Include="MarkdownExtensions.cs" />
     <Compile Include="MessageBoxExt.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
@@ -186,6 +187,7 @@
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="QueryExecutionOptions.cs" />
+    <Compile Include="ResultType.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="SettingsForm.cs">
       <SubType>Form</SubType>
