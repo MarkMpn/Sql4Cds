@@ -61,17 +61,24 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (orgVersion == null)
                     orgVersion = ((RetrieveVersionResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(new RetrieveVersionRequest(), _context._options, "Retrieving server version...")).Version;
 
-                var assembly = typeof(Sql4CdsConnection).Assembly;
-                var assemblyVersion = assembly.GetName().Version;
-                var assemblyCopyright = assembly
-                    .GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false)
-                    .OfType<AssemblyCopyrightAttribute>()
-                    .FirstOrDefault()?
-                    .Copyright;
-                var assemblyFilename = assembly.Location;
-                var assemblyDate = System.IO.File.GetLastWriteTime(assemblyFilename);
+                try
+                {
+                    var assembly = typeof(Sql4CdsConnection).Assembly;
+                    var assemblyVersion = assembly.GetName().Version;
+                    var assemblyCopyright = assembly
+                        .GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false)
+                        .OfType<AssemblyCopyrightAttribute>()
+                        .FirstOrDefault()?
+                        .Copyright;
+                    var assemblyFilename = assembly.Location;
+                    var assemblyDate = System.IO.File.GetLastWriteTime(assemblyFilename);
 
-                return $"Microsoft Dataverse - {orgVersion}\r\n\tSQL 4 CDS - {assemblyVersion}\r\n\t{assemblyDate:MMM dd yyyy HH:mm:ss}\r\n\t{assemblyCopyright}";
+                    return $"Microsoft Dataverse - {orgVersion}\r\n\tSQL 4 CDS - {assemblyVersion}\r\n\t{assemblyCopyright}";
+                }
+                catch
+                {
+                    return $"Microsoft Dataverse - {orgVersion}";
+                }
             }
 
             private SqlString GetServerName()
