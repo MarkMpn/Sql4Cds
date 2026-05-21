@@ -1367,7 +1367,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 linkEntity.AddItem(attr);
             }
 
-            if (attrMetadata.IsPrimaryId == true)
+            if (attrMetadata.IsPrimaryId == true && (!FetchXml.aggregate || !FetchXml.aggregateSpecified))
             {
                 if (attrMetadata.EntityLogicalName == "activitypointer")
                     AddAttribute($"{entityName.EscapeIdentifier()}.activitytypecode", predicate, metadata, out _, out _, out _, out _);
