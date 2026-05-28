@@ -250,6 +250,37 @@ namespace MarkMpn.Sql4Cds.Engine
                         _errorDetails.Pop();
                         _context.Error = _errorDetails.FirstOrDefault();
                     }
+                    else if (node is ExecuteSqlNode exec)
+                    {
+                        using (var cmd = _connection.CreateCommand())
+                        {
+                            var ecc = new ExpressionCompilationContext(_context, null, null);
+                            var eec = new ExpressionExecutionContext(ecc);
+                            var execSql = (SqlString)exec.Statement.ExecuteSpecification.ExecutableEntity.Parameters[0].ParameterValue.Compile(ecc)(eec);
+                            cmd.CommandText = execSql.Value;
+
+                            cmd.StatementCompleted += (s, e) =>
+                            {
+                                _command.OnStatementCompleted(e.Statement, e.RecordsAffected, e.Message);
+                                _connection.Session.GlobalVariableValues["@@ERROR"] = (SqlInt32)0;
+                            };
+
+                            _reader = cmd.ExecuteReader(_behavior);
+
+                            if (_reader.FieldCount > 0)
+                            {
+                                _resultSetsReturned++;
+                                _rows = 0;
+                                _instructionPointer++;
+                                return true;
+                            }
+                            else
+                            {
+                                _reader.Close();
+                                _reader = null;
+                            }
+                        }
+                    }
                     else
                     {
                         throw new NotImplementedException("Unexpected node type " + node.GetType().Name);
@@ -553,6 +584,22 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override bool NextResult()
         {
+            if (_reader != null && _readerQuery == null)
+            {
+                // We have an inner reader from sp_executesql - check if it produces any more result sets first
+                if (_reader.NextResult())
+                {
+                    _resultSetsReturned++;
+                    _rows = 0;
+                    return true;
+                }
+                else
+                {
+                    _reader.Close();
+                    _reader = null;
+                }
+            }
+
             return ExecuteWithExceptionHandling();
         }
 
@@ -600,7 +647,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 _rows++;
             }
-            else
+            else if (_readerQuery != null)
             {
                 _command.OnStatementCompleted(_readerQuery, _rows, $"({_rows} {(_rows == 1 ? "row" : "rows")} affected)");
                 _connection.Session.GlobalVariableValues["@@ERROR"] = (SqlInt32)0;
