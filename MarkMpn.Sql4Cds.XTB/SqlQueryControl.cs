@@ -1182,22 +1182,25 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     using (var reader = cmd.ExecuteReader())
                     {
-                        do
+                        if (!reader.IsClosed)
                         {
-                            var resultOutput = StartResultOutput(reader, args.ResultType);
-                            _latestResultOutput = resultOutput;
-
-                            while (reader.Read())
+                            do
                             {
-                                var row = new object[reader.FieldCount];
-                                reader.GetValues(row);
-                                resultOutput.AddRow(row);
+                                var resultOutput = StartResultOutput(reader, args.ResultType);
+                                _latestResultOutput = resultOutput;
 
-                                _rowCount++;
-                            }
+                                while (reader.Read())
+                                {
+                                    var row = new object[reader.FieldCount];
+                                    reader.GetValues(row);
+                                    resultOutput.AddRow(row);
 
-                            resultOutput.Complete();
-                        } while (reader.NextResult());
+                                    _rowCount++;
+                                }
+
+                                resultOutput.Complete();
+                            } while (reader.NextResult());
+                        }
                     }
 
                     Execute(() => ShowRowCount());
