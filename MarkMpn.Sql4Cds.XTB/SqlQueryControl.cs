@@ -1190,8 +1190,10 @@ namespace MarkMpn.Sql4Cds.XTB
                             while (reader.Read())
                             {
                                 var row = new object[reader.FieldCount];
+                                var providerSpecificRow = new object[reader.FieldCount];
                                 reader.GetValues(row);
-                                resultOutput.AddRow(row);
+                                reader.GetProviderSpecificValues(providerSpecificRow);
+                                resultOutput.AddRow(row, providerSpecificRow);
 
                                 _rowCount++;
                             }
@@ -1226,24 +1228,31 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        class GridRow
+        {
+            public object[] Values { get; set; }
+            public object[] ProviderSpecificValues { get; set; }
+        }
+
         class DataGridViewResultOutput : IResultOutput
         {
             private readonly SqlQueryControl _query;
             private readonly DataGridView _grid;
-            private readonly List<object[]> _values;
+            private readonly List<GridRow> _values;
             private bool _resizedColumns;
+            private DataGridViewColumn _sortedColumn;
 
             public DataGridViewResultOutput(SqlQueryControl query, DataTable schema)
             {
                 _query = query;
-                _values = new List<object[]>();
+                _values = new List<GridRow>();
                 _grid = query.Execute(() =>
                 {
                     var grid = new DataGridView();
 
                     grid.AllowUserToAddRows = false;
                     grid.AllowUserToDeleteRows = false;
-                    grid.AllowUserToOrderColumns = true;
+                    grid.AllowUserToOrderColumns = false;
                     grid.AllowUserToResizeRows = false;
                     grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
                     grid.AutoGenerateColumns = false;
@@ -1386,10 +1395,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
                         var row = _values[e.RowIndex];
 
-                        if (e.ColumnIndex >= row.Length)
+                        if (e.ColumnIndex >= row.Values.Length)
                             return;
 
-                        e.Value = row[e.ColumnIndex];
+                        e.Value = row.Values[e.ColumnIndex];
                     };
 
                     query.AddResult(grid);
@@ -1412,9 +1421,16 @@ namespace MarkMpn.Sql4Cds.XTB
                 }
             }
 
-            public void AddRow(object[] values)
+            public void AddRow(object[] values, object[] providerSpecificValues)
             {
-                _values.Add(values);
+                // Use the standard .NET values by default, but use SqlXml values to allow better formatting
+                for (var i = 0; i < values.Length; i++)
+                {
+                    if (providerSpecificValues[i] is SqlXml xml && !xml.IsNull)
+                        values[i] = xml;
+                }
+
+                _values.Add(new GridRow { Values = values, ProviderSpecificValues = providerSpecificValues });
             }
 
             public void Update()
@@ -1433,6 +1449,60 @@ namespace MarkMpn.Sql4Cds.XTB
             public void Complete()
             {
                 Update();
+
+                _query.Execute(() =>
+                {
+                    _grid.AllowUserToOrderColumns = true;
+                    _grid.ColumnHeaderMouseClick += (s, e) =>
+                    {
+                        var column = _grid.Columns[e.ColumnIndex];
+                        var direction = 1;
+
+                        if (column == _sortedColumn)
+                        {
+                            if (column.HeaderCell.SortGlyphDirection == SortOrder.Ascending)
+                            {
+                                column.HeaderCell.SortGlyphDirection = SortOrder.Descending;
+                                direction = -1;
+                            }
+                            else
+                            {
+                                column.HeaderCell.SortGlyphDirection = SortOrder.Ascending;
+                            }
+                        }
+                        else
+                        {
+                            if (_sortedColumn != null)
+                                _sortedColumn.HeaderCell.SortGlyphDirection = SortOrder.None;
+
+                            column.HeaderCell.SortGlyphDirection = SortOrder.Ascending;
+                            _sortedColumn = column;
+                        }
+
+                        // Sort _values. Make sure the values in the column are of a sortable type
+                        if (_values.Count > 0)
+                        {
+                            var firstValue = _values[0].ProviderSpecificValues[e.ColumnIndex];
+
+                            if (firstValue is IComparable)
+                            {
+                                _values.Sort((x, y) =>
+                                {
+                                    var xValue = (IComparable)x.ProviderSpecificValues[e.ColumnIndex];
+                                    var yValue = (IComparable)y.ProviderSpecificValues[e.ColumnIndex];
+                                    var comparison = xValue.CompareTo(yValue);
+
+                                    return comparison * direction;
+                                });
+                                _grid.Refresh();
+                            }
+                            else
+                            {
+                                column.HeaderCell.SortGlyphDirection = SortOrder.None;
+                            }
+                        }
+                    };
+                });
             }
         }
 
@@ -1543,7 +1613,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 WriteLine(_colWidths.Select(w => new string('-', w)));
             }
 
-            public void AddRow(object[] values)
+            public void AddRow(object[] values, object[] providerSpecificValues)
             {
                 WriteLine(values.Zip(_schema.Rows.Cast<DataRow>(), (v, s) =>
                 {
