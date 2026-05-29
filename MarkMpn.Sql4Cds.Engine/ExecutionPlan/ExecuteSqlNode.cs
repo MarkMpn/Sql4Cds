@@ -35,6 +35,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            // Check that we have at least one parameter
+            var sproc = (ExecutableProcedureReference)Statement.ExecuteSpecification.ExecutableEntity;
+            if (sproc.Parameters.Count == 0)
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.MissingParameter(sproc.ProcedureReference.ProcedureReference.Name, "@statement", true));
+
+            // Check the SQL to execute is a unicode string
+            var sql = sproc.Parameters[0].ParameterValue;
+            var ecc = new ExpressionCompilationContext(context, null, null);
+            sql.GetType(ecc, out var sqlType);
+
+            if (!(sqlType is SqlDataTypeReference sqlDataType) ||
+                (sqlDataType.SqlDataTypeOption != SqlDataTypeOption.NText && sqlDataType.SqlDataTypeOption != SqlDataTypeOption.NChar && sqlDataType.SqlDataTypeOption != SqlDataTypeOption.NVarChar))
+                throw new NotSupportedQueryFragmentException(Sql4CdsError.InvalidProcedureParameterType(sql, "@statement", "ntext/nchar/nvarchar"));
+
             return new[] { this };
         }
 

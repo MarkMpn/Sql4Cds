@@ -255,7 +255,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         using (var cmd = _connection.CreateCommand())
                         {
                             var ecc = new ExpressionCompilationContext(_context, null, null);
-                            var eec = new ExpressionExecutionContext(ecc);
+                            var eec = new ExpressionExecutionContext(_context);
                             var execSql = (SqlString)exec.Statement.ExecuteSpecification.ExecutableEntity.Parameters[0].ParameterValue.Compile(ecc)(eec);
                             cmd.CommandText = execSql.Value;
 

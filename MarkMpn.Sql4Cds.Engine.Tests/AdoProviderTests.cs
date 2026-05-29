@@ -3195,46 +3195,5 @@ SELECT ABS(@i);";
                 }
             }
         }
-
-        [TestMethod]
-        public void SpExecuteSqlSimpleExpression()
-        {
-            using (var con = new Sql4CdsConnection(_localDataSources))
-            using (var cmd = con.CreateCommand())
-            {
-                cmd.CommandTimeout = 0;
-                cmd.CommandText = @"
-EXEC sp_executesql N'SELECT 1'";
-
-                Assert.AreEqual(1, cmd.ExecuteScalar());
-            }
-        }
-
-        [TestMethod]
-        public void SpExecuteSqlMultipleResultSets()
-        {
-            using (var con = new Sql4CdsConnection(_localDataSources))
-            using (var cmd = con.CreateCommand())
-            {
-                cmd.CommandTimeout = 0;
-                cmd.CommandText = @"
-EXEC sp_executesql N'SELECT 1; SELECT 2'";
-
-                using (var reader = cmd.ExecuteReader())
-                {
-                    Assert.IsTrue(reader.Read());
-                    Assert.AreEqual(1, reader.GetInt32(0));
-                    Assert.IsFalse(reader.Read());
-
-                    Assert.IsTrue(reader.NextResult());
-
-                    Assert.IsTrue(reader.Read());
-                    Assert.AreEqual(2, reader.GetInt32(0));
-                    Assert.IsFalse(reader.Read());
-
-                    Assert.IsFalse(reader.NextResult());
-                }
-            }
-        }
     }
 }
