@@ -2,7 +2,7 @@
 {
     interface IResultOutput
     {
-        void AddRow(object[] values);
+        void AddRow(object[] values, object[] providerSpecificValues);
 
         void Update();
 
