@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ["Source"] = _connection.ApplicationName,
                 }
             };
-            _connection.TelemetryClient.TrackEvent("Execute", null, null);
+            _connection.TelemetryClient.TrackEvent(evt);
 
             var handler = StatementCompleted;
 
