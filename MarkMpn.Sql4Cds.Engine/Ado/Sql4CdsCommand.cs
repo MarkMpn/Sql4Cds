@@ -11,6 +11,8 @@ using System.Threading;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.ApplicationInsights.DataContracts;
+
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -103,7 +105,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected, string message)
         {
-            _connection.TelemetryClient.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = node.GetType().Name, ["Source"] = _connection.ApplicationName });
+            var evt = new EventTelemetry("Execute")
+            {
+                Properties =
+                {
+                    ["QueryType"] = node.GetType().Name,
+                    ["Source"] = _connection.ApplicationName,
+                }
+            };
+            _connection.TelemetryClient.TrackEvent("Execute", null, null);
 
             var handler = StatementCompleted;
 
@@ -218,19 +228,36 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     foreach (var query in plan)
-                        _connection.TelemetryClient.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = _connection.ApplicationName });
+                    {
+                        var evt = new EventTelemetry("Convert")
+                        {
+                            Properties =
+                            {
+                                ["QueryType"] = query.GetType().Name,
+                                ["Source"] = _connection.ApplicationName,
+                            }
+                        };
+                        _connection.TelemetryClient.TrackEvent(evt);
+                    }
                 }
 
                 return plan;
             }
             catch (Exception ex)
             {
-                var exProps = new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName };
+                var exTelem = new ExceptionTelemetry(ex)
+                {
+                    Properties =
+                    {
+                        ["Sql"] = CommandText,
+                        ["Source"] = _connection.ApplicationName,
+                    }
+                };
 
                 if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exProps["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
+                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
 
-                _connection.TelemetryClient.TrackException(ex, exProps);
+                _connection.TelemetryClient.TrackException(exTelem);
 
                 if (ex is Sql4CdsException)
                     throw;
@@ -329,12 +356,19 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (Exception ex)
             {
-                var exProps = new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName };
+                var exTelem = new ExceptionTelemetry(ex)
+                {
+                    Properties =
+                    {
+                        ["Sql"] = CommandText,
+                        ["Source"] = _connection.ApplicationName,
+                    }
+                };
 
                 if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exProps["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
+                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
 
-                _connection.TelemetryClient.TrackException(ex, exProps);
+                _connection.TelemetryClient.TrackException(exTelem);
                 throw;
             }
         }
