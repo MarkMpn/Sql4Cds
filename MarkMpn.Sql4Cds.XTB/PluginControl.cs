@@ -43,7 +43,10 @@ namespace MarkMpn.Sql4Cds.XTB
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
             _properties.SelectedObjectChanged += OnSelectedObjectChanged;
-            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
+            {
+                ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
+            });
             tscbConnection.Items.Add("Add Connection...");
             
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;

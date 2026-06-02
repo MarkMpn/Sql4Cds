@@ -28,7 +28,10 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         static CommandBase()
         {
-            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
+            {
+                ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
+            });
         }
 
         protected CommandBase(Sql4CdsPackage package, DTE2 dte)

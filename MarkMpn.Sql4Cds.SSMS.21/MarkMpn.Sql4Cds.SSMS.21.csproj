@@ -184,7 +184,9 @@
     <Content Include="Resources\Sql2FetchXmlCommand.png" />
     <Content Include="Resources\Sql2FetchXmlCommandPackage.ico" />
     <Content Include="Resources\Sql2MCommand.png" />
-    <Content Include="Resources\sql4cds.png" />
+    <Content Include="Resources\sql4cds.png">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
   </ItemGroup>
   <Import Project="..\MarkMpn.Sql4Cds.SSMS\MarkMpn.Sql4Cds.SSMS.projitems" Label="Shared" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

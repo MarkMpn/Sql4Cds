@@ -23,14 +23,12 @@ plugins or integrations by writing familiar SQL and converting it.
 Queries can also run using the preview TDS Endpoint. A wide range of SQL functionality is also built
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>New features:
-* Updated Copilot feature to work with latest XrmToolBox changes
-* Enabled use of Anthropic AI service
-* Added AI-driven autocomplete suggestions
-* New AI service option for sponsors
+    <releaseNotes>Enhancements:
+* Sort results in grid by clicking on column headers - sort order uses SQL ordering rules
 
 Bug fixes:
-* Fixed sorting on virtual name attribute of polymorphic lookup columns
+* Fixed "Operation is not valid due to the current state of the object" when running queries that return no results 
+* Fixed compatibility with client applications that use Application Insights v3
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

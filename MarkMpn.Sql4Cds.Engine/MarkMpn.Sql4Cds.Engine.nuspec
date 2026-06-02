@@ -12,7 +12,7 @@
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
     <releaseNotes>Bug fixes:
-* Fixed sorting on virtual name attribute of polymorphic lookup columns
+* Fixed compatibility with client applications that use Application Insights v3
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
