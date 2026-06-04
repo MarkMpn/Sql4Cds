@@ -64,12 +64,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 var assembly = typeof(Sql4CdsConnection).Assembly;
                 var assemblyVersion = assembly.GetName().Version;
                 var assemblyCopyright = assembly
-                    .GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false)
-                    .OfType<AssemblyCopyrightAttribute>()
-                    .FirstOrDefault()?
+                    .GetCustomAttribute<AssemblyCopyrightAttribute>()
                     .Copyright;
-                var assemblyFilename = assembly.Location;
-                var assemblyDate = System.IO.File.GetLastWriteTime(assemblyFilename);
+                var assemblyDate = assembly
+                    .GetCustomAttribute<BuiltAtAttribute>()
+                    .Date;
 
                 return $"Microsoft Dataverse - {orgVersion}\r\n\tSQL 4 CDS - {assemblyVersion}\r\n\t{assemblyDate:MMM dd yyyy HH:mm:ss}\r\n\t{assemblyCopyright}";
             }
