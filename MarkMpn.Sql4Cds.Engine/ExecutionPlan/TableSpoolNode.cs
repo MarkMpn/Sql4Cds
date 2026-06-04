@@ -84,10 +84,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public TableSpoolNode() { }
+        private TableSpoolNode() { }
+
+        public TableSpoolNode(ISpoolProducerNode producer)
+        {
+            Producer = producer;
+        }
+
+        public TableSpoolNode(IDataExecutionPlanNodeInternal source, NodeCompilationContext context)
+        {
+            Source = source;
+            _workTableSchema = source.GetSchema(context);
+        }
 
         private IEnumerable<Entity> _workTable;
         private HashSet<string> _addedColumns;
+        private INodeSchema _workTableSchema;
 
         /// <summary>
         /// The data source to cache
@@ -211,7 +223,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public INodeSchema GetWorkTableSchema(NodeCompilationContext context)
         {
-            return Source.GetSchema(context);
+            return _workTableSchema;
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
@@ -229,6 +241,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             Source.Parent = this;
             return this;
+        }
+
+        public override void FinishedFolding(NodeCompilationContext context)
+        {
+            base.FinishedFolding(context);
+
+            if (Producer == null)
+                _workTableSchema = Source.GetSchema(context);
         }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
@@ -295,6 +315,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Producer = Producer?.LastClone,
                 SpoolType = SpoolType,
                 SegmentColumn = SegmentColumn,
+                IsPerformanceSpool = IsPerformanceSpool,
+                _workTableSchema = _workTableSchema
             };
 
             LastClone = clone;

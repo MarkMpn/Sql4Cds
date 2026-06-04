@@ -656,8 +656,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Alias = "test"
             };
+            var context = new NodeCompilationContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null);
 
-            var spool = new TableSpoolNode { Source = source };
+            var spool = new TableSpoolNode(source, context);
 
             var results1 = spool.Execute(new NodeExecutionContext(new SessionContext(_localDataSources, new StubOptions()), new StubOptions(), null, null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)

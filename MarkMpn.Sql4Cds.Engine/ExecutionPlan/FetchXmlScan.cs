@@ -1734,9 +1734,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (rowCount.Value >= 100)
                     {
-                        indexSpool = new IndexSpoolNode
+                        indexSpool = new IndexSpoolNode(this, context)
                         {
-                            Source = this,
                             KeyColumn = (variableCondition.entityname ?? Alias) + "." + variableCondition.attribute,
                             SeekValue = variableCondition.value
                         };
@@ -1754,7 +1753,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // lots of times. Add an adaptive spool in to avoid excessive calls
                         var clone = (FetchXmlScan)Clone();
 
-                        indexSpool = new AdaptiveIndexSpoolNode
+                        indexSpool = new AdaptiveIndexSpoolNode(this, context)
                         {
                             UnspooledSource = clone,
                             SpooledSource = this,

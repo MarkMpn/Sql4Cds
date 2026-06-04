@@ -448,9 +448,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         Source = ctePlan,
                         Columns =
-                                {
-                                    [recursionDepthField] = new IntegerLiteral { Value = "0" }
-                                }
+                        {
+                            [recursionDepthField] = new IntegerLiteral { Value = "0" }
+                        }
                     };
 
                     // Add a ConcatenateNode to combine the anchor results with the recursion results
@@ -479,16 +479,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     });
 
                     // Add an IndexSpool node in stack mode to enable the recursion
-                    var recurseIndexStack = new IndexSpoolNode
+                    var recurseIndexStack = new IndexSpoolNode(recurseConcat, _nodeContext)
                     {
-                        Source = recurseConcat,
                         WithStack = true
                     };
 
                     // Pull the same records into the recursive loop
-                    var recurseTableSpool = new TableSpoolNode
+                    var recurseTableSpool = new TableSpoolNode(recurseIndexStack)
                     {
-                        Producer = recurseIndexStack,
                         SpoolType = SpoolType.Lazy
                     };
 
@@ -3561,16 +3559,14 @@ namespace MarkMpn.Sql4Cds.Engine
                                 // fed into a nested loop. That loop calls another loop which combines the aggregate with the individual
                                 // row values
                                 // https://sqlserverfast.com/blog/hugo/2018/06/plansplaining-part-6-aggregates-with-over/
-                                var spoolProducer = new TableSpoolNode
+                                var spoolProducer = new TableSpoolNode(segment, _nodeContext)
                                 {
-                                    Source = segment,
                                     SpoolType = SpoolType.Lazy,
                                     SegmentColumn = segmentCol
                                 };
 
-                                var spoolConsumerAggregate = new TableSpoolNode
+                                var spoolConsumerAggregate = new TableSpoolNode(spoolProducer)
                                 {
-                                    Producer = spoolProducer,
                                     SpoolType = spoolProducer.SpoolType
                                 };
                                 var aggregate = new StreamAggregateNode
@@ -3581,9 +3577,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                         [functionCol] = converted
                                     }
                                 };
-                                var spoolConsumer = new TableSpoolNode
+                                var spoolConsumer = new TableSpoolNode(spoolProducer)
                                 {
-                                    Producer = spoolProducer,
                                     SpoolType = spoolProducer.SpoolType
                                 };
                                 var loop1 = new NestedLoopNode
@@ -3919,9 +3914,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // We can spool the results for reuse each time
-                innerQuery.Source = new TableSpoolNode
+                innerQuery.Source = new TableSpoolNode(innerQuery.Source, context)
                 {
-                    Source = innerQuery.Source,
                     SpoolType = SpoolType.Lazy
                 };
 
@@ -4441,7 +4435,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // TOP x PERCENT requires evaluating the source twice - once to get the total count and again to get the top
             // records. Cache the results in a table spool node.
             if (topRowFilter.Percent)
-                source = new TableSpoolNode { Source = source, SpoolType = SpoolType.Eager };
+                source = new TableSpoolNode(source, context) { SpoolType = SpoolType.Eager };
 
             return new TopNode
             {
@@ -4894,7 +4888,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         if (EstimateRowsOut(node, context) > 1)
                         {
-                            var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy, IsPerformanceSpool = true };
+                            var spool = new TableSpoolNode(loopRightSource, context) { SpoolType = SpoolType.Lazy, IsPerformanceSpool = true };
                             loopRightSource = spool;
                         }
                     }
@@ -5169,9 +5163,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (outerCount >= 100 || innerCount <= 5000)
             {
-                var spool = new TableSpoolNode
+                var spool = new TableSpoolNode(lastCorrelatedStep.Source, context)
                 {
-                    Source = lastCorrelatedStep.Source,
                     SpoolType = SpoolType.Lazy,
                     IsPerformanceSpool = true
                 };
@@ -5240,7 +5233,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Join predicates will be lifted from the WHERE clause during folding later. For now, just add a table spool
                 // to cache the results of the second table and use a nested loop to join them.
-                nextTable = new TableSpoolNode { Source = nextTable, SpoolType = SpoolType.Lazy };
+                nextTable = new TableSpoolNode(nextTable, context) { SpoolType = SpoolType.Lazy };
 
                 node = new NestedLoopNode { LeftSource = node, RightSource = nextTable };
             }
@@ -5576,7 +5569,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // Spool the inner table so the results can be reused by the nested loop
-                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Eager, IsPerformanceSpool = true };
+                    rhs = new TableSpoolNode(rhs, context) { SpoolType = SpoolType.Eager, IsPerformanceSpool = true };
 
                     joinNode = new NestedLoopNode
                     {
@@ -5670,7 +5663,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             joinNode = new NestedLoopNode
                             {
                                 LeftSource = foldable.LeftSource,
-                                RightSource = new TableSpoolNode { Source = foldable.RightSource },
+                                RightSource = new TableSpoolNode(foldable.RightSource, context),
                                 JoinType = foldable.JoinType
                             };
 
@@ -5773,7 +5766,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // If it is correlated, add a spool where possible closer to the data source
                     if (lhsReferences.Count == 0)
                     {
-                        var spool = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Lazy };
+                        var spool = new TableSpoolNode(rhs, context) { SpoolType = SpoolType.Lazy };
                         rhs = spool;
                     }
                     else if (UseMergeJoin(lhs, subqueryPlan, context, lhsReferences, null, null, false, true, out _, out var merge))
@@ -5791,7 +5784,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // For cross joins there is no outer reference so the entire result can be spooled for reuse
                 if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossJoin)
-                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Lazy };
+                    rhs = new TableSpoolNode(rhs, context) { SpoolType = SpoolType.Lazy };
                 
                 return new NestedLoopNode
                 {
