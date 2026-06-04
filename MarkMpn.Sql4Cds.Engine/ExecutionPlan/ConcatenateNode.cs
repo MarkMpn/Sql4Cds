@@ -51,10 +51,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var schema = new ColumnList();
 
-            var sourceSchema = Sources[0].GetSchema(context);
+            // Combine types from each source as per FoldQuery
+            var schemas = Sources.Select(s => s.GetSchema(context)).ToArray();
+            var types = GetCombinedTypes(context, out _);
 
-            foreach (var col in ColumnSet)
-                schema[col.OutputColumn] = sourceSchema.Schema[col.SourceColumns[0]];
+            for (var i = 0; i < ColumnSet.Count; i++)
+            {
+                var isNullable = false;
+                var isCalculated = false;
+                var isVisible = false;
+                var isWildcardable = false;
+
+                for (var sourceIndex = 0; sourceIndex < Sources.Count; sourceIndex++)
+                {
+                    var sourceSchema = schemas[sourceIndex].Schema[ColumnSet[i].SourceColumns[sourceIndex]];
+                    isNullable |= sourceSchema.IsNullable;
+                    isCalculated |= sourceSchema.IsCalculated;
+                    isVisible |= sourceSchema.IsVisible;
+                    isWildcardable |= sourceSchema.IsWildcardable;
+                }
+
+                schema[ColumnSet[i].OutputColumn] = new ColumnDefinition(types[i], isNullable, isCalculated, isVisible, isWildcardable);
+            }
 
             return new NodeSchema(
                 primaryKey: null,
@@ -68,17 +86,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        private DataTypeReference[] GetCombinedTypes(NodeCompilationContext context, out DataTypeReference[][] sourceColumnTypes)
         {
-            for (var i = 0; i < Sources.Count; i++)
-            {
-                Sources[i] = Sources[i].FoldQuery(context, hints);
-                Sources[i].Parent = this;
-            }
-
-            // Work out the column types
-            var sourceColumnTypes = Sources.Select((source, index) => GetColumnTypes(index, context)).ToArray();
-            var types = (DataTypeReference[]) sourceColumnTypes[0].Clone();
+            sourceColumnTypes = Sources.Select((source, index) => GetColumnTypes(index, context)).ToArray();
+            var types = (DataTypeReference[])sourceColumnTypes[0].Clone();
 
             for (var i = 1; i < Sources.Count; i++)
             {
@@ -92,6 +103,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     types[colIndex] = colType;
                 }
             }
+
+            return types;
+        }
+
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            for (var i = 0; i < Sources.Count; i++)
+            {
+                Sources[i] = Sources[i].FoldQuery(context, hints);
+                Sources[i].Parent = this;
+            }
+
+            // Work out the column types
+            var types = GetCombinedTypes(context, out var sourceColumnTypes);
 
             // Apply any necessary conversions
             for (var i = 0; i < Sources.Count; i++)
