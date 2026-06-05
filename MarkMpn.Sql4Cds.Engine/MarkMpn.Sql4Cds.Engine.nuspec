@@ -12,7 +12,8 @@
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
     <releaseNotes>Bug fixes:
-* Fixed compatibility with client applications that use Application Insights v3
+* Fixed using INSERT with multiple values when implicit type conversion is required between the rows
+* Fixed using @@VERSION when local file system is not available
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

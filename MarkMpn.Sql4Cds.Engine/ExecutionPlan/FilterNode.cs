@@ -1508,9 +1508,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            Source = new IndexSpoolNode
+            Source = new IndexSpoolNode(spoolSource, context)
             {
-                Source = spoolSource,
                 KeyColumn = indexColumn,
                 SeekValue = seekVariable
             }.FoldQuery(context, hints);

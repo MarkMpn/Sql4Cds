@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
         abstract class ExportParams
         {
-            public DataTable DataTable { get; set; }
+            public GridResults Results { get; set; }
 
             public string Filename { get; set; }
 
@@ -85,23 +85,22 @@ namespace MarkMpn.Sql4Cds.XTB
             {
                 var cols = new List<DbColumnWrapper>();
 
-                for (var i = 0; i < DataTable.Columns.Count; i++)
+                foreach (DataRow schema in Results.Schema.Rows)
                 {
-                    var col = DataTable.Columns[i];
-                    var schema = (DataRow)col.ExtendedProperties["Schema"];
+                    var name = (string)schema["ColumnName"];
                     var type = (string)schema["DataTypeName"];
                     var scale = (short)schema["NumericScale"];
-                    cols.Add(new DbColumnWrapper(col.Caption, type, scale));
+                    cols.Add(new DbColumnWrapper(name, type, scale));
                 }
 
                 using (var stream = GetFileStreamFactory().GetWriter(Filename, cols))
                 {
                     var cells = new DbCellValue[cols.Count];
 
-                    for (var row = 0; row < DataTable.Rows.Count; row++)
+                    for (var row = 0; row < Results.Rows.Count; row++)
                     {
                         for (var col = 0; col < cols.Count; col++)
-                            cells[col] = ValueFormatter.Format(DataTable.Rows[row][col], cols[col].DataTypeName, cols[col].NumericScale, Settings.Instance.LocalFormatDates);
+                            cells[col] = ValueFormatter.Format(Results.Rows[row].Values[col], cols[col].DataTypeName, cols[col].NumericScale, Settings.Instance.LocalFormatDates);
 
                         stream.WriteRow(cells, cols);
 
@@ -109,7 +108,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             progress(row + 1);
                     }
 
-                    progress(DataTable.Rows.Count);
+                    progress(Results.Rows.Count);
                 }
             }
         }
@@ -1231,6 +1230,19 @@ namespace MarkMpn.Sql4Cds.XTB
             }
         }
 
+        class GridResults
+        {
+            public GridResults(DataTable schema)
+            {
+                Schema = schema;
+                Rows = new List<GridRow>();
+            }
+
+            public DataTable Schema { get; }
+
+            public List<GridRow> Rows { get; }
+        }
+
         class GridRow
         {
             public object[] Values { get; set; }
@@ -1248,7 +1260,8 @@ namespace MarkMpn.Sql4Cds.XTB
             public DataGridViewResultOutput(SqlQueryControl query, DataTable schema)
             {
                 _query = query;
-                _values = new List<GridRow>();
+                var results = new GridResults(schema);
+                _values = results.Rows;
                 _grid = query.Execute(() =>
                 {
                     var grid = new DataGridView();
@@ -1270,7 +1283,7 @@ namespace MarkMpn.Sql4Cds.XTB
                     grid.ShowEditingIcon = false;
                     grid.ContextMenuStrip = query.gridContextMenuStrip;
                     grid.VirtualMode = true;
-                    grid.Tag = _values;
+                    grid.Tag = results;
 
                     if (Settings.Instance.ResultGridFontSize != null)
                         grid.Font = new Font(grid.Font.FontFamily, Settings.Instance.ResultGridFontSize.Value);
@@ -2130,7 +2143,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 firstRow = false;
             }
 
-            var values = (List<object[]>)grid.Tag;
+            var values = ((GridResults)grid.Tag).Rows;
 
             for (var i = minRow; i <= maxRow; i++)
             {
@@ -2160,7 +2173,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                     if (isSelected)
                     {
-                        var args = new DataGridViewCellFormattingEventArgs(j, i, row[j], typeof(string), null);
+                        var args = new DataGridViewCellFormattingEventArgs(j, i, row.Values[j], typeof(string), null);
                         FormatCell(grid, args);
 
                         var str = args.Value.ToString();
@@ -2186,7 +2199,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                         var isLink = false;
 
-                        if (row[j] is SqlEntityReference entityReference && !entityReference.IsNull)
+                        if (row.Values[j] is SqlEntityReference entityReference && !entityReference.IsNull)
                         {
                             var url = GetRecordUrl(entityReference, out _);
                             html.Append($"<A HREF=\"{url}\">");
@@ -2246,7 +2259,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private void saveAsCSVToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
-            var table = (DataTable)grid.DataSource;
+            var results = (GridResults)grid.Tag;
 
             using (var saveDialog = new SaveFileDialog())
             {
@@ -2254,16 +2267,16 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 if (saveDialog.ShowDialog() == DialogResult.OK)
                 {
-                    _exportBackgroundWorker.RunWorkerAsync(new ExportToCsv(table, saveDialog.FileName));
+                    _exportBackgroundWorker.RunWorkerAsync(new ExportToCsv(results, saveDialog.FileName));
                 }
             }
         }
 
         class ExportToCsv : ExportParams
         {
-            public ExportToCsv(DataTable table, string filename)
+            public ExportToCsv(GridResults results, string filename)
             {
-                DataTable = table;
+                Results = results;
                 Filename = filename;
             }
 
@@ -2283,7 +2296,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private void saveAsExcelToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
-            var table = (DataTable)grid.DataSource;
+            var results = (GridResults)grid.Tag;
 
             using (var saveDialog = new SaveFileDialog())
             {
@@ -2291,7 +2304,7 @@ namespace MarkMpn.Sql4Cds.XTB
 
                 if (saveDialog.ShowDialog() == DialogResult.OK)
                 {
-                    _exportBackgroundWorker.RunWorkerAsync(new ExportToExcel(table, saveDialog.FileName, er => GetRecordUrl(er, out _)));
+                    _exportBackgroundWorker.RunWorkerAsync(new ExportToExcel(results, saveDialog.FileName, er => GetRecordUrl(er, out _)));
                 }
             }
         }
@@ -2300,9 +2313,9 @@ namespace MarkMpn.Sql4Cds.XTB
         {
             private readonly Func<SqlEntityReference, string> _urlGenerator;
 
-            public ExportToExcel(DataTable table, string filename, Func<SqlEntityReference, string> urlGenerator)
+            public ExportToExcel(GridResults results, string filename, Func<SqlEntityReference, string> urlGenerator)
             {
-                DataTable = table;
+                Results = results;
                 Filename = filename;
                 _urlGenerator = urlGenerator;
             }
