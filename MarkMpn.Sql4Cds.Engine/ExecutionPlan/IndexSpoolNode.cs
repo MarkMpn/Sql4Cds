@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Stack<Entity> _stack;
         private INodeSchema _workTableSchema;
 
-        private IndexSpoolNode() { }
+        public IndexSpoolNode() { }
 
         public IndexSpoolNode(IDataExecutionPlanNodeInternal source, NodeCompilationContext context)
         {

@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private TableSpoolNode() { }
+        public TableSpoolNode() { }
 
         public TableSpoolNode(ISpoolProducerNode producer)
         {
