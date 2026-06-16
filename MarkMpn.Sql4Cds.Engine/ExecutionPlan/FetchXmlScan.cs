@@ -613,12 +613,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_parameterizedConditions == null)
                 _parameterizedConditions = FindParameterizedConditions();
 
-            foreach (var param in context.ParameterValues)
+            foreach (var parameterizedCondition in _parameterizedConditions)
             {
-                if (_parameterizedConditions.TryGetValue(param.Key, out var conditions))
+                if (context.ParameterValues.TryGetValue(parameterizedCondition.Key, out var value))
                 {
-                    foreach (var condition in conditions)
-                        condition.SetValue(param.Value, context.Options);
+                    foreach (var condition in parameterizedCondition.Value)
+                        condition.SetValue(value, context.Options);
                 }
             }
         }
