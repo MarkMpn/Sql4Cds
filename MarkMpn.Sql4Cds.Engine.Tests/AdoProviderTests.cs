@@ -3195,5 +3195,33 @@ SELECT ABS(@i);";
                 }
             }
         }
+
+        [TestMethod]
+        public void InsertMultipleRecordsWithFirstValueNull()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/784
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+INSERT INTO account (name, employees) VALUES (NULL, 10), ('Data8', 20)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name, employees FROM account ORDER BY employees";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.AreEqual(10, reader.GetInt32(1));
+
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Data8", reader.GetString(0));
+                    Assert.AreEqual(20, reader.GetInt32(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

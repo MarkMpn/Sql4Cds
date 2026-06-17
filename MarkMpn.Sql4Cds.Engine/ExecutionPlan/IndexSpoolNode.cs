@@ -21,6 +21,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Func<INullable, ExpressionExecutionContext, INullable> _keySelector;
         private Func<INullable, ExpressionExecutionContext, INullable> _seekSelector;
         private Stack<Entity> _stack;
+        private INodeSchema _workTableSchema;
+
+        public IndexSpoolNode() { }
+
+        public IndexSpoolNode(IDataExecutionPlanNodeInternal source, NodeCompilationContext context)
+        {
+            Source = source;
+            _workTableSchema = source.GetSchema(context);
+        }
 
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
@@ -108,6 +117,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return FoldCTEToFetchXml(context, hints);
 
             return this;
+        }
+
+        public override void FinishedFolding(NodeCompilationContext context)
+        {
+            base.FinishedFolding(context);
+
+            _workTableSchema = Source.GetSchema(context);
         }
 
         private IDataExecutionPlanNodeInternal FoldCTEToFetchXml(NodeCompilationContext context, IList<OptimizerHint> hints)
@@ -403,7 +419,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public INodeSchema GetWorkTableSchema(NodeCompilationContext context)
         {
-            return Source.GetSchema(context);
+            return _workTableSchema;
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -473,6 +489,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _keySelector = _keySelector,
                 _seekSelector = _seekSelector,
                 WithStack = WithStack,
+                _workTableSchema = _workTableSchema,
             };
 
             LastClone = clone;

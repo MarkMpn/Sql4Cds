@@ -64,6 +64,10 @@ namespace MarkMpn.Sql4Cds.Export
             {
                 text = "0x" + BitConverter.ToString(bin).Replace("-", "").ToUpperInvariant();
             }
+            else if (value is SqlXml xml)
+            {
+                text = xml.Value;
+            }
 
             return new DbCellValue
             {

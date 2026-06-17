@@ -613,12 +613,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_parameterizedConditions == null)
                 _parameterizedConditions = FindParameterizedConditions();
 
-            foreach (var param in context.ParameterValues)
+            foreach (var parameterizedCondition in _parameterizedConditions)
             {
-                if (_parameterizedConditions.TryGetValue(param.Key, out var conditions))
+                if (context.ParameterValues.TryGetValue(parameterizedCondition.Key, out var value))
                 {
-                    foreach (var condition in conditions)
-                        condition.SetValue(param.Value, context.Options);
+                    foreach (var condition in parameterizedCondition.Value)
+                        condition.SetValue(value, context.Options);
                 }
             }
         }
@@ -1734,9 +1734,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (rowCount.Value >= 100)
                     {
-                        indexSpool = new IndexSpoolNode
+                        indexSpool = new IndexSpoolNode(this, context)
                         {
-                            Source = this,
                             KeyColumn = (variableCondition.entityname ?? Alias) + "." + variableCondition.attribute,
                             SeekValue = variableCondition.value
                         };
@@ -1754,7 +1753,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // lots of times. Add an adaptive spool in to avoid excessive calls
                         var clone = (FetchXmlScan)Clone();
 
-                        indexSpool = new AdaptiveIndexSpoolNode
+                        indexSpool = new AdaptiveIndexSpoolNode(this, context)
                         {
                             UnspooledSource = clone,
                             SpooledSource = this,

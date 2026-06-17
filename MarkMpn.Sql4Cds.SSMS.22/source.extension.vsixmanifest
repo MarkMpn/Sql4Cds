@@ -4,15 +4,18 @@
         <Identity Id="MarkMpn.Sql4Cds.SSMS.6739e1e9-23a8-45a5-a025-5130fd478647" Version="1.0" Language="en-US" Publisher="Mark Carrington" />
         <DisplayName>SQL 4 CDS</DisplayName>
         <Description>Extends support for Dataverse queries to include DML and other queries not supported by the TDS Endpoint</Description>
-        <MoreInfo>https://github.com/MarkMpn/Sql4CDs</MoreInfo>
+        <MoreInfo>https://github.com/MarkMpn/Sql4CDS</MoreInfo>
         <License>Resources\license.txt</License>
         <GettingStartedGuide>https://github.com/MarkMpn/Sql4Cds/wiki</GettingStartedGuide>
         <Icon>Resources\sql4cds.png</Icon>
         <Tags>sql ssms cds dataverse d365 dynamics sql4cds</Tags>
     </Metadata>
-    <Installation AllUsers="true">
+    <Installation>
         <InstallationTarget Id="Microsoft.VisualStudio.Ssms" Version="[22.0,)">
             <ProductArchitecture>amd64</ProductArchitecture>
+        </InstallationTarget>
+        <InstallationTarget Id="Microsoft.VisualStudio.Ssms" Version="[22.0,)">
+            <ProductArchitecture>arm64</ProductArchitecture>
         </InstallationTarget>
     </Installation>
     <Dependencies>

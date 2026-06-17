@@ -11,21 +11,9 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>New features:
-* Load data from local files using `OPENROWSET(BULK)` function
-* Added `ABS`, `SIGN`, `CEILING`, `FLOOR`, and `ROUND` functions (thanks @sulimanbenhalim)
-* Added `defaultstatus`, `invariantname`, `state` and `transitiondata` columns to `metadata.optionsetvalue` table to show values from state and status code optionsets
-
-Enhancements:
-* Improved folding additional filters after extracting join criteria
-* Improved error handling for unnamed and missing columns in subqueries
-* Improved error handling for invalid constants while building query plan
-
-Bug fixes:
-* Fixed missing values from `from` and `to` fields with aliased joins
-* Fixed JSON serialization of nested Entity/EntityCollection values in expando API responses
-* Fixed joins with additional filter criteria on virtual entities
-* Fixed aggregate query generation for `activitypointer` and elastic tables
+    <releaseNotes>Bug fixes:
+* Fixed using INSERT with multiple values when implicit type conversion is required between the rows
+* Fixed using @@VERSION when local file system is not available
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
