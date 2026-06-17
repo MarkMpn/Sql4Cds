@@ -122,6 +122,7 @@ EXEC sp_executesql N'SELECT ' + N'1'";
                 }
             }
         }
+
         [TestMethod]
         public void VariableSql()
         {
@@ -132,6 +133,21 @@ EXEC sp_executesql N'SELECT ' + N'1'";
                 cmd.CommandText = @"
 DECLARE @sql nvarchar(100) = N'SELECT 1';
 EXEC sp_executesql @sql";
+
+                Assert.AreEqual(1, cmd.ExecuteScalar());
+            }
+        }
+
+        [TestMethod]
+        public void InputParameters()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+DECLARE @sql nvarchar(100) = N'SELECT @p1';
+EXEC sp_executesql @sql, N'@p1 int', @p1 = 1";
 
                 Assert.AreEqual(1, cmd.ExecuteScalar());
             }
