@@ -335,6 +335,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return err;
         }
 
+        internal static Sql4CdsError TooManyArguments(TSqlFragment fragment, string name)
+        {
+            return Create(8144, fragment, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
+        }
+
         internal static Sql4CdsError NamedParametersRequiredAfter(ExecuteParameter param, int paramIndex)
         {
             return Create(119, param, (SqlInt32)paramIndex);
@@ -357,6 +362,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 err.Procedure = sprocOrFunc.BaseIdentifier.Value;
 
             return err;
+        }
+
+        internal static Sql4CdsError ParameterizedQueryMissingParameter(TSqlFragment fragment, string query, string param)
+        {
+            return Create(8178, fragment, (SqlInt32)query.Length, Collation.USEnglish.ToSqlString(query), (SqlInt32)param.Length, Collation.USEnglish.ToSqlString(param));
         }
 
         internal static Sql4CdsError ExplicitConversionNotAllowed(TSqlFragment fragment, DataTypeReference from, DataTypeReference to)
@@ -706,6 +716,11 @@ namespace MarkMpn.Sql4Cds.Engine
         internal static Sql4CdsError DuplicateVariable(DeclareVariableElement declaration)
         {
             return Create(134, declaration, (SqlInt32)declaration.VariableName.Value.Length, Collation.USEnglish.ToSqlString(declaration.VariableName.Value));
+        }
+
+        internal static Sql4CdsError DuplicateVariable(TSqlFragment fragment, string name)
+        {
+            return Create(134, fragment, (SqlInt32)name.Length, Collation.USEnglish.ToSqlString(name));
         }
 
         internal static Sql4CdsError InvalidSelectVariableAssignment(SelectElement element)

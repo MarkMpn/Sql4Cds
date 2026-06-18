@@ -957,6 +957,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (sproc.ProcedureReference.ProcedureVariable != null)
                 throw new NotSupportedQueryFragmentException(Sql4CdsError.NotSupported(sproc.ProcedureReference.ProcedureVariable, "stored procedure variable name"));
 
+            if (sproc.ProcedureReference.ProcedureReference.Name.BaseIdentifier.Value.Equals("sp_executesql", StringComparison.OrdinalIgnoreCase))
+                return new IRootExecutionPlanNodeInternal[] { new ExecuteSqlNode { Statement = execute.Clone() } };
+
             var dataSource = SelectDataSource(sproc.ProcedureReference.ProcedureReference.Name);
 
             var node = ExecuteMessageNode.FromMessage(sproc, dataSource, _staticContext);

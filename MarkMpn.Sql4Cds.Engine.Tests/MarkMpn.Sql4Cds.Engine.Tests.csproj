@@ -80,6 +80,7 @@
     <Compile Include="CursorTests.cs" />
     <Compile Include="OpenRowsetBulkTests.cs" />
     <Compile Include="SerializerTests.cs" />
+    <Compile Include="SpExecuteSqlTests.cs" />
     <Compile Include="SqlDateTests.cs" />
     <Compile Include="ExecutionPlanNodeTests.cs" />
     <Compile Include="CteTests.cs" />
