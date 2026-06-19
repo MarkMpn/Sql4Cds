@@ -152,5 +152,22 @@ EXEC sp_executesql @sql, N'@p1 int', @p1 = 1";
                 Assert.AreEqual(1, cmd.ExecuteScalar());
             }
         }
+
+        [TestMethod]
+        public void OutputParameters()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @"
+DECLARE @id INT
+DECLARE @sql nvarchar(100) = N'SET @p1 = 1';
+EXEC sp_executesql @sql, N'@p1 INT OUTPUT', @p1 = @id OUTPUT
+SELECT @id";
+
+                Assert.AreEqual(1, cmd.ExecuteScalar());
+            }
+        }
     }
 }

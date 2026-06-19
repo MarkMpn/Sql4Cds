@@ -21,6 +21,7 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     public class Sql4CdsCommand : DbCommand
     {
+        private readonly bool _reuseCts;
         private Sql4CdsConnection _connection;
         private ExecutionPlanBuilder _planBuilder;
         private string _commandText;
@@ -38,6 +39,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public Sql4CdsCommand(Sql4CdsConnection connection) : this(connection, string.Empty)
         {
+        }
+
+        private Sql4CdsCommand(Sql4CdsConnection connection, CancellationTokenSource cts) : this(connection, string.Empty)
+        {
+            _cts = cts;
+            _reuseCts = true;
         }
 
         public Sql4CdsCommand(Sql4CdsConnection connection, string commandText)
@@ -256,7 +263,9 @@ namespace MarkMpn.Sql4Cds.Engine
             try
             {
                 _cancelledManually = false;
-                _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
+
+                if (!_reuseCts)
+                    _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
 
                 if (UseTDSEndpointDirectly)
                 {
@@ -314,18 +323,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     return new SqlDataReaderWrapper(con, cmd, behavior, node, _cts.Token);
                 }
 
-                var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
+                var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts, _reuseCts);
 
-                var reader = new Sql4CdsDataReader(this, options, behavior);
-
-                if (CommandType == CommandType.StoredProcedure)
-                {
-                    // Capture the values of output parameters
-                    foreach (var param in Parameters.Cast<Sql4CdsParameter>().Where(p => p.Direction == ParameterDirection.Output))
-                        param.SetOutputValue((INullable)reader.ParameterValues[param.FullParameterName]);
-                }
-
-                return reader;
+                return new Sql4CdsDataReader(this, options, behavior);
             }
             catch (Exception ex)
             {
@@ -337,6 +337,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 _connection.TelemetryClient.TrackException(ex, exProps);
                 throw;
             }
+        }
+
+        internal Sql4CdsCommand CreateChildCommand()
+        {
+            return new Sql4CdsCommand(_connection, _cts);
         }
     }
 }
