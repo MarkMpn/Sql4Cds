@@ -11,9 +11,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private IndexSpoolNode _indexSpool;
 
-        public AdaptiveIndexSpoolNode()
+        private AdaptiveIndexSpoolNode() { }
+
+        public AdaptiveIndexSpoolNode(IDataExecutionPlanNodeInternal source, NodeCompilationContext context)
         {
-            _indexSpool = new IndexSpoolNode();
+            UnspooledSource = (IDataExecutionPlanNodeInternal)source.Clone();
+            _indexSpool = new IndexSpoolNode(source, context);
         }
 
         [Browsable(false)]

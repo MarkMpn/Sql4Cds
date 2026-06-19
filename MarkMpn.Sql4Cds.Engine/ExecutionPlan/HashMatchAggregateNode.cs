@@ -598,14 +598,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // aggregate processing
                 if (maxResultCount > maxPageSize && !supportsPaging)
                 {
-                    var spoolProducer = new TableSpoolNode
+                    var spoolProducer = new TableSpoolNode(firstTry, context)
                     {
-                        Source = firstTry,
                         SpoolType = SpoolType.Eager
                     };
-                    var spoolConsumer = new TableSpoolNode
+                    var spoolConsumer = new TableSpoolNode(spoolProducer)
                     {
-                        Producer = spoolProducer,
                         SpoolType = SpoolType.Eager
                     };
                     var countCol = context.GetExpressionName();
