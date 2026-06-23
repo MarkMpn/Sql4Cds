@@ -109,6 +109,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     _errorDetails.Push(ex.Errors[0]);
                 }
+                finally
+                {
+                    // Capture the values of output parameters
+                    foreach (var param in _command.Parameters.Cast<Sql4CdsParameter>().Where(p => p.Direction == ParameterDirection.Output))
+                        param.ProviderSpecificOutputValue = ParameterValues[param.FullParameterName];
+                }
             }
         }
 
@@ -252,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else if (node is ExecuteSqlNode exec)
                     {
-                        using (var cmd = _connection.CreateCommand())
+                        using (var cmd = _command.CreateChildCommand())
                         {
                             exec.SetupCommand(cmd, _context);
 
@@ -264,7 +270,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             _reader = cmd.ExecuteReader(_behavior);
 
-                            if (_reader.FieldCount > 0)
+                            if (!_reader.IsClosed && _reader.FieldCount > 0)
                             {
                                 _resultSetsReturned++;
                                 _rows = 0;
@@ -275,6 +281,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 _reader.Close();
                                 _reader = null;
+
+                                exec.CaptureOutputParameters(cmd, _context);
                             }
                         }
                     }
@@ -592,6 +600,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
+                    // Copy any output parameter values back into our context
+                    var exec = (ExecuteSqlNode)_command.Plan[_instructionPointer - 1];
+                    exec.CaptureOutputParameters(((Sql4CdsDataReader)_reader)._command, _context);
+
                     _reader.Close();
                     _reader = null;
                 }

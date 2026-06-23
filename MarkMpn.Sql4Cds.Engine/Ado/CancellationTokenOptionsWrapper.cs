@@ -10,11 +10,13 @@ namespace MarkMpn.Sql4Cds.Engine
     class CancellationTokenOptionsWrapper : IQueryExecutionOptions, IDisposable
     {
         private readonly IQueryExecutionOptions _options;
+        private readonly bool _reuseCts;
 
-        public CancellationTokenOptionsWrapper(IQueryExecutionOptions options, CancellationTokenSource cts)
+        public CancellationTokenOptionsWrapper(IQueryExecutionOptions options, CancellationTokenSource cts, bool reuseCts)
         {
             _options = options;
             CancellationTokenSource = cts;
+            _reuseCts = reuseCts;
         }
 
         public CancellationTokenSource CancellationTokenSource { get; }
@@ -85,7 +87,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         void IDisposable.Dispose()
         {
-            CancellationTokenSource.Dispose();
+            if (!_reuseCts)
+                CancellationTokenSource.Dispose();
         }
     }
 }

@@ -16,6 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private DbType? _type;
         private DataTypeReference _dataType;
         private object _value;
+        private INullable _rawOutputValue;
 
         public Sql4CdsParameter()
         {
@@ -72,9 +73,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        internal void SetOutputValue(INullable value)
+        internal INullable ProviderSpecificOutputValue
         {
-            _value = SqlTypeConverter.SqlToNetType(value);
+            get { return _rawOutputValue; }
+            set
+            {
+                _rawOutputValue = value;
+                _value = SqlTypeConverter.SqlToNetType(value);
+            }
         }
 
         public override void ResetDbType()

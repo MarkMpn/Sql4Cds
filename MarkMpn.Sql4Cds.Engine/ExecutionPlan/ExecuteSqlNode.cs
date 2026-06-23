@@ -11,6 +11,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     internal class ExecuteSqlNode : IRootExecutionPlanNodeInternal
     {
+        private Dictionary<string, string> _outputParameterMapping;
+
         public ExecuteStatement Statement { get; set; }
 
         public string Sql { get; set; }
@@ -141,18 +143,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             throw new NotSupportedQueryFragmentException(Sql4CdsError.TooManyArguments(param, ""));
 
                         // Convert the parameter value to the correct type
-                        var conversion = new ConvertCall
-                        {
-                            Parameter = param.ParameterValue,
-                            DataType = paramDef.DataType
-                        };
+                        var valueType = param.ParameterValue.GetType(ecc, out var sqlType);
+                        var value = (INullable)param.ParameterValue.Compile(ecc)(eec);
 
-                        var paramValue = conversion.Compile(ecc)(eec);
+                        if (!sqlType.IsSameAs(paramDef.DataType))
+                        {
+                            if (!SqlTypeConverter.CanChangeTypeImplicit(sqlType, paramDef.DataType))
+                                throw new NotSupportedQueryFragmentException(Sql4CdsError.TypeClash(param, sqlType, paramDef.DataType));
+                            
+                            var conversion = SqlTypeConverter.GetConversion(sqlType, paramDef.DataType);
+                            value = conversion(value, eec);
+                        }
 
                         var sqlParam = cmd.CreateParameter();
                         sqlParam.ParameterName = paramDef.VariableName.Value;
-                        sqlParam.Value = paramValue;
+                        sqlParam.Value = value;
+                        sqlParam.Direction = paramDef.Modifier == ParameterModifier.Output ? ParameterDirection.Output : ParameterDirection.Input;
                         cmd.Parameters.Add(sqlParam);
+
+                        if (sqlParam.Direction == ParameterDirection.Output)
+                        {
+                            if (_outputParameterMapping == null)
+                                _outputParameterMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                            _outputParameterMapping[sqlParam.ParameterName] = ((VariableReference)param.ParameterValue).Name;
+                        }
                     }
 
                     // Check all parameters are provided
@@ -163,6 +178,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException(Sql4CdsError.ParameterizedQueryMissingParameter(Statement, $"({paramSpec.Value}){execSql.Value}", missingParam.VariableName.Value));
                 }
             }
+        }
+
+        public void CaptureOutputParameters(Sql4CdsCommand command, NodeExecutionContext context)
+        {
+            foreach (var outParam in command.Parameters.Cast<Sql4CdsParameter>().Where(p => p.Direction == ParameterDirection.Output))
+            {
+                context.ParameterValues[_outputParameterMapping[outParam.ParameterName]] = outParam.ProviderSpecificOutputValue;
+            }
+        }
+
+        public override string ToString()
+        {
+            return "EXECUTE PROC";
         }
     }
 }
