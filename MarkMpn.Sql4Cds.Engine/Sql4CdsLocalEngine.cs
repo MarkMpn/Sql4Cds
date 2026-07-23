@@ -97,50 +97,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private static object ConvertValue(object value)
         {
-            if (value == null || value == DBNull.Value)
-                return null;
-
-            switch (value)
-            {
-                case SqlString sqlString:
-                    return sqlString.IsNull ? null : sqlString.Value;
-                case SqlInt16 sqlInt16:
-                    return sqlInt16.IsNull ? null : sqlInt16.Value;
-                case SqlInt32 sqlInt32:
-                    return sqlInt32.IsNull ? null : sqlInt32.Value;
-                case SqlInt64 sqlInt64:
-                    return sqlInt64.IsNull ? null : sqlInt64.Value;
-                case SqlDecimal sqlDecimal:
-                    return sqlDecimal.IsNull ? null : sqlDecimal.Value;
-                case SqlDouble sqlDouble:
-                    return sqlDouble.IsNull ? null : sqlDouble.Value;
-                case SqlSingle sqlSingle:
-                    return sqlSingle.IsNull ? null : sqlSingle.Value;
-                case SqlBoolean sqlBoolean:
-                    return sqlBoolean.IsNull ? null : sqlBoolean.Value;
-                case SqlGuid sqlGuid:
-                    return sqlGuid.IsNull ? null : sqlGuid.Value;
-                case SqlDateTime sqlDateTime:
-                    return sqlDateTime.IsNull ? null : sqlDateTime.Value;
-                case SqlMoney sqlMoney:
-                    return sqlMoney.IsNull ? null : sqlMoney.Value;
-                case SqlBytes sqlBytes:
-                    return sqlBytes.IsNull ? null : sqlBytes.Value;
-                case SqlBinary sqlBinary:
-                    return sqlBinary.IsNull ? null : sqlBinary.Value;
-                case SqlXml sqlXml:
-                    return sqlXml.IsNull ? null : sqlXml.Value;
-                case SqlEntityReference sqlEntityReference:
-                    return sqlEntityReference.IsNull
-                        ? null
-                        : new Dictionary<string, object>
-                        {
-                            ["logicalName"] = sqlEntityReference.LogicalName,
-                            ["id"] = sqlEntityReference.Id
-                        };
-                default:
-                    return value;
-            }
+            return Sql4CdsLocalEngineValueConverter.Convert(value);
         }
 
         private static Sql4CdsLocalPlanNode DescribeNode(IExecutionPlanNode node)
@@ -242,5 +199,56 @@ namespace MarkMpn.Sql4Cds.Engine
         public string Sql { get; set; }
 
         public List<Sql4CdsLocalPlanNode> Children { get; set; }
+    }
+
+    public static class Sql4CdsLocalEngineValueConverter
+    {
+        public static object Convert(object value)
+        {
+            if (value == null || value == DBNull.Value)
+                return null;
+
+            switch (value)
+            {
+                case SqlString sqlString:
+                    return sqlString.IsNull ? null : sqlString.Value;
+                case SqlInt16 sqlInt16:
+                    return sqlInt16.IsNull ? null : sqlInt16.Value;
+                case SqlInt32 sqlInt32:
+                    return sqlInt32.IsNull ? null : sqlInt32.Value;
+                case SqlInt64 sqlInt64:
+                    return sqlInt64.IsNull ? null : sqlInt64.Value;
+                case SqlDecimal sqlDecimal:
+                    return sqlDecimal.IsNull ? null : sqlDecimal.Value;
+                case SqlDouble sqlDouble:
+                    return sqlDouble.IsNull ? null : sqlDouble.Value;
+                case SqlSingle sqlSingle:
+                    return sqlSingle.IsNull ? null : sqlSingle.Value;
+                case SqlBoolean sqlBoolean:
+                    return sqlBoolean.IsNull ? null : sqlBoolean.Value;
+                case SqlGuid sqlGuid:
+                    return sqlGuid.IsNull ? null : sqlGuid.Value;
+                case SqlDateTime sqlDateTime:
+                    return sqlDateTime.IsNull ? null : sqlDateTime.Value;
+                case SqlMoney sqlMoney:
+                    return sqlMoney.IsNull ? null : sqlMoney.Value;
+                case SqlBytes sqlBytes:
+                    return sqlBytes.IsNull ? null : sqlBytes.Value;
+                case SqlBinary sqlBinary:
+                    return sqlBinary.IsNull ? null : sqlBinary.Value;
+                case SqlXml sqlXml:
+                    return sqlXml.IsNull ? null : sqlXml.Value;
+                case SqlEntityReference sqlEntityReference:
+                    return sqlEntityReference.IsNull
+                        ? null
+                        : new Dictionary<string, object>
+                        {
+                            ["logicalName"] = sqlEntityReference.LogicalName,
+                            ["id"] = sqlEntityReference.Id
+                        };
+                default:
+                    return value;
+            }
+        }
     }
 }

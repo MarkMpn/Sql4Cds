@@ -13,5 +13,19 @@ Then serve `MarkMpn.Sql4Cds.Engine.Wasm/bin/Release/net8.0/wwwroot` with any sta
 
 1. load `dotnet.js`
 2. get the exported .NET assembly functions
-3. call `Reset`, `Explain`, and `Execute`
-4. parse the returned JSON
+3. create a SQL 4 CDS session with either `CreateLocalSession()` or `CreateSession(callbacks, dataSourceName)`
+4. call `Explain(sessionId, sql)` and `Execute(sessionId, sql)`
+5. dispose the session with `DisposeSession(sessionId)`
+
+When using `CreateSession`, provide JavaScript callbacks matching the `IOrganizationService` surface:
+
+* `execute(requestName, requestType, requestJson) => responseJson`
+* `retrieveMultiple(queryType, queryJson) => entityCollectionJson`
+* `retrieve(logicalName, id, columnSetJson) => entityJson`
+* `create(entityJson) => id`
+* `update(entityJson)`
+* `delete(logicalName, id)`
+* `associate(logicalName, id, relationshipJson, relatedEntitiesJson)`
+* `disassociate(logicalName, id, relationshipJson, relatedEntitiesJson)`
+
+The callback payloads are JSON produced from the Dataverse SDK types, so JavaScript can inspect the request/query and forward it to Web API, FetchXML, metadata, or other application-specific handlers.
