@@ -62,10 +62,15 @@ namespace MarkMpn.Sql4Cds.Engine
             _options = new DefaultQueryExecutionOptions(this, dataSources.First().Value, CancellationToken.None);
             _session = new SessionContext(dataSources, _options);
 
-            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsBrowser())
+#endif
             {
-                ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
-            });
+                _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
+                {
+                    ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
+                });
+            }
 
             var app = System.Reflection.Assembly.GetEntryAssembly();
 

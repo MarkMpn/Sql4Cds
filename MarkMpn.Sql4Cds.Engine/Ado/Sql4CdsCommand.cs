@@ -120,7 +120,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ["Source"] = _connection.ApplicationName,
                 }
             };
-            _connection.TelemetryClient.TrackEvent(evt);
+            _connection.TelemetryClient?.TrackEvent(evt);
 
             var handler = StatementCompleted;
 
@@ -244,7 +244,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 ["Source"] = _connection.ApplicationName,
                             }
                         };
-                        _connection.TelemetryClient.TrackEvent(evt);
+                        _connection.TelemetryClient?.TrackEvent(evt);
                     }
                 }
 
@@ -264,7 +264,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
                     exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
 
-                _connection.TelemetryClient.TrackException(exTelem);
+                _connection.TelemetryClient?.TrackException(exTelem);
 
                 if (ex is Sql4CdsException)
                     throw;
@@ -368,7 +368,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
                     exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
 
-                _connection.TelemetryClient.TrackException(exTelem);
+                _connection.TelemetryClient?.TrackException(exTelem);
                 throw;
             }
         }

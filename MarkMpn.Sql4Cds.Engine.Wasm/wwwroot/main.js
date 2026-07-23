@@ -5,8 +5,8 @@ const { getAssemblyExports, getConfig } = await dotnet
   .create();
 
 const config = getConfig();
-const exports = await getAssemblyExports(config.mainAssemblyName);
-const sql4cds = exports["MarkMpn.Sql4Cds.Engine.Wasm"].MarkMpn.Sql4Cds.Engine.Wasm.Sql4CdsExports;
+const assemblyExports = await getAssemblyExports(config.mainAssemblyName);
+const sql4cds = assemblyExports.MarkMpn.Sql4Cds.Engine.Wasm.Sql4CdsExports;
 
 const script = `
 CREATE TABLE #Numbers (Id INT, Name NVARCHAR(100));
@@ -16,7 +16,7 @@ SELECT Id, Name, ROW_NUMBER() OVER (ORDER BY Id) AS RowNum FROM #Numbers;
 
 sql4cds.Reset();
 
-const plan = JSON.parse(sql4cds.Explain("SELECT Id, Name, ROW_NUMBER() OVER (ORDER BY Id) AS RowNum FROM #Numbers;"));
+const plan = JSON.parse(sql4cds.Explain(script));
 const result = JSON.parse(sql4cds.Execute(script));
 
 document.querySelector('#plan').textContent = JSON.stringify(plan, null, 2);

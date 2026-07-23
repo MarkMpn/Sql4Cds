@@ -1,34 +1,37 @@
+using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Runtime.InteropServices.JavaScript;
 using MarkMpn.Sql4Cds.Engine;
 
 namespace MarkMpn.Sql4Cds.Engine.Wasm;
 
-public static class Sql4CdsExports
+[SupportedOSPlatform("browser")]
+public static partial class Sql4CdsExports
 {
-    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
-
-    private static Sql4CdsLocalEngine _engine = new Sql4CdsLocalEngine();
-
     [JSExport]
     public static void Reset()
     {
-        _engine.Dispose();
-        _engine = new Sql4CdsLocalEngine();
     }
 
     [JSExport]
     public static string Execute(string sql)
     {
-        return JsonSerializer.Serialize(_engine.Execute(sql), JsonOptions);
+        using var engine = new Sql4CdsLocalEngine();
+        return JsonSerializer.Serialize(engine.Execute(sql), Sql4CdsJsonContext.Default.Sql4CdsLocalExecutionResult);
     }
 
     [JSExport]
     public static string Explain(string sql)
     {
-        return JsonSerializer.Serialize(_engine.Explain(sql), JsonOptions);
+        using var engine = new Sql4CdsLocalEngine();
+        return JsonSerializer.Serialize(engine.Explain(sql), Sql4CdsJsonContext.Default.Sql4CdsLocalPlan);
     }
+}
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(Sql4CdsLocalExecutionResult))]
+[JsonSerializable(typeof(Sql4CdsLocalPlan))]
+internal partial class Sql4CdsJsonContext : JsonSerializerContext
+{
 }

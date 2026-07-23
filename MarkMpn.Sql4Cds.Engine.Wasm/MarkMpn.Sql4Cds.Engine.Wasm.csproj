@@ -7,17 +7,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <InvariantGlobalization>true</InvariantGlobalization>
-    <WasmMainJSPath>main.js</WasmMainJSPath>
+    <PublishTrimmed>false</PublishTrimmed>
+    <WasmMainJSPath>wwwroot/main.js</WasmMainJSPath>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <WasmExtraFilesToDeploy Include="index.html" />
-    <WasmExtraFilesToDeploy Include="README.md" />
   </ItemGroup>
 
 </Project>

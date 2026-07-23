@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public Sql4CdsLocalEngine()
         {
-            var metadata = new MetaMetadataCache(new EmptyAttributeMetadataCache());
+            var metadata = new EmptyAttributeMetadataCache();
             var dataSource = new DataSource
             {
                 Name = "local",
