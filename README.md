@@ -135,13 +135,14 @@ The repository also includes a minimal browser WebAssembly wrapper in
 It reuses the existing `MarkMpn.Sql4Cds.Engine` assembly and exposes a tiny JavaScript API for local, in-memory usage:
 
 * `CreateLocalSession()` - creates a local in-memory session
-* `CreateSession(callbacks, dataSourceName)` - creates a session backed by JavaScript callbacks that implement `IOrganizationService`
+* `CreateSession(callbackSetId, dataSourceName)` - creates a session backed by JavaScript callbacks that implement `IOrganizationService`
 * `Explain(sessionId, sql)` - returns an estimated execution plan as JSON
 * `Execute(sessionId, sql)` - executes SQL and returns result sets as JSON
 * `DisposeSession(sessionId)` - releases the session
 
 This wrapper is intended for browser-hosted scenarios where you want to call SQL 4 CDS from JavaScript without creating
-another copy of the engine logic. See `MarkMpn.Sql4Cds.Engine.Wasm/README.md` and `MarkMpn.Sql4Cds.Engine.Wasm/wwwroot/main.js`
+another copy of the engine logic. Register the callback functions in JavaScript under your chosen callback-set id, then
+pass that id to `CreateSession`. See `MarkMpn.Sql4Cds.Engine.Wasm/README.md` and `MarkMpn.Sql4Cds.Engine.Wasm/wwwroot/main.js`
 for the minimal integration example.
 
 ### Advanced Options

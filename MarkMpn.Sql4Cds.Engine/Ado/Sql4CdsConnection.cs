@@ -10,7 +10,6 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using System.Threading;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.Data.SqlTypes;
-using Microsoft.ApplicationInsights;
 using System.Reflection;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -27,7 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine
     public class Sql4CdsConnection : DbConnection
     {
         private readonly DefaultQueryExecutionOptions _options;
-        private readonly TelemetryClient _ai;
+        private readonly ISql4CdsTelemetryClient _telemetry;
         private readonly SessionContext _session;
 
         /// <summary>
@@ -66,11 +65,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!OperatingSystem.IsBrowser())
 #endif
             {
-                _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
-                {
-                    ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
-                });
+                _telemetry = ApplicationInsightsSql4CdsTelemetryClient.Create();
             }
+
+            _telemetry ??= NullSql4CdsTelemetryClient.Instance;
 
             var app = System.Reflection.Assembly.GetEntryAssembly();
 
@@ -231,7 +229,7 @@ namespace MarkMpn.Sql4Cds.Engine
             set => _options.ColumnOrdering = value;
         }
 
-        internal TelemetryClient TelemetryClient => _ai;
+        internal ISql4CdsTelemetryClient TelemetryClient => _telemetry;
 
         /// <summary>
         /// Triggered before one or more records are about to be deleted

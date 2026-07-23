@@ -13,11 +13,11 @@ Then serve `MarkMpn.Sql4Cds.Engine.Wasm/bin/Release/net8.0/wwwroot` with any sta
 
 1. load `dotnet.js`
 2. get the exported .NET assembly functions
-3. create a SQL 4 CDS session with either `CreateLocalSession()` or `CreateSession(callbacks, dataSourceName)`
+3. create a SQL 4 CDS session with either `CreateLocalSession()` or `CreateSession(callbackSetId, dataSourceName)`
 4. call `Explain(sessionId, sql)` and `Execute(sessionId, sql)`
 5. dispose the session with `DisposeSession(sessionId)`
 
-When using `CreateSession`, provide JavaScript callbacks matching the `IOrganizationService` surface:
+When using `CreateSession`, first register a callback object in JavaScript under a callback-set id, then pass that id to the .NET export. The callback object should match the `IOrganizationService` surface:
 
 * `execute(requestName, requestType, requestJson) => responseJson`
 * `retrieveMultiple(queryType, queryJson) => entityCollectionJson`

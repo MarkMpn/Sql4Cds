@@ -11,7 +11,6 @@ using System.Threading;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.ApplicationInsights.DataContracts;
 
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -112,15 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected, string message)
         {
-            var evt = new EventTelemetry("Execute")
-            {
-                Properties =
-                {
-                    ["QueryType"] = node.GetType().Name,
-                    ["Source"] = _connection.ApplicationName,
-                }
-            };
-            _connection.TelemetryClient?.TrackEvent(evt);
+            _connection.TelemetryClient.TrackCommandEvent("Execute", node.GetType().Name, _connection.ApplicationName);
 
             var handler = StatementCompleted;
 
@@ -235,36 +226,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     foreach (var query in plan)
-                    {
-                        var evt = new EventTelemetry("Convert")
-                        {
-                            Properties =
-                            {
-                                ["QueryType"] = query.GetType().Name,
-                                ["Source"] = _connection.ApplicationName,
-                            }
-                        };
-                        _connection.TelemetryClient?.TrackEvent(evt);
-                    }
+                        _connection.TelemetryClient.TrackCommandEvent("Convert", query.GetType().Name, _connection.ApplicationName);
                 }
 
                 return plan;
             }
             catch (Exception ex)
             {
-                var exTelem = new ExceptionTelemetry(ex)
-                {
-                    Properties =
-                    {
-                        ["Sql"] = CommandText,
-                        ["Source"] = _connection.ApplicationName,
-                    }
-                };
-
-                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
-
-                _connection.TelemetryClient?.TrackException(exTelem);
+                _connection.TelemetryClient.TrackException(ex, CommandText, _connection.ApplicationName, GetErrorNumber(ex));
 
                 if (ex is Sql4CdsException)
                     throw;
@@ -356,21 +325,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (Exception ex)
             {
-                var exTelem = new ExceptionTelemetry(ex)
-                {
-                    Properties =
-                    {
-                        ["Sql"] = CommandText,
-                        ["Source"] = _connection.ApplicationName,
-                    }
-                };
-
-                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
-
-                _connection.TelemetryClient?.TrackException(exTelem);
+                _connection.TelemetryClient.TrackException(ex, CommandText, _connection.ApplicationName, GetErrorNumber(ex));
                 throw;
             }
+        }
+
+        private static string GetErrorNumber(Exception ex)
+        {
+            return ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0 ? sqlEx.Errors[0].Number.ToString() : null;
         }
 
         internal Sql4CdsCommand CreateChildCommand()
