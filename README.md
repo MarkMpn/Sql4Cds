@@ -127,6 +127,21 @@ You can also connect to multiple instances at once and execute queries to combin
 pass all the `IOrganizationService` instances to the `Sql4CdsConnection` constructor. You can then reference
 data from a specific instance using `instancename.dbo.tablename`.
 
+### WebAssembly sample
+
+The repository also includes a minimal browser WebAssembly wrapper in
+`/home/runner/work/Sql4Cds/Sql4Cds/MarkMpn.Sql4Cds.Engine.Wasm`.
+
+It reuses the existing `MarkMpn.Sql4Cds.Engine` assembly and exposes a tiny JavaScript API for local, in-memory usage:
+
+* `Reset()` - creates a fresh local engine session
+* `Explain(sql)` - returns an estimated execution plan as JSON
+* `Execute(sql)` - executes SQL against the local engine and returns result sets as JSON
+
+This wrapper is intended for browser-hosted scenarios where you want to call SQL 4 CDS from JavaScript without creating
+another copy of the engine logic. See `MarkMpn.Sql4Cds.Engine.Wasm/README.md` and `MarkMpn.Sql4Cds.Engine.Wasm/main.js`
+for the minimal integration example.
+
 ### Advanced Options
 
 There are various properties available on the `Sql4CdsConnection` class that you can use to control exactly how your queries are executed:
