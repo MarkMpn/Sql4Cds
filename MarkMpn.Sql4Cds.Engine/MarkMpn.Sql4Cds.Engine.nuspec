@@ -11,9 +11,13 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Bug fixes:
-* Fixed using INSERT with multiple values when implicit type conversion is required between the rows
-* Fixed using @@VERSION when local file system is not available
+    <releaseNotes>New features:
+* Support `sp_executesql` for dynamic SQL execution
+
+Improvements:
+* Allow executing messages with more complex response types
+* Avoid loading values for global parameters such as `@@VERSION` until required
+* Avoid unsupported properties in metadata queries
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
