@@ -72,5 +72,6 @@ Fixes:
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\ColorCode.Html.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\ColorCode.Html.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Resources\Copilot.html" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Copilot.html" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\QuikGraph.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\QuikGraph.dll" />
+    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\CsvHelper.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\CsvHelper.dll" />
   </files>
 </package>

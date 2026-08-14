@@ -448,4 +448,27 @@ copy $(TargetDir)ColorCode.Html.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\Mar
 copy $(TargetDir)Resources\Copilot.html $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)QuikGraph.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
   </PropertyGroup>
+  <PropertyGroup>
+    <PostBuildEvent>mkdir $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)SkiaSharp.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.Text.Encoding.CodePages.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Anthropic.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Azure.AI.OpenAI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Azure.Core.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)CSharpToJsonSchema.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Microsoft.Extensions.AI.Abstractions.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Microsoft.Extensions.AI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Microsoft.Extensions.AI.OpenAI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Microsoft.Extensions.Logging.Abstractions.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)OpenAI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.ClientModel.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)System.Memory.Data.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Markdig.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)ColorCode.Core.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)ColorCode.Html.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)Resources\Copilot.html $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)QuikGraph.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
+copy $(TargetDir)CsvHelper.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds</PostBuildEvent>
+  </PropertyGroup>
 </Project>
