@@ -11,15 +11,20 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Bug fixes:
-* Fixed using INSERT with multiple values when implicit type conversion is required between the rows
-* Fixed using @@VERSION when local file system is not available
+    <releaseNotes>New features:
+* Support `sp_executesql` for dynamic SQL execution
+
+Improvements:
+* Allow executing messages with more complex response types
+* Avoid loading values for global parameters such as `@@VERSION` until required
+* Avoid unsupported properties in metadata queries
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
     <dependencies>
       <group targetFramework=".NETFramework4.6.2">
+        <dependency id="CsvHelper" version="33.1.0" />
         <dependency id="Microsoft.CrmSdk.CoreAssemblies" version="9.0.2.49" />
         <dependency id="Microsoft.CrmSdk.XrmTooling.CoreAssembly" version="9.1.1.32" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="170.64.0" />
@@ -28,6 +33,7 @@
         <dependency id="XPath2.Extensions" version="1.1.3" />
       </group>
       <group targetFramework=".NETCoreApp8.0">
+        <dependency id="CsvHelper" version="33.1.0" />
         <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="1.2.2" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="170.64.0" />
         <dependency id="Microsoft.ApplicationInsights" version="2.23.0" />
