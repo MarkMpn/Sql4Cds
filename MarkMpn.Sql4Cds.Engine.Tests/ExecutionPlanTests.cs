@@ -5369,9 +5369,10 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            var tryCatch = AssertNode<TryCatchNode>(select.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(tryCatch.TrySource);
             Assert.AreEqual(1, computeScalar.Columns.Count);
-            Assert.AreEqual("account_count", computeScalar.Columns["count"].ToSql());
+            Assert.AreEqual("CAST (account_count AS INT)", computeScalar.Columns["count"].ToSql());
             var count = AssertNode<RetrieveTotalRecordCountNode>(computeScalar.Source);
             Assert.AreEqual("account", count.EntityName);
         }

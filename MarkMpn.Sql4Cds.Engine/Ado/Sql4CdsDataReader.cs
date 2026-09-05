@@ -92,10 +92,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     // If we are in a TRY block, store the exception information in the context and move to the CATCH block
                     var caught = false;
+                    var tryCount = 1;
 
                     while (_instructionPointer < _command.Plan.Length && !_options.CancellationToken.IsCancellationRequested)
                     {
-                        if (_command.Plan[_instructionPointer] is BeginCatchNode)
+                        if (_command.Plan[_instructionPointer] is BeginTryNode)
+                        {
+                            tryCount++;
+                        }
+                        else if (_command.Plan[_instructionPointer] is EndTryNode)
+                        {
+                            tryCount--;
+                        }
+                        else if (tryCount == 0 && _command.Plan[_instructionPointer] is BeginCatchNode)
                         {
                             caught = true;
                             break;
