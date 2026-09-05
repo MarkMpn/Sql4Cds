@@ -32,6 +32,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!context.Session.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new QueryExecutionException("Missing datasource " + DataSource);
 
+            var meta = dataSource.Metadata[EntityName];
+            var progressMessage = $"Retrieving {GetDisplayName(0, meta)} count...";
+            context.Options.Progress(0, progressMessage);
+
             var count = ((RetrieveTotalRecordCountResponse)dataSource.Connection.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { EntityName } })).EntityRecordCountCollection[EntityName];
 
             var resultEntity = new Entity(EntityName)
