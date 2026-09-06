@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -11,7 +11,6 @@ using System.Threading;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
-using Microsoft.ApplicationInsights.DataContracts;
 
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -112,16 +111,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected, string message)
         {
-            var evt = new EventTelemetry("Execute")
-            {
-                Properties =
-                {
-                    ["QueryType"] = node.GetType().Name,
-                    ["Source"] = _connection.ApplicationName,
-                }
-            };
-            _connection.TelemetryClient.TrackEvent(evt);
-
             var handler = StatementCompleted;
 
             if (handler != null)
@@ -232,40 +221,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     Plan = plan;
                 }
-                else
-                {
-                    foreach (var query in plan)
-                    {
-                        var evt = new EventTelemetry("Convert")
-                        {
-                            Properties =
-                            {
-                                ["QueryType"] = query.GetType().Name,
-                                ["Source"] = _connection.ApplicationName,
-                            }
-                        };
-                        _connection.TelemetryClient.TrackEvent(evt);
-                    }
-                }
 
                 return plan;
             }
             catch (Exception ex)
             {
-                var exTelem = new ExceptionTelemetry(ex)
-                {
-                    Properties =
-                    {
-                        ["Sql"] = CommandText,
-                        ["Source"] = _connection.ApplicationName,
-                    }
-                };
-
-                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
-
-                _connection.TelemetryClient.TrackException(exTelem);
-
                 if (ex is Sql4CdsException)
                     throw;
 
@@ -287,9 +247,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             Prepare();
 
-            try
-            {
-                _cancelledManually = false;
+            _cancelledManually = false;
 
                 if (!_reuseCts)
                     _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
@@ -299,10 +257,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     var dataSource = _connection.Session.DataSources[_connection.Database];
 #if NETCOREAPP
                     var svc = (ServiceClient)dataSource.Connection;
-                    var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
+                    var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host + ";Encrypt=True;TrustServerCertificate=False");
 #else
                     var svc = (CrmServiceClient)dataSource.Connection;
-                    var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
+                    var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host + ";Encrypt=True;TrustServerCertificate=False");
 #endif
                     // Try to get the access token from CurrentAccessToken first, then fall back to the AccessTokenProvider
                     var accessToken = svc.CurrentAccessToken;
@@ -353,24 +311,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts, _reuseCts);
 
                 return new Sql4CdsDataReader(this, options, behavior);
-            }
-            catch (Exception ex)
-            {
-                var exTelem = new ExceptionTelemetry(ex)
-                {
-                    Properties =
-                    {
-                        ["Sql"] = CommandText,
-                        ["Source"] = _connection.ApplicationName,
-                    }
-                };
-
-                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
-
-                _connection.TelemetryClient.TrackException(exTelem);
-                throw;
-            }
         }
 
         internal Sql4CdsCommand CreateChildCommand()

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml;
@@ -145,12 +145,12 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!(dataSource.Connection is ServiceClient svc))
                 throw new ArgumentOutOfRangeException(nameof(dataSource.Connection), "Only ServiceClient instances are supported");
 
-            var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
+            var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host + ";Encrypt=True;TrustServerCertificate=False");
 #else
             if (!(dataSource.Connection is CrmServiceClient svc))
                 throw new ArgumentOutOfRangeException(nameof(dataSource.Connection), "Only CrmServiceClient instances are supported");
 
-            var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
+            var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host + ";Encrypt=True;TrustServerCertificate=False");
 #endif
 
             // Try to get the access token from CurrentAccessToken first, then fall back to the AccessTokenProvider

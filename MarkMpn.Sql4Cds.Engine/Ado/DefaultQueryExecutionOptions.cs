@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 #if NETCOREAPP
@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public int BatchSize { get; set; } = 100;
 
-        public bool UseTDSEndpoint { get; set; } = true;
+        public bool UseTDSEndpoint { get; set; } = false;
 
         public int MaxDegreeOfParallelism { get; set; } = 10;
 

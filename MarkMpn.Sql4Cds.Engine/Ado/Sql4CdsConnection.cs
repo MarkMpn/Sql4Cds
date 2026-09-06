@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -10,7 +10,6 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using System.Threading;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.Data.SqlTypes;
-using Microsoft.ApplicationInsights;
 using System.Reflection;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -27,7 +26,6 @@ namespace MarkMpn.Sql4Cds.Engine
     public class Sql4CdsConnection : DbConnection
     {
         private readonly DefaultQueryExecutionOptions _options;
-        private readonly TelemetryClient _ai;
         private readonly SessionContext _session;
 
         /// <summary>
@@ -62,10 +60,6 @@ namespace MarkMpn.Sql4Cds.Engine
             _options = new DefaultQueryExecutionOptions(this, dataSources.First().Value, CancellationToken.None);
             _session = new SessionContext(dataSources, _options);
 
-            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
-            {
-                ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
-            });
 
             var app = System.Reflection.Assembly.GetEntryAssembly();
 
@@ -225,8 +219,6 @@ namespace MarkMpn.Sql4Cds.Engine
             get => _options.ColumnOrdering;
             set => _options.ColumnOrdering = value;
         }
-
-        internal TelemetryClient TelemetryClient => _ai;
 
         /// <summary>
         /// Triggered before one or more records are about to be deleted
