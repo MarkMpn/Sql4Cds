@@ -2,15 +2,20 @@
 
 Query and manage Microsoft Dataverse data with the SQL 4 CDS engine directly from Visual Studio Code. The extension provides saved connections, Dataverse metadata browsing, SQL editor assistance, query execution, result inspection, and export while remaining isolated from the Microsoft MSSQL language mode.
 
-> This is an early release. Review generated statements and use a non-production environment while evaluating data-modification workflows.
+The first release combines the SQL 4 CDS query engine with a dedicated Dataverse connection explorer and results grid.
 
 ## Requirements
 
 - Visual Studio Code 1.96 or later on Windows, macOS, or Linux.
 - The [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) available through the `dotnet` command.
 - Network access and permissions for the target Dataverse environment.
+- A trusted VS Code workspace. The extension is disabled in Restricted Mode and virtual workspaces.
 
 The language service is included in the extension, but it is framework-dependent. A .NET SDK is not required to use the extension. VS Code for the Web is not supported. Remote Development, Dev Containers, and WSL have not yet been validated for this release; in those configurations, install .NET 8 in the environment where the extension host runs.
+
+## Install
+
+For a release VSIX, run **Extensions: Install from VSIX…** from the Command Palette, select `sql4cds.vsix`, and reload VS Code.
 
 ## Get started
 
@@ -24,7 +29,7 @@ SQL 4 CDS uses the `.sql4cds` extension and the `sql4cds` language identifier. T
 
 ## Working with results
 
-The results grid keeps only the current page in the browser while maintaining selection across pages. Click or drag to select cells, use the row-number gutter or column name to select a complete row or column, and use `Shift` to extend a range. `Ctrl+A` (`Cmd+A` on macOS) selects the complete filtered result view. Paging and column reordering preserve selection; changing search, filters, or sort clears it because those operations change the logical row positions.
+The results grid renders the current page and caches up to three pages in the browser while maintaining selection across pages. Click or drag to select cells, use the row-number gutter or column name to select a complete row or column, and use `Shift` to extend a range. `Ctrl+A` (`Cmd+A` on macOS) selects the complete filtered result view. Paging and column reordering preserve selection; changing search, filters, or sort clears it because those operations change the logical row positions.
 
 Each column header has separate controls for dragging, selecting the column by name, cycling its sort through original/ascending/descending, opening its filter, and resizing. Quick search and column filters apply to the complete retained result view, not only the visible 200-row page.
 
@@ -40,7 +45,9 @@ The first release supports:
 - Windows integrated authentication for supported on-premises deployments.
 - An advanced Dataverse connection string.
 
-Profile names, environment URLs, user hints, and client IDs are saved in VS Code global extension state. Passwords, client secrets, and full connection strings are saved through VS Code Secret Storage and are removed when the corresponding profile is deleted. Tokens are managed by the Dataverse client, cached in the extension's VS Code global-storage directory, and are not written to extension settings or the installation directory.
+Profile names, environment URLs, user hints, and client IDs are saved in VS Code global extension state. Passwords, client secrets, and full connection strings are saved through VS Code Secret Storage and are removed when the corresponding profile is deleted. Renaming a profile or changing its settings disconnects affected query editors; reconnect them to use the updated profile. **Test Connection** performs fresh authentication even when another editor is connected.
+
+Tokens are managed by the Dataverse client, cached in the extension's VS Code global-storage directory, and are not written to extension settings or the installation directory.
 
 ## Query safety
 
@@ -84,7 +91,8 @@ The client attempts automatic recovery. If it cannot recover, choose **Restart S
 
 - Confirm the environment URL uses HTTPS and opens for the same account.
 - Check that the user or application user has Dataverse access and the required security roles.
-- Delete and recreate the saved profile if a password or client secret changed.
+- Use **Edit Connection** to replace an expired password or client secret.
+- If a name is still in use with different settings, disconnect its query editors, refresh Object Explorer, and reconnect.
 - Refresh the connection after authentication or metadata changes.
 - For interactive authentication, complete any account or consent window opened by the Dataverse client.
 
@@ -111,18 +119,18 @@ Known first-release limitations:
 
 ## Development
 
-From `VSCodeExtension`:
+Development requires Node.js 22 or later, a .NET 8 SDK or later, and the .NET 8 Runtime. From `VSCodeExtension`:
 
 ```bash
-dotnet build ../MarkMpn.Sql4Cds.LanguageServer/MarkMpn.Sql4Cds.LanguageServer.csproj -c Release
 npm ci
-npm run check
-npm test
-npm run build
-npm run test:service
 npm run package
+npm run test:connections
+npm run test:service
+npm run test:host
 ```
 
-The package step copies the Release language-service output into the VSIX. Debug output is used only when no Release build is available.
+Packaging type-checks source and tests, runs unit and DOM tests, publishes a fresh framework-dependent Release service, bundles the extension, and verifies the VSIX contents. It never falls back to Debug output.
 
-SQL 4 CDS is licensed under the [MIT License](LICENSE). See the [changelog](CHANGELOG.md) for release details.
+The host tests download VS Code 1.96.0 and use an isolated temporary profile. Set `VSCODE_TEST_VERSION=stable` to test the current stable editor. On Linux, run `xvfb-run -a npm run test:host`. The connection coordinator tests use controlled authentication completions and do not require Dataverse credentials. See [RELEASING.md](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/RELEASING.md) for the release process and live-environment checks.
+
+SQL 4 CDS is licensed under the [MIT License](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/LICENSE). See the [changelog](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/CHANGELOG.md) for release details.

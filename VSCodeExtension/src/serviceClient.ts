@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import * as vscode from "vscode";
 import { LanguageClient, LanguageClientOptions, ServerOptions, State, TransportKind } from "vscode-languageclient/node";
@@ -16,10 +17,12 @@ export class Sql4CdsService implements vscode.Disposable {
   private client: LanguageClient | undefined;
   private readonly connectionPending = new PendingRequests<ConnectionCompleteParams>();
   private readonly sessionPending = new PendingRequests<SessionCreatedParams>();
+  private readonly sessionCreated = new vscode.EventEmitter<SessionCreatedParams>();
   private readonly expandPending = new PendingRequests<ExpandResponse>();
   private readonly output: vscode.OutputChannel;
   private stopping = false;
   private stoppedTimer: NodeJS.Timeout | undefined;
+  private disposal: Promise<void> | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.output = vscode.window.createOutputChannel("SQL 4 CDS");
@@ -80,19 +83,23 @@ export class Sql4CdsService implements vscode.Disposable {
   }
 
   public async connect(ownerUri: string, details: ConnectionDetails, type = "Default"): Promise<ConnectionCompleteParams> {
-    const completion = this.connectionPending.wait(ownerUri, 120_000, "Connection timed out");
+    const requestId = randomUUID();
+    const client = this.languageClient;
     try {
-      const accepted = await this.languageClient.sendRequest<boolean>(Methods.connect, {
-        ownerUri,
-        connection: details,
-        type,
-        purpose: type === "ObjectExplorer" ? "ObjectExplorer" : "GeneralConnection"
+      return await this.connectionPending.run(requestId, 120_000, "Connection timed out", async () => {
+        const accepted = await client.sendRequest<boolean>(Methods.connect, {
+          ownerUri,
+          requestId,
+          connection: details,
+          type,
+          purpose: type === "ObjectExplorer" ? "ObjectExplorer" : "GeneralConnection"
+        });
+        if (!accepted) { throw new Error("The SQL 4 CDS service rejected the connection request."); }
       });
-      if (!accepted) { throw new Error("The SQL 4 CDS service rejected the connection request."); }
     } catch (error) {
-      this.connectionPending.reject(ownerUri, error);
+      void Promise.resolve().then(() => client.sendRequest(Methods.cancelConnect, { ownerUri, requestId })).catch(() => {});
+      throw error;
     }
-    return completion;
   }
 
   public async disconnect(ownerUri: string, type = "Default"): Promise<void> {
@@ -100,22 +107,48 @@ export class Sql4CdsService implements vscode.Disposable {
   }
 
   public async createObjectExplorerSession(details: ConnectionDetails): Promise<SessionCreatedParams> {
-    const response = await this.languageClient.sendRequest<{ sessionId: string }>(Methods.createObjectExplorerSession, details);
-    return this.sessionPending.wait(response.sessionId, 120_000, "Object Explorer connection timed out");
+    const key = randomUUID();
+    let sessionId: string | undefined;
+    let finished = false;
+    let succeeded = false;
+    const early = new Map<string, SessionCreatedParams>();
+    const complete = (params: SessionCreatedParams): void => {
+      if (!params.success || params.errorMessage) {
+        this.sessionPending.reject(key, new Error(params.errorMessage || "Unable to create Object Explorer session."));
+      } else { this.sessionPending.resolve(key, params); }
+    };
+    // Subscribe before sending: transport scheduling must not depend on the server's delay.
+    const subscription = this.sessionCreated.event((params: SessionCreatedParams) => {
+      if (!sessionId) { early.set(params.sessionId, params); }
+      else if (params.sessionId === sessionId) { complete(params); }
+    });
+    try {
+      const created = await this.sessionPending.run(key, 120_000, "Object Explorer connection timed out", async () => {
+        const response = await this.languageClient.sendRequest<{ sessionId: string }>(Methods.createObjectExplorerSession, details);
+        sessionId = response.sessionId;
+        if (finished) { await this.closeObjectExplorerSession(sessionId); return; }
+        const notification = early.get(sessionId);
+        early.clear();
+        if (notification) { complete(notification); }
+      });
+      succeeded = true;
+      return created;
+    } finally {
+      finished = true;
+      subscription.dispose();
+      early.clear();
+      if (!succeeded && sessionId) { void this.closeObjectExplorerSession(sessionId).catch(() => {}); }
+    }
   }
 
   public async expandObjectExplorer(sessionId: string, nodePath: string): Promise<ExpandResponse> {
     const key = `${sessionId}\n${nodePath}`;
-    const completion = this.expandPending.wait(key, 60_000, "Object Explorer expansion timed out");
-    try {
+    return this.expandPending.run(key, 60_000, "Object Explorer expansion timed out", async () => {
       const accepted = await this.languageClient.sendRequest<boolean>(Methods.expandObjectExplorer, { sessionId, nodePath });
       if (!accepted) {
-        this.expandPending.reject(key, new Error("Object Explorer expansion was rejected."));
+        throw new Error("Object Explorer expansion was rejected.");
       }
-    } catch (error) {
-      this.expandPending.reject(key, error);
-    }
-    return completion;
+    });
   }
 
   public async closeObjectExplorerSession(sessionId: string): Promise<void> {
@@ -124,13 +157,11 @@ export class Sql4CdsService implements vscode.Disposable {
 
   private registerNotifications(client: LanguageClient): void {
     client.onNotification(Methods.connectionComplete, (params: ConnectionCompleteParams) => {
-      if (params.errorMessage) { this.connectionPending.reject(params.ownerUri, new Error(params.errorMessage)); }
-      else { this.connectionPending.resolve(params.ownerUri, params); }
+      if (!params.requestId) { return; }
+      if (params.errorMessage) { this.connectionPending.reject(params.requestId, new Error(params.errorMessage)); }
+      else { this.connectionPending.resolve(params.requestId, params); }
     });
-    client.onNotification(Methods.objectExplorerSessionCreated, (params: SessionCreatedParams) => {
-      if (!params.success || params.errorMessage) { this.sessionPending.reject(params.sessionId, new Error(params.errorMessage || "Unable to create Object Explorer session.")); }
-      else { this.sessionPending.resolve(params.sessionId, params); }
-    });
+    client.onNotification(Methods.objectExplorerSessionCreated, (params: SessionCreatedParams) => this.sessionCreated.fire(params));
     client.onNotification(Methods.objectExplorerExpanded, (params: ExpandResponse) => {
       const key = `${params.sessionId}\n${params.nodePath}`;
       if (params.errorMessage) { this.expandPending.reject(key, new Error(params.errorMessage)); }
@@ -192,11 +223,16 @@ export class Sql4CdsService implements vscode.Disposable {
     this.expandPending.rejectAll(reason);
   }
 
-  public async dispose(): Promise<void> {
+  public dispose(): Promise<void> {
+    return this.disposal ??= this.stop();
+  }
+
+  private async stop(): Promise<void> {
     this.stopping = true;
     if (this.stoppedTimer) { clearTimeout(this.stoppedTimer); }
     this.rejectAllPending(new Error("The SQL 4 CDS extension is shutting down."));
     if (this.client) { await this.client.stop(); }
     this.client = undefined;
+    this.sessionCreated.dispose();
   }
 }

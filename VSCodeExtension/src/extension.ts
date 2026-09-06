@@ -16,22 +16,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await vscode.commands.executeCommand("setContext", "sql4cds.queryRunning", false);
 
   service = new Sql4CdsService(context);
+  context.subscriptions.push(profiles, service);
   try {
     await service.start();
   } catch (error) {
     const message = `SQL 4 CDS could not start: ${errorMessage(error)}`;
-    const selection = await vscode.window.showErrorMessage(message, "Show Output", ...(error instanceof ServicePrerequisiteError && error.helpUrl ? ["Install .NET 8"] : []));
-    if (selection === "Show Output") { service.showOutput(); }
-    if (selection === "Install .NET 8" && error instanceof ServicePrerequisiteError && error.helpUrl) {
-      await vscode.env.openExternal(vscode.Uri.parse(error.helpUrl));
-    }
+    void vscode.window.showErrorMessage(message, "Show Output", ...(error instanceof ServicePrerequisiteError && error.helpUrl ? ["Install .NET 8"] : [])).then(async selection => {
+      if (selection === "Show Output") { service?.showOutput(); }
+      if (selection === "Install .NET 8" && error instanceof ServicePrerequisiteError && error.helpUrl) {
+        await vscode.env.openExternal(vscode.Uri.parse(error.helpUrl));
+      }
+    });
     throw error;
   }
 
   const documentConnections = new DocumentConnectionManager(service, profiles);
   const objectExplorer = new ObjectExplorerProvider(service, profiles);
   const queries = new QueryController(service, documentConnections);
-  context.subscriptions.push(documentConnections, objectExplorer, queries, profiles, service);
+  context.subscriptions.push(documentConnections, objectExplorer, queries);
   context.subscriptions.push(vscode.window.registerTreeDataProvider("sql4cds.objectExplorer", objectExplorer));
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("sql4cdsQueryResults", queries, {
     webviewOptions: { retainContextWhenHidden: true }

@@ -14,6 +14,7 @@ export interface ConnectionDetails { options: Record<string, unknown>; }
 
 export interface ConnectionCompleteParams {
   ownerUri: string;
+  requestId?: string;
   connectionId?: string;
   messages?: string;
   errorMessage?: string;
@@ -198,6 +199,7 @@ export interface SubsetResult {
 
 export const Methods = {
   connect: "connection/connect",
+  cancelConnect: "connection/cancelconnect",
   disconnect: "connection/disconnect",
   connectionComplete: "connection/complete",
   createObjectExplorerSession: "objectexplorer/createsession",

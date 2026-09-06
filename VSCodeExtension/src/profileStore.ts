@@ -128,7 +128,7 @@ export class ProfileStore implements vscode.Disposable {
     const validationError = validateProfile(profile);
     if (validationError) { throw new Error(validationError); }
 
-    const options: Record<string, unknown> = { connectionName: profile.name };
+    const options: Record<string, unknown> = { connectionName: profile.name, connectionId: profile.id };
     if (profile.authenticationType === "ConnectionString") {
       options.connectionString = await this.requiredSecret(profile, "connectionString");
       return { options };

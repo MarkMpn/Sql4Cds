@@ -32,6 +32,10 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
   private readonly changedEmitter = new vscode.EventEmitter<Sql4CdsTreeItem | undefined>();
   private readonly sessions = new Map<string, ExplorerSession>();
   private readonly children = new Map<string, NodeInfo[]>();
+  private readonly sessionRequests = new Map<string, Promise<ExplorerSession>>();
+  private readonly expandRequests = new Map<string, Promise<NodeInfo[]>>();
+  private generation = 0;
+  private disposed = false;
   private readonly disposables: vscode.Disposable[] = [];
   public readonly onDidChangeTreeData = this.changedEmitter.event;
 
@@ -40,6 +44,7 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
       profiles.onDidChange(() => this.refresh()),
       service.languageClient.onDidChangeState(event => {
         if (event.newState !== State.Stopped) { return; }
+        this.invalidateRequests();
         this.sessions.clear();
         this.children.clear();
         this.changedEmitter.fire(undefined);
@@ -74,8 +79,9 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
   }
 
   public refresh(item?: Sql4CdsTreeItem): void {
+    this.invalidateRequests();
     if (!item) {
-      for (const session of this.sessions.values()) { void this.service.closeObjectExplorerSession(session.sessionId); }
+      for (const session of this.sessions.values()) { void this.closeSession(session.sessionId); }
       this.sessions.clear();
       this.children.clear();
       this.changedEmitter.fire(undefined);
@@ -84,7 +90,7 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
 
     if (!item.node) {
       const session = this.sessions.get(item.profile.id);
-      if (session) { void this.service.closeObjectExplorerSession(session.sessionId); }
+      if (session) { void this.closeSession(session.sessionId); }
       this.sessions.delete(item.profile.id);
       this.clearProfileCache(item.profile.id);
     } else {
@@ -126,9 +132,6 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
   }
 
   public async removeProfile(item: Sql4CdsTreeItem): Promise<void> {
-    const session = this.sessions.get(item.profile.id);
-    if (session) { await this.service.closeObjectExplorerSession(session.sessionId); this.sessions.delete(item.profile.id); }
-    this.clearProfileCache(item.profile.id);
     await this.profiles.remove(item.profile.id);
   }
 
@@ -136,10 +139,19 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
     const key = cacheKey(profile.id, nodePath);
     const cached = this.children.get(key);
     if (cached) { return cached; }
-    const response = await this.service.expandObjectExplorer(sessionId, nodePath);
-    const nodes = response.nodes ?? [];
-    this.children.set(key, nodes);
-    return nodes;
+    const pending = this.expandRequests.get(key);
+    if (pending) { return pending; }
+    const generation = this.generation;
+    const request = (async () => {
+      const response = await this.service.expandObjectExplorer(sessionId, nodePath);
+      if (this.disposed || generation !== this.generation) { throw new Error("Object Explorer was refreshed. Expand the connection again."); }
+      const nodes = response.nodes ?? [];
+      this.children.set(key, nodes);
+      return nodes;
+    })();
+    this.expandRequests.set(key, request);
+    try { return await request; }
+    finally { if (this.expandRequests.get(key) === request) { this.expandRequests.delete(key); } }
   }
 
   private clearProfileCache(profileId: string): void {
@@ -152,16 +164,41 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
   private async ensureSession(profile: ConnectionProfile): Promise<ExplorerSession> {
     const existing = this.sessions.get(profile.id);
     if (existing) { return existing; }
-    const created = await this.service.createObjectExplorerSession(await this.profiles.toConnectionDetails(profile));
-    if (!created.rootNode) { throw new Error("The language service did not return an Object Explorer root."); }
-    const session = { sessionId: created.sessionId, root: created.rootNode };
-    this.sessions.set(profile.id, session);
-    return session;
+    const pending = this.sessionRequests.get(profile.id);
+    if (pending) { return pending; }
+    const generation = this.generation;
+    const request = (async () => {
+      const created = await this.service.createObjectExplorerSession(await this.profiles.toConnectionDetails(profile));
+      if (this.disposed || generation !== this.generation || !created.rootNode) {
+        await this.closeSession(created.sessionId);
+        throw new Error("Object Explorer changed while connecting. Expand the connection again.");
+      }
+      const session = { sessionId: created.sessionId, root: created.rootNode };
+      this.sessions.set(profile.id, session);
+      return session;
+    })();
+    this.sessionRequests.set(profile.id, request);
+    try { return await request; }
+    finally { if (this.sessionRequests.get(profile.id) === request) { this.sessionRequests.delete(profile.id); } }
+  }
+
+  private invalidateRequests(): void {
+    this.generation++;
+    this.sessionRequests.clear();
+    this.expandRequests.clear();
+  }
+
+  private async closeSession(sessionId: string): Promise<void> {
+    try { await this.service.closeObjectExplorerSession(sessionId); }
+    catch { /* Sessions are already gone when the service stops. */ }
   }
 
   public dispose(): void {
+    this.disposed = true;
+    this.invalidateRequests();
     for (const disposable of this.disposables) { disposable.dispose(); }
-    for (const session of this.sessions.values()) { void this.service.closeObjectExplorerSession(session.sessionId); }
+    for (const session of this.sessions.values()) { void this.closeSession(session.sessionId); }
+    this.sessions.clear();
     this.children.clear();
     this.changedEmitter.dispose();
   }

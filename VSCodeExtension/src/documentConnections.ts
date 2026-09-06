@@ -9,6 +9,7 @@ import { redactSensitiveText } from "./serviceRuntime";
 export class DocumentConnectionManager implements vscode.Disposable {
   private readonly connections = new Map<string, ConnectionProfile>();
   private readonly connecting = new Set<string>();
+  private readonly invalidated = new Set<string>();
   private readonly changedEmitter = new vscode.EventEmitter<void>();
   private readonly status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   private readonly disposables: vscode.Disposable[] = [];
@@ -50,6 +51,7 @@ export class DocumentConnectionManager implements vscode.Disposable {
     const profileRevision = this.profiles.revision(profile.id);
     let previousDisconnected = false;
     this.connecting.add(uri);
+    this.invalidated.delete(uri);
     try {
       this.showConnecting(profile.name);
       const details = await this.profiles.toConnectionDetails(profile);
@@ -58,7 +60,7 @@ export class DocumentConnectionManager implements vscode.Disposable {
         previousDisconnected = true;
       }
       await this.service.connect(uri, details);
-      if (this.disposed) {
+      if (this.disposed || editor.document.isClosed || this.invalidated.has(uri)) {
         await this.disconnectService(uri);
         return false;
       }
@@ -71,7 +73,8 @@ export class DocumentConnectionManager implements vscode.Disposable {
       this.fireChanged();
       return true;
     } catch (error) {
-      const restored = previous ? (!previousDisconnected || await this.restoreConnection(uri, previous)) : false;
+      const restored = previous && !this.disposed && !editor.document.isClosed && !this.invalidated.has(uri)
+        ? (!previousDisconnected || await this.restoreConnection(uri, previous)) : false;
       if (!restored) { this.connections.delete(uri); }
       this.fireChanged();
       const reason = errorMessage(error).replace(/[.\s]+$/, "");
@@ -80,6 +83,7 @@ export class DocumentConnectionManager implements vscode.Disposable {
       return false;
     } finally {
       this.connecting.delete(uri);
+      this.invalidated.delete(uri);
       this.updateContext();
     }
   }
@@ -110,7 +114,11 @@ export class DocumentConnectionManager implements vscode.Disposable {
         location: vscode.ProgressLocation.Notification,
         title: `Testing SQL 4 CDS connection '${profile.name}'…`,
         cancellable: false
-      }, async () => this.service.connect(ownerUri, await this.profiles.toConnectionDetails(profile!)));
+      }, async () => {
+        const details = await this.profiles.toConnectionDetails(profile!);
+        // A separate name forces fresh authentication instead of reusing a live data source.
+        return this.service.connect(ownerUri, { options: { ...details.options, connectionName: ownerUri } });
+      });
       const target = response.connectionSummary?.serverName ?? response.connectionSummary?.databaseName ?? profile.name;
       void vscode.window.showInformationMessage(`Connected successfully to ${target}.`);
       return true;
@@ -140,6 +148,10 @@ export class DocumentConnectionManager implements vscode.Disposable {
       const current = this.profiles.get(previous.id);
       if (!current) { return false; }
       await this.service.connect(uri, await this.profiles.toConnectionDetails(current));
+      if (this.disposed || this.invalidated.has(uri) || !vscode.workspace.textDocuments.some(document => !document.isClosed && document.uri.toString() === uri)) {
+        await this.disconnectService(uri);
+        return false;
+      }
       this.connections.set(uri, current);
       return true;
     } catch {
@@ -148,6 +160,7 @@ export class DocumentConnectionManager implements vscode.Disposable {
   }
 
   private async disconnectUri(uri: string): Promise<void> {
+    if (this.connecting.has(uri)) { this.invalidated.add(uri); }
     if (!this.connections.delete(uri)) { return; }
     await this.disconnectService(uri);
     this.fireChanged();
@@ -184,7 +197,7 @@ export class DocumentConnectionManager implements vscode.Disposable {
   }
 
   private handleServiceStopped(): void {
-    this.connecting.clear();
+    for (const uri of this.connecting) { this.invalidated.add(uri); }
     if (this.connections.size === 0) { return; }
     this.connections.clear();
     this.fireChanged();
@@ -226,7 +239,7 @@ export function errorMessage(error: unknown): string {
 }
 
 function sameConnectionSettings(left: ConnectionProfile, right: ConnectionProfile): boolean {
-  return left.authenticationType === right.authenticationType &&
+  return left.name === right.name && left.authenticationType === right.authenticationType &&
     left.url === right.url &&
     left.user === right.user &&
     left.clientId === right.clientId &&
