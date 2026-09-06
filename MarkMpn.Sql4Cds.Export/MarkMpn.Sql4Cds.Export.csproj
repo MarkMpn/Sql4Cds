@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net48</TargetFrameworks>
@@ -20,7 +20,7 @@
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' And '$(TargetFramework)' == 'net48' ">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition=" '$(OS)' == 'Windows_NT' And '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' And '$(TargetFramework)' == 'net48' ">
     <MakeDir Directories="$(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
     <Exec Command="copy $(TargetDir)MarkMpn.Sql4Cds.Export.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds" />
   </Target>
