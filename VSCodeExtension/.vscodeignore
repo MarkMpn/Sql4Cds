@@ -5,7 +5,10 @@ scripts/**
 test/**
 .test-dist/**
 node_modules/**
-tsconfig.json
+tsconfig*.json
 package-lock.json
 **/*.map
 out/sql4cdstoolsservice/*.pdb
+.vscode-test/**
+RELEASING.md
+*.vsix

@@ -8,6 +8,7 @@ const extensionRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const serviceDll = join(extensionRoot, "out", "sql4cdstoolsservice", "MarkMpn.Sql4Cds.LanguageServer.dll");
 const logDir = await mkdtemp(join(tmpdir(), "sql4cds-smoke-"));
 const pending = new Map();
+const notifications = new Map();
 let buffer = Buffer.alloc(0);
 let stderr = "";
 
@@ -24,7 +25,7 @@ service.stdout.on("data", chunk => {
 });
 service.on("error", error => rejectAll(error));
 service.on("exit", (code, signal) => {
-  if (pending.size > 0) {
+  if (pending.size > 0 || notifications.size > 0) {
     rejectAll(new Error(`Language service exited early (${signal ?? code}). ${stderr.trim()}`));
   }
 });
@@ -39,14 +40,25 @@ try {
   if (!initialized?.capabilities) { throw new Error("Initialize response did not contain server capabilities."); }
 
   notify("initialized", {});
+  const diagnostics = waitForNotification("textDocument/publishDiagnostics");
+  notify("textDocument/didOpen", { textDocument: { uri: "untitled:sql4cds-smoke", languageId: "sql4cds", version: 1, text: "SELECT 1" } });
+  const published = await diagnostics;
+  if (Array.isArray(published) || published?.uri !== "untitled:sql4cds-smoke" || !Array.isArray(published.diagnostics)) {
+    throw new Error("Editor diagnostics must use an LSP named-parameter object.");
+  }
+  notify("textDocument/didClose", { textDocument: { uri: "untitled:sql4cds-smoke" } });
   const exited = new Promise(resolve => service.once("exit", (code, signal) => resolve({ code, signal })));
-  service.kill();
-  const exit = await Promise.race([
-    exited,
-    new Promise((_, reject) => setTimeout(() => reject(new Error("Language service did not stop after termination.")), 10_000))
-  ]);
-  if (exit.code !== 0 && exit.code !== 143 && exit.code !== null) { throw new Error(`Language service exited with code ${exit.code}. ${stderr.trim()}`); }
-  process.stdout.write("SQL 4 CDS language service completed the LSP initialization smoke test.\n");
+  service.stdin.end();
+  let timer;
+  let exit;
+  try {
+    exit = await Promise.race([
+      exited,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Language service did not stop after closing its input.")), 10_000); })
+    ]);
+  } finally { clearTimeout(timer); }
+  if (exit.code !== 0) { throw new Error(`Language service exited with code ${exit.code}. ${stderr.trim()}`); }
+  process.stdout.write("SQL 4 CDS language service passed initialization, editor diagnostics, and shutdown smoke tests.\n");
 } finally {
   if (service.exitCode === null) { service.kill(); }
   await rm(logDir, { recursive: true, force: true });
@@ -60,6 +72,13 @@ function request(id, method, params) {
     }, 20_000);
     pending.set(id, { resolve, reject, timer });
     send({ jsonrpc: "2.0", id, method, params });
+  });
+}
+
+function waitForNotification(method) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { notifications.delete(method); reject(new Error(`Timed out waiting for ${method}.`)); }, 20_000);
+    notifications.set(method, { resolve, reject, timer });
   });
 }
 
@@ -86,7 +105,15 @@ function readMessages() {
     if (buffer.length < messageEnd) { return; }
     const message = JSON.parse(buffer.subarray(headerEnd + 4, messageEnd).toString("utf8"));
     buffer = buffer.subarray(messageEnd);
-    if (message.id === undefined) { continue; }
+    if (message.id === undefined) {
+      const notification = notifications.get(message.method);
+      if (notification) {
+        clearTimeout(notification.timer);
+        notifications.delete(message.method);
+        notification.resolve(message.params);
+      }
+      continue;
+    }
     const completion = pending.get(message.id);
     if (!completion) { continue; }
     clearTimeout(completion.timer);
@@ -97,9 +124,10 @@ function readMessages() {
 }
 
 function rejectAll(error) {
-  for (const completion of pending.values()) {
+  for (const completion of [...pending.values(), ...notifications.values()]) {
     clearTimeout(completion.timer);
     completion.reject(error);
   }
   pending.clear();
+  notifications.clear();
 }

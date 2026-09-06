@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makeUniqueHeaders, serializeClipboard, serializeClipboardChunks } from "../src/resultClipboard";
+import { makeUniqueHeaders, projectClipboardRows, serializeClipboard, serializeClipboardChunks } from "../src/resultClipboard";
 
 const table = {
   headers: ["name", "name", "", "active"],
   rows: [["O'Brien", "line 1\nline 2", null, true], ["a,b", "<tag>", 42, false]]
 };
+
+test("sparse selections never introduce unselected rows into SQL IN or JSON", () => {
+  const rows = projectClipboardRows([["first"], ["unselected"], ["third"]], 0, [
+    { rowStart: 0, rowEnd: 0, columnStart: 0, columnEnd: 0 },
+    { rowStart: 2, rowEnd: 2, columnStart: 0, columnEnd: 0 }
+  ], [0]);
+  assert.deepEqual(rows, [["first"], ["third"]]);
+  assert.equal(serializeClipboard("sqlIn", { headers: ["name"], rows }), "IN (N'first', N'third')");
+  assert.deepEqual(JSON.parse(serializeClipboard("json", { headers: ["name"], rows })), [{ name: "first" }, { name: "third" }]);
+});
+
+test("chunked selection respects reordered columns, holes and SQL nulls", () => {
+  const rows = projectClipboardRows([["a", null], ["b", "c"]], 200, [
+    { rowStart: 200, rowEnd: 200, columnStart: 0, columnEnd: 0 },
+    { rowStart: 201, rowEnd: 201, columnStart: 1, columnEnd: 1 }
+  ], [1, 0]);
+  assert.deepEqual(rows, [[null, ""], ["", "b"]]);
+});
 
 test("duplicate and blank headers are made deterministic", () => {
   assert.deepEqual(makeUniqueHeaders(["name", "name", "name_2", "", ""]), ["name", "name_2", "name_2_2", "Column4", "Column5"]);

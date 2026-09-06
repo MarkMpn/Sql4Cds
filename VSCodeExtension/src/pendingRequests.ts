@@ -7,6 +7,17 @@ type Pending<T> = {
 export class PendingRequests<T> {
   private readonly requests = new Map<string, Pending<T>>();
 
+  public async run(key: string, timeout: number, timeoutMessage: string, dispatch: () => Promise<void>): Promise<T> {
+    const completion = this.wait(key, timeout, timeoutMessage);
+    const pending = this.requests.get(key);
+    // Attach the rejection handler before dispatch: the notification or timeout can
+    // arrive while the transport is still waiting for the request acknowledgement.
+    void Promise.resolve().then(dispatch).catch(error => {
+      if (this.requests.get(key) === pending) { this.reject(key, error); }
+    });
+    return await completion;
+  }
+
   public wait(key: string, timeout: number, timeoutMessage: string): Promise<T> {
     this.reject(key, new Error("Superseded by a newer request."));
     return new Promise<T>((resolve, reject) => {

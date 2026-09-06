@@ -12,6 +12,28 @@ export interface ClipboardOptions {
   includeHeaders?: boolean;
 }
 
+export interface SelectionRange {
+  rowStart: number;
+  rowEnd: number;
+  columnStart: number;
+  columnEnd: number;
+}
+
+/** Keep only selected rows; holes within a selected row remain empty cells. */
+export function projectClipboardRows(
+  rows: readonly (readonly ClipboardValue[])[], start: number,
+  ranges: readonly SelectionRange[], columnOrder: readonly number[]
+): ClipboardValue[][] {
+  const columns = columnOrder.map((original, visual) => ({ original, visual }))
+    .filter(({ visual }) => ranges.some(range => visual >= range.columnStart && visual <= range.columnEnd));
+  return rows.flatMap((row, offset) => {
+    const selected = ranges.filter(range => start + offset >= range.rowStart && start + offset <= range.rowEnd);
+    if (!selected.length) { return []; }
+    return [columns.map(({ original, visual }) => selected.some(range => visual >= range.columnStart && visual <= range.columnEnd)
+      ? row[original] ?? null : "")];
+  });
+}
+
 /**
  * Serializes a logical selection. Callers can obtain the rows in server-side chunks;
  * this function deliberately has no dependency on rendered/page DOM state.

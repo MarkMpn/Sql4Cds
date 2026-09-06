@@ -17,7 +17,7 @@ import {
   SubsetResult
 } from "./protocol";
 import { createExportParams, exportMethod, opensInTextEditor, resultExportChoices } from "./resultExport";
-import { ClipboardFormat, ClipboardValue, serializeClipboard } from "./resultClipboard";
+import { ClipboardFormat, ClipboardValue, projectClipboardRows, serializeClipboard } from "./resultClipboard";
 import { resultsHtml } from "./resultWebview";
 import { Sql4CdsService } from "./serviceClient";
 import { detectStructuredValue } from "./structuredValue";
@@ -69,6 +69,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   private resultsView?: vscode.WebviewView;
   private selectedUri?: string;
   private nextRunId = 1;
+  private readonly preparing = new Set<string>();
 
   constructor(private readonly service: Sql4CdsService, private readonly connections: DocumentConnectionManager) {
     const client = service.languageClient;
@@ -93,8 +94,10 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
 
   public resolveWebviewView(view: vscode.WebviewView): void {
     this.resultsView = view;
-    view.webview.options = { enableScripts: true };
-    view.webview.onDidReceiveMessage((message: WebviewMessage) => void this.onWebviewMessage(message), undefined, this.disposables);
+    view.webview.options = { enableScripts: true, localResourceRoots: [] };
+    view.webview.onDidReceiveMessage((message: WebviewMessage) => {
+      void this.onWebviewMessage(message).catch(error => vscode.window.showErrorMessage(`SQL 4 CDS: ${errorMessage(error)}`));
+    }, undefined, this.disposables);
     view.onDidDispose(() => {
       if (this.resultsView === view) { this.resultsView = undefined; }
     }, undefined, this.disposables);
@@ -109,6 +112,13 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     }
 
     const uri = editor.document.uri.toString();
+    if (this.preparing.has(uri)) { return; }
+    this.preparing.add(uri);
+    try { await this.executeEditor(editor, uri); }
+    finally { this.preparing.delete(uri); }
+  }
+
+  private async executeEditor(editor: vscode.TextEditor, uri: string): Promise<void> {
     const cleanup = this.cleanupPending.get(uri);
     if (cleanup) { await cleanup; }
     if (!this.connections.get(uri) && !await this.connections.connectEditor(undefined, editor)) { return; }
@@ -128,6 +138,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     }
 
     if (previous) { await this.disposeStoredResults(uri, false); }
+    if (editor.document.isClosed) { return; }
 
     const state: QueryState = {
       runId: this.nextRunId++,
@@ -139,11 +150,11 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     };
     this.states.set(uri, state);
     this.selectedUri = uri;
-    await this.showResultsView();
-    this.publishState(uri);
-    this.updateRunningContext();
-
     try {
+      await this.showResultsView();
+      if (this.states.get(uri) !== state || editor.document.isClosed) { return; }
+      this.publishState(uri);
+      this.updateRunningContext();
       await this.service.languageClient.sendRequest(Methods.executeString, {
         ownerUri: uri,
         query,
@@ -239,6 +250,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   }
 
   private async onWebviewMessage(message: WebviewMessage): Promise<void> {
+    if (!message || typeof message !== "object") { return; }
     if (message.type === "ready") {
       if (this.selectedUri && this.states.has(this.selectedUri)) {
         this.publishState(this.selectedUri);
@@ -266,7 +278,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
         await this.viewCell(uri, message);
         break;
       case "export":
-        if (message.key) { await this.exportResult(uri, message.key); }
+        if (message.key && message.runId === this.states.get(uri)?.runId) { await this.exportResult(uri, message.key); }
         break;
     }
   }
@@ -380,20 +392,15 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
             });
             if (this.states.get(uri) !== state || response.resultSubset?.viewVersion !== message.viewVersion) { throw new Error("The result view changed while it was being copied."); }
             const sourceRows = response.resultSubset?.rows ?? [];
-            sourceRows.forEach((sourceRow, offset) => {
-              const logicalRow = chunkStart + offset;
-              rows.push(selectedVisualColumns.map(originalColumn => {
-                const visualColumn = columnOrder.indexOf(originalColumn);
-                const selected = ranges.some(range => logicalRow >= range.rowStart && logicalRow <= range.rowEnd && visualColumn >= range.columnStart && visualColumn <= range.columnEnd);
-                return selected ? clipboardCell(sourceRow[originalColumn]) : "";
-              }));
-            });
+            rows.push(...projectClipboardRows(sourceRows.map(row => row.map(clipboardCell)), chunkStart, ranges, columnOrder));
             progress.report({ increment: chunkCount / rowCount * 100 });
           }
+          if (token.isCancellationRequested) { throw new CopyCancelledError(); }
           const headers = selectedVisualColumns.map(index => result.summary.columnInfo[index]?.columnName ?? result.summary.columnInfo[index]?.name ?? "");
           return serializeClipboard(format, { headers, rows }, { includeHeaders: message.headers });
         }
       );
+      if (this.states.get(uri) !== state) { throw new Error("The query changed while the selection was being copied."); }
       await vscode.env.clipboard.writeText(text);
       void vscode.window.setStatusBarMessage("SQL 4 CDS: Selection copied", 2000);
     } catch (error) {
