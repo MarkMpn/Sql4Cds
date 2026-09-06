@@ -7,7 +7,7 @@ name after release; those fields form the extension's identity.
 
 ## Build and automated verification
 
-Use Node.js 22+, a .NET 8 SDK or later, and the .NET 8 Runtime. From this directory:
+Use Node.js 24+, a .NET 10 SDK or later, and the .NET 10 Runtime. From this directory:
 
 ```sh
 npm ci

@@ -8,10 +8,10 @@ const output = join(root, "out", "sql4cdstoolsservice");
 await rm(output, { recursive: true, force: true });
 const published = spawnSync("dotnet", [
   "publish", join(dirname(root), "MarkMpn.Sql4Cds.LanguageServer", "MarkMpn.Sql4Cds.LanguageServer.csproj"),
-  "--configuration", "Release", "--no-self-contained", "-p:UseAppHost=false", "--output", output
+  "--configuration", "Release", "-p:Sql4CdsVSCodeBuild=true", "--no-self-contained", "-p:UseAppHost=false", "--output", output
 ], { stdio: "inherit" });
 if (published.error) { throw published.error; }
-if (published.status !== 0) { throw new Error("The Release language service could not be published. Install the .NET 8 SDK or later and retry."); }
+if (published.status !== 0) { throw new Error("The Release language service could not be published. Install the .NET 10 SDK or later and retry."); }
 
 // Bundling removes node_modules, so carry the runtime packages' license texts into dist.
 const lock = JSON.parse(await readFile(join(root, "package-lock.json"), "utf8"));

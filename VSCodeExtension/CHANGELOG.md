@@ -4,6 +4,10 @@ All notable changes to the SQL 4 CDS extension for Visual Studio Code are docume
 
 ## [0.3.0] - Unreleased
 
+### Changed
+
+- The VS Code language service now requires .NET 10 LTS; development and CI use Node.js 24 LTS.
+
 ### Added
 
 - A dedicated Query Results view in the VS Code bottom panel, consistent with the MSSQL extension experience.

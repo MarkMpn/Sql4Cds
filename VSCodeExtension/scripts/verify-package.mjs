@@ -48,7 +48,7 @@ for (const field of ["name", "publisher", "version", "main"]) {
   assert.equal(packagedManifest[field], manifest[field], `Stale packaged manifest field: ${field}`);
 }
 const runtime = jsonFiles.get("extension/out/sql4cdstoolsservice/MarkMpn.Sql4Cds.LanguageServer.runtimeconfig.json").runtimeOptions;
-assert.equal(runtime.tfm, "net8.0", "The service must match the documented .NET runtime requirement");
+assert.equal(runtime.tfm, "net10.0", "The service must match the documented .NET runtime requirement");
 assert.equal(runtime.framework?.name, "Microsoft.NETCore.App", "The service must be framework-dependent");
 for (const file of files.keys()) {
   assert.ok(!/^extension\/(?:src|test|scripts|node_modules|\.test-dist|\.vscode-test)\//.test(file), `Development file shipped: ${file}`);

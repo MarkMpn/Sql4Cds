@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-export const requiredDotnetMajor = 8;
+export const requiredDotnetMajor = 10;
 
 export function redactSensitiveText(value: string): string {
   return value
@@ -55,7 +55,7 @@ export async function assertServicePrerequisites(
     const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
     throw new ServicePrerequisiteError(
       `.NET could not be started${detail}. Install the .NET ${requiredDotnetMajor} Runtime and restart VS Code.`,
-      "https://dotnet.microsoft.com/download/dotnet/8.0"
+      "https://dotnet.microsoft.com/download/dotnet/10.0"
     );
   }
 
@@ -64,7 +64,7 @@ export async function assertServicePrerequisites(
     const detected = majors.length > 0 ? ` Detected runtime major versions: ${majors.join(", ")}.` : " No .NET runtimes were detected.";
     throw new ServicePrerequisiteError(
       `SQL 4 CDS requires the .NET ${requiredDotnetMajor} Runtime.${detected}`,
-      "https://dotnet.microsoft.com/download/dotnet/8.0"
+      "https://dotnet.microsoft.com/download/dotnet/10.0"
     );
   }
 }

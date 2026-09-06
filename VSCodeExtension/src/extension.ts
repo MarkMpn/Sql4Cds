@@ -21,9 +21,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await service.start();
   } catch (error) {
     const message = `SQL 4 CDS could not start: ${errorMessage(error)}`;
-    void vscode.window.showErrorMessage(message, "Show Output", ...(error instanceof ServicePrerequisiteError && error.helpUrl ? ["Install .NET 8"] : [])).then(async selection => {
+    void vscode.window.showErrorMessage(message, "Show Output", ...(error instanceof ServicePrerequisiteError && error.helpUrl ? ["Install .NET 10"] : [])).then(async selection => {
       if (selection === "Show Output") { service?.showOutput(); }
-      if (selection === "Install .NET 8" && error instanceof ServicePrerequisiteError && error.helpUrl) {
+      if (selection === "Install .NET 10" && error instanceof ServicePrerequisiteError && error.helpUrl) {
         await vscode.env.openExternal(vscode.Uri.parse(error.helpUrl));
       }
     });
