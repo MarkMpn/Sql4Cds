@@ -2,7 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- VS Code opts into .NET 10 without changing other consumers. -->
+    <TargetFramework Condition="'$(Sql4CdsVSCodeBuild)' != 'true'">net8.0</TargetFramework>
+    <TargetFramework Condition="'$(Sql4CdsVSCodeBuild)' == 'true'">net10.0</TargetFramework>
     <Copyright>Copyright © 2022 - 2024 Mark Carrington</Copyright>
   </PropertyGroup>
 

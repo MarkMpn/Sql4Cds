@@ -14,5 +14,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
         /// 2D array of the cell values requested from result set
         /// </summary>
         public DbCellValue[][] Rows { get; set; }
+
+        /// <summary>
+        /// Total number of rows in the transformed result view, before pagination.
+        /// </summary>
+        public long TotalRowCount { get; set; }
+
+        /// <summary>
+        /// The client-provided view version associated with this response.
+        /// </summary>
+        public long ViewVersion { get; set; }
     }
 }

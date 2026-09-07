@@ -6,6 +6,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
 using System.Security.Policy;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Data8.PowerPlatform.Dataverse.Client;
@@ -42,6 +43,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 ownerUri = Guid.NewGuid().ToString("N");
 
             var ds = _dataSources.GetOrAdd(dataSourceName, (_) => CreateDataSource(connection));
+            // Names are SQL database aliases, not credential identities. Never silently
+            // reuse a name for another profile or for changed authentication settings.
+            if (((DataSourceWithInfo)ds).ConnectionIdentity != GetConnectionIdentity(connection))
+                throw new InvalidOperationException("A connection with this name is still using different settings. Disconnect its query editors and refresh Object Explorer, then reconnect.");
             _connectedDataSource[ownerUri] = dataSourceName;
 
             return GetConnection(ownerUri);
@@ -56,6 +61,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             _connections.TryRemove(ownerUri, out _);
         }
 
+        public Session AssociateConnection(string pendingOwnerUri, string ownerUri)
+        {
+            var dataSourceName = _connectedDataSource[pendingOwnerUri];
+            Disconnect(ownerUri);
+            _connectedDataSource[ownerUri] = dataSourceName;
+            if (_connections.TryRemove(pendingOwnerUri, out var connection))
+                _connections[ownerUri] = connection;
+            _connectedDataSource.TryRemove(pendingOwnerUri, out _);
+            return GetConnection(ownerUri);
+        }
+
         public Session GetConnection(string ownerUri)
         {
             if (!_connectedDataSource.TryGetValue(ownerUri, out var dsName))
@@ -64,7 +80,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (!_dataSources.TryGetValue(dsName, out var ds))
                 return null;
 
-            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = "Azure Data Studio" });
+            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = "SQL 4 CDS" });
             con.ChangeDatabase(ds.Name);
 
             return new Session
@@ -85,7 +101,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
         private Uri GetUri(ConnectionDetails connection)
         {
-            string url;
+            string url = null;
 
             if (connection.Options.TryGetValue("connectionString", out var x) && x is string conStr)
             {
@@ -101,7 +117,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                     }
                 }
 
-                throw new ArgumentOutOfRangeException("Missing url");
+                if (url == null)
+                    throw new ArgumentOutOfRangeException("Missing url");
             }
             else if (!connection.Options.TryGetValue("authenticationType", out x) || !(x is string authType))
             {
@@ -176,13 +193,29 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 switch (authType)
                 {
                     case "AzureMFA":
-                        if (!connection.Options.TryGetValue("azureAccountToken", out x) || !(x is string oauthUsername))
-                            throw new ArgumentOutOfRangeException("Missing user");
+                        string oauthUsername = null;
 
-                        var token = new JwtSecurityToken(oauthUsername);
-                        oauthUsername = token.Claims.Single(c => c.Type == "upn").Value;
+                        // Azure Data Studio supplies an account token. Other hosts can supply a user
+                        // name directly or omit it and allow ServiceClient to show an account picker.
+                        if (connection.Options.TryGetValue("azureAccountToken", out x) && x is string accountToken && !String.IsNullOrWhiteSpace(accountToken))
+                        {
+                            var token = new JwtSecurityToken(accountToken);
+                            oauthUsername = token.Claims.FirstOrDefault(c => c.Type == "upn" || c.Type == "preferred_username")?.Value;
+                        }
+                        else if (connection.Options.TryGetValue("user", out x) && x is string user && !String.IsNullOrWhiteSpace(user))
+                        {
+                            oauthUsername = user;
+                        }
 
-                        org = new ServiceClient($"AuthType=OAuth;Username={oauthUsername};Url={url};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost;LoginPrompt=Auto;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
+                        var oauth = new DbConnectionStringBuilder
+                        {
+                            ["AuthType"] = "OAuth", ["Url"] = url,
+                            ["AppId"] = "51f81489-12ee-4a9e-aaae-a2591f45987d",
+                            ["RedirectUri"] = "http://localhost", ["LoginPrompt"] = "Auto",
+                            ["TokenCacheStorePath"] = GetTokenCachePath()
+                        };
+                        if (oauthUsername != null) oauth["Username"] = oauthUsername;
+                        org = new ServiceClient(oauth.ConnectionString);
                         break;
 
                     case "None":
@@ -193,7 +226,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                         if (!connection.Options.TryGetValue("redirectUrl", out x) || !(x is string redirectUrl))
                             throw new ArgumentOutOfRangeException("Missing Redirect URL");
 
-                        org = new ServiceClient($"AuthType=ClientSecret;Url={url};ClientId={clientId};ClientSecret={clientSecret};RedirectUri={redirectUrl};LoginPrompt=Never;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
+                        org = new ServiceClient(new DbConnectionStringBuilder
+                        {
+                            ["AuthType"] = "ClientSecret", ["Url"] = url,
+                            ["ClientId"] = clientId, ["ClientSecret"] = clientSecret,
+                            ["RedirectUri"] = redirectUrl, ["LoginPrompt"] = "Never",
+                            ["TokenCacheStorePath"] = GetTokenCachePath()
+                        }.ConnectionString);
                         break;
 
                     case "SqlLogin":
@@ -218,8 +257,30 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
             var dataSource = new DataSourceWithInfo(org, url, _persistentMetadataCache);
             dataSource.Name = GetDataSourceName(connection);
+            dataSource.ConnectionIdentity = GetConnectionIdentity(connection);
 
             return dataSource;
+        }
+
+        private string GetTokenCachePath()
+        {
+            var dataDir = Environment.GetEnvironmentVariable("SQL4CDS_DATA_DIR");
+
+            if (String.IsNullOrWhiteSpace(dataDir))
+                dataDir = Path.GetDirectoryName(GetType().Assembly.Location);
+
+            Directory.CreateDirectory(dataDir);
+            return Path.Combine(dataDir, "TokenCache");
+        }
+
+        private static string GetConnectionIdentity(ConnectionDetails connection)
+        {
+            // ADS refreshes its account token independently of the underlying connection.
+            // Profile identity is supplied by VS Code; keep legacy ADS reuse unchanged.
+            if (!connection.Options.ContainsKey("connectionId")) return null;
+            var options = new SortedDictionary<string, object>(connection.Options, StringComparer.Ordinal);
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(options);
+            return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
         }
 
         private void ValidateConnection(IOrganizationService org)
@@ -240,6 +301,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
     class DataSourceWithInfo : DataSource
     {
+        public string ConnectionIdentity { get; set; }
         private readonly string _url;
 
         public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org)
@@ -251,7 +313,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource> { [Name] = this }))
             using (var cmd = con.CreateCommand())
             {
-                con.ApplicationName = "Azure Data Studio";
+                con.ApplicationName = "SQL 4 CDS";
                 cmd.CommandText = "SELECT fullname FROM systemuser WHERE systemuserid = CURRENT_USER";
                 Username = (string)cmd.ExecuteScalar();
             }
