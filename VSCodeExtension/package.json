@@ -38,7 +38,7 @@
     "vscode:prepublish": "npm run build",
     "test:host": "node ./scripts/test-extension-host.mjs",
     "verify:package": "node ./scripts/verify-package.mjs",
-    "test:connections": "dotnet run --project test/service/ConnectionTests.csproj --configuration Release"
+    "test:connections": "dotnet run --project test/service/ConnectionTests.csproj --configuration Release -p:Sql4CdsVSCodeBuild=true"
   },
   "contributes": {
     "languages": [

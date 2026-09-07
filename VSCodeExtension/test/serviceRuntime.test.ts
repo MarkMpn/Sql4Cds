@@ -27,10 +27,10 @@ test("installedDotnetRuntimeMajors returns sorted, unique .NET runtime majors", 
   assert.deepEqual(installedDotnetRuntimeMajors(output), [8, 9]);
 });
 
-test("prerequisite check accepts a readable service and the .NET 8 runtime", async () => {
+test("prerequisite check accepts a readable service and the .NET 10 runtime", async () => {
   await assertServicePrerequisites("/extension/service.dll", {
     accessFile: async () => undefined,
-    listRuntimes: async () => "Microsoft.NETCore.App 8.0.12 [/dotnet/shared/Microsoft.NETCore.App]"
+    listRuntimes: async () => "Microsoft.NETCore.App 10.0.1 [/dotnet/shared/Microsoft.NETCore.App]"
   });
 });
 
@@ -38,7 +38,7 @@ test("prerequisite check explains a missing packaged service", async () => {
   await assert.rejects(
     assertServicePrerequisites("/extension/service.dll", {
       accessFile: async () => { throw new Error("ENOENT"); },
-      listRuntimes: async () => "Microsoft.NETCore.App 8.0.12 [/dotnet/shared/Microsoft.NETCore.App]"
+      listRuntimes: async () => "Microsoft.NETCore.App 10.0.1 [/dotnet/shared/Microsoft.NETCore.App]"
     }),
     (error: unknown) => error instanceof ServicePrerequisiteError &&
       error.message.includes("language service was not found") &&
@@ -46,17 +46,19 @@ test("prerequisite check explains a missing packaged service", async () => {
   );
 });
 
-test("prerequisite check requires the .NET 8 runtime even when another major is present", async () => {
-  await assert.rejects(
-    assertServicePrerequisites("/extension/service.dll", {
-      accessFile: async () => undefined,
-      listRuntimes: async () => "Microsoft.NETCore.App 9.0.1 [/dotnet/shared/Microsoft.NETCore.App]"
-    }),
-    (error: unknown) => error instanceof ServicePrerequisiteError &&
-      error.message.includes("requires the .NET 8 Runtime") &&
-      error.helpUrl?.includes("dotnet/8.0") === true
-  );
-});
+for (const major of [8, 9, 11]) {
+  test(`prerequisite check rejects .NET ${major} without .NET 10`, async () => {
+    await assert.rejects(
+      assertServicePrerequisites("/extension/service.dll", {
+        accessFile: async () => undefined,
+        listRuntimes: async () => `Microsoft.NETCore.App ${major}.0.1 [/dotnet/shared/Microsoft.NETCore.App]`
+      }),
+      (error: unknown) => error instanceof ServicePrerequisiteError &&
+        error.message.includes("requires the .NET 10 Runtime") &&
+        error.helpUrl?.includes("dotnet/10.0") === true
+    );
+  });
+}
 
 test("prerequisite check turns dotnet launch failures into actionable guidance", async () => {
   await assert.rejects(
@@ -65,6 +67,6 @@ test("prerequisite check turns dotnet launch failures into actionable guidance",
       listRuntimes: async () => { throw new Error("spawn dotnet ENOENT"); }
     }),
     (error: unknown) => error instanceof ServicePrerequisiteError &&
-      error.message.includes("Install the .NET 8 Runtime")
+      error.message.includes("Install the .NET 10 Runtime")
   );
 });

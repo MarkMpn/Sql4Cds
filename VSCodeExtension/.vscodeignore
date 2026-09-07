@@ -12,3 +12,5 @@ out/sql4cdstoolsservice/*.pdb
 .vscode-test/**
 RELEASING.md
 *.vsix
+.nvmrc
+FRAMEWORKS.md

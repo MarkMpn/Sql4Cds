@@ -7,11 +7,11 @@ The first release combines the SQL 4 CDS query engine with a dedicated Dataverse
 ## Requirements
 
 - Visual Studio Code 1.96 or later on Windows, macOS, or Linux.
-- The [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) available through the `dotnet` command.
+- The [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) available through the `dotnet` command.
 - Network access and permissions for the target Dataverse environment.
 - A trusted VS Code workspace. The extension is disabled in Restricted Mode and virtual workspaces.
 
-The language service is included in the extension, but it is framework-dependent. A .NET SDK is not required to use the extension. VS Code for the Web is not supported. Remote Development, Dev Containers, and WSL have not yet been validated for this release; in those configurations, install .NET 8 in the environment where the extension host runs.
+The language service is included in the extension, but it is framework-dependent. A .NET SDK is not required to use the extension. VS Code for the Web is not supported. Remote Development, Dev Containers, and WSL have not yet been validated for this release; in those configurations, install .NET 10 in the environment where the extension host runs.
 
 ## Install
 
@@ -69,15 +69,15 @@ Important settings are available under **Settings → Extensions → SQL 4 CDS**
 
 ## Troubleshooting
 
-### The extension says .NET 8 is missing
+### The extension says .NET 10 is missing
 
-Install the [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0), restart VS Code, and verify this command lists `Microsoft.NETCore.App 8.x`:
+Install the [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), restart VS Code, and verify this command lists `Microsoft.NETCore.App 10.x`:
 
 ```text
 dotnet --list-runtimes
 ```
 
-Installing only .NET 9 or a later major version does not normally satisfy a framework-dependent .NET 8 application.
+Installing only .NET 8, .NET 9, or a later major version such as .NET 11 does not normally satisfy a framework-dependent .NET 10 application.
 
 ### The language service was not found
 
@@ -112,14 +112,14 @@ Report reproducible problems in the [SQL 4 CDS issue tracker](https://github.com
 
 Known first-release limitations:
 
-- A .NET 8 runtime must be installed separately.
+- A .NET 10 runtime must be installed separately.
 - VS Code for the Web is unsupported, and remote extension-host scenarios are not yet fully validated.
 - The displayed row limit is intended for interactive use and is not a Dataverse query limit.
 - SQL 4 CDS language features apply automatically to `.sql4cds` files; `.sql` files require selecting the SQL 4 CDS language mode.
 
 ## Development
 
-Development requires Node.js 22 or later, a .NET 8 SDK or later, and the .NET 8 Runtime. From `VSCodeExtension`:
+Development requires Node.js 24 or later, a .NET 10 SDK or later, and the .NET 10 Runtime. From `VSCodeExtension`:
 
 ```bash
 npm ci
