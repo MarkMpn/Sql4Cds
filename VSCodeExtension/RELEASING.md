@@ -10,12 +10,14 @@ name after release; those fields form the extension's identity.
 Use Node.js 24+, a .NET 10 SDK or later, and the .NET 10 Runtime. From this directory:
 
 ```sh
-npm ci
+npm ci --ignore-scripts
 npm run package
 npm run test:connections
 npm run test:service
 npm run test:host
 ```
+
+Build and smoke-test scripts locate .NET through `DOTNET_ROOT` or standard installation directories, without searching `PATH`. For a custom SDK installation, set `DOTNET_ROOT` to its absolute installation directory. CI uses the installation configured by `actions/setup-dotnet`.
 
 On Linux, use `xvfb-run -a npm run test:host`. Set `VSCODE_TEST_VERSION=stable`
 to run against current stable VS Code; the default is the minimum supported 1.96.0.

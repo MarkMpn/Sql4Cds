@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type * as vscode from "vscode";
 
 /** Builds the self-contained results grid webview. Grid state deliberately lives in
@@ -137,8 +138,5 @@ export function resultsHtml(webview: vscode.Webview): string {
 }
 
 function createNonce(): string {
-  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let value = "";
-  for (let index = 0; index < 32; index++) { value += characters.charAt(Math.floor(Math.random() * characters.length)); }
-  return value;
+  return randomBytes(32).toString("base64");
 }

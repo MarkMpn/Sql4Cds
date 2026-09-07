@@ -122,7 +122,7 @@ Known first-release limitations:
 Development requires Node.js 24 or later, a .NET 10 SDK or later, and the .NET 10 Runtime. From `VSCodeExtension`:
 
 ```bash
-npm ci
+npm ci --ignore-scripts
 npm run package
 npm run test:connections
 npm run test:service

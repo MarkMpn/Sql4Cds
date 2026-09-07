@@ -1,3 +1,4 @@
+import { dotnetHost } from "./dotnet-host.mjs";
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { spawnSync } from "node:child_process";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const output = join(root, "out", "sql4cdstoolsservice");
 await rm(output, { recursive: true, force: true });
-const published = spawnSync("dotnet", [
+const published = spawnSync(await dotnetHost(), [
   "publish", join(dirname(root), "MarkMpn.Sql4Cds.LanguageServer", "MarkMpn.Sql4Cds.LanguageServer.csproj"),
   "--configuration", "Release", "-p:Sql4CdsVSCodeBuild=true", "--no-self-contained", "-p:UseAppHost=false", "--output", output
 ], { stdio: "inherit" });

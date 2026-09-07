@@ -33,7 +33,7 @@
     "build": "npm run clean && npm run compile && npm run copy-assets",
     "package": "npm run check && npm test && vsce package --no-dependencies --out sql4cds.vsix && npm run verify:package",
     "check": "tsc -p . --noEmit && tsc -p tsconfig.test.json",
-    "test": "rimraf .test-dist && esbuild test/*.test.ts --bundle --external:jsdom --platform=node --format=cjs --outdir=.test-dist && node --test .test-dist/*.test.js",
+    "test": "rimraf .test-dist && esbuild test/*.test.ts --bundle --external:jsdom --platform=node --format=cjs --outdir=.test-dist && node --test .test-dist/*.test.js test/*.test.mjs",
     "test:service": "node ./scripts/smoke-language-service.mjs",
     "vscode:prepublish": "npm run build",
     "test:host": "node ./scripts/test-extension-host.mjs",

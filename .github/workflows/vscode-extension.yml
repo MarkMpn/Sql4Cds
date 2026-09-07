@@ -53,7 +53,7 @@ jobs:
 
       - name: Install extension dependencies
         working-directory: VSCodeExtension
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Check, test, and package the release
         working-directory: VSCodeExtension

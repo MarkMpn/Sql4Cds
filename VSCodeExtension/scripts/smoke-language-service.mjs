@@ -1,3 +1,4 @@
+import { dotnetHost } from "./dotnet-host.mjs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,7 +13,7 @@ const notifications = new Map();
 let buffer = Buffer.alloc(0);
 let stderr = "";
 
-const service = spawn("dotnet", [serviceDll, `--log-dir=${logDir}`], {
+const service = spawn(await dotnetHost(), [serviceDll, `--log-dir=${logDir}`], {
   stdio: ["pipe", "pipe", "pipe"],
   env: { ...process.env, SQL4CDS_DATA_DIR: logDir, SQL4CDS_DISABLE_TELEMETRY: "1" }
 });
