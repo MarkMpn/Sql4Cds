@@ -1,0 +1,60 @@
+# VS Code feature coverage compared with Azure Data Studio
+
+Prepared for upstream PR review on 2026-09-06. This is a source-based inventory of the working tree at `b15a45fb7b3f2cef124f313895d9853964ad7bdd`, including the existing uncommitted VS Code manifest changes. The baseline is the repository's Azure Data Studio extension, with historical service behavior checked before the first VS Code extension commit (`74ab7bdf`). It is not a comparison against a freshly downloaded upstream release.
+
+**Implemented** means a user-facing path is wired to an implementation; it does not mean live Dataverse acceptance testing was performed for this audit. ADS supplies much of its UI through `SqlOpsDataClient`; features rebuilt in VS Code should not automatically be described as new relative to ADS. The SQL engine is shared, so this inventory focuses on extension workflows rather than enumerating SQL syntax.
+
+## Carried over or rebuilt
+
+| Feature | ADS baseline | VS Code status and scope | Evidence |
+| --- | --- | --- | --- |
+| Query and modify Dataverse data through SQL 4 CDS | Shared engine; online and on-premises connections | **Implemented.** Uses the shared language service and engine for SQL execution and data modification. | [ADS README](../AzureDataStudioExtension/README.md), [query controller](src/queryController.ts), [query service](../MarkMpn.Sql4Cds.LanguageServer/QueryExecution/QueryExecutionHandler.cs) |
+| Authentication | Interactive, username/password, integrated, client-secret and connection-string options | **Implemented.** All five paths have profile UI and service integration. Deployment/OS compatibility still needs live validation, especially on-premises modes. | [ADS manifest](../AzureDataStudioExtension/package.json), [profile store](src/profileStore.ts), [release acceptance](RELEASING.md) |
+| Saved connections | ADS connection management, including grouping | **Partial parity.** Add, edit, rename, delete and test saved profiles; credentials use VS Code Secret Storage. No connection groups or ADS profile import UI. | [ADS README](../AzureDataStudioExtension/README.md), [profile store](src/profileStore.ts), [commands](src/extension.ts) |
+| Editor connection selection | ADS provider connections | **Implemented.** Connect, switch, reconnect and disconnect per editor, with connection status. | [ADS adapter](../AzureDataStudioExtension/src/main.ts), [document connections](src/documentConnections.ts) |
+| Metadata/Object Explorer | Tables, columns and service-provided metadata nodes | **Implemented.** Tree consumes shared service nodes, including functions, stored procedures, metadata, and retention/recycle-bin tables when available. Refresh and new-query actions are provided. | [explorer client](src/objectExplorer.ts), [explorer service](../MarkMpn.Sql4Cds.LanguageServer/ObjectExplorer/ObjectExplorerHandler.cs) |
+| Select Top 1000 | Service scripting operation | **Implemented.** Generates a query for the selected table, with quoted SQL identifiers. | [ADS scripting service](../MarkMpn.Sql4Cds.LanguageServer/Scripting/ScriptingHandler.cs), [VS Code explorer](src/objectExplorer.ts), [commands](src/extension.ts) |
+| Completion, hover and function signature help | Shared language-service handlers | **Implemented.** Standard LSP client receives all three advertised capabilities for connected SQL 4 CDS documents. | [capabilities](../MarkMpn.Sql4Cds.LanguageServer/Capabilities/CapabilitiesHandler.cs), [autocomplete](../MarkMpn.Sql4Cds.LanguageServer/Autocomplete/AutocompleteHandler.cs), [client](src/serviceClient.ts) |
+| SQL diagnostics | Service diagnostics forwarded by ADS adapter | **Implemented.** Diagnostics are delivered through the VS Code language client. | [ADS adapter](../AzureDataStudioExtension/src/main.ts), [client](src/serviceClient.ts), [query service](../MarkMpn.Sql4Cds.LanguageServer/QueryExecution/QueryExecutionHandler.cs) |
+| Execute document or selected text; cancel | Query service and ADS query UI | **Implemented.** Run/cancel commands, editor buttons and execution shortcut. | [query controller](src/queryController.ts), [manifest](package.json) |
+| Results and messages | ADS built-in result tables | **Implemented.** Dedicated bottom panel, per-editor state, multiple result sets, messages, elapsed time and row counts. This rebuilds the host UI rather than adding a new engine capability. | [ADS README](../AzureDataStudioExtension/README.md), [query controller](src/queryController.ts), [results UI](src/resultWebview.ts) |
+| Result paging and copying | ADS result UI backed by subset requests | **Implemented.** 200-row pages; cell, row, column, range and cross-page selection; copy with/without headers. Display limit defaults to 10,000 rows per result set. | [query controller](src/queryController.ts), [results UI](src/resultWebview.ts), [manifest](package.json) |
+| Export CSV, Excel, JSON, Markdown and XML | All five service export handlers already existed | **Implemented; parity, not five new formats.** Exports the full retained result set, independently of display limits. Text exports open in the editor; Excel offers system open/reveal actions. | [query service](../MarkMpn.Sql4Cds.LanguageServer/QueryExecution/QueryExecutionHandler.cs), [export formats](src/resultExport.ts), [export orchestration](src/queryController.ts) |
+| DML safeguards and confirmations | Block unfiltered UPDATE/DELETE; threshold prompts | **Implemented.** Same setting defaults, with modal Yes/All/No confirmation; dismissal answers No. | [ADS manifest](../AzureDataStudioExtension/package.json), [VS Code manifest](package.json), [client](src/serviceClient.ts) |
+| Query engine settings | TDS endpoint, bulk delete, batching, parallelism, time zone, plugin bypass, quoted identifiers, warning thresholds, SELECT/retrieve limits and date formatting | **Implemented.** All common configuration keys retain their ADS defaults; settings are synchronized to the service. | [ADS manifest](../AzureDataStudioExtension/package.json), [VS Code manifest](package.json), [client](src/serviceClient.ts) |
+
+## ADS features not yet exposed in VS Code
+
+| Feature | Current gap | Evidence |
+| --- | --- | --- |
+| Estimated and actual execution-plan viewing | Service support remains, but VS Code sends no execution-plan options and has no plan viewer or command. | [query controller](src/queryController.ts), [query service](../MarkMpn.Sql4Cds.LanguageServer/QueryExecution/QueryExecutionHandler.cs) |
+| Inspect generated FetchXML through execution plans | ADS advertises this workflow. VS Code has no corresponding plan-details UI. The engine still translates SQL; it is the inspection workflow that is missing. | [ADS README](../AzureDataStudioExtension/README.md), [query controller](src/queryController.ts), [results UI](src/resultWebview.ts) |
+| Result charts | ADS advertises built-in charting. VS Code currently presents result grids and messages only. | [ADS README](../AzureDataStudioExtension/README.md), [results UI](src/resultWebview.ts) |
+| Server/database dashboard | ADS contributes organization, user, URL, server, version and edition properties. VS Code has connection profiles and a tree, but no equivalent dashboard. | [ADS manifest](../AzureDataStudioExtension/package.json), [VS Code manifest](package.json) |
+| Connection groups | ADS advertises grouped connections; VS Code uses a flat saved-profile list. | [ADS README](../AzureDataStudioExtension/README.md), [profile store](src/profileStore.ts), [explorer](src/objectExplorer.ts) |
+
+## Additional implementation and deliberate differences
+
+These are concrete VS Code additions or design choices. Where ADS delegated behavior to its host, this audit does not establish that ADS lacked every equivalent interaction.
+
+| Area | What this implementation adds or changes | Evidence |
+| --- | --- | --- |
+| Dedicated language mode | `.sql4cds` files, SQL grammar, language configuration and SELECT/INSERT/UPDATE/DELETE snippets. Existing `.sql` files require choosing SQL 4 CDS mode, allowing coexistence with MSSQL. | [manifest](package.json), [snippets](snippets/sql4cds.json), [client](src/serviceClient.ts) |
+| Explorer shortcuts | Search tables across the supported schema folders; copy logical names; insert quoted SQL names. | [explorer](src/objectExplorer.ts), [commands](src/extension.ts) |
+| Result manipulation | Quick search, per-column filters and type-aware sorting over the retained result set, plus resizing/reordering columns. The service-side transformed-view implementation is additional to the original subset handler; ADS host UI equivalence was not audited. | [view transformer](../MarkMpn.Sql4Cds.LanguageServer/QueryExecution/ResultSetViewTransformer.cs), [results UI](src/resultWebview.ts) |
+| Selection formats | Copy selected values as TSV, CSV, JSON, XML, Markdown or SQL `IN (...)`, with cancellable chunked retrieval for large selections. | [clipboard formatting](src/resultClipboard.ts), [query controller](src/queryController.ts) |
+| Structured values | Detect JSON/XML cells and open formatted, read-only, syntax-highlighted side documents. | [structured values](src/structuredValue.ts), [viewer](src/structuredValueViewer.ts) |
+| Credential/session handling | Secret Storage for credentials; stable profile identity; fresh Test Connection authentication; cleanup and protection against stale authentication completions. | [profiles](src/profileStore.ts), [document connections](src/documentConnections.ts), [connection tests](test/service/Program.cs) |
+| Privacy and diagnostics | VS Code service process explicitly disables engine usage/error telemetry, uses global storage for token caching, and redacts common credential forms in displayed connection errors. | [client](src/serviceClient.ts), [error handling](src/documentConnections.ts), [README](README.md) |
+| Runtime and packaging | Bundled framework-dependent .NET 10 service, prerequisite checks and recovery messages; standard language-client crash restart behavior with manual recovery when exhausted. VS Code 1.96+ desktop is declared. | [runtime](src/serviceRuntime.ts), [client](src/serviceClient.ts), [asset packaging](scripts/copy-assets.mjs), [manifest](package.json) |
+| Verification infrastructure | Unit/DOM tests, service smoke tests, connection-race tests, extension-host tests, VSIX verification and an OS/editor CI matrix. These are present in the repository; this audit does not claim current CI success. | [test scripts](package.json), [workflow](../.github/workflows/vscode-extension.yml), [release guide](RELEASING.md) |
+
+## Boundaries for the PR
+
+- Full-result export means the full **retained query result**, not all rows in Dataverse. Query limits still apply. Export currently uses original result ordering/columns, not the grid's search, filters, sort, reordering or selection; use selection copying for the current view.
+- Browser VS Code and virtual/untrusted workspaces are unsupported. Remote Development, WSL and Dev Containers have not been validated for this release. A separate .NET 10 Runtime is required. See [requirements](README.md).
+- General CREATE/ALTER/DROP scripting is not an ADS feature lost in the port: the shared scripting handler implements Select only and throws for other operations. Do not infer supported features from protocol contract files alone.
+- ADS-specific debug settings (`useDebugSource`, `debugSourcePath`, `enableStartupDebugging`) are replaced only in part by `servicePath` and logging. The ADS `enabled` setting is not carried over. These are configuration differences, not core query-feature gaps.
+- No live authentication/query testing or automated test suite was run for this documentation audit. Follow [release acceptance](RELEASING.md) and attach actual results to the eventual PR; source coverage and release validation are separate claims.
+
+See [the PR draft](UPSTREAM-PR-DRAFT.md) for a shorter maintainer-facing description and [the ADS baseline audit](ADS-BASELINE-NOTES.md) for historical evidence.

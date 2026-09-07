@@ -68,24 +68,95 @@
       }
     ],
     "commands": [
-      {"command": "sql4cds.addConnection", "title": "SQL 4 CDS: Add Connection", "icon": "$(add)"},
-      {"command": "sql4cds.manageConnections", "title": "SQL 4 CDS: Manage Connections"},
-      {"command": "sql4cds.connect", "title": "SQL 4 CDS: Connect", "icon": "$(plug)"},
-      {"command": "sql4cds.switchConnection", "title": "SQL 4 CDS: Switch Connection", "icon": "$(arrow-swap)"},
-      {"command": "sql4cds.reconnect", "title": "SQL 4 CDS: Reconnect", "icon": "$(refresh)"},
-      {"command": "sql4cds.disconnect", "title": "SQL 4 CDS: Disconnect", "icon": "$(debug-disconnect)"},
-      {"command": "sql4cds.editConnection", "title": "SQL 4 CDS: Edit Connection", "icon": "$(edit)"},
-      {"command": "sql4cds.renameConnection", "title": "SQL 4 CDS: Rename Connection", "icon": "$(edit)"},
-      {"command": "sql4cds.testConnection", "title": "SQL 4 CDS: Test Connection", "icon": "$(beaker)"},
-      {"command": "sql4cds.newQuery", "title": "SQL 4 CDS: New Query", "icon": "$(new-file)"},
-      {"command": "sql4cds.runQuery", "title": "SQL 4 CDS: Execute Query", "icon": "$(play)"},
-      {"command": "sql4cds.cancelQuery", "title": "SQL 4 CDS: Cancel Query", "icon": "$(debug-stop)"},
-      {"command": "sql4cds.refreshObjectExplorer", "title": "Refresh", "icon": "$(refresh)"},
-      {"command": "sql4cds.searchTables", "title": "SQL 4 CDS: Search Tables", "icon": "$(search)"},
-      {"command": "sql4cds.removeConnection", "title": "Remove Connection", "icon": "$(trash)"},
-      {"command": "sql4cds.selectTop", "title": "Select Top 1000", "icon": "$(run)"},
-      {"command": "sql4cds.copyName", "title": "Copy Logical Name", "icon": "$(copy)"},
-      {"command": "sql4cds.insertName", "title": "Insert SQL Name", "icon": "$(insert)"}
+      {
+        "command": "sql4cds.addConnection",
+        "title": "SQL 4 CDS: Add Connection",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sql4cds.manageConnections",
+        "title": "SQL 4 CDS: Manage Connections"
+      },
+      {
+        "command": "sql4cds.connect",
+        "title": "SQL 4 CDS: Connect",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "sql4cds.switchConnection",
+        "title": "SQL 4 CDS: Switch Connection",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "sql4cds.reconnect",
+        "title": "SQL 4 CDS: Reconnect",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sql4cds.disconnect",
+        "title": "SQL 4 CDS: Disconnect",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "sql4cds.editConnection",
+        "title": "SQL 4 CDS: Edit Connection",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sql4cds.renameConnection",
+        "title": "SQL 4 CDS: Rename Connection",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sql4cds.testConnection",
+        "title": "SQL 4 CDS: Test Connection",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "sql4cds.newQuery",
+        "title": "SQL 4 CDS: New Query",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "sql4cds.runQuery",
+        "title": "SQL 4 CDS: Execute Query",
+        "icon": "$(play)"
+      },
+      {
+        "command": "sql4cds.cancelQuery",
+        "title": "SQL 4 CDS: Cancel Query",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "sql4cds.refreshObjectExplorer",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sql4cds.searchTables",
+        "title": "SQL 4 CDS: Search Tables",
+        "icon": "$(search)"
+      },
+      {
+        "command": "sql4cds.removeConnection",
+        "title": "Remove Connection",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sql4cds.selectTop",
+        "title": "Select Top 1000",
+        "icon": "$(run)"
+      },
+      {
+        "command": "sql4cds.copyName",
+        "title": "Copy Logical Name",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "sql4cds.insertName",
+        "title": "Insert SQL Name",
+        "icon": "$(insert)"
+      }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -127,55 +198,220 @@
     ],
     "menus": {
       "view/title": [
-        {"command": "sql4cds.addConnection", "when": "view == sql4cds.objectExplorer", "group": "navigation@1"},
-        {"command": "sql4cds.searchTables", "when": "view == sql4cds.objectExplorer && sql4cds.hasProfiles", "group": "navigation@2"},
-        {"command": "sql4cds.refreshObjectExplorer", "when": "view == sql4cds.objectExplorer", "group": "navigation@3"}
+        {
+          "command": "sql4cds.addConnection",
+          "when": "view == sql4cds.objectExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sql4cds.searchTables",
+          "when": "view == sql4cds.objectExplorer && sql4cds.hasProfiles",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sql4cds.refreshObjectExplorer",
+          "when": "view == sql4cds.objectExplorer",
+          "group": "navigation@3"
+        }
       ],
       "view/item/context": [
-        {"command": "sql4cds.newQuery", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile", "group": "inline@1"},
-        {"command": "sql4cds.searchTables", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile", "group": "inline@2"},
-        {"command": "sql4cds.selectTop", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.table", "group": "inline@1"},
-        {"command": "sql4cds.insertName", "when": "view == sql4cds.objectExplorer && viewItem =~ /sql4cds\\.(table|column|function|storedprocedure)/", "group": "query@1"},
-        {"command": "sql4cds.copyName", "when": "view == sql4cds.objectExplorer && viewItem =~ /sql4cds\\.(table|column|function|storedprocedure)/", "group": "query@2"},
-        {"command": "sql4cds.testConnection", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile", "group": "management@1"},
-        {"command": "sql4cds.editConnection", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile", "group": "management@2"},
-        {"command": "sql4cds.renameConnection", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile", "group": "management@3"},
-        {"command": "sql4cds.refreshObjectExplorer", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile", "group": "management@4"},
-        {"command": "sql4cds.refreshObjectExplorer", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.folder", "group": "management@4"},
-        {"command": "sql4cds.removeConnection", "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile", "group": "management@5"}
+        {
+          "command": "sql4cds.newQuery",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile",
+          "group": "inline@1"
+        },
+        {
+          "command": "sql4cds.searchTables",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile",
+          "group": "inline@2"
+        },
+        {
+          "command": "sql4cds.selectTop",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.table",
+          "group": "inline@1"
+        },
+        {
+          "command": "sql4cds.insertName",
+          "when": "view == sql4cds.objectExplorer && viewItem =~ /sql4cds\\.(table|column|function|storedprocedure)/",
+          "group": "query@1"
+        },
+        {
+          "command": "sql4cds.copyName",
+          "when": "view == sql4cds.objectExplorer && viewItem =~ /sql4cds\\.(table|column|function|storedprocedure)/",
+          "group": "query@2"
+        },
+        {
+          "command": "sql4cds.testConnection",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile",
+          "group": "management@1"
+        },
+        {
+          "command": "sql4cds.editConnection",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile",
+          "group": "management@2"
+        },
+        {
+          "command": "sql4cds.renameConnection",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile",
+          "group": "management@3"
+        },
+        {
+          "command": "sql4cds.refreshObjectExplorer",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile",
+          "group": "management@4"
+        },
+        {
+          "command": "sql4cds.refreshObjectExplorer",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.folder",
+          "group": "management@4"
+        },
+        {
+          "command": "sql4cds.removeConnection",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.profile",
+          "group": "management@5"
+        }
       ],
       "editor/title": [
-        {"command": "sql4cds.runQuery", "when": "editorLangId == sql4cds && !sql4cds.queryRunning", "group": "navigation@1"},
-        {"command": "sql4cds.cancelQuery", "when": "editorLangId == sql4cds && sql4cds.queryRunning", "group": "navigation@1"},
-        {"command": "sql4cds.connect", "when": "editorLangId == sql4cds && !sql4cds.connected", "group": "navigation@2"},
-        {"command": "sql4cds.switchConnection", "when": "editorLangId == sql4cds && sql4cds.connected", "group": "navigation@2"},
-        {"command": "sql4cds.disconnect", "when": "editorLangId == sql4cds && sql4cds.connected", "group": "navigation@3"}
+        {
+          "command": "sql4cds.runQuery",
+          "when": "editorLangId == sql4cds && !sql4cds.queryRunning",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sql4cds.cancelQuery",
+          "when": "editorLangId == sql4cds && sql4cds.queryRunning",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sql4cds.connect",
+          "when": "editorLangId == sql4cds && !sql4cds.connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sql4cds.switchConnection",
+          "when": "editorLangId == sql4cds && sql4cds.connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sql4cds.disconnect",
+          "when": "editorLangId == sql4cds && sql4cds.connected",
+          "group": "navigation@3"
+        }
       ]
     },
     "keybindings": [
-      {"command": "sql4cds.runQuery", "key": "ctrl+shift+e", "mac": "cmd+shift+e", "when": "editorLangId == sql4cds && !sql4cds.queryRunning"}
+      {
+        "command": "sql4cds.runQuery",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorLangId == sql4cds && !sql4cds.queryRunning"
+      }
     ],
     "configuration": {
       "title": "SQL 4 CDS",
       "properties": {
-        "SQL4CDS.logDebugInfo": {"type": "boolean", "default": false, "description": "Enable diagnostic logging in the SQL 4 CDS service. Reload VS Code after changing this setting."},
-        "SQL4CDS.useTdsEndpoint": {"type": "boolean", "default": false, "description": "Use the Dataverse TDS endpoint where possible."},
-        "SQL4CDS.blockDeleteWithoutWhere": {"type": "boolean", "default": true, "description": "Block DELETE statements without a WHERE clause."},
-        "SQL4CDS.blockUpdateWithoutWhere": {"type": "boolean", "default": true, "description": "Block UPDATE statements without a WHERE clause."},
-        "SQL4CDS.useBulkDelete": {"type": "boolean", "default": false, "description": "Use Dataverse bulk deletion jobs where possible."},
-        "SQL4CDS.batchSize": {"type": "integer", "default": 100, "minimum": 1, "description": "Maximum number of records in a data-modification batch."},
-        "SQL4CDS.maxDegreeOfParallelism": {"type": "integer", "default": 10, "minimum": 0, "description": "Maximum parallel requests to Dataverse (0 lets the engine choose)."},
-        "SQL4CDS.useLocalTimeZone": {"type": "boolean", "default": false, "description": "Use the local time zone when working with date and time values."},
-        "SQL4CDS.bypassCustomPlugins": {"type": "boolean", "default": false, "description": "Bypass custom Dataverse plugins when your account has permission."},
-        "SQL4CDS.quotedIdentifiers": {"type": "boolean", "default": false, "description": "Treat double-quoted values as SQL identifiers."},
-        "SQL4CDS.insertWarnThreshold": {"type": "integer", "default": 1, "minimum": 0, "description": "Ask before inserting more than this many records (0 prompts for every insert)."},
-        "SQL4CDS.updateWarnThreshold": {"type": "integer", "default": 0, "minimum": 0, "description": "Ask before updating more than this many records (0 prompts for every update)."},
-        "SQL4CDS.deleteWarnThreshold": {"type": "integer", "default": 0, "minimum": 0, "description": "Ask before deleting more than this many records (0 prompts for every delete)."},
-        "SQL4CDS.selectLimit": {"type": "integer", "default": 0, "minimum": 0, "description": "Maximum SELECT rows (0 means no additional limit)."},
-        "SQL4CDS.maxRetrievesPerQuery": {"type": "integer", "default": 100, "minimum": 0, "description": "Maximum Dataverse retrieve requests per query (0 means no limit)."},
-        "SQL4CDS.localFormatDates": {"type": "boolean", "default": false, "description": "Format result dates using the local display format."},
-        "SQL4CDS.maxResultRows": {"type": "integer", "default": 10000, "minimum": 100, "description": "Maximum rows displayed per result set."},
-        "SQL4CDS.servicePath": {"type": ["string", "null"], "default": null, "description": "Optional development override containing the language-service DLL. Reload VS Code after changing this setting.", "scope": "machine"}
+        "SQL4CDS.logDebugInfo": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable diagnostic logging in the SQL 4 CDS service. Reload VS Code after changing this setting."
+        },
+        "SQL4CDS.useTdsEndpoint": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use the Dataverse TDS endpoint where possible."
+        },
+        "SQL4CDS.blockDeleteWithoutWhere": {
+          "type": "boolean",
+          "default": true,
+          "description": "Block DELETE statements without a WHERE clause."
+        },
+        "SQL4CDS.blockUpdateWithoutWhere": {
+          "type": "boolean",
+          "default": true,
+          "description": "Block UPDATE statements without a WHERE clause."
+        },
+        "SQL4CDS.useBulkDelete": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use Dataverse bulk deletion jobs where possible."
+        },
+        "SQL4CDS.batchSize": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 1,
+          "description": "Maximum number of records in a data-modification batch."
+        },
+        "SQL4CDS.maxDegreeOfParallelism": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 0,
+          "description": "Maximum parallel requests to Dataverse (0 lets the engine choose)."
+        },
+        "SQL4CDS.useLocalTimeZone": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use the local time zone when working with date and time values."
+        },
+        "SQL4CDS.bypassCustomPlugins": {
+          "type": "boolean",
+          "default": false,
+          "description": "Bypass custom Dataverse plugins when your account has permission."
+        },
+        "SQL4CDS.quotedIdentifiers": {
+          "type": "boolean",
+          "default": false,
+          "description": "Treat double-quoted values as SQL identifiers."
+        },
+        "SQL4CDS.insertWarnThreshold": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 0,
+          "description": "Ask before inserting more than this many records (0 prompts for every insert)."
+        },
+        "SQL4CDS.updateWarnThreshold": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Ask before updating more than this many records (0 prompts for every update)."
+        },
+        "SQL4CDS.deleteWarnThreshold": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Ask before deleting more than this many records (0 prompts for every delete)."
+        },
+        "SQL4CDS.selectLimit": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Maximum SELECT rows (0 means no additional limit)."
+        },
+        "SQL4CDS.maxRetrievesPerQuery": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 0,
+          "description": "Maximum Dataverse retrieve requests per query (0 means no limit)."
+        },
+        "SQL4CDS.localFormatDates": {
+          "type": "boolean",
+          "default": false,
+          "description": "Format result dates using the local display format."
+        },
+        "SQL4CDS.maxResultRows": {
+          "type": "integer",
+          "default": 10000,
+          "minimum": 100,
+          "description": "Maximum rows displayed per result set."
+        },
+        "SQL4CDS.servicePath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional development override containing the language-service DLL. Reload VS Code after changing this setting.",
+          "scope": "machine"
+        }
       }
     }
   },
@@ -191,7 +427,7 @@
     "esbuild": "^0.25.12",
     "jsdom": "^26.1.0",
     "rimraf": "^6.0.1",
-    "typescript": "^5.7.2",
+    "typescript": "^5.9.3",
     "yauzl": "^3.4.0"
   },
   "bugs": {
