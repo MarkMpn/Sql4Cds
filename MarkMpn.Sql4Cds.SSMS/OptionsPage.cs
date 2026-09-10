@@ -79,5 +79,11 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             return VersionChecker.Result.IsCompleted && Latest != Version;
         }
+
+        [Category("Telemetry")]
+        [DisplayName("Include Detailed Error Telemetry")]
+        [Description("Includes full SQL query and error messages in telemetry reports when an error occurs")]
+        [DefaultValue(true)]
+        public bool IncludeDetailedErrorTelemetry { get; set; }
     }
 }
