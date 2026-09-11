@@ -99,6 +99,8 @@
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
             this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.sponsorshipLinkLabel = new System.Windows.Forms.LinkLabel();
+            this.pictureBox5 = new System.Windows.Forms.PictureBox();
             this.label28 = new System.Windows.Forms.Label();
             this.aiAutocompleteCheckBox = new System.Windows.Forms.CheckBox();
             this.aiProviderComboBox = new System.Windows.Forms.ComboBox();
@@ -111,8 +113,7 @@
             this.label22 = new System.Windows.Forms.Label();
             this.aiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
-            this.pictureBox5 = new System.Windows.Forms.PictureBox();
-            this.sponsorshipLinkLabel = new System.Windows.Forms.LinkLabel();
+            this.includedDetailedErrorTelemetryCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -513,6 +514,7 @@
             // 
             // tabPage1
             // 
+            this.tabPage1.Controls.Add(this.includedDetailedErrorTelemetryCheckBox);
             this.tabPage1.Controls.Add(this.schemaColumnOrderingCheckbox);
             this.tabPage1.Controls.Add(this.showFetchXMLInEstimatedExecutionPlansCheckBox);
             this.tabPage1.Controls.Add(this.pictureBox6);
@@ -535,7 +537,7 @@
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(409, 269);
+            this.tabPage1.Size = new System.Drawing.Size(409, 330);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Query Execution";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -649,7 +651,7 @@
             this.tabPage2.Location = new System.Drawing.Point(4, 22);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(409, 269);
+            this.tabPage2.Size = new System.Drawing.Size(409, 330);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "Safety Limits";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -710,7 +712,7 @@
             this.tabPage3.Location = new System.Drawing.Point(4, 22);
             this.tabPage3.Name = "tabPage3";
             this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage3.Size = new System.Drawing.Size(409, 269);
+            this.tabPage3.Size = new System.Drawing.Size(409, 330);
             this.tabPage3.TabIndex = 2;
             this.tabPage3.Text = "Editor";
             this.tabPage3.UseVisualStyleBackColor = true;
@@ -812,7 +814,7 @@
             this.tabPage6.Controls.Add(this.autoSizeColumnsCheckBox);
             this.tabPage6.Location = new System.Drawing.Point(4, 22);
             this.tabPage6.Name = "tabPage6";
-            this.tabPage6.Size = new System.Drawing.Size(409, 269);
+            this.tabPage6.Size = new System.Drawing.Size(409, 330);
             this.tabPage6.TabIndex = 5;
             this.tabPage6.Text = "Results";
             this.tabPage6.UseVisualStyleBackColor = true;
@@ -883,7 +885,7 @@
             this.tabPage4.Location = new System.Drawing.Point(4, 22);
             this.tabPage4.Name = "tabPage4";
             this.tabPage4.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage4.Size = new System.Drawing.Size(409, 269);
+            this.tabPage4.Size = new System.Drawing.Size(409, 330);
             this.tabPage4.TabIndex = 3;
             this.tabPage4.Text = "Conversion";
             this.tabPage4.UseVisualStyleBackColor = true;
@@ -976,6 +978,33 @@
             this.tabPage5.TabIndex = 4;
             this.tabPage5.Text = "Copilot";
             this.tabPage5.UseVisualStyleBackColor = true;
+            // 
+            // sponsorshipLinkLabel
+            // 
+            this.sponsorshipLinkLabel.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.sponsorshipLinkLabel.LinkArea = new System.Windows.Forms.LinkArea(196, 23);
+            this.sponsorshipLinkLabel.Location = new System.Drawing.Point(5, 42);
+            this.sponsorshipLinkLabel.Name = "sponsorshipLinkLabel";
+            this.sponsorshipLinkLabel.Size = new System.Drawing.Size(399, 54);
+            this.sponsorshipLinkLabel.TabIndex = 30;
+            this.sponsorshipLinkLabel.TabStop = true;
+            this.sponsorshipLinkLabel.Tag = "https://ai.markcarrington.dev";
+            this.sponsorshipLinkLabel.Text = resources.GetString("sponsorshipLinkLabel.Text");
+            this.sponsorshipLinkLabel.UseCompatibleTextRendering = true;
+            this.sponsorshipLinkLabel.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.sponsorshipLinkLabel_LinkClicked);
+            // 
+            // pictureBox5
+            // 
+            this.pictureBox5.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox5.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
+            this.pictureBox5.Location = new System.Drawing.Point(216, 21);
+            this.pictureBox5.Name = "pictureBox5";
+            this.pictureBox5.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox5.TabIndex = 29;
+            this.pictureBox5.TabStop = false;
+            this.pictureBox5.Tag = "https://ai.markcarrington.dev";
+            this.pictureBox5.Click += new System.EventHandler(this.helpIcon_Click);
             // 
             // label28
             // 
@@ -1094,32 +1123,15 @@
             this.label21.TabIndex = 2;
             this.label21.Text = "Endpoint";
             // 
-            // pictureBox5
+            // includedDetailedErrorTelemetryCheckBox
             // 
-            this.pictureBox5.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox5.Image = global::MarkMpn.Sql4Cds.XTB.Properties.Resources.StatusHelp_16x;
-            this.pictureBox5.Location = new System.Drawing.Point(216, 21);
-            this.pictureBox5.Name = "pictureBox5";
-            this.pictureBox5.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox5.TabIndex = 29;
-            this.pictureBox5.TabStop = false;
-            this.pictureBox5.Tag = "https://ai.markcarrington.dev";
-            this.pictureBox5.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // sponsorshipLinkLabel
-            // 
-            this.sponsorshipLinkLabel.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.sponsorshipLinkLabel.LinkArea = new System.Windows.Forms.LinkArea(196, 23);
-            this.sponsorshipLinkLabel.Location = new System.Drawing.Point(5, 42);
-            this.sponsorshipLinkLabel.Name = "sponsorshipLinkLabel";
-            this.sponsorshipLinkLabel.Size = new System.Drawing.Size(399, 54);
-            this.sponsorshipLinkLabel.TabIndex = 30;
-            this.sponsorshipLinkLabel.TabStop = true;
-            this.sponsorshipLinkLabel.Tag = "https://ai.markcarrington.dev";
-            this.sponsorshipLinkLabel.Text = resources.GetString("sponsorshipLinkLabel.Text");
-            this.sponsorshipLinkLabel.UseCompatibleTextRendering = true;
-            this.sponsorshipLinkLabel.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.sponsorshipLinkLabel_LinkClicked);
+            this.includedDetailedErrorTelemetryCheckBox.AutoSize = true;
+            this.includedDetailedErrorTelemetryCheckBox.Location = new System.Drawing.Point(6, 216);
+            this.includedDetailedErrorTelemetryCheckBox.Name = "includedDetailedErrorTelemetryCheckBox";
+            this.includedDetailedErrorTelemetryCheckBox.Size = new System.Drawing.Size(340, 17);
+            this.includedDetailedErrorTelemetryCheckBox.TabIndex = 32;
+            this.includedDetailedErrorTelemetryCheckBox.Text = "Include full SQL query and error messages in error telemetry reports";
+            this.includedDetailedErrorTelemetryCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
@@ -1263,5 +1275,6 @@
         private System.Windows.Forms.CheckBox aiAutocompleteCheckBox;
         private System.Windows.Forms.PictureBox pictureBox5;
         private System.Windows.Forms.LinkLabel sponsorshipLinkLabel;
+        private System.Windows.Forms.CheckBox includedDetailedErrorTelemetryCheckBox;
     }
 }

@@ -34,7 +34,7 @@ Improvements:
       </group>
       <group targetFramework=".NETCoreApp8.0">
         <dependency id="CsvHelper" version="33.1.0" />
-        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="1.2.2" />
+        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="1.2.27" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="170.64.0" />
         <dependency id="Microsoft.ApplicationInsights" version="2.23.0" />
         <dependency id="System.Data.SqlClient" version="4.8.6" />

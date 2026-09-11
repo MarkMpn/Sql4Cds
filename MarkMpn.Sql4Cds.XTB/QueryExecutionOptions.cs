@@ -44,6 +44,7 @@ namespace MarkMpn.Sql4Cds.XTB
             _con.BypassCustomPlugins = Settings.Instance.BypassCustomPlugins;
             _con.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
             _con.ColumnOrdering = Settings.Instance.ColumnOrdering;
+            _con.IncludeDetailedErrorTelemetry = Settings.Instance.IncludeDetailedErrorTelemetry;
 
             _con.PreInsert += ConfirmInsert;
             _con.PreUpdate += ConfirmUpdate;

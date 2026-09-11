@@ -84,6 +84,8 @@ namespace MarkMpn.Sql4Cds.XTB
         public bool UseAIAutocomplete { get; set; } = true;
 
         public ResultType ResultsOutputType { get; set; } = ResultType.Grid;
+
+        public bool IncludeDetailedErrorTelemetry { get; set; }
     }
 
     public class TabContent

@@ -39,6 +39,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             con.MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism;
             con.UseLocalTimeZone = false;
             con.BypassCustomPlugins = _options.BypassCustomPlugins;
+            con.IncludeDetailedErrorTelemetry = _options.IncludeDetailedErrorTelemetry;
 
             con.PreInsert += ConfirmInsert;
             con.PreDelete += ConfirmDelete;

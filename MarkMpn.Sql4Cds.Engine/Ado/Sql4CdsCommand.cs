@@ -91,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         public override int CommandTimeout { get; set; }
-        
+
         public override CommandType CommandType
         {
             get { return _commandType; }
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         public override bool DesignTimeVisible { get; set; }
-        
+
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
         public event EventHandler<StatementCompletedEventArgs> StatementCompleted;
@@ -127,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (handler != null)
                 handler(this, new StatementCompletedEventArgs(node, recordsAffected, message));
         }
-        
+
         protected override DbConnection DbConnection
         {
             get { return _connection; }
@@ -171,6 +171,13 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             using (var reader = ExecuteReader())
             {
+                // Consume all the results to ensure all statements in the batch are actually executed
+                do
+                {
+                    while (reader.Read())
+                        ;
+                } while (reader.NextResult());
+                
                 return reader.RecordsAffected;
             }
         }
@@ -179,11 +186,21 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             using (var reader = ExecuteReader())
             {
-                if (!reader.Read())
-                    return null;
 
-                return reader.GetValue(0);
-            }    
+                object result = null;
+
+                if (reader.Read())
+                    result = reader.GetValue(0);
+
+                // Consume all remaining results to ensure all statements in the batch are actually executed
+                do
+                {
+                    while (reader.Read())
+                        ;
+                } while (reader.NextResult());
+
+                return result;
+            }
         }
 
         public override void Prepare()
@@ -252,19 +269,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (Exception ex)
             {
-                var exTelem = new ExceptionTelemetry(ex)
-                {
-                    Properties =
-                    {
-                        ["Sql"] = CommandText,
-                        ["Source"] = _connection.ApplicationName,
-                    }
-                };
-
-                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
-
-                _connection.TelemetryClient.TrackException(exTelem);
+                TrackException(ex);
 
                 if (ex is Sql4CdsException)
                     throw;
@@ -308,7 +313,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var accessToken = svc.CurrentAccessToken;
                     if (String.IsNullOrEmpty(accessToken) && dataSource.AccessTokenProvider != null)
                         accessToken = dataSource.AccessTokenProvider();
-                    
+
                     con.AccessToken = accessToken;
                     con.Open();
 
@@ -356,19 +361,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (Exception ex)
             {
-                var exTelem = new ExceptionTelemetry(ex)
-                {
-                    Properties =
-                    {
-                        ["Sql"] = CommandText,
-                        ["Source"] = _connection.ApplicationName,
-                    }
-                };
-
-                if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
-                    exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
-
-                _connection.TelemetryClient.TrackException(exTelem);
+                TrackException(ex);
                 throw;
             }
         }
@@ -376,6 +369,35 @@ namespace MarkMpn.Sql4Cds.Engine
         internal Sql4CdsCommand CreateChildCommand()
         {
             return new Sql4CdsCommand(_connection, _cts);
+        }
+
+        internal void TrackException(Exception ex)
+        {
+            ExceptionTelemetry exTelem;
+
+            if (_connection.IncludeDetailedErrorTelemetry)
+            {
+                exTelem = new ExceptionTelemetry(ex)
+                {
+                    Properties =
+                        {
+                            ["Sql"] = CommandText,
+                        }
+                };
+            }
+            else
+            {
+                exTelem = new ExceptionTelemetry();
+                exTelem.Message = "_";
+                exTelem.ExceptionDetailsInfoList[0].TypeName = ex.GetType().FullName;
+            }
+
+            exTelem.Properties["Source"] = _connection.ApplicationName;
+
+            if (ex is ISql4CdsErrorException sqlEx && sqlEx.Errors.Count > 0)
+                exTelem.Properties["ErrorNumber"] = sqlEx.Errors[0].Number.ToString();
+
+            _connection.TelemetryClient.TrackException(exTelem);
         }
     }
 }
