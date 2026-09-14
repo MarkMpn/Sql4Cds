@@ -16,6 +16,7 @@ import {
   SaveResultRequestResult,
   SubsetResult
 } from "./protocol";
+import { findInvalidFilter } from "./filterRecovery";
 import { createExportParams, exportMethod, opensInTextEditor, resultExportChoices } from "./resultExport";
 import { ClipboardFormat, ClipboardValue, projectClipboardRows, serializeClipboard } from "./resultClipboard";
 import { resultsHtml } from "./resultWebview";
@@ -295,21 +296,22 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     const page = Math.max(0, Math.min(requestedPage, lastPage));
     const start = page * pageSize;
     const count = Math.min(pageSize, Math.max(0, displayRows - start));
+    const request = {
+      ownerUri: uri,
+      batchIndex: result.summary.batchId,
+      resultSetIndex: result.summary.id,
+      rowsStartIndex: start,
+      rowsCount: count,
+      searchText: message.searchText,
+      filters: message.filters,
+      sort: message.sort,
+      viewVersion: message.viewVersion
+    };
 
     try {
       const response = count === 0
         ? { resultSubset: { rowCount: 0, rows: [] } }
-        : await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, {
-          ownerUri: uri,
-          batchIndex: result.summary.batchId,
-          resultSetIndex: result.summary.id,
-          rowsStartIndex: start,
-          rowsCount: count,
-          searchText: message.searchText,
-          filters: message.filters,
-          sort: message.sort,
-          viewVersion: message.viewVersion
-        });
+        : await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, request);
       if (this.states.get(uri) !== state) { return; }
       const subset = response.resultSubset;
       const rows = (subset?.rows ?? []).map(row => row.map(formatCell));
@@ -330,6 +332,34 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       });
     } catch (error) {
       if (this.states.get(uri) !== state) { return; }
+
+      const invalidFilter = await findInvalidFilter(message.filters, async filters => {
+        try {
+          await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, {
+            ...request,
+            filters
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      });
+
+      if (invalidFilter && this.states.get(uri) === state) {
+        const column = result.summary.columnInfo[invalidFilter.columnIndex];
+        const columnName = column?.columnName ?? column?.name ?? `column ${invalidFilter.columnIndex + 1}`;
+        const value = invalidFilter.value?.trim();
+        const valuePart = value ? ` '${value}'` : "";
+        void vscode.window.showErrorMessage(`Could not apply the filter${valuePart} on ${columnName}. The filter has been cleared.`);
+        void this.resultsView?.webview.postMessage({
+          type: "resetFilter",
+          runId: state.runId,
+          key: message.key,
+          columnIndex: invalidFilter.columnIndex
+        });
+        return;
+      }
+
       void this.resultsView?.webview.postMessage({
         type: "pageError",
         runId: state.runId,

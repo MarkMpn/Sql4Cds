@@ -6,6 +6,8 @@
     <TargetFramework Condition="'$(Sql4CdsVSCodeBuild)' != 'true'">net8.0</TargetFramework>
     <TargetFramework Condition="'$(Sql4CdsVSCodeBuild)' == 'true'">net10.0</TargetFramework>
     <Copyright>Copyright © 2022 - 2024 Mark Carrington</Copyright>
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>Key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>

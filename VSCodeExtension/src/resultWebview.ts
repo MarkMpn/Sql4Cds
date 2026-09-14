@@ -55,6 +55,8 @@ export function resultsHtml(webview: vscode.Webview): string {
       }else if(message.type==='pageError'&&state&&message.runId===state.runId){
         const result=state.results.find(x=>x.key===message.key);if(!result)return;const view=viewFor(result),responseVersion=message.viewVersion??view.viewVersion;pending.delete(pageKey(message.key,message.page,responseVersion));if(responseVersion!==view.viewVersion)return;
         if(active===message.key&&currentPage===message.page)showError(message.message);
+      }else if(message.type==='resetFilter'&&state&&message.runId===state.runId){
+        const result=state.results.find(x=>x.key===message.key);if(!result||!Number.isInteger(message.columnIndex))return;const view=viewFor(result);view.filters.delete(message.columnIndex);if(active===message.key)invalidate(result,true);
       }
     });
     window.addEventListener('pointerup',()=>dragSelecting=false);

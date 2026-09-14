@@ -349,7 +349,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 var schemaTable = reader.GetSchemaTable();
 
                                 for (var i = 0; i < reader.FieldCount; i++)
-                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(schemaTable.Rows[i]["ColumnName"] as string, (string)schemaTable.Rows[i]["DataTypeName"], (short?)schemaTable.Rows[i]["NumericScale"]);
+                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(
+                                        schemaTable.Rows[i]["ColumnName"] as string,
+                                        (string)schemaTable.Rows[i]["DataTypeName"],
+                                        (short?)schemaTable.Rows[i]["NumericScale"],
+                                        reader.GetProviderSpecificFieldType(i));
 
                                 resultSetInProgress = resultSet;
                                 resultSets.Add(resultSet);
@@ -365,6 +369,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     var row = new object[reader.FieldCount];
                                     reader.GetValues(row);
                                     resultSet.Values.Add(row);
+
+                                    var providerSpecificRow = new object[reader.FieldCount];
+                                    reader.GetProviderSpecificValues(providerSpecificRow);
+                                    resultSet.ProviderSpecificValues.Add(providerSpecificRow);
+
                                     resultSet.RowCount++;
                                 }
 
@@ -1028,13 +1037,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 request.Filters?.Length > 0 ||
                 request.Sort != null;
 
+            var session = _connectionManager.GetConnection(request.OwnerUri);
+
             // Preserve the inexpensive Skip/Take path for ordinary paging. Transformations need
             // a snapshot so filtering, sorting and pagination all observe the same row set.
             IReadOnlyList<object[]> transformedRows = hasTransform
                 ? ResultSetViewTransformer.Transform(
                     resultSet.Values.ToArray(),
+                    resultSet.ProviderSpecificValues.ToArray(),
                     resultSet.ColumnInfo,
                     request,
+                    session.Connection.Session,
+                    session.Connection.Options,
                     (value, col) => ValueFormatter.Format(
                         value,
                         col.DataTypeName,

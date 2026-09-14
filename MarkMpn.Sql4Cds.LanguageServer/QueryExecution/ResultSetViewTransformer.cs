@@ -1,26 +1,35 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
-using System.Globalization;
 using System.Linq;
+using System.Text;
+using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 {
     /// <summary>
     /// Applies a results-grid view specification without changing the retained query results.
-    /// Row indexes are retained as a final tie breaker so sorting is stable.
+    /// Filters are converted to SQL comparisons in ScriptDom, then compiled and executed against
+    /// the provider-specific (SQL typed) rows using the same logic as the engine's internal
+    /// FilterNode and SortNode. Row indexes are retained as a final tie breaker so sorting is stable.
     /// </summary>
     internal static class ResultSetViewTransformer
     {
         internal static IReadOnlyList<object[]> Transform(
             IReadOnlyList<object[]> rows,
+            IReadOnlyList<object[]> providerSpecificRows,
             DbColumnWrapper[] columns,
             SubsetParams request,
+            SessionContext session,
+            IQueryExecutionOptions options,
             Func<object, DbColumnWrapper, string> formatValue)
         {
-            var indexedRows = rows.Select((row, index) => new IndexedRow(row, index));
+            var indexedRows = rows.Select((row, index) => new IndexedRow(row, providerSpecificRows[index], index));
 
             if (!String.IsNullOrWhiteSpace(request.SearchText))
             {
@@ -29,231 +38,282 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     Contains(formatValue(row.Values[columnIndex], columns[columnIndex]), searchText)));
             }
 
-            if (request.Filters != null)
+            var filterExpression = BuildFilterExpression(request.Filters, columns);
+
+            if (filterExpression != null)
             {
-                foreach (var filter in request.Filters.Where(filter => filter != null && filter.ColumnIndex >= 0 && filter.ColumnIndex < columns.Length))
+                var compilationContext = CreateCompilationContext(columns, session, options);
+                var filter = filterExpression.Compile(compilationContext);
+                var executionContext = new ExpressionExecutionContext(compilationContext);
+
+                indexedRows = indexedRows.Where(row =>
                 {
-                    var currentFilter = filter;
-                    indexedRows = indexedRows.Where(row => MatchesFilter(
-                        row.Values[currentFilter.ColumnIndex],
-                        formatValue(row.Values[currentFilter.ColumnIndex], columns[currentFilter.ColumnIndex]),
-                        currentFilter));
-                }
+                    executionContext.Entity = ToEntity(row.ProviderSpecificValues);
+                    return filter(executionContext);
+                });
             }
 
             var materialized = indexedRows.ToList();
 
             if (request.Sort != null &&
                 request.Sort.ColumnIndex >= 0 &&
-                request.Sort.ColumnIndex < columns.Length &&
-                (String.Equals(request.Sort.Direction, "asc", StringComparison.OrdinalIgnoreCase) ||
-                 String.Equals(request.Sort.Direction, "desc", StringComparison.OrdinalIgnoreCase)))
+                request.Sort.ColumnIndex < columns.Length)
             {
-                var direction = String.Equals(request.Sort.Direction, "desc", StringComparison.OrdinalIgnoreCase) ? -1 : 1;
-                var columnIndex = request.Sort.ColumnIndex;
-                materialized.Sort((left, right) =>
-                {
-                    var comparison = CompareValues(
-                        left.Values[columnIndex],
-                        right.Values[columnIndex],
-                        formatValue(left.Values[columnIndex], columns[columnIndex]),
-                        formatValue(right.Values[columnIndex], columns[columnIndex]));
-
-                    if (comparison == 0)
-                        return left.OriginalIndex.CompareTo(right.OriginalIndex);
-
-                    // Nulls remain last in both directions.
-                    if (IsNull(left.Values[columnIndex]) || IsNull(right.Values[columnIndex]))
-                        return comparison;
-
-                    return comparison * direction;
-                });
+                Sort(materialized, columns, request.Sort, session, options);
             }
 
             return materialized.Select(row => row.Values).ToArray();
         }
 
-        private static bool MatchesFilter(object rawValue, string displayValue, ResultSetFilter filter)
+        private static void Sort(
+            List<IndexedRow> rows,
+            DbColumnWrapper[] columns,
+            ResultSetSort sort,
+            SessionContext session,
+            IQueryExecutionOptions options)
         {
-            var op = filter.Operator ?? String.Empty;
-            var isEmpty = IsNull(rawValue) || String.IsNullOrEmpty(displayValue);
+            // Simple case if there's no need to do any sorting
+            if (rows.Count <= 1)
+                return;
 
-            if (op.Equals("isEmpty", StringComparison.OrdinalIgnoreCase))
-                return isEmpty;
+            // Build the same ScriptDom sort description as a SQL ORDER BY clause would produce
+            // and compile it using the same logic as the internal SortNode
+            var sortExpression = new ExpressionWithSortOrder
+            {
+                Expression = GetColumnName(sort.ColumnIndex).ToColumnReference(),
+                SortOrder = sort.Direction == ResultSetSortDirection.Desc
+                    ? SortOrder.Descending
+                    : SortOrder.Ascending
+            };
 
-            if (op.Equals("isNotEmpty", StringComparison.OrdinalIgnoreCase))
-                return !isEmpty;
+            var compilationContext = CreateCompilationContext(columns, session, options);
+            var executionContext = new ExpressionExecutionContext(compilationContext);
+            var expression = sortExpression.Expression.Compile(compilationContext);
 
-            var filterValue = filter.Value ?? String.Empty;
+            // Precalculate the sort keys, as SortNode.SortSubset does
+            var sortKeys = rows
+                .ToDictionary(
+                    row => row,
+                    row =>
+                    {
+                        executionContext.Entity = ToEntity(row.ProviderSpecificValues);
+                        return expression(executionContext);
+                    });
 
-            if (op.Equals("contains", StringComparison.OrdinalIgnoreCase))
-                return Contains(displayValue, filterValue);
+            // Sort the list according to these sort keys, retaining the original row index
+            // as a final tie breaker so sorting is stable
+            rows.Sort((x, y) =>
+            {
+                var comparison = ((IComparable)sortKeys[x]).CompareTo(sortKeys[y]);
 
-            if (op.Equals("notContains", StringComparison.OrdinalIgnoreCase))
-                return !Contains(displayValue, filterValue);
+                if (comparison == 0)
+                    return x.OriginalIndex.CompareTo(y.OriginalIndex);
 
-            if (op.Equals("startsWith", StringComparison.OrdinalIgnoreCase))
-                return (displayValue ?? String.Empty).StartsWith(filterValue, StringComparison.OrdinalIgnoreCase);
+                if (sortExpression.SortOrder == SortOrder.Descending)
+                    return -comparison;
 
-            if (op.Equals("endsWith", StringComparison.OrdinalIgnoreCase))
-                return (displayValue ?? String.Empty).EndsWith(filterValue, StringComparison.OrdinalIgnoreCase);
-
-            if (op.Equals("equals", StringComparison.OrdinalIgnoreCase))
-                return String.Equals(displayValue ?? String.Empty, filterValue, StringComparison.OrdinalIgnoreCase);
-
-            if (op.Equals("notEquals", StringComparison.OrdinalIgnoreCase))
-                return !String.Equals(displayValue ?? String.Empty, filterValue, StringComparison.OrdinalIgnoreCase);
-
-            if (isEmpty || !TryCompareToFilter(rawValue, displayValue, filterValue, out var comparison))
-                return false;
-
-            if (op.Equals("greaterThan", StringComparison.OrdinalIgnoreCase) || op.Equals("gt", StringComparison.OrdinalIgnoreCase))
-                return comparison > 0;
-            if (op.Equals("greaterThanOrEqual", StringComparison.OrdinalIgnoreCase) || op.Equals("gte", StringComparison.OrdinalIgnoreCase))
-                return comparison >= 0;
-            if (op.Equals("lessThan", StringComparison.OrdinalIgnoreCase) || op.Equals("lt", StringComparison.OrdinalIgnoreCase))
-                return comparison < 0;
-            if (op.Equals("lessThanOrEqual", StringComparison.OrdinalIgnoreCase) || op.Equals("lte", StringComparison.OrdinalIgnoreCase))
-                return comparison <= 0;
-
-            // Unknown operators should not unexpectedly hide every row from older/newer clients.
-            return true;
+                return comparison;
+            });
         }
 
-        private static bool TryCompareToFilter(object rawValue, string displayValue, string filterValue, out int comparison)
+        private static ExpressionCompilationContext CreateCompilationContext(
+            DbColumnWrapper[] columns,
+            SessionContext session,
+            IQueryExecutionOptions options)
         {
-            rawValue = UnwrapSqlValue(rawValue);
+            var schema = new ColumnList();
+            var dataSource = session.DataSources[options.PrimaryDataSource];
 
-            if (IsNumeric(rawValue) && TryParseDecimal(filterValue, out var numericFilter))
+            for (var i = 0; i < columns.Length; i++)
             {
-                try
-                {
-                    comparison = Convert.ToDecimal(rawValue, CultureInfo.InvariantCulture).CompareTo(numericFilter);
-                    return true;
-                }
-                catch (OverflowException)
-                {
-                    comparison = 0;
-                    return false;
-                }
+                var providerType = columns[i].ProviderSpecificDataType;
+
+                var type = providerType != null
+                    ? providerType.ToSqlType(dataSource)
+                    : DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+
+                schema.Add(GetColumnName(i), new Engine.ExecutionPlan.ColumnDefinition(type, isNullable: true, isCalculated: false));
             }
 
-            if (rawValue is DateTime dateTime && TryParseDate(filterValue, out var dateFilter))
-            {
-                comparison = new DateTimeOffset(dateTime).CompareTo(dateFilter);
-                return true;
-            }
-
-            if (rawValue is DateTimeOffset dateTimeOffset && TryParseDate(filterValue, out var offsetFilter))
-            {
-                comparison = dateTimeOffset.CompareTo(offsetFilter);
-                return true;
-            }
-
-            if (rawValue is TimeSpan timeSpan && TimeSpan.TryParse(filterValue, CultureInfo.CurrentCulture, out var timeFilter))
-            {
-                comparison = timeSpan.CompareTo(timeFilter);
-                return true;
-            }
-
-            comparison = StringComparer.OrdinalIgnoreCase.Compare(displayValue ?? String.Empty, filterValue);
-            return true;
+            return new ExpressionCompilationContext(session, options, null, new NodeSchema(schema, null, null, null), null);
         }
 
-        private static int CompareValues(object left, object right, string leftDisplay, string rightDisplay)
+        private static Entity ToEntity(object[] providerSpecificValues)
         {
-            var leftNull = IsNull(left);
-            var rightNull = IsNull(right);
+            var entity = new Entity();
 
-            if (leftNull || rightNull)
-                return leftNull == rightNull ? 0 : leftNull ? 1 : -1;
+            for (var i = 0; i < providerSpecificValues.Length; i++)
+                entity[GetColumnName(i)] = providerSpecificValues[i];
 
-            left = UnwrapSqlValue(left);
-            right = UnwrapSqlValue(right);
-
-            if (IsNumeric(left) && IsNumeric(right))
-            {
-                if (left.GetType() == right.GetType() && left is IComparable numericComparable)
-                    return numericComparable.CompareTo(right);
-
-                try
-                {
-                    return Convert.ToDecimal(left, CultureInfo.InvariantCulture).CompareTo(Convert.ToDecimal(right, CultureInfo.InvariantCulture));
-                }
-                catch (OverflowException)
-                {
-                    return Convert.ToDouble(left, CultureInfo.InvariantCulture).CompareTo(Convert.ToDouble(right, CultureInfo.InvariantCulture));
-                }
-            }
-
-            if (left is DateTime leftDate && right is DateTime rightDate)
-                return leftDate.CompareTo(rightDate);
-
-            if (left is DateTimeOffset leftOffset && right is DateTimeOffset rightOffset)
-                return leftOffset.CompareTo(rightOffset);
-
-            if (left is string leftString && right is string rightString)
-                return StringComparer.OrdinalIgnoreCase.Compare(leftString, rightString);
-
-            if (left.GetType() == right.GetType() && left is IComparable comparable)
-                return comparable.CompareTo(right);
-
-            return StringComparer.OrdinalIgnoreCase.Compare(leftDisplay ?? String.Empty, rightDisplay ?? String.Empty);
+            return entity;
         }
 
-        private static bool IsNull(object value) =>
-            value == null ||
-            value == DBNull.Value ||
-            (value is INullable nullable && nullable.IsNull);
+        private static string GetColumnName(int columnIndex) => $"col{columnIndex}";
 
-        private static object UnwrapSqlValue(object value) => value is INullable && value.GetType().GetProperty("Value") != null
-            ? value.GetType().GetProperty("Value").GetValue(value)
-            : value;
-
-        private static bool IsNumeric(object value)
+        private static BooleanExpression BuildFilterExpression(ResultSetFilter[] filters, DbColumnWrapper[] columns)
         {
-            if (value == null)
-                return false;
+            if (filters == null)
+                return null;
 
-            switch (Type.GetTypeCode(value.GetType()))
+            BooleanExpression result = null;
+
+            foreach (var filter in filters.Where(f => f != null && f.ColumnIndex >= 0 && f.ColumnIndex < columns.Length))
+                result = result.And(BuildFilterExpression(filter));
+
+            return result;
+        }
+
+        private static BooleanExpression BuildFilterExpression(ResultSetFilter filter)
+        {
+            var column = GetColumnName(filter.ColumnIndex).ToColumnReference();
+            var value = new StringLiteral { Value = filter.Value ?? String.Empty };
+
+            switch (filter.Operator)
             {
-                case TypeCode.Byte:
-                case TypeCode.SByte:
-                case TypeCode.UInt16:
-                case TypeCode.UInt32:
-                case TypeCode.UInt64:
-                case TypeCode.Int16:
-                case TypeCode.Int32:
-                case TypeCode.Int64:
-                case TypeCode.Decimal:
-                case TypeCode.Double:
-                case TypeCode.Single:
-                    return true;
+                case ResultSetFilterOperator.IsEmpty:
+                    return IsEmptyExpression(column, isNot: false);
+
+                case ResultSetFilterOperator.IsNotEmpty:
+                    return IsEmptyExpression(column, isNot: true);
+
+                case ResultSetFilterOperator.Contains:
+                    return LikeExpression(column, "%" + EscapeLikePattern(filter.Value) + "%", notDefined: false);
+
+                case ResultSetFilterOperator.NotContains:
+                    return LikeExpression(column, "%" + EscapeLikePattern(filter.Value) + "%", notDefined: true);
+
+                case ResultSetFilterOperator.StartsWith:
+                    return LikeExpression(column, EscapeLikePattern(filter.Value) + "%", notDefined: false);
+
+                case ResultSetFilterOperator.EndsWith:
+                    return LikeExpression(column, "%" + EscapeLikePattern(filter.Value), notDefined: true /* see note */ == false);
+
+                case ResultSetFilterOperator.Equals:
+                    return ComparisonExpression(column, value, BooleanComparisonType.Equals);
+
+                case ResultSetFilterOperator.NotEquals:
+                    return ComparisonExpression(column, value, BooleanComparisonType.NotEqualToBrackets);
+
+                case ResultSetFilterOperator.GreaterThan:
+                    return ComparisonExpression(column, value, BooleanComparisonType.GreaterThan);
+
+                case ResultSetFilterOperator.GreaterThanOrEqual:
+                    return ComparisonExpression(column, value, BooleanComparisonType.GreaterThanOrEqualTo);
+
+                case ResultSetFilterOperator.LessThan:
+                    return ComparisonExpression(column, value, BooleanComparisonType.LessThan);
+
+                case ResultSetFilterOperator.LessThanOrEqual:
+                    return ComparisonExpression(column, value, BooleanComparisonType.LessThanOrEqualTo);
+
                 default:
-                    return false;
+                    throw new ArgumentOutOfRangeException(nameof(filter), $"Unknown filter operator '{filter.Operator}'");
             }
         }
 
-        private static bool TryParseDecimal(string value, out decimal result) =>
-            Decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result) ||
-            Decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result);
+        private static BooleanExpression ComparisonExpression(ColumnReferenceExpression column, ScalarExpression value, BooleanComparisonType comparisonType)
+        {
+            return new BooleanComparisonExpression
+            {
+                FirstExpression = column,
+                ComparisonType = comparisonType,
+                SecondExpression = value
+            };
+        }
 
-        private static bool TryParseDate(string value, out DateTimeOffset result) =>
-            DateTimeOffset.TryParse(value, CultureInfo.CurrentCulture, DateTimeStyles.AllowWhiteSpaces, out result) ||
-            DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out result);
+        private static BooleanExpression LikeExpression(ColumnReferenceExpression column, string pattern, bool notDefined)
+        {
+            // col [NOT] LIKE 'pattern' ESCAPE '\'
+            var like = new LikePredicate
+            {
+                FirstExpression = new ConvertCall
+                {
+                    DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } },
+                    Parameter = column
+                },
+                SecondExpression = new StringLiteral { Value = pattern },
+                EscapeExpression = new StringLiteral { Value = "\\" },
+                NotDefined = notDefined
+            };
+
+            if (!notDefined)
+                return like;
+
+            // NOT LIKE also excludes NULLs; the grid semantics expect NULL rows to be kept for
+            // negated matches only when the display value genuinely doesn't contain the text, so
+            // treat NULL as an empty string via ISNULL semantics: (col IS NULL OR col NOT LIKE ...)
+            return new BooleanParenthesisExpression
+            {
+                Expression = new BooleanBinaryExpression
+                {
+                    FirstExpression = new BooleanIsNullExpression { Expression = column },
+                    BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                    SecondExpression = like
+                }
+            };
+        }
+
+        private static BooleanExpression IsEmptyExpression(ColumnReferenceExpression column, bool isNot)
+        {
+            // col IS NULL OR CONVERT(nvarchar(max), col) = ''
+            var isEmpty = new BooleanBinaryExpression
+            {
+                FirstExpression = new BooleanIsNullExpression { Expression = column },
+                BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                SecondExpression = new BooleanComparisonExpression
+                {
+                    FirstExpression = new ConvertCall
+                    {
+                        DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } },
+                        Parameter = column
+                    },
+                    ComparisonType = BooleanComparisonType.Equals,
+                    SecondExpression = new StringLiteral { Value = "" }
+                }
+            };
+
+            if (!isNot)
+                return new BooleanParenthesisExpression { Expression = isEmpty };
+
+            return new BooleanNotExpression
+            {
+                Expression = new BooleanParenthesisExpression { Expression = isEmpty }
+            };
+        }
+
+        private static string EscapeLikePattern(string value)
+        {
+            if (String.IsNullOrEmpty(value))
+                return String.Empty;
+
+            var sb = new StringBuilder(value.Length);
+
+            foreach (var ch in value)
+            {
+                if (ch == '%' || ch == '_' || ch == '[' || ch == ']' || ch == '\\')
+                    sb.Append('\\');
+
+                sb.Append(ch);
+            }
+
+            return sb.ToString();
+        }
 
         private static bool Contains(string value, string search) =>
             (value ?? String.Empty).IndexOf(search ?? String.Empty, StringComparison.OrdinalIgnoreCase) >= 0;
 
         private sealed class IndexedRow
         {
-            public IndexedRow(object[] values, int originalIndex)
+            public IndexedRow(object[] values, object[] providerSpecificValues, int originalIndex)
             {
                 Values = values;
+                ProviderSpecificValues = providerSpecificValues;
                 OriginalIndex = originalIndex;
             }
 
             public object[] Values { get; }
+
+            public object[] ProviderSpecificValues { get; }
 
             public int OriginalIndex { get; }
         }

@@ -1,4 +1,6 @@
-﻿namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
+﻿using System.Text.Json.Serialization;
+
+namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
 {
     /// <summary>
     /// Parameters for a query result subset retrieval request
@@ -56,17 +58,43 @@
         public long ViewVersion { get; set; }
     }
 
+    /// <summary>
+    /// The comparison to apply for a <see cref="ResultSetFilter"/>
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum ResultSetFilterOperator
+    {
+        Contains,
+        NotContains,
+        Equals,
+        NotEquals,
+        StartsWith,
+        EndsWith,
+        IsEmpty,
+        IsNotEmpty,
+        GreaterThan,
+        GreaterThanOrEqual,
+        LessThan,
+        LessThanOrEqual
+    }
+
     public class ResultSetFilter
     {
         public int ColumnIndex { get; set; }
 
-        /// <summary>
-        /// contains, notContains, equals, notEquals, startsWith, endsWith, isEmpty, isNotEmpty,
-        /// greaterThan, greaterThanOrEqual, lessThan, or lessThanOrEqual.
-        /// </summary>
-        public string Operator { get; set; }
+        public ResultSetFilterOperator Operator { get; set; }
 
         public string Value { get; set; }
+    }
+
+    /// <summary>
+    /// The direction to sort a column in for a <see cref="ResultSetSort"/>
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum ResultSetSortDirection
+    {
+        Asc,
+        Desc
     }
 
     public class ResultSetSort
@@ -74,8 +102,8 @@
         public int ColumnIndex { get; set; }
 
         /// <summary>
-        /// asc or desc. Omit the entire sort object to use original result order.
+        /// The direction to sort in. Omit the entire sort object to use original result order.
         /// </summary>
-        public string Direction { get; set; }
+        public ResultSetSortDirection Direction { get; set; }
     }
 }

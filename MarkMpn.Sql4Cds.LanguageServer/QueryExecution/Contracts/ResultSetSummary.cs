@@ -46,6 +46,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
         internal List<object[]> Values { get; } = new List<object[]>();
 
         /// <summary>
+        /// The provider-specific (SQL type) values for each row, captured via
+        /// <see cref="System.Data.Common.DbDataReader.GetProviderSpecificValues"/>. These are used
+        /// when filtering/sorting the results so no CLR-to-SQL type conversion is required.
+        /// </summary>
+        internal List<object[]> ProviderSpecificValues { get; } = new List<object[]>();
+
+        /// <summary>
         /// Returns a string represents the current object.
         /// </summary>
         public override string ToString() => $"Result Summary Id:{Id}, Batch Id:'{BatchId}', RowCount:'{RowCount}', Complete:'{Complete}', SpecialAction:'{SpecialAction}', Visualization:'{Visualization}'";
