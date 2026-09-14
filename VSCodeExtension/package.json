@@ -163,14 +163,14 @@
         {
           "id": "sql4cds",
           "title": "SQL 4 CDS",
-          "icon": "images/Dataverse_scalable.svg"
+          "icon": "images/extension-icon.svg"
         }
       ],
       "panel": [
         {
           "id": "sql4cdsQueryResults",
           "title": "SQL 4 CDS Results",
-          "icon": "images/Dataverse_scalable.svg"
+          "icon": "images/extension-icon.svg"
         }
       ]
     },
