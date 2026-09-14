@@ -80,7 +80,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (!_dataSources.TryGetValue(dsName, out var ds))
                 return null;
 
-            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = "SQL 4 CDS" });
+            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = "VS Code" });
             con.ChangeDatabase(ds.Name);
 
             return new Session
@@ -313,7 +313,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource> { [Name] = this }))
             using (var cmd = con.CreateCommand())
             {
-                con.ApplicationName = "SQL 4 CDS";
+                con.ApplicationName = "VS Code";
                 cmd.CommandText = "SELECT fullname FROM systemuser WHERE systemuserid = CURRENT_USER";
                 Username = (string)cmd.ExecuteScalar();
             }
