@@ -30,109 +30,1183 @@ export function resultsHtml(webview: vscode.Webview): string {
     const vscode = acquireVsCodeApi();
     const tabs = document.getElementById('tabs');
     const content = document.getElementById('content');
-    let state, active, currentPage = 0, currentPageData, userSelectedTab = false, dragSelecting = false, searchTimer, restoreGridFocus = false, restoreSearchFocus = false;
-    const pages = new Map(), pending = new Set(), views = new Map();
+    let state;
+    let active;
+    let currentPage = 0;
+    let currentPageData;
+    let userSelectedTab = false;
+    let dragSelecting = false;
+    let searchTimer;
+    let restoreGridFocus = false;
+    let restoreSearchFocus = false;
+    const pages = new Map();
+    const pending = new Set();
+    const views = new Map();
 
-    function freshView(result) { return { searchText:'', filters:new Map(), sort:undefined, viewVersion:0, columnOrder:result.columns.map((_,i)=>i), widths:new Map(), terms:[], anchor:undefined, focus:undefined }; }
-    function viewFor(result) { let view=views.get(result.key); if(!view){view=freshView(result);views.set(result.key,view);} return view; }
-    function spec(view){ return {searchText:view.searchText,filters:[...view.filters].map(([columnIndex,f])=>({columnIndex,operator:f.operator,value:f.value})),sort:view.sort,viewVersion:view.viewVersion}; }
-    function invalidate(result, clearSelection){ const view=viewFor(result); restoreSearchFocus=document.activeElement?.matches('.search input')||false; view.viewVersion++; if(clearSelection){view.terms=[];view.anchor=undefined;view.focus=undefined;} currentPage=0;currentPageData=undefined; const prefix=state.runId+':'+result.key+':';for(const key of [...pages.keys()])if(key.startsWith(prefix))pages.delete(key);for(const key of [...pending])if(key.startsWith(prefix))pending.delete(key);showActive(); }
+    function freshView(result) {
+      return {
+        searchText: '',
+        filters: new Map(),
+        sort: undefined,
+        viewVersion: 0,
+        columnOrder: result.columns.map((_, index) => index),
+        widths: new Map(),
+        terms: [],
+        anchor: undefined,
+        focus: undefined
+      };
+    }
 
-    window.addEventListener('message', event => {
-      const message=event.data;
-      if(message.type==='state'){
-        const changedRun=!state||state.runId!==message.runId; state=message;
-        if(changedRun){clearTimeout(searchTimer);restoreGridFocus=false;restoreSearchFocus=false;pages.clear();pending.clear();views.clear();active='messages';userSelectedTab=false;currentPage=0;currentPageData=undefined;}
-        renderState();
-      }else if(message.type==='empty'){
-        clearTimeout(searchTimer);restoreGridFocus=false;restoreSearchFocus=false;state=undefined;active=undefined;userSelectedTab=false;pages.clear();pending.clear();views.clear();dismissOverlays();tabs.replaceChildren();content.replaceChildren(makeNode('div','empty','Run a query to see its results.'));
-      }else if(message.type==='page'&&state&&message.runId===state.runId){
-        const result=state.results.find(x=>x.key===message.key); if(!result)return; const view=viewFor(result);
-        const responseVersion=message.viewVersion??view.viewVersion,cacheKey=pageKey(message.key,message.page,responseVersion);pending.delete(cacheKey);
-        if(responseVersion!==view.viewVersion)return;
-        pages.set(cacheKey,message);while(pages.size>3)pages.delete(pages.keys().next().value);
-        if(active===message.key&&currentPage===message.page)renderResult();
-      }else if(message.type==='pageError'&&state&&message.runId===state.runId){
-        const result=state.results.find(x=>x.key===message.key);if(!result)return;const view=viewFor(result),responseVersion=message.viewVersion??view.viewVersion;pending.delete(pageKey(message.key,message.page,responseVersion));if(responseVersion!==view.viewVersion)return;
-        if(active===message.key&&currentPage===message.page)showError(message.message);
-      }else if(message.type==='resetFilter'&&state&&message.runId===state.runId){
-        const result=state.results.find(x=>x.key===message.key);if(!result||!Number.isInteger(message.columnIndex))return;const view=viewFor(result);view.filters.delete(message.columnIndex);if(active===message.key)invalidate(result,true);
+    function viewFor(result) {
+      let view = views.get(result.key);
+      if (!view) {
+        view = freshView(result);
+        views.set(result.key, view);
+      }
+      return view;
+    }
+
+    function spec(view) {
+      return {
+        searchText: view.searchText,
+        filters: [...view.filters].map(([columnIndex, filter]) => ({
+          columnIndex,
+          operator: filter.operator,
+          value: filter.value
+        })),
+        sort: view.sort,
+        viewVersion: view.viewVersion
+      };
+    }
+
+    function invalidate(result, clearSelection) {
+      const view = viewFor(result);
+      restoreSearchFocus = document.activeElement?.matches('.search input') || false;
+      view.viewVersion++;
+      if (clearSelection) {
+        view.terms = [];
+        view.anchor = undefined;
+        view.focus = undefined;
+      }
+      currentPage = 0;
+      currentPageData = undefined;
+
+      const prefix = state.runId + ':' + result.key + ':';
+      for (const key of [...pages.keys()]) {
+        if (key.startsWith(prefix)) { pages.delete(key); }
+      }
+      for (const key of [...pending]) {
+        if (key.startsWith(prefix)) { pending.delete(key); }
+      }
+
+      showActive();
+    }
+
+    window.addEventListener('message', event => handleMessage(event.data));
+    window.addEventListener('pointerup', () => { dragSelecting = false; });
+    window.addEventListener('blur', () => {
+      dragSelecting = false;
+      dismissOverlays();
+    });
+    document.addEventListener('pointerdown', event => {
+      if (!event.target.closest('.popover,.context-menu,.filter')) {
+        dismissOverlays();
       }
     });
-    window.addEventListener('pointerup',()=>dragSelecting=false);
-    window.addEventListener('blur',()=>{dragSelecting=false;dismissOverlays();});
-    document.addEventListener('pointerdown',event=>{if(!event.target.closest('.popover,.context-menu,.filter'))dismissOverlays();});
-    document.addEventListener('keydown',event=>{if(event.key==='Escape')dismissOverlays();});
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { dismissOverlays(); }
+    });
 
-    function renderState(){
-      tabs.replaceChildren();for(const result of state.results)addTab(result.key,state.results.length===1?'Results':'Result '+result.ordinal);addTab('messages','Messages'+(state.messages.length?' ('+state.messages.length+')':''));
-      const errors=state.status==='failed'||state.messages.some(x=>x.isError);if(errors){active='messages';userSelectedTab=false;}else if(!state.results.length){active='messages';}else if(active==='messages'&&!userSelectedTab){active=state.results[0].key;}else if(!active||(active!=='messages'&&!state.results.some(x=>x.key===active))){active=state.results[0].key;}
-      for(const tab of tabs.children)tab.classList.toggle('active',tab.dataset.key===active);showActive();
-    }
-    function addTab(key,label){const b=makeNode('button','tab',label);b.dataset.key=key;b.setAttribute('role','tab');b.addEventListener('click',()=>{clearTimeout(searchTimer);restoreSearchFocus=false;restoreGridFocus=false;active=key;userSelectedTab=true;currentPage=0;dismissOverlays();for(const tab of tabs.children)tab.classList.toggle('active',tab.dataset.key===active);showActive();});tabs.append(b);}
-    function showActive(){
-      dismissOverlays();if(active==='messages'){renderMessages();return;}const result=state.results.find(x=>x.key===active);
-      if(!result){content.replaceChildren(makeNode('div','empty',state.status==='running'||state.status==='cancelling'?'Waiting for query results…':'No result sets were returned.'));return;}
-      if(!result.complete){content.replaceChildren(makeNode('div','empty','Waiting for this result set to finish…'));return;}
-      const view=viewFor(result), known=currentPageData&&currentPageData.key===active?currentPageData.displayRows:result.displayRowCount;const last=Math.max(0,Math.ceil(known/result.pageSize)-1);currentPage=Math.min(currentPage,last);
-      const cached=pages.get(pageKey(active,currentPage,view.viewVersion));if(cached){renderResult();return;}const loading=makeNode('div','empty','Loading result page…');const area=content.querySelector('.result-area');if(restoreSearchFocus&&area)area.replaceChildren(loading);else content.replaceChildren(loading);requestPage(result);
-    }
-    function requestPage(result){const view=viewFor(result),key=pageKey(result.key,currentPage,view.viewVersion);if(pending.has(key))return;pending.add(key);vscode.postMessage({type:'page',ownerUri:state.ownerUri,runId:state.runId,key:result.key,page:currentPage,...spec(view)});}
-
-    function renderResult(){
-      const result=state.results.find(x=>x.key===active);if(!result)return;const view=viewFor(result),page=pages.get(pageKey(active,currentPage,view.viewVersion));if(!page)return;currentPageData={...page,key:active};const focused=document.activeElement;const keepGrid=restoreGridFocus||focused?.classList.contains('grid');const keepSearch=restoreSearchFocus||focused?.matches('.search input');const oldGrid=content.querySelector('.grid');const scrollLeft=oldGrid?.scrollLeft||0,scrollTop=oldGrid?.scrollTop||0;content.replaceChildren();
-      const toolbar=makeNode('div','toolbar');const search=makeNode('div','search');const input=document.createElement('input');input.type='search';input.placeholder='Search all columns';input.setAttribute('aria-label','Quick search results');input.value=keepSearch&&focused?.matches('.search input')?focused.value:view.searchText;input.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(view.searchText===input.value)return;view.searchText=input.value;invalidate(result,true);},250);});const clear=makeNode('button','clear','×');clear.title='Clear search';clear.addEventListener('click',()=>{input.value='';if(view.searchText){view.searchText='';invalidate(result,true);}});search.append(input,clear);toolbar.append(search);
-      const first=page.displayRows?page.start+1:0,lastRow=page.start+page.rows.length;const originalTotal=page.totalRows??result.rowCount,filteredTotal=page.filteredRows??page.displayRows,transformed=page.displayRows,isFiltered=filteredTotal!==originalTotal;
-      const detail=page.truncated?first.toLocaleString()+'–'+lastRow.toLocaleString()+' of '+transformed.toLocaleString()+' displayed ('+(isFiltered?filteredTotal.toLocaleString()+' matching; ':'')+originalTotal.toLocaleString()+' total; display limit reached)':first.toLocaleString()+'–'+lastRow.toLocaleString()+' of '+transformed.toLocaleString()+(isFiltered?' matching ('+originalTotal.toLocaleString()+' total)':'');toolbar.append(makeNode('span','meta',detail));
-      const lastPage=Math.max(0,Math.ceil(transformed/result.pageSize)-1);toolbar.append(iconButton('First page','⇤',()=>changePage(0),currentPage===0),iconButton('Previous page','‹',()=>changePage(currentPage-1),currentPage===0),makeNode('span','page-label',(currentPage+1)+' / '+(lastPage+1)),iconButton('Next page','›',()=>changePage(currentPage+1),currentPage>=lastPage),iconButton('Last page','⇥',()=>changePage(lastPage),currentPage>=lastPage));
-      const selectionLabel=selectionSummary(view,result,transformed);toolbar.append(makeNode('span','selection-status',selectionLabel));if(view.searchText||view.filters.size||view.sort)toolbar.append(iconButton('Clear search, filters and sort','↺',()=>{view.searchText='';view.filters.clear();view.sort=undefined;invalidate(result,true);},false));content.append(toolbar);
-      if(!result.columns.length){content.append(makeNode('div','empty','This result set has no columns.'));return;}
-      const area=makeNode('div','result-area'),grid=makeNode('div','grid');grid.tabIndex=0;grid.setAttribute('role','grid');grid.setAttribute('aria-rowcount',String(transformed+1));grid.setAttribute('aria-colcount',String(result.columns.length+1));grid.addEventListener('keydown',event=>gridKeyDown(event,result,page,view));grid.addEventListener('pointerdown',()=>grid.focus({preventScroll:true}));
-      const table=document.createElement('table'),thead=document.createElement('thead'),hr=document.createElement('tr'),corner=makeNode('th','corner','◩');corner.title='Select all filtered results';corner.addEventListener('click',event=>{if(transformed>0)selectArea(view,0,transformed-1,view.columnOrder,event,false);});hr.append(corner);
-      for(const originalIndex of view.columnOrder)hr.append(makeHeader(result,view,originalIndex,transformed));thead.append(hr);table.append(thead);const tbody=document.createElement('tbody');
-      page.rows.forEach((row,localRow)=>{const logicalRow=page.start+localRow,tr=document.createElement('tr'),gutter=makeNode('th','row-gutter',String(logicalRow+1));gutter.scope='row';gutter.addEventListener('pointerdown',event=>{if(event.button!==0)return;selectArea(view,logicalRow,logicalRow,view.columnOrder,event,true);dragSelecting=true;});gutter.addEventListener('pointerenter',event=>{if(dragSelecting&&(event.buttons&1))extendArea(view,logicalRow,view.columnOrder);});gutter.addEventListener('contextmenu',event=>openContext(event,result,view,logicalRow,undefined));tr.append(gutter);
-        view.columnOrder.forEach((originalIndex,visualColumn)=>{const value=originalIndex<row.length?row[originalIndex]:null,candidate=isStructuredCandidate(value),td=makeNode('td',(value===null?'null':'')+(candidate?' structured':''),value===null?'NULL':value);td.dataset.row=String(logicalRow);td.dataset.column=String(originalIndex);td.title=candidate?'Double-click to view formatted value':value===null?'NULL':String(value);decorateCell(td,view,logicalRow,originalIndex);td.addEventListener('pointerdown',event=>{if(event.button!==0)return;selectArea(view,logicalRow,logicalRow,[originalIndex],event,true);dragSelecting=true;});td.addEventListener('pointerenter',event=>{if(dragSelecting&&(event.buttons&1))extendCell(view,logicalRow,originalIndex);});if(candidate)td.addEventListener('dblclick',()=>vscode.postMessage({type:'viewCell',ownerUri:state.ownerUri,runId:state.runId,key:active,row:logicalRow,columnIndex:originalIndex,text:value,...spec(view)}));td.addEventListener('contextmenu',event=>openContext(event,result,view,logicalRow,originalIndex));tr.append(td);});tbody.append(tr);});
-      table.append(tbody);grid.append(table);area.append(grid);const actions=makeNode('aside','grid-actions');actions.setAttribute('aria-label','Result actions');actions.append(iconButton('Copy selection','⧉',()=>copySelection(result,view,'tsv',false),!view.terms.length),iconButton('Copy selection with headers','⧉⁺',()=>copySelection(result,view,'tsv',true),!view.terms.length),iconButton('Export full result set…','⇩',()=>vscode.postMessage({type:'export',ownerUri:state.ownerUri,runId:state.runId,key:active}),!result.complete));area.append(actions);content.append(area);grid.scrollLeft=scrollLeft;grid.scrollTop=scrollTop;if(keepSearch)input.focus({preventScroll:true});else if(keepGrid)grid.focus({preventScroll:true});restoreGridFocus=false;restoreSearchFocus=false;paintSelection(view);
+    function handleMessage(message) {
+      if (message.type === 'state') {
+        handleStateMessage(message);
+        return;
+      }
+      if (message.type === 'empty') {
+        handleEmptyMessage();
+        return;
+      }
+      if (!state || message.runId !== state.runId) { return; }
+      if (message.type === 'page') {
+        handlePageMessage(message);
+      } else if (message.type === 'pageError') {
+        handlePageErrorMessage(message);
+      } else if (message.type === 'resetFilter') {
+        handleResetFilterMessage(message);
+      }
     }
 
-    function makeHeader(result,view,columnIndex,rowCount){
-      const th=document.createElement('th');th.dataset.column=String(columnIndex);const width=view.widths.get(columnIndex);if(width)th.style.width=width+'px';const box=makeNode('div','header');const drag=makeNode('button','header-button drag-handle','⋮⋮');drag.title='Drag to reorder column';drag.draggable=true;drag.addEventListener('dragstart',event=>{event.dataTransfer.setData('text/plain',String(columnIndex));th.classList.add('column-drag');});drag.addEventListener('dragend',()=>th.classList.remove('column-drag'));th.addEventListener('dragover',event=>event.preventDefault());th.addEventListener('drop',event=>{event.preventDefault();const from=Number(event.dataTransfer.getData('text/plain')),to=view.columnOrder.indexOf(columnIndex);if(!Number.isInteger(from)||from===columnIndex)return;const old=view.columnOrder.indexOf(from);if(old<0)return;view.columnOrder.splice(old,1);view.columnOrder.splice(to,0,from);renderResult();});
-      const name=makeNode('button','header-button column-name',result.columns[columnIndex]||'(unnamed)');name.title='Select column '+(result.columns[columnIndex]||columnIndex+1);name.addEventListener('click',event=>{if(rowCount>0)selectArea(view,0,rowCount-1,[columnIndex],event,false);});
-      const direction=view.sort&&view.sort.columnIndex===columnIndex?view.sort.direction:undefined,sort=makeNode('button','header-button sort'+(direction?' active':''),direction==='asc'?'↑':direction==='desc'?'↓':'↕');sort.title=direction?'Sorted '+direction+'. Click to change.':'Sort column';sort.addEventListener('click',event=>{event.stopPropagation();view.sort=!direction?{columnIndex,direction:'asc'}:direction==='asc'?{columnIndex,direction:'desc'}:undefined;invalidate(result,true);});
-      const filter=makeNode('button','header-button filter'+(view.filters.has(columnIndex)?' active':''),'⌄');filter.title='Filter column';filter.addEventListener('click',event=>{event.stopPropagation();openFilter(event,result,view,columnIndex);});box.append(drag,name,sort,filter);th.append(box);const resize=makeNode('span','resize-handle');resize.addEventListener('pointerdown',event=>startResize(event,th,view,columnIndex));th.append(resize);return th;
+    function handleStateMessage(message) {
+      const changedRun = !state || state.runId !== message.runId;
+      state = message;
+      if (changedRun) { resetUiState(); }
+      renderState();
     }
-    function startResize(event,th,view,column){event.preventDefault();event.stopPropagation();const start=event.clientX,width=th.getBoundingClientRect().width;function move(e){const next=Math.max(52,width+e.clientX-start);th.style.width=next+'px';view.widths.set(column,next);}function up(){window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);}window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);}
-    function openFilter(event,result,view,columnIndex){dismissOverlays();const current=view.filters.get(columnIndex)||{operator:'contains',value:''},pop=makeNode('div','popover');pop.style.left=Math.max(4,Math.min(event.clientX,window.innerWidth-225))+'px';pop.style.top=Math.max(4,Math.min(event.clientY+18,window.innerHeight-145))+'px';pop.append(makeNode('label','',result.columns[columnIndex]||'Column '+(columnIndex+1)));const select=document.createElement('select');[['contains','Contains'],['equals','Equals'],['notEquals','Does not equal'],['startsWith','Starts with'],['endsWith','Ends with'],['greaterThan','Greater than'],['greaterThanOrEqual','Greater than or equal'],['lessThan','Less than'],['lessThanOrEqual','Less than or equal'],['isEmpty','Is empty'],['isNotEmpty','Is not empty']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;select.append(o);});select.value=current.operator;const input=document.createElement('input');input.placeholder='Filter value';input.value=current.value;const updateDisabled=()=>input.disabled=select.value==='isEmpty'||select.value==='isNotEmpty';select.addEventListener('change',updateDisabled);updateDisabled();const buttons=makeNode('div','popover-actions'),clear=makeNode('button','','Clear'),apply=makeNode('button','','Apply');clear.addEventListener('click',()=>{view.filters.delete(columnIndex);dismissOverlays();invalidate(result,true);});apply.addEventListener('click',()=>{view.filters.set(columnIndex,{operator:select.value,value:input.value});dismissOverlays();invalidate(result,true);});input.addEventListener('keydown',e=>{if(e.key==='Enter')apply.click();});buttons.append(clear,apply);pop.append(select,input,buttons);document.body.append(pop);input.focus();}
 
-    function selectArea(view,rowStart,rowEnd,columnIds,event,setAnchor){
-      const additive=event.metaKey||event.ctrlKey;if(event.shiftKey&&view.anchor){view.terms=additive?view.terms:[];addTerm(view,view.anchor.row,rowEnd,columnsBetween(view,view.anchor.column,columnIds[columnIds.length-1]),true);}else{let selected=true;for(let row=rowStart;selected&&row<=rowEnd;row++)for(const column of columnIds)if(!isSelected(view,row,column)){selected=false;break;}if(!additive)view.terms=[];addTerm(view,rowStart,rowEnd,columnIds,!(additive&&selected));if(setAnchor||!view.anchor)view.anchor={row:rowStart,column:columnIds[0]};}view.focus={row:rowEnd,column:columnIds[columnIds.length-1]};paintSelection(view);
+    function handleEmptyMessage() {
+      resetUiState();
+      state = undefined;
+      active = undefined;
+      dismissOverlays();
+      tabs.replaceChildren();
+      content.replaceChildren(makeNode('div', 'empty', 'Run a query to see its results.'));
     }
-    function extendArea(view,row,columnIds){if(!view.anchor)return;view.terms=view.terms.filter(x=>!x.preview);const term=addTerm(view,view.anchor.row,row,columnsBetween(view,view.anchor.column,columnIds[columnIds.length-1]),true);term.preview=true;view.focus={row,column:columnIds[columnIds.length-1]};paintSelection(view);}
-    function extendCell(view,row,column){extendArea(view,row,[column]);}
-    function addTerm(view,r1,r2,columnIds,selected){const term={rowStart:Math.min(r1,r2),rowEnd:Math.max(r1,r2),columnIds:[...new Set(columnIds)],selected};view.terms.push(term);return term;}
-    function columnsBetween(view,a,b){const ai=view.columnOrder.indexOf(a),bi=view.columnOrder.indexOf(b);return view.columnOrder.slice(Math.min(ai,bi),Math.max(ai,bi)+1);}
-    function isSelected(view,row,column){let selected=false;for(const term of view.terms)if(row>=term.rowStart&&row<=term.rowEnd&&term.columnIds.includes(column))selected=term.selected;return selected;}
-    function decorateCell(cell,view,row,column){cell.classList.toggle('selected',isSelected(view,row,column));cell.classList.toggle('focused',!!view.focus&&view.focus.row===row&&view.focus.column===column);cell.setAttribute('aria-selected',String(isSelected(view,row,column)));}
-    function paintSelection(view){document.querySelectorAll('td[data-row]').forEach(cell=>decorateCell(cell,view,Number(cell.dataset.row),Number(cell.dataset.column)));document.querySelectorAll('th[data-column]').forEach(header=>{const column=Number(header.dataset.column),selected=view.terms.length>0&&currentPageData&&isSelected(view,0,column)&&isSelected(view,Math.max(0,currentPageData.displayRows-1),column);header.classList.toggle('selected',!!selected);});document.querySelectorAll('.row-gutter').forEach((gutter,index)=>{const row=(currentPageData?.start||0)+index;gutter.classList.toggle('selected',view.columnOrder.every(column=>isSelected(view,row,column)));});const any=selectionRanges(view).length>0;document.querySelectorAll('.grid-actions button[title^="Copy selection"]').forEach(button=>button.disabled=!any);updateSelectionStatus(view);}
+
+    function handlePageMessage(message) {
+      const result = state.results.find(item => item.key === message.key);
+      if (!result) { return; }
+
+      const view = viewFor(result);
+      const responseVersion = message.viewVersion ?? view.viewVersion;
+      const cacheKey = pageKey(message.key, message.page, responseVersion);
+      pending.delete(cacheKey);
+      if (responseVersion !== view.viewVersion) { return; }
+
+      pages.set(cacheKey, message);
+      while (pages.size > 3) {
+        pages.delete(pages.keys().next().value);
+      }
+
+      if (active === message.key && currentPage === message.page) {
+        renderResult();
+      }
+    }
+
+    function handlePageErrorMessage(message) {
+      const result = state.results.find(item => item.key === message.key);
+      if (!result) { return; }
+
+      const view = viewFor(result);
+      const responseVersion = message.viewVersion ?? view.viewVersion;
+      pending.delete(pageKey(message.key, message.page, responseVersion));
+      if (responseVersion !== view.viewVersion) { return; }
+
+      if (active === message.key && currentPage === message.page) {
+        showError(message.message);
+      }
+    }
+
+    function handleResetFilterMessage(message) {
+      const result = state.results.find(item => item.key === message.key);
+      if (!result || !Number.isInteger(message.columnIndex)) { return; }
+
+      const view = viewFor(result);
+      view.filters.delete(message.columnIndex);
+      if (active === message.key) {
+        invalidate(result, true);
+      }
+    }
+
+    function resetUiState() {
+      clearTimeout(searchTimer);
+      restoreGridFocus = false;
+      restoreSearchFocus = false;
+      pages.clear();
+      pending.clear();
+      views.clear();
+      active = 'messages';
+      userSelectedTab = false;
+      currentPage = 0;
+      currentPageData = undefined;
+    }
+
+    function renderState() {
+      tabs.replaceChildren();
+      for (const result of state.results) {
+        addTab(result.key, state.results.length === 1 ? 'Results' : 'Result ' + result.ordinal);
+      }
+      addTab('messages', 'Messages' + (state.messages.length ? ' (' + state.messages.length + ')' : ''));
+
+      const hasErrors = state.status === 'failed' || state.messages.some(message => message.isError);
+      if (hasErrors || !state.results.length) {
+        active = 'messages';
+        userSelectedTab = false;
+      } else if (active === 'messages' && !userSelectedTab) {
+        active = state.results[0].key;
+      } else if (!active || (active !== 'messages' && !state.results.some(result => result.key === active))) {
+        active = state.results[0].key;
+      }
+
+      for (const tab of tabs.children) {
+        tab.classList.toggle('active', tab.dataset.key === active);
+      }
+      showActive();
+    }
+
+    function addTab(key, label) {
+      const tab = makeNode('button', 'tab', label);
+      tab.dataset.key = key;
+      tab.setAttribute('role', 'tab');
+      tab.addEventListener('click', () => {
+        clearTimeout(searchTimer);
+        restoreSearchFocus = false;
+        restoreGridFocus = false;
+        active = key;
+        userSelectedTab = true;
+        currentPage = 0;
+        dismissOverlays();
+        for (const item of tabs.children) {
+          item.classList.toggle('active', item.dataset.key === active);
+        }
+        showActive();
+      });
+      tabs.append(tab);
+    }
+
+    function showActive() {
+      dismissOverlays();
+      if (active === 'messages') {
+        renderMessages();
+        return;
+      }
+
+      const result = state.results.find(item => item.key === active);
+      if (!result) {
+        const text = state.status === 'running' || state.status === 'cancelling'
+          ? 'Waiting for query results…'
+          : 'No result sets were returned.';
+        content.replaceChildren(makeNode('div', 'empty', text));
+        return;
+      }
+      if (!result.complete) {
+        content.replaceChildren(makeNode('div', 'empty', 'Waiting for this result set to finish…'));
+        return;
+      }
+
+      const view = viewFor(result);
+      const knownRows = currentPageData && currentPageData.key === active
+        ? currentPageData.displayRows
+        : result.displayRowCount;
+      const lastPage = Math.max(0, Math.ceil(knownRows / result.pageSize) - 1);
+      currentPage = Math.min(currentPage, lastPage);
+
+      const cachedPage = pages.get(pageKey(active, currentPage, view.viewVersion));
+      if (cachedPage) {
+        renderResult();
+        return;
+      }
+
+      const area = content.querySelector('.result-area');
+      if (area) {
+        requestPage(result);
+        return;
+      }
+
+      content.replaceChildren(makeNode('div', 'empty', 'Loading result page…'));
+      requestPage(result);
+    }
+
+    function requestPage(result) {
+      const view = viewFor(result);
+      const key = pageKey(result.key, currentPage, view.viewVersion);
+      if (pending.has(key)) { return; }
+      pending.add(key);
+      vscode.postMessage({
+        type: 'page',
+        ownerUri: state.ownerUri,
+        runId: state.runId,
+        key: result.key,
+        page: currentPage,
+        ...spec(view)
+      });
+    }
+
+    function renderResult() {
+      const result = state.results.find(item => item.key === active);
+      if (!result) { return; }
+
+      const view = viewFor(result);
+      const page = pages.get(pageKey(active, currentPage, view.viewVersion));
+      if (!page) { return; }
+
+      currentPageData = { ...page, key: active };
+      const focused = document.activeElement;
+      const keepGrid = restoreGridFocus || focused?.classList.contains('grid');
+      const keepSearch = restoreSearchFocus || focused?.matches('.search input');
+      const transformedRows = page.displayRows;
+      const toolbar = buildToolbar(result, view, page, focused);
+
+      if (!result.columns.length) {
+        content.replaceChildren(makeNode('div', 'empty', 'This result set has no columns.'));
+        return;
+      }
+      if (reuseGrid(result, view, page, toolbar, keepSearch, keepGrid, transformedRows)) {
+        return;
+      }
+
+      content.replaceChildren();
+      content.append(toolbar);
+
+      const area = makeNode('div', 'result-area');
+      area.dataset.key = result.key;
+
+      const grid = createGrid(result, view, page, transformedRows);
+      const table = createResultTable(result, view, page, transformedRows);
+      grid.append(table);
+      area.append(grid);
+
+      const actions = createGridActions(result, view);
+      area.append(actions);
+      content.append(area);
+
+      restoreFocusedElement(toolbar, grid, keepSearch, keepGrid);
+      finishResultRender(view);
+    }
+
+    function buildToolbar(result, view, page, focused) {
+      const toolbar = makeNode('div', 'toolbar');
+      toolbar.append(createSearchBox(result, view, focused));
+      toolbar.append(makeNode('span', 'meta', resultSummary(result, page)));
+
+      const transformedRows = page.displayRows;
+      const lastPage = Math.max(0, Math.ceil(transformedRows / result.pageSize) - 1);
+      toolbar.append(
+        iconButton('First page', '⇤', () => changePage(0), currentPage === 0),
+        iconButton('Previous page', '‹', () => changePage(currentPage - 1), currentPage === 0),
+        makeNode('span', 'page-label', (currentPage + 1) + ' / ' + (lastPage + 1)),
+        iconButton('Next page', '›', () => changePage(currentPage + 1), currentPage >= lastPage),
+        iconButton('Last page', '⇥', () => changePage(lastPage), currentPage >= lastPage)
+      );
+      toolbar.append(makeNode('span', 'selection-status', selectionSummary(view, result, transformedRows)));
+
+      if (view.searchText || view.filters.size || view.sort) {
+        toolbar.append(iconButton('Clear search, filters and sort', '↺', () => {
+          view.searchText = '';
+          view.filters.clear();
+          view.sort = undefined;
+          invalidate(result, true);
+        }, false));
+      }
+
+      return toolbar;
+    }
+
+    function createSearchBox(result, view, focused) {
+      const search = makeNode('div', 'search');
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.placeholder = 'Search all columns';
+      input.setAttribute('aria-label', 'Quick search results');
+      input.value = focused?.matches('.search input') ? focused.value : view.searchText;
+      input.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          if (view.searchText === input.value) { return; }
+          view.searchText = input.value;
+          invalidate(result, true);
+        }, 250);
+      });
+
+      const clear = makeNode('button', 'clear', '×');
+      clear.title = 'Clear search';
+      clear.addEventListener('click', () => {
+        input.value = '';
+        if (view.searchText) {
+          view.searchText = '';
+          invalidate(result, true);
+        }
+      });
+
+      search.append(input, clear);
+      return search;
+    }
+
+    function resultSummary(result, page) {
+      const first = page.displayRows ? page.start + 1 : 0;
+      const lastRow = page.start + page.rows.length;
+      const originalTotal = page.totalRows ?? result.rowCount;
+      const filteredTotal = page.filteredRows ?? page.displayRows;
+      const transformedRows = page.displayRows;
+      const isFiltered = filteredTotal !== originalTotal;
+
+      if (page.truncated) {
+        return first.toLocaleString() + '–' + lastRow.toLocaleString() + ' of ' + transformedRows.toLocaleString() +
+          ' displayed (' +
+          (isFiltered ? filteredTotal.toLocaleString() + ' matching; ' : '') +
+          originalTotal.toLocaleString() + ' total; display limit reached)';
+      }
+
+      return first.toLocaleString() + '–' + lastRow.toLocaleString() + ' of ' + transformedRows.toLocaleString() +
+        (isFiltered ? ' matching (' + originalTotal.toLocaleString() + ' total)' : '');
+    }
+
+    function createGrid(result, view, page, transformedRows) {
+      const grid = makeNode('div', 'grid');
+      grid.tabIndex = 0;
+      grid.setAttribute('role', 'grid');
+      grid.setAttribute('aria-rowcount', String(transformedRows + 1));
+      grid.setAttribute('aria-colcount', String(result.columns.length + 1));
+      grid.addEventListener('keydown', event => gridKeyDown(event, result, page, view));
+      grid.addEventListener('pointerdown', () => grid.focus({ preventScroll: true }));
+      return grid;
+    }
+
+    function createResultTable(result, view, page, transformedRows) {
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      const corner = makeNode('th', 'corner', '◩');
+      corner.title = 'Select all filtered results';
+      corner.onclick = event => {
+        if (transformedRows > 0) {
+          selectArea(view, 0, transformedRows - 1, view.columnOrder, event, false);
+        }
+      };
+      headerRow.append(corner);
+
+      for (const originalIndex of view.columnOrder) {
+        headerRow.append(makeHeader(result, view, originalIndex, transformedRows));
+      }
+
+      thead.append(headerRow);
+      table.append(thead);
+
+      const tbody = document.createElement('tbody');
+      syncBodyRows(tbody, result, view, page);
+      table.append(tbody);
+      return table;
+    }
+
+    function createGridActions(result, view) {
+      const actions = makeNode('aside', 'grid-actions');
+      actions.setAttribute('aria-label', 'Result actions');
+      actions.append(
+        iconButton('Copy selection', '⧉', () => copySelection(result, view, 'tsv', false), !view.terms.length),
+        iconButton('Copy selection with headers', '⧉⁺', () => copySelection(result, view, 'tsv', true), !view.terms.length),
+        iconButton('Export full result set…', '⇩', () => vscode.postMessage({ type: 'export', ownerUri: state.ownerUri, runId: state.runId, key: active }), !result.complete)
+      );
+      return actions;
+    }
+
+    function restoreFocusedElement(toolbar, grid, keepSearch, keepGrid) {
+      const input = toolbar.querySelector('.search input');
+      if (keepSearch && input) {
+        input.focus({ preventScroll: true });
+      } else if (keepGrid) {
+        grid.focus({ preventScroll: true });
+      }
+    }
+
+    function finishResultRender(view) {
+      restoreGridFocus = false;
+      restoreSearchFocus = false;
+      paintSelection(view);
+    }
+
+    function reuseGrid(result, view, page, nextToolbar, keepSearch, keepGrid, transformedRows) {
+      const oldToolbar = content.querySelector('.toolbar');
+      const area = content.querySelector('.result-area');
+      const grid = area?.querySelector('.grid');
+      const table = grid?.querySelector('table');
+      if (!oldToolbar || !area || !grid || !table || area.dataset.key !== result.key) {
+        return false;
+      }
+
+      const headRow = table.tHead?.rows?.[0];
+      if (!headRow || headRow.cells.length !== view.columnOrder.length + 1) {
+        return false;
+      }
+      for (let index = 0; index < view.columnOrder.length; index++) {
+        const header = headRow.cells[index + 1];
+        if (Number(header.dataset.column) !== view.columnOrder[index]) {
+          return false;
+        }
+      }
+
+      oldToolbar.replaceWith(nextToolbar);
+      if (keepSearch) {
+        const oldInput = oldToolbar.querySelector('.search input');
+        const nextInput = nextToolbar.querySelector('.search input');
+        if (oldInput && nextInput) {
+          nextInput.value = oldInput.value;
+          nextInput.focus({ preventScroll: true });
+        }
+      }
+
+      grid.setAttribute('aria-rowcount', String(transformedRows + 1));
+      grid.setAttribute('aria-colcount', String(result.columns.length + 1));
+      grid.onkeydown = event => gridKeyDown(event, result, page, view);
+      grid.onpointerdown = () => grid.focus({ preventScroll: true });
+
+      const corner = headRow.cells[0];
+      if (corner) {
+        corner.onclick = event => {
+          if (transformedRows > 0) {
+            selectArea(view, 0, transformedRows - 1, view.columnOrder, event, false);
+          }
+        };
+      }
+
+      const tbody = table.tBodies[0] || table.appendChild(document.createElement('tbody'));
+      syncBodyRows(tbody, result, view, page);
+      syncHeaderState(headRow, result, view, transformedRows);
+      syncActionButtons(area, result, view);
+
+      if (keepGrid) {
+        grid.focus({ preventScroll: true });
+      }
+      finishResultRender(view);
+      updateSelectionStatus(view);
+      return true;
+    }
+
+    function syncHeaderState(headRow, result, view, transformedRows) {
+      for (let index = 0; index < view.columnOrder.length; index++) {
+        const columnIndex = view.columnOrder[index];
+        const header = headRow.cells[index + 1];
+        const direction = view.sort && view.sort.columnIndex === columnIndex ? view.sort.direction : undefined;
+        const name = header.querySelector('.column-name');
+        const sort = header.querySelector('.sort');
+        const filter = header.querySelector('.filter');
+
+        if (name) {
+          name.onclick = event => {
+            if (transformedRows > 0) {
+              selectArea(view, 0, transformedRows - 1, [columnIndex], event, false);
+            }
+          };
+        }
+        if (sort) {
+          sort.classList.toggle('active', !!direction);
+          sort.textContent = direction === 'asc' ? '↑' : direction === 'desc' ? '↓' : '↕';
+          sort.title = direction ? 'Sorted ' + direction + '. Click to change.' : 'Sort column';
+          sort.onclick = event => {
+            event.stopPropagation();
+            const current = view.sort && view.sort.columnIndex === columnIndex ? view.sort.direction : undefined;
+            view.sort = !current ? { columnIndex, direction: 'asc' } : current === 'asc' ? { columnIndex, direction: 'desc' } : undefined;
+            invalidate(result, true);
+          };
+        }
+        if (filter) {
+          filter.classList.toggle('active', view.filters.has(columnIndex));
+          filter.onclick = event => {
+            event.stopPropagation();
+            openFilter(event, result, view, columnIndex);
+          };
+        }
+      }
+    }
+
+    function syncActionButtons(area, result, view) {
+      const actionButtons = area.querySelectorAll('.grid-actions button');
+      if (actionButtons.length < 3) { return; }
+
+      actionButtons[0].disabled = !view.terms.length;
+      actionButtons[0].onclick = () => copySelection(result, view, 'tsv', false);
+      actionButtons[1].disabled = !view.terms.length;
+      actionButtons[1].onclick = () => copySelection(result, view, 'tsv', true);
+      actionButtons[2].disabled = !result.complete;
+      actionButtons[2].onclick = () => vscode.postMessage({ type: 'export', ownerUri: state.ownerUri, runId: state.runId, key: active });
+    }
+
+    function makeHeader(result, view, columnIndex, rowCount) {
+      const th = document.createElement('th');
+      th.dataset.column = String(columnIndex);
+
+      const width = view.widths.get(columnIndex);
+      if (width) {
+        th.style.width = width + 'px';
+      }
+
+      const box = makeNode('div', 'header');
+      box.append(
+        createDragHandle(th, view, columnIndex),
+        createColumnSelectButton(result, view, columnIndex, rowCount),
+        createSortButton(result, view, columnIndex),
+        createFilterButton(result, view, columnIndex)
+      );
+      th.append(box);
+
+      const resize = makeNode('span', 'resize-handle');
+      resize.addEventListener('pointerdown', event => startResize(event, th, view, columnIndex));
+      th.append(resize);
+      return th;
+    }
+
+    function createDragHandle(th, view, columnIndex) {
+      const drag = makeNode('button', 'header-button drag-handle', '⋮⋮');
+      drag.title = 'Drag to reorder column';
+      drag.draggable = true;
+      drag.addEventListener('dragstart', event => {
+        event.dataTransfer.setData('text/plain', String(columnIndex));
+        th.classList.add('column-drag');
+      });
+      drag.addEventListener('dragend', () => th.classList.remove('column-drag'));
+
+      th.addEventListener('dragover', event => event.preventDefault());
+      th.addEventListener('drop', event => {
+        event.preventDefault();
+        const from = Number(event.dataTransfer.getData('text/plain'));
+        const to = view.columnOrder.indexOf(columnIndex);
+        if (!Number.isInteger(from) || from === columnIndex) { return; }
+
+        const oldIndex = view.columnOrder.indexOf(from);
+        if (oldIndex < 0) { return; }
+
+        view.columnOrder.splice(oldIndex, 1);
+        view.columnOrder.splice(to, 0, from);
+        renderResult();
+      });
+
+      return drag;
+    }
+
+    function createColumnSelectButton(result, view, columnIndex, rowCount) {
+      const name = makeNode('button', 'header-button column-name', result.columns[columnIndex] || '(unnamed)');
+      name.title = 'Select column ' + (result.columns[columnIndex] || columnIndex + 1);
+      name.onclick = event => {
+        if (rowCount > 0) {
+          selectArea(view, 0, rowCount - 1, [columnIndex], event, false);
+        }
+      };
+      return name;
+    }
+
+    function createSortButton(result, view, columnIndex) {
+      const direction = view.sort && view.sort.columnIndex === columnIndex ? view.sort.direction : undefined;
+      const sort = makeNode('button', 'header-button sort' + (direction ? ' active' : ''), sortGlyph(direction));
+      sort.title = direction ? 'Sorted ' + direction + '. Click to change.' : 'Sort column';
+      sort.onclick = event => {
+        event.stopPropagation();
+        const current = view.sort && view.sort.columnIndex === columnIndex ? view.sort.direction : undefined;
+        view.sort = !current ? { columnIndex, direction: 'asc' } : current === 'asc' ? { columnIndex, direction: 'desc' } : undefined;
+        invalidate(result, true);
+      };
+      return sort;
+    }
+
+    function createFilterButton(result, view, columnIndex) {
+      const filter = makeNode('button', 'header-button filter' + (view.filters.has(columnIndex) ? ' active' : ''), '⌄');
+      filter.title = 'Filter column';
+      filter.onclick = event => {
+        event.stopPropagation();
+        openFilter(event, result, view, columnIndex);
+      };
+      return filter;
+    }
+    function syncBodyRows(tbody,result,view,page){
+      const columnCount=view.columnOrder.length;
+      while(tbody.rows.length<page.rows.length){
+        tbody.append(createResultRow(columnCount));
+      }
+      while(tbody.rows.length>page.rows.length)tbody.deleteRow(tbody.rows.length-1);
+      for(let i=0;i<page.rows.length;i++)updateResultRow(tbody.rows[i],result,view,page,i);
+    }
+    function createResultRow(columnCount){
+      const tr=document.createElement('tr');
+      tr.append(makeNode('th','row-gutter',''));
+      for(let i=0;i<columnCount;i++)tr.append(makeNode('td','',''));
+      return tr;
+    }
+    function updateResultRow(row,result,view,page,localRow){
+      const columnCount=view.columnOrder.length;
+      const logicalRow=page.start+localRow;
+      const sourceRow=page.rows[localRow];
+      const gutter=row.cells[0];
+      gutter.className='row-gutter';
+      gutter.textContent=String(logicalRow+1);
+      gutter.scope='row';
+      const gutterSignal=resetNodeListeners(gutter);
+      gutter.addEventListener('pointerdown',event=>{if(event.button!==0)return;selectArea(view,logicalRow,logicalRow,view.columnOrder,event,true);dragSelecting=true;},{signal:gutterSignal});
+      gutter.addEventListener('pointerenter',event=>{if(dragSelecting&&(event.buttons&1))extendArea(view,logicalRow,view.columnOrder);},{signal:gutterSignal});
+      gutter.addEventListener('contextmenu',event=>openContext(event,result,view,logicalRow,undefined),{signal:gutterSignal});
+
+      for(let v=0;v<view.columnOrder.length;v++){
+        const originalIndex=view.columnOrder[v];
+        let td=row.cells[v+1];
+        if(!td){td=makeNode('td','','');row.append(td);}
+        updateResultCell(td,result,view,logicalRow,originalIndex,sourceRow[originalIndex]);
+      }
+      while(row.cells.length>columnCount+1)row.deleteCell(row.cells.length-1);
+    }
+    function updateResultCell(td,result,view,logicalRow,originalIndex,value){
+      const candidate=isStructuredCandidate(value);
+      td.className=(value===null?'null':'')+(candidate?' structured':'');
+      td.textContent=value===null?'NULL':String(value);
+      td.dataset.row=String(logicalRow);
+      td.dataset.column=String(originalIndex);
+      td.title=candidate?'Double-click to view formatted value':value===null?'NULL':String(value);
+      decorateCell(td,view,logicalRow,originalIndex);
+      const cellSignal=resetNodeListeners(td);
+      td.addEventListener('pointerdown',event=>{if(event.button!==0)return;selectArea(view,logicalRow,logicalRow,[originalIndex],event,true);dragSelecting=true;},{signal:cellSignal});
+      td.addEventListener('pointerenter',event=>{if(dragSelecting&&(event.buttons&1))extendCell(view,logicalRow,originalIndex);},{signal:cellSignal});
+      if(candidate)td.addEventListener('dblclick',()=>vscode.postMessage({type:'viewCell',ownerUri:state.ownerUri,runId:state.runId,key:active,row:logicalRow,columnIndex:originalIndex,text:value,...spec(view)}),{signal:cellSignal});
+      td.addEventListener('contextmenu',event=>openContext(event,result,view,logicalRow,originalIndex),{signal:cellSignal});
+    }
+    function resetNodeListeners(node){
+      node._sql4cdsListeners?.abort();
+      const controller=new AbortController();
+      node._sql4cdsListeners=controller;
+      return controller.signal;
+    }
+    function startResize(event, th, view, column) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const start = event.clientX;
+      const width = th.getBoundingClientRect().width;
+
+      function move(pointerEvent) {
+        const next = Math.max(52, width + pointerEvent.clientX - start);
+        th.style.width = next + 'px';
+        view.widths.set(column, next);
+      }
+
+      function up() {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+      }
+
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    }
+
+    function openFilter(event, result, view, columnIndex) {
+      dismissOverlays();
+
+      const current = view.filters.get(columnIndex) || { operator: 'contains', value: '' };
+      const popover = makeNode('div', 'popover');
+      positionOverlay(popover, event.clientX, event.clientY + 18, 225, 145);
+      popover.append(makeNode('label', '', result.columns[columnIndex] || 'Column ' + (columnIndex + 1)));
+
+      const select = document.createElement('select');
+      for (const [value, text] of filterOptions()) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        select.append(option);
+      }
+      select.value = current.operator;
+
+      const input = document.createElement('input');
+      input.placeholder = 'Filter value';
+      input.value = current.value;
+
+      const updateDisabled = () => {
+        input.disabled = select.value === 'isEmpty' || select.value === 'isNotEmpty';
+      };
+      select.addEventListener('change', updateDisabled);
+      updateDisabled();
+
+      const buttons = makeNode('div', 'popover-actions');
+      const clear = makeNode('button', '', 'Clear');
+      clear.addEventListener('click', () => {
+        view.filters.delete(columnIndex);
+        dismissOverlays();
+        invalidate(result, true);
+      });
+
+      const apply = makeNode('button', '', 'Apply');
+      apply.addEventListener('click', () => {
+        view.filters.set(columnIndex, { operator: select.value, value: input.value });
+        dismissOverlays();
+        invalidate(result, true);
+      });
+
+      input.addEventListener('keydown', keyEvent => {
+        if (keyEvent.key === 'Enter') { apply.click(); }
+      });
+
+      buttons.append(clear, apply);
+      popover.append(select, input, buttons);
+      document.body.append(popover);
+      input.focus();
+    }
+
+    function filterOptions() {
+      return [
+        ['contains', 'Contains'],
+        ['equals', 'Equals'],
+        ['notEquals', 'Does not equal'],
+        ['startsWith', 'Starts with'],
+        ['endsWith', 'Ends with'],
+        ['greaterThan', 'Greater than'],
+        ['greaterThanOrEqual', 'Greater than or equal'],
+        ['lessThan', 'Less than'],
+        ['lessThanOrEqual', 'Less than or equal'],
+        ['isEmpty', 'Is empty'],
+        ['isNotEmpty', 'Is not empty']
+      ];
+    }
+
+    function positionOverlay(element, left, top, width, height) {
+      element.style.left = Math.max(4, Math.min(left, window.innerWidth - width)) + 'px';
+      element.style.top = Math.max(4, Math.min(top, window.innerHeight - height)) + 'px';
+    }
+
+    function selectArea(view, rowStart, rowEnd, columnIds, event, setAnchor) {
+      const additive = event.metaKey || event.ctrlKey;
+      if (event.shiftKey && view.anchor) {
+        view.terms = additive ? view.terms : [];
+        addTerm(view, view.anchor.row, rowEnd, columnsBetween(view, view.anchor.column, columnIds[columnIds.length - 1]), true);
+      } else {
+        const selected = areCellsSelected(view, rowStart, rowEnd, columnIds);
+        if (!additive) {
+          view.terms = [];
+        }
+        addTerm(view, rowStart, rowEnd, columnIds, !(additive && selected));
+        if (setAnchor || !view.anchor) {
+          view.anchor = { row: rowStart, column: columnIds[0] };
+        }
+      }
+
+      view.focus = { row: rowEnd, column: columnIds[columnIds.length - 1] };
+      paintSelection(view);
+    }
+    function extendArea(view, row, columnIds) {
+      if (!view.anchor) { return; }
+      view.terms = view.terms.filter(term => !term.preview);
+      const term = addTerm(view, view.anchor.row, row, columnsBetween(view, view.anchor.column, columnIds[columnIds.length - 1]), true);
+      term.preview = true;
+      view.focus = { row, column: columnIds[columnIds.length - 1] };
+      paintSelection(view);
+    }
+
+    function extendCell(view, row, column) {
+      extendArea(view, row, [column]);
+    }
+
+    function addTerm(view, startRow, endRow, columnIds, selected) {
+      const term = {
+        rowStart: Math.min(startRow, endRow),
+        rowEnd: Math.max(startRow, endRow),
+        columnIds: [...new Set(columnIds)],
+        selected
+      };
+      view.terms.push(term);
+      return term;
+    }
+
+    function columnsBetween(view, startColumn, endColumn) {
+      const startIndex = view.columnOrder.indexOf(startColumn);
+      const endIndex = view.columnOrder.indexOf(endColumn);
+      return view.columnOrder.slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1);
+    }
+
+    function areCellsSelected(view, rowStart, rowEnd, columnIds) {
+      for (let row = rowStart; row <= rowEnd; row++) {
+        for (const column of columnIds) {
+          if (!isSelected(view, row, column)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function isSelected(view, row, column) {
+      let selected = false;
+      for (const term of view.terms) {
+        if (row >= term.rowStart && row <= term.rowEnd && term.columnIds.includes(column)) {
+          selected = term.selected;
+        }
+      }
+      return selected;
+    }
+
+    function decorateCell(cell, view, row, column) {
+      const selected = isSelected(view, row, column);
+      cell.classList.toggle('selected', selected);
+      cell.classList.toggle('focused', !!view.focus && view.focus.row === row && view.focus.column === column);
+      cell.setAttribute('aria-selected', String(selected));
+    }
+
+    function paintSelection(view) {
+      document.querySelectorAll('td[data-row]').forEach(cell => {
+        decorateCell(cell, view, Number(cell.dataset.row), Number(cell.dataset.column));
+      });
+
+      document.querySelectorAll('th[data-column]').forEach(header => {
+        const column = Number(header.dataset.column);
+        const selected = view.terms.length > 0 && currentPageData &&
+          isSelected(view, 0, column) &&
+          isSelected(view, Math.max(0, currentPageData.displayRows - 1), column);
+        header.classList.toggle('selected', !!selected);
+      });
+
+      document.querySelectorAll('.row-gutter').forEach((gutter, index) => {
+        const row = (currentPageData?.start || 0) + index;
+        gutter.classList.toggle('selected', view.columnOrder.every(column => isSelected(view, row, column)));
+      });
+
+      const anySelection = selectionRanges(view).length > 0;
+      document.querySelectorAll('.grid-actions button[title^="Copy selection"]').forEach(button => {
+        button.disabled = !anySelection;
+      });
+      updateSelectionStatus(view);
+    }
     function selectionRanges(view){
       if(!view.terms.length)return[];const boundaries=new Set();for(const t of view.terms){boundaries.add(t.rowStart);boundaries.add(t.rowEnd+1);}const rows=[...boundaries].sort((a,b)=>a-b),out=[];
       for(let i=0;i<rows.length-1;i++){const rs=rows[i],re=rows[i+1]-1;let start=-1;for(let c=0;c<=view.columnOrder.length;c++){const yes=c<view.columnOrder.length&&isSelected(view,rs,view.columnOrder[c]);if(yes&&start<0)start=c;if(!yes&&start>=0){out.push({rowStart:rs,rowEnd:re,columnStart:start,columnEnd:c-1});start=-1;}}}
       const merged=[];for(const range of out){const prior=merged.find(x=>x.columnStart===range.columnStart&&x.columnEnd===range.columnEnd&&x.rowEnd+1===range.rowStart);if(prior)prior.rowEnd=range.rowEnd;else merged.push({...range});}return merged;
     }
-    function selectionSummary(view,result,rowCount){const ranges=selectionRanges(view);if(!ranges.length)return'';let cells=0,rows=new Set(),cols=new Set();for(const range of ranges){cells+=(range.rowEnd-range.rowStart+1)*(range.columnEnd-range.columnStart+1);for(let c=range.columnStart;c<=range.columnEnd;c++)cols.add(c);if(range.rowEnd-range.rowStart<10000)for(let r=range.rowStart;r<=range.rowEnd;r++)rows.add(r);}const rowText=rows.size?rows.size.toLocaleString():rowCount.toLocaleString();return rowText+' rows × '+cols.size.toLocaleString()+' columns selected ('+cells.toLocaleString()+' cells)';}
-    function updateSelectionStatus(view){const result=state.results.find(x=>x.key===active),node=document.querySelector('.selection-status');if(result&&node)node.textContent=selectionSummary(view,result,currentPageData?.displayRows??result.displayRowCount);}
+    function selectionSummary(view, result, rowCount) {
+      const ranges = selectionRanges(view);
+      if (!ranges.length) { return ''; }
 
-    function gridKeyDown(event,result,page,view){if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','a','A','c','C'].includes(event.key))return;if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='a'){event.preventDefault();if(!page.displayRows||!view.columnOrder.length)return;view.terms=[];addTerm(view,0,page.displayRows-1,view.columnOrder,true);view.focus={row:0,column:view.columnOrder[0]};view.anchor={...view.focus};paintSelection(view);return;}if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='c'){event.preventDefault();copySelection(result,view,'tsv',false);return;}if(!event.key.startsWith('Arrow')||!page.displayRows||!view.columnOrder.length)return;event.preventDefault();const focus=view.focus||{row:page.start,column:view.columnOrder[0]},visual=view.columnOrder.indexOf(focus.column);let row=focus.row,column=focus.column;if(event.key==='ArrowUp')row=Math.max(0,row-1);if(event.key==='ArrowDown')row=Math.min(page.displayRows-1,row+1);if(event.key==='ArrowLeft')column=view.columnOrder[Math.max(0,visual-1)];if(event.key==='ArrowRight')column=view.columnOrder[Math.min(view.columnOrder.length-1,visual+1)];if(event.shiftKey&&view.anchor){view.terms=[];addTerm(view,view.anchor.row,row,columnsBetween(view,view.anchor.column,column),true);}else{view.terms=[];addTerm(view,row,row,[column],true);view.anchor={row,column};}view.focus={row,column};const targetPage=Math.floor(row/result.pageSize);if(targetPage!==currentPage)changePage(targetPage);else{paintSelection(view);document.querySelector('td[data-row="'+row+'"][data-column="'+column+'"]')?.scrollIntoView({block:'nearest',inline:'nearest'});}}
-    function copySelection(result,view,format,headers){const ranges=selectionRanges(view);if(!ranges.length)return;vscode.postMessage({type:'copySelection',ownerUri:state.ownerUri,runId:state.runId,key:active,selection:{ranges,columnOrder:view.columnOrder},format,headers,...spec(view)});}
-    function openContext(event,result,view,row,column){event.preventDefault();const rowSelected=view.columnOrder.every(id=>isSelected(view,row,id));if(column!==undefined&&!isSelected(view,row,column)){view.terms=[];addTerm(view,row,row,[column],true);view.anchor={row,column};view.focus={row,column};paintSelection(view);}else if(column===undefined&&!rowSelected){view.terms=[];addTerm(view,row,row,view.columnOrder,true);view.anchor={row,column:view.columnOrder[0]};view.focus={...view.anchor};paintSelection(view);}dismissOverlays();const menu=makeNode('div','context-menu');menu.style.left=Math.max(4,Math.min(event.clientX,window.innerWidth-205))+'px';menu.style.top=Math.max(4,Math.min(event.clientY,window.innerHeight-260))+'px';const add=(label,fn)=>{const b=makeNode('button','menu-item',label);b.addEventListener('click',()=>{dismissOverlays();fn();});menu.append(b);};add('Copy',()=>copySelection(result,view,'tsv',false));add('Copy with headers',()=>copySelection(result,view,'tsv',true));menu.append(makeNode('div','menu-separator'));add('Copy as CSV',()=>copySelection(result,view,'csv',true));add('Copy as JSON',()=>copySelection(result,view,'json',true));add('Copy as XML',()=>copySelection(result,view,'xml',true));add('Copy as Markdown',()=>copySelection(result,view,'markdown',true));add('Copy as SQL IN clause',()=>copySelection(result,view,'sqlIn',false));menu.append(makeNode('div','menu-separator'));add('Select row',()=>{view.terms=[];addTerm(view,row,row,view.columnOrder,true);renderResult();});if(column!==undefined){add('Select column',()=>{view.terms=[];addTerm(view,0,Math.max(0,currentPageData.displayRows-1),[column],true);renderResult();});const local=row-currentPageData.start,value=currentPageData.rows[local]?.[column];if(isStructuredCandidate(value))add('View formatted value',()=>vscode.postMessage({type:'viewCell',ownerUri:state.ownerUri,runId:state.runId,key:active,row,columnIndex:column,text:value,...spec(view)}));}document.body.append(menu);}
-    function isStructuredCandidate(value){if(typeof value!=='string')return false;const text=value.trim();return (text.startsWith('{')&&text.endsWith('}'))||(text.startsWith('[')&&text.endsWith(']'))||text.startsWith('<');}
-    function dismissOverlays(){document.querySelectorAll('.popover,.context-menu').forEach(x=>x.remove());}
-    function changePage(page){restoreGridFocus=document.activeElement?.classList.contains('grid')||false;currentPage=Math.max(0,page);currentPageData=undefined;showActive();}
-    function renderMessages(){content.replaceChildren();if(!state.messages.length){content.append(makeNode('div','empty',state.status==='running'?'Running query…':'No messages.'));return;}const list=makeNode('ol','messages');for(const message of state.messages){const item=makeNode('li','message'+(message.isError?' error':''));if(message.time){const time=document.createElement('time'),date=new Date(message.time);time.textContent=Number.isNaN(date.valueOf())?message.time:date.toLocaleTimeString();item.append(time);}item.append(document.createTextNode(message.message));list.append(item);}content.append(list);}
-    function showError(message){content.replaceChildren(makeNode('div','error',message));}
-    function iconButton(label,glyph,handler,disabled){const b=makeNode('button','icon-button',glyph);b.title=label;b.setAttribute('aria-label',label);b.disabled=disabled;b.addEventListener('click',handler);return b;}
-    function makeNode(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;}
-    function pageKey(key,page,version){return state.runId+':'+key+':'+version+':'+page;}
+      let cells = 0;
+      const rows = new Set();
+      const columns = new Set();
+      for (const range of ranges) {
+        cells += (range.rowEnd - range.rowStart + 1) * (range.columnEnd - range.columnStart + 1);
+        for (let column = range.columnStart; column <= range.columnEnd; column++) {
+          columns.add(column);
+        }
+        if (range.rowEnd - range.rowStart < 10000) {
+          for (let row = range.rowStart; row <= range.rowEnd; row++) {
+            rows.add(row);
+          }
+        }
+      }
+
+      const rowText = rows.size ? rows.size.toLocaleString() : rowCount.toLocaleString();
+      return rowText + ' rows × ' + columns.size.toLocaleString() + ' columns selected (' + cells.toLocaleString() + ' cells)';
+    }
+
+    function updateSelectionStatus(view) {
+      const result = state.results.find(item => item.key === active);
+      const node = document.querySelector('.selection-status');
+      if (result && node) {
+        node.textContent = selectionSummary(view, result, currentPageData?.displayRows ?? result.displayRowCount);
+      }
+    }
+
+    function gridKeyDown(event, result, page, view) {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'a', 'A', 'c', 'C'].includes(event.key)) {
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        if (!page.displayRows || !view.columnOrder.length) { return; }
+        view.terms = [];
+        addTerm(view, 0, page.displayRows - 1, view.columnOrder, true);
+        view.focus = { row: 0, column: view.columnOrder[0] };
+        view.anchor = { ...view.focus };
+        paintSelection(view);
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        copySelection(result, view, 'tsv', false);
+        return;
+      }
+
+      if (!event.key.startsWith('Arrow') || !page.displayRows || !view.columnOrder.length) {
+        return;
+      }
+
+      event.preventDefault();
+      const next = nextGridPosition(event, result, page, view);
+      if (!next) { return; }
+
+      if (event.shiftKey && view.anchor) {
+        view.terms = [];
+        addTerm(view, view.anchor.row, next.row, columnsBetween(view, view.anchor.column, next.column), true);
+      } else {
+        view.terms = [];
+        addTerm(view, next.row, next.row, [next.column], true);
+        view.anchor = { row: next.row, column: next.column };
+      }
+
+      view.focus = next;
+      const targetPage = Math.floor(next.row / result.pageSize);
+      if (targetPage !== currentPage) {
+        changePage(targetPage);
+        return;
+      }
+
+      paintSelection(view);
+      document.querySelector('td[data-row="' + next.row + '"][data-column="' + next.column + '"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    function nextGridPosition(event, result, page, view) {
+      const focus = view.focus || { row: page.start, column: view.columnOrder[0] };
+      const visual = view.columnOrder.indexOf(focus.column);
+      let row = focus.row;
+      let column = focus.column;
+
+      if (event.key === 'ArrowUp') { row = Math.max(0, row - 1); }
+      if (event.key === 'ArrowDown') { row = Math.min(page.displayRows - 1, row + 1); }
+      if (event.key === 'ArrowLeft') { column = view.columnOrder[Math.max(0, visual - 1)]; }
+      if (event.key === 'ArrowRight') { column = view.columnOrder[Math.min(view.columnOrder.length - 1, visual + 1)]; }
+      return { row, column };
+    }
+
+    function copySelection(result, view, format, headers) {
+      const ranges = selectionRanges(view);
+      if (!ranges.length) { return; }
+      vscode.postMessage({
+        type: 'copySelection',
+        ownerUri: state.ownerUri,
+        runId: state.runId,
+        key: active,
+        selection: { ranges, columnOrder: view.columnOrder },
+        format,
+        headers,
+        ...spec(view)
+      });
+    }
+
+    function openContext(event, result, view, row, column) {
+      event.preventDefault();
+      ensureContextSelection(view, row, column);
+      dismissOverlays();
+
+      const menu = makeNode('div', 'context-menu');
+      positionOverlay(menu, event.clientX, event.clientY, 205, 260);
+
+      addMenuItem(menu, 'Copy', () => copySelection(result, view, 'tsv', false));
+      addMenuItem(menu, 'Copy with headers', () => copySelection(result, view, 'tsv', true));
+      menu.append(makeNode('div', 'menu-separator'));
+      addMenuItem(menu, 'Copy as CSV', () => copySelection(result, view, 'csv', true));
+      addMenuItem(menu, 'Copy as JSON', () => copySelection(result, view, 'json', true));
+      addMenuItem(menu, 'Copy as XML', () => copySelection(result, view, 'xml', true));
+      addMenuItem(menu, 'Copy as Markdown', () => copySelection(result, view, 'markdown', true));
+      addMenuItem(menu, 'Copy as SQL IN clause', () => copySelection(result, view, 'sqlIn', false));
+      menu.append(makeNode('div', 'menu-separator'));
+      addMenuItem(menu, 'Select row', () => selectContextRow(view, row));
+
+      if (column !== undefined) {
+        addMenuItem(menu, 'Select column', () => selectContextColumn(view, column));
+        const value = currentCellValue(row, column);
+        if (isStructuredCandidate(value)) {
+          addMenuItem(menu, 'View formatted value', () => postViewCell(row, column, value, view));
+        }
+      }
+
+      document.body.append(menu);
+    }
+
+    function ensureContextSelection(view, row, column) {
+      const rowSelected = view.columnOrder.every(id => isSelected(view, row, id));
+      if (column !== undefined && !isSelected(view, row, column)) {
+        view.terms = [];
+        addTerm(view, row, row, [column], true);
+        view.anchor = { row, column };
+        view.focus = { row, column };
+        paintSelection(view);
+      } else if (column === undefined && !rowSelected) {
+        view.terms = [];
+        addTerm(view, row, row, view.columnOrder, true);
+        view.anchor = { row, column: view.columnOrder[0] };
+        view.focus = { ...view.anchor };
+        paintSelection(view);
+      }
+    }
+
+    function addMenuItem(menu, label, action) {
+      const item = makeNode('button', 'menu-item', label);
+      item.addEventListener('click', () => {
+        dismissOverlays();
+        action();
+      });
+      menu.append(item);
+    }
+
+    function selectContextRow(view, row) {
+      view.terms = [];
+      addTerm(view, row, row, view.columnOrder, true);
+      renderResult();
+    }
+
+    function selectContextColumn(view, column) {
+      view.terms = [];
+      addTerm(view, 0, Math.max(0, currentPageData.displayRows - 1), [column], true);
+      renderResult();
+    }
+
+    function currentCellValue(row, column) {
+      const localRow = row - currentPageData.start;
+      return currentPageData.rows[localRow]?.[column];
+    }
+
+    function postViewCell(row, columnIndex, text, view) {
+      vscode.postMessage({
+        type: 'viewCell',
+        ownerUri: state.ownerUri,
+        runId: state.runId,
+        key: active,
+        row,
+        columnIndex,
+        text,
+        ...spec(view)
+      });
+    }
+
+    function isStructuredCandidate(value) {
+      if (typeof value !== 'string') { return false; }
+      const text = value.trim();
+      return (text.startsWith('{') && text.endsWith('}')) ||
+        (text.startsWith('[') && text.endsWith(']')) ||
+        text.startsWith('<');
+    }
+
+    function dismissOverlays() {
+      document.querySelectorAll('.popover,.context-menu').forEach(element => element.remove());
+    }
+
+    function changePage(page) {
+      restoreGridFocus = document.activeElement?.classList.contains('grid') || false;
+      currentPage = Math.max(0, page);
+      currentPageData = undefined;
+      showActive();
+    }
+
+    function renderMessages() {
+      content.replaceChildren();
+      if (!state.messages.length) {
+        content.append(makeNode('div', 'empty', state.status === 'running' ? 'Running query…' : 'No messages.'));
+        return;
+      }
+
+      const list = makeNode('ol', 'messages');
+      for (const message of state.messages) {
+        const item = makeNode('li', 'message' + (message.isError ? ' error' : ''));
+        if (message.time) {
+          const time = document.createElement('time');
+          const date = new Date(message.time);
+          time.textContent = Number.isNaN(date.valueOf()) ? message.time : date.toLocaleTimeString();
+          item.append(time);
+        }
+        item.append(document.createTextNode(message.message));
+        list.append(item);
+      }
+      content.append(list);
+    }
+
+    function showError(message) {
+      content.replaceChildren(makeNode('div', 'error', message));
+    }
+
+    function iconButton(label, glyph, handler, disabled) {
+      const button = makeNode('button', 'icon-button', glyph);
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      button.disabled = disabled;
+      button.addEventListener('click', handler);
+      return button;
+    }
+
+    function makeNode(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) {
+        node.className = className;
+      }
+      if (text !== undefined) {
+        node.textContent = text;
+      }
+      return node;
+    }
+
+    function sortGlyph(direction) {
+      return direction === 'asc' ? '↑' : direction === 'desc' ? '↓' : '↕';
+    }
+
+    function pageKey(key, page, version) {
+      return state.runId + ':' + key + ':' + version + ':' + page;
+    }
     vscode.postMessage({type:'ready'});
   </script>
 </body>

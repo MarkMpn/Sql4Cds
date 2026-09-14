@@ -68,6 +68,57 @@ test("quick search retains its input while loading and after a response", async 
   } finally { ui.close(); }
 });
 
+test("quick search preserves grid scroll position after refresh", async () => {
+  const ui = grid(1000);
+  try {
+    const gridElement = ui.window.document.querySelector(".grid") as HTMLElement;
+    gridElement.scrollLeft = 137;
+    gridElement.scrollTop = 88;
+
+    const input = ui.window.document.querySelector("input")!;
+    input.value = "refresh";
+    input.dispatchEvent(new ui.window.Event("input"));
+    await new Promise(resolve => setTimeout(resolve, 280));
+
+    ui.page(0, 1);
+
+    const refreshedGrid = ui.window.document.querySelector(".grid") as HTMLElement;
+    assert.equal(refreshedGrid.scrollLeft, 137);
+    assert.equal(refreshedGrid.scrollTop, 88);
+  } finally { ui.close(); }
+});
+
+test("quick search reuses existing table cell nodes after refresh", async () => {
+  const ui = grid(1000);
+  try {
+    const originalCell = ui.window.document.querySelector('td[data-row="0"][data-column="0"]')!;
+
+    const input = ui.window.document.querySelector("input")!;
+    input.value = "reuse";
+    input.dispatchEvent(new ui.window.Event("input"));
+    await new Promise(resolve => setTimeout(resolve, 280));
+    ui.page(0, 1);
+
+    const refreshedCell = ui.window.document.querySelector('td[data-row="0"][data-column="0"]')!;
+    assert.equal(refreshedCell, originalCell);
+  } finally { ui.close(); }
+});
+
+test("sort button toggles from ascending to descending on second click", () => {
+  const ui = grid();
+  try {
+    const sortButton = ui.window.document.querySelector('th[data-column="0"] .sort') as HTMLElement;
+    sortButton.click();
+    assert.equal(ui.sent.at(-1).sort.direction, "asc");
+
+    ui.page(0, 1);
+
+    const updatedSortButton = ui.window.document.querySelector('th[data-column="0"] .sort') as HTMLElement;
+    updatedSortButton.click();
+    assert.equal(ui.sent.at(-1).sort.direction, "desc");
+  } finally { ui.close(); }
+});
+
 test("result values render as text and export messages identify their query run", () => {
   const ui = grid();
   try {
