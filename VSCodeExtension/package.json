@@ -403,6 +403,11 @@
           "minimum": 100,
           "description": "Maximum rows displayed per result set."
         },
+        "SQL4CDS.autoSizeColumns": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically size result columns from their visible content. When disabled, result columns start at a fixed width with ellipsis for overflow. Columns can still be resized manually in either mode."
+        },
         "SQL4CDS.servicePath": {
           "type": [
             "string",

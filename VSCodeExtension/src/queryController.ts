@@ -86,6 +86,11 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       client.onNotification(Methods.queryComplete, (params: QueryCompleteParams) => this.onQueryComplete(params)),
       client.onDidChangeState(event => { if (event.newState === State.Stopped) { this.onServiceStopped(); } }),
       vscode.window.onDidChangeActiveTextEditor(editor => this.onActiveEditorChanged(editor)),
+      vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration("SQL4CDS.autoSizeColumns") && this.selectedUri && this.states.has(this.selectedUri)) {
+          this.publishState(this.selectedUri);
+        }
+      }),
       vscode.workspace.onDidCloseTextDocument(document => {
         const uri = document.uri.toString();
         if (this.states.has(uri)) { void this.cleanupUri(uri, true); }
@@ -556,6 +561,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     const state = this.states.get(uri);
     if (!state || uri !== this.selectedUri) { return; }
     const maxRows = vscode.workspace.getConfiguration("SQL4CDS").get<number>("maxResultRows", 10000);
+    const autoSizeColumns = vscode.workspace.getConfiguration("SQL4CDS").get<boolean>("autoSizeColumns", true);
     const returnedRows = [...state.results.values()].reduce((total, result) => total + result.summary.rowCount, 0);
     const affectedRows = state.messages.map(message => affectedRowCount(message.message)).filter((value): value is number => value !== undefined);
     this.updateQueryStatus(state, returnedRows, affectedRows.length ? affectedRows.reduce((total, value) => total + value, 0) : undefined);
@@ -568,6 +574,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       started: state.started,
       ended: state.ended,
       batchElapsed: state.batchElapsed,
+      autoSizeColumns,
       returnedRows,
       affectedRows: affectedRows.length ? affectedRows.reduce((total, value) => total + value, 0) : undefined,
       results: [...state.results.entries()].map(([key, result], index) => ({

@@ -42,6 +42,8 @@ export function resultsHtml(webview: vscode.Webview): string {
     const pages = new Map();
     const pending = new Set();
     const views = new Map();
+    const defaultColumnWidth = 180;
+    const rowGutterWidth = 52;
 
     function freshView(result) {
       return {
@@ -51,6 +53,7 @@ export function resultsHtml(webview: vscode.Webview): string {
         viewVersion: 0,
         columnOrder: result.columns.map((_, index) => index),
         widths: new Map(),
+        autoWidths: new Map(),
         terms: [],
         anchor: undefined,
         focus: undefined
@@ -77,6 +80,75 @@ export function resultsHtml(webview: vscode.Webview): string {
         sort: view.sort,
         viewVersion: view.viewVersion
       };
+    }
+
+    function autoSizeColumnsEnabled() {
+      return state?.autoSizeColumns !== false;
+    }
+
+    function columnWidth(view, columnIndex) {
+      if (view.widths.has(columnIndex)) {
+        return view.widths.get(columnIndex);
+      }
+      if (autoSizeColumnsEnabled()) {
+        return view.autoWidths.get(columnIndex) ?? defaultColumnWidth;
+      }
+      return defaultColumnWidth;
+    }
+
+    function applyHeaderWidth(header, view, columnIndex) {
+      header.style.width = columnWidth(view, columnIndex) + 'px';
+    }
+
+    function applyCellWidth(cell, view, columnIndex) {
+      cell.style.width = columnWidth(view, columnIndex) + 'px';
+    }
+
+    function resizeHandleState(handle) {
+      handle.style.display = '';
+    }
+
+    function updateTableWidth(table, view) {
+      const width = rowGutterWidth + view.columnOrder.reduce((total, columnIndex) => total + columnWidth(view, columnIndex), 0);
+      table.style.width = width + 'px';
+    }
+
+    function updateVisibleColumnWidth(view, columnIndex) {
+      const table = content.querySelector('.result-area table');
+      if (!table) { return; }
+
+      const header = table.querySelector('th[data-column="' + columnIndex + '"]');
+      if (header) {
+        applyHeaderWidth(header, view, columnIndex);
+      }
+
+      table.querySelectorAll('td[data-column="' + columnIndex + '"]').forEach(cell => {
+        applyCellWidth(cell, view, columnIndex);
+      });
+      updateTableWidth(table, view);
+    }
+
+    function ensureAutoWidths(result, view, page) {
+      if (!autoSizeColumnsEnabled()) { return; }
+
+      for (const columnIndex of view.columnOrder) {
+        if (view.widths.has(columnIndex)) { continue; }
+        if (!view.autoWidths.has(columnIndex)) {
+          view.autoWidths.set(columnIndex, estimateAutoWidth(result, page, columnIndex));
+        }
+      }
+    }
+
+    function estimateAutoWidth(result, page, columnIndex) {
+      const headerText = result.columns[columnIndex] || '(unnamed)';
+      let longest = headerText.length;
+      for (const row of page.rows) {
+        const value = row[columnIndex];
+        const text = value === null ? 'NULL' : String(value ?? '');
+        longest = Math.max(longest, text.length);
+      }
+
+      return Math.max(90, Math.min(420, longest * 8 + 24));
     }
 
     function invalidate(result, clearSelection) {
@@ -442,6 +514,7 @@ export function resultsHtml(webview: vscode.Webview): string {
     }
 
     function createResultTable(result, view, page, transformedRows) {
+      ensureAutoWidths(result, view, page);
       const table = document.createElement('table');
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
@@ -464,6 +537,7 @@ export function resultsHtml(webview: vscode.Webview): string {
       const tbody = document.createElement('tbody');
       syncBodyRows(tbody, result, view, page);
       table.append(tbody);
+      updateTableWidth(table, view);
       return table;
     }
 
@@ -538,6 +612,7 @@ export function resultsHtml(webview: vscode.Webview): string {
       }
 
       const tbody = table.tBodies[0] || table.appendChild(document.createElement('tbody'));
+      ensureAutoWidths(result, view, page);
       syncBodyRows(tbody, result, view, page);
       syncHeaderState(headRow, result, view, transformedRows);
       syncActionButtons(area, result, view);
@@ -558,6 +633,9 @@ export function resultsHtml(webview: vscode.Webview): string {
         const name = header.querySelector('.column-name');
         const sort = header.querySelector('.sort');
         const filter = header.querySelector('.filter');
+        const resize = header.querySelector('.resize-handle');
+
+        applyHeaderWidth(header, view, columnIndex);
 
         if (name) {
           name.onclick = event => {
@@ -584,6 +662,14 @@ export function resultsHtml(webview: vscode.Webview): string {
             openFilter(event, result, view, columnIndex);
           };
         }
+        if (resize) {
+          resizeHandleState(resize);
+        }
+      }
+
+      const table = headRow.closest('table');
+      if (table) {
+        updateTableWidth(table, view);
       }
     }
 
@@ -602,11 +688,7 @@ export function resultsHtml(webview: vscode.Webview): string {
     function makeHeader(result, view, columnIndex, rowCount) {
       const th = document.createElement('th');
       th.dataset.column = String(columnIndex);
-
-      const width = view.widths.get(columnIndex);
-      if (width) {
-        th.style.width = width + 'px';
-      }
+      applyHeaderWidth(th, view, columnIndex);
 
       const box = makeNode('div', 'header');
       box.append(
@@ -618,6 +700,7 @@ export function resultsHtml(webview: vscode.Webview): string {
       th.append(box);
 
       const resize = makeNode('span', 'resize-handle');
+      resizeHandleState(resize);
       resize.addEventListener('pointerdown', event => startResize(event, th, view, columnIndex));
       th.append(resize);
       return th;
@@ -725,6 +808,7 @@ export function resultsHtml(webview: vscode.Webview): string {
       td.textContent=value===null?'NULL':String(value);
       td.dataset.row=String(logicalRow);
       td.dataset.column=String(originalIndex);
+      applyCellWidth(td, view, originalIndex);
       td.title=candidate?'Double-click to view formatted value':value===null?'NULL':String(value);
       decorateCell(td,view,logicalRow,originalIndex);
       const cellSignal=resetNodeListeners(td);
@@ -744,12 +828,12 @@ export function resultsHtml(webview: vscode.Webview): string {
       event.stopPropagation();
 
       const start = event.clientX;
-      const width = th.getBoundingClientRect().width;
+      const width = th.getBoundingClientRect().width || columnWidth(view, column);
 
       function move(pointerEvent) {
         const next = Math.max(52, width + pointerEvent.clientX - start);
-        th.style.width = next + 'px';
         view.widths.set(column, next);
+        updateVisibleColumnWidth(view, column);
       }
 
       function up() {
