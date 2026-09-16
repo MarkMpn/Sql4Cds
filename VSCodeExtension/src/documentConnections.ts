@@ -32,6 +32,12 @@ export class DocumentConnectionManager implements vscode.Disposable {
 
   public get(uri: string): ConnectionProfile | undefined { return this.connections.get(uri); }
 
+  public findByName(name: string): ConnectionProfile | undefined {
+    const target = name.trim();
+    if (!target) { return undefined; }
+    return this.profiles.profiles.find(profile => profile.name.localeCompare(target, undefined, { sensitivity: "accent" }) === 0);
+  }
+
   public async connectEditor(profile?: ConnectionProfile, editor = vscode.window.activeTextEditor): Promise<boolean> {
     if (!editor) { void vscode.window.showInformationMessage("Open a SQL 4 CDS query editor first."); return false; }
     if (editor.document.languageId !== "sql4cds") {

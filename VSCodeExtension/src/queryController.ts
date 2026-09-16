@@ -19,6 +19,7 @@ import {
 import { findInvalidFilter } from "./filterRecovery";
 import { createExportParams, exportMethod, opensInTextEditor, resultExportChoices } from "./resultExport";
 import { ClipboardFormat, ClipboardValue, projectClipboardRows, serializeClipboard } from "./resultClipboard";
+import { buildDataverseRecordUrl, extractDataverseRecordReference } from "./dataverseRecordLink";
 import { resultsHtml } from "./resultWebview";
 import { Sql4CdsService } from "./serviceClient";
 import { detectStructuredValue } from "./structuredValue";
@@ -319,7 +320,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
         : await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, request);
       if (this.states.get(uri) !== state) { return; }
       const subset = response.resultSubset;
-      const rows = (subset?.rows ?? []).map(row => row.map(formatCell));
+      const rows = (subset?.rows ?? []).map(row => row.map(toWebCell));
       const filteredRows = subset?.totalRowCount ?? displayRows;
       const transformedRows = Math.min(filteredRows, maxRows);
       void this.resultsView?.webview.postMessage({
@@ -468,6 +469,26 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     if (this.states.get(uri) !== state || response.resultSubset?.viewVersion !== message.viewVersion) { return; }
     const cell = response.resultSubset?.rows[0]?.[message.columnIndex!];
     if (!cell || cell.isNull) { return; }
+
+    const record = extractDataverseRecordReference(cell.rawObject);
+    if (record) {
+      const profile = this.connections.findByName(record.dataSource);
+      if (!profile?.url) {
+        void vscode.window.showInformationMessage(`No SQL 4 CDS connection named '${record.dataSource}' with a Dataverse URL was found.`);
+        return;
+      }
+      try {
+        const recordUrl = buildDataverseRecordUrl(profile.url, record);
+        const opened = await vscode.env.openExternal(vscode.Uri.parse(recordUrl));
+        if (!opened) {
+          void vscode.window.showWarningMessage(`Could not open Dataverse record URL: ${recordUrl}`);
+        }
+      } catch (error) {
+        void vscode.window.showErrorMessage(`Could not open Dataverse record: ${errorMessage(error)}`);
+      }
+      return;
+    }
+
     const structured = detectStructuredValue(formatCell(cell) ?? "");
     if (!structured) {
       void vscode.window.showInformationMessage("This cell does not contain a valid JSON object, JSON array, or XML document.");
@@ -678,6 +699,13 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
 function formatCell(cell: CellValue): string | null {
   if (cell.isNull) { return null; }
   return cell.displayValue ?? cell.invariantCultureDisplayValue ?? String(cell.rawObject ?? "");
+}
+
+function toWebCell(cell: CellValue): string | null | { text: string | null; isDataverseRecord: boolean } {
+  const text = formatCell(cell);
+  const isDataverseRecord = Boolean(extractDataverseRecordReference(cell.rawObject));
+  if (!isDataverseRecord) { return text; }
+  return { text, isDataverseRecord: true };
 }
 
 function clipboardCell(cell: CellValue | undefined): ClipboardValue {

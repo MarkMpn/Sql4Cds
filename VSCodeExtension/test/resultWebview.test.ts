@@ -185,3 +185,13 @@ test("result values render as text and export messages identify their query run"
     assert.equal(ui.sent.at(-1).runId, 1);
   } finally { ui.close(); }
 });
+
+test("dataverse record cells are clickable even when display text is not JSON", () => {
+  const ui = grid(1, { initialRows: [[{ text: "Account", isDataverseRecord: true }, "value"]] });
+  try {
+    ui.window.document.querySelector('td[data-column="0"]')!.dispatchEvent(new ui.window.MouseEvent("dblclick", { bubbles: true }));
+    assert.equal(ui.sent.at(-1).type, "viewCell");
+    assert.equal(ui.sent.at(-1).row, 0);
+    assert.equal(ui.sent.at(-1).columnIndex, 0);
+  } finally { ui.close(); }
+});

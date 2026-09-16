@@ -143,8 +143,8 @@ export function resultsHtml(webview: vscode.Webview): string {
       const headerText = result.columns[columnIndex] || '(unnamed)';
       let longest = headerText.length;
       for (const row of page.rows) {
-        const value = row[columnIndex];
-        const text = value === null ? 'NULL' : String(value ?? '');
+        const textValue = cellText(row[columnIndex]);
+        const text = textValue === null ? 'NULL' : String(textValue ?? '');
         longest = Math.max(longest, text.length);
       }
 
@@ -803,18 +803,20 @@ export function resultsHtml(webview: vscode.Webview): string {
       while(row.cells.length>columnCount+1)row.deleteCell(row.cells.length-1);
     }
     function updateResultCell(td,result,view,logicalRow,originalIndex,value){
+      const text = cellText(value);
       const candidate=isStructuredCandidate(value);
-      td.className=(value===null?'null':'')+(candidate?' structured':'');
-      td.textContent=value===null?'NULL':String(value);
+      const dataverseRecord = isDataverseRecordCandidate(value);
+      td.className=(text===null?'null':'')+(candidate?' structured':'');
+      td.textContent=text===null?'NULL':String(text);
       td.dataset.row=String(logicalRow);
       td.dataset.column=String(originalIndex);
       applyCellWidth(td, view, originalIndex);
-      td.title=candidate?'Double-click to view formatted value':value===null?'NULL':String(value);
+      td.title=dataverseRecord?'Double-click to open Dataverse record':candidate?'Double-click to view formatted value':text===null?'NULL':String(text);
       decorateCell(td,view,logicalRow,originalIndex);
       const cellSignal=resetNodeListeners(td);
       td.addEventListener('pointerdown',event=>{if(event.button!==0)return;selectArea(view,logicalRow,logicalRow,[originalIndex],event,true);dragSelecting=true;},{signal:cellSignal});
       td.addEventListener('pointerenter',event=>{if(dragSelecting&&(event.buttons&1))extendCell(view,logicalRow,originalIndex);},{signal:cellSignal});
-      if(candidate)td.addEventListener('dblclick',()=>vscode.postMessage({type:'viewCell',ownerUri:state.ownerUri,runId:state.runId,key:active,row:logicalRow,columnIndex:originalIndex,text:value,...spec(view)}),{signal:cellSignal});
+      if(candidate)td.addEventListener('dblclick',()=>vscode.postMessage({type:'viewCell',ownerUri:state.ownerUri,runId:state.runId,key:active,row:logicalRow,columnIndex:originalIndex,text:text,...spec(view)}),{signal:cellSignal});
       td.addEventListener('contextmenu',event=>openContext(event,result,view,logicalRow,originalIndex),{signal:cellSignal});
     }
     function resetNodeListeners(node){
@@ -1156,7 +1158,7 @@ export function resultsHtml(webview: vscode.Webview): string {
         addMenuItem(menu, 'Select column', () => selectContextColumn(view, column));
         const value = currentCellValue(row, column);
         if (isStructuredCandidate(value)) {
-          addMenuItem(menu, 'View formatted value', () => postViewCell(row, column, value, view));
+          addMenuItem(menu, isDataverseRecordCandidate(value) ? 'Open Dataverse record' : 'View formatted value', () => postViewCell(row, column, value, view));
         }
       }
 
@@ -1220,11 +1222,25 @@ export function resultsHtml(webview: vscode.Webview): string {
     }
 
     function isStructuredCandidate(value) {
-      if (typeof value !== 'string') { return false; }
-      const text = value.trim();
+      const textValue = cellText(value);
+      if (typeof textValue !== 'string') { return isDataverseRecordCandidate(value); }
+      const text = textValue.trim();
       return (text.startsWith('{') && text.endsWith('}')) ||
         (text.startsWith('[') && text.endsWith(']')) ||
-        text.startsWith('<');
+        text.startsWith('<') ||
+        isDataverseRecordCandidate(value);
+    }
+
+    function cellText(value) {
+      if (value && typeof value === 'object' && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, 'text')) {
+        return value.text;
+      }
+      return value;
+    }
+
+    function isDataverseRecordCandidate(value) {
+    debugger;
+      return Boolean(value && typeof value === 'object' && !Array.isArray(value) && value.isDataverseRecord === true);
     }
 
     function dismissOverlays() {
