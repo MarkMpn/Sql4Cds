@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../../MarkMpn.Sql4Cds.LanguageServer/MarkMpn.Sql4Cds.LanguageServer.csproj" AdditionalProperties="Sql4CdsVSCodeBuild=true" />
+    <ProjectReference Include="../../../MarkMpn.Sql4Cds.LanguageServer/MarkMpn.Sql4Cds.LanguageServer.csproj" />
     <!-- Run the production coordinator against controlled authentication completions. -->
     <Compile Include="../../../MarkMpn.Sql4Cds.LanguageServer/Connection/ConnectionHandler.cs" Link="ConnectionHandler.cs" />
     <Compile Include="../../../MarkMpn.Sql4Cds.LanguageServer/JsonRpcExtensions.cs" Link="JsonRpcExtensions.cs" />

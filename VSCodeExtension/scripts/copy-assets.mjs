@@ -9,7 +9,7 @@ const output = join(root, "out", "sql4cdstoolsservice");
 await rm(output, { recursive: true, force: true });
 const published = spawnSync(await dotnetHost(), [
   "publish", join(dirname(root), "MarkMpn.Sql4Cds.LanguageServer", "MarkMpn.Sql4Cds.LanguageServer.csproj"),
-  "--configuration", "Release", "-p:Sql4CdsVSCodeBuild=true", "--no-self-contained", "-p:UseAppHost=false", "--output", output
+  "--configuration", "Release", "--no-self-contained", "-p:UseAppHost=false", "--output", output
 ], { stdio: "inherit" });
 if (published.error) { throw published.error; }
 if (published.status !== 0) { throw new Error("The Release language service could not be published. Install the .NET 10 SDK or later and retry."); }

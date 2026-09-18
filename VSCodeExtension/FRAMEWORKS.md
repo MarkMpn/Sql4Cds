@@ -18,8 +18,6 @@ Checked 2026-09-06. Scope: the VS Code extension, its packaging workflow, and th
 
 The npm audit (including development dependencies) reports zero known vulnerabilities. Newer package versions above are available updates, not a claim that the installed versions are unsupported.
 
-The shared language-server project selects `net10.0` only when `Sql4CdsVSCodeBuild=true`, supplied by VS Code publishing and connection-test commands. Other consumers retain `net8.0`. Engine and Export remain unchanged; their compatible net8.0 library assemblies run inside the .NET 10 service and do not require a separate .NET 8 runtime.
-
 Existing NuGet restore warnings include vulnerable MessagePack 2.5.187 and System.Security.Cryptography.Pkcs 6.0.1 dependencies. The runtime upgrade does not remediate these package advisories. Shared dependency upgrades require a separate review by their owners.
 
 Sources: [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy), [Node release schedule](https://github.com/nodejs/Release), and the npm registry via `npm outdated` / `npm audit`. Version availability is a snapshot, not a pinning recommendation.
