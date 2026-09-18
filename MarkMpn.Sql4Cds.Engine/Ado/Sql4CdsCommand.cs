@@ -174,9 +174,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Consume all the results to ensure all statements in the batch are actually executed
                 do
                 {
-                    while (reader.Read())
+                    while (!reader.IsClosed && reader.HasRows && reader.Read())
                         ;
-                } while (reader.NextResult());
+                } while (!reader.IsClosed && reader.NextResult());
                 
                 return reader.RecordsAffected;
             }
@@ -186,16 +186,15 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             using (var reader = ExecuteReader())
             {
-
                 object result = null;
 
-                if (reader.Read())
+                if (reader.HasRows && reader.Read())
                     result = reader.GetValue(0);
 
                 // Consume all remaining results to ensure all statements in the batch are actually executed
                 do
                 {
-                    while (reader.Read())
+                    while (reader.HasRows && reader.Read())
                         ;
                 } while (reader.NextResult());
 
