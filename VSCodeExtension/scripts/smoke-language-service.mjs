@@ -15,7 +15,7 @@ let stderr = "";
 
 const service = spawn(await dotnetHost(), [serviceDll, `--log-dir=${logDir}`], {
   stdio: ["pipe", "pipe", "pipe"],
-  env: { ...process.env, SQL4CDS_DATA_DIR: logDir, SQL4CDS_DISABLE_TELEMETRY: "1" }
+  env: { ...process.env, SQL4CDS_DATA_DIR: logDir }
 });
 
 service.stderr.setEncoding("utf8");

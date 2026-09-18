@@ -66,10 +66,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
             };
-            var disableTelemetry = Environment.GetEnvironmentVariable("SQL4CDS_DISABLE_TELEMETRY");
-            telemetryConfiguration.DisableTelemetry =
-                String.Equals(disableTelemetry, "1", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(disableTelemetry, "true", StringComparison.OrdinalIgnoreCase);
             _ai = new TelemetryClient(telemetryConfiguration);
 
             var app = System.Reflection.Assembly.GetEntryAssembly();

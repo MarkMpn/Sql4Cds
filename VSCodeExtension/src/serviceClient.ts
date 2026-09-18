@@ -57,8 +57,7 @@ export class Sql4CdsService implements vscode.Disposable {
       options: {
         env: {
           ...process.env,
-          SQL4CDS_DATA_DIR: dataRoot,
-          SQL4CDS_DISABLE_TELEMETRY: "1"
+          SQL4CDS_DATA_DIR: dataRoot
         }
       }
     };

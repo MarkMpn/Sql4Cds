@@ -55,7 +55,6 @@ All notable changes to the SQL 4 CDS extension for Visual Studio Code are docume
 - Configurable safeguards for data modification and result limits.
 - Startup validation and actionable diagnostics for the bundled language service and .NET 8 Runtime.
 - Automatic language-service crash recovery with manual restart guidance when recovery is exhausted.
-- Usage and error telemetry disabled for the Visual Studio Code language-service process.
 - Authentication token caching moved from the extension installation directory to VS Code global storage.
 - Common password, client-secret, bearer-token, and credentialed-URL forms redacted from user-visible errors.
 - Automated TypeScript checks, runtime tests, language-service builds, and VSIX packaging in CI.

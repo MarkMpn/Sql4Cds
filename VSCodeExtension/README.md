@@ -102,7 +102,7 @@ The results view applies `SQL4CDS.maxResultRows` to keep the editor responsive. 
 
 ## Privacy and diagnostics
 
-The Visual Studio Code extension disables SQL 4 CDS engine usage and error telemetry in its language-service process and does not add analytics of its own. It communicates with the Dataverse environment and Microsoft identity endpoints required by the selected authentication flow.
+The Visual Studio Code extension communicates with the Dataverse environment and Microsoft identity endpoints required by the selected authentication flow.
 
 The language service caches Dataverse entity and attribute metadata as compressed JSON below VS Code's per-session extension log directory, under `Metadata`. Authentication token caching uses the extension's VS Code global-storage directory. Diagnostic output and logs remain on the machine or remote extension host where VS Code runs. Logs can include SQL text, environment metadata, and error details; review and redact them before attaching them to an issue. Passwords, client secrets, connection strings, and access tokens should never be included in support reports.
 
