@@ -151,7 +151,7 @@ function serializeMarkdown(table: ClipboardTable, includeHeaders: boolean): stri
 }
 
 function markdownRow(row: readonly ClipboardValue[]): string {
-  return `| ${row.map(value => displayValue(value).replaceAll(/\\/g, "\\\\").replaceAll(/\|/g, "\\|").replaceAll(/\r?\n/g, "<br>")).join(" | ")} |`;
+  return `| ${row.map(value => displayValue(value).replaceAll(/\\/g, String.raw`\\`).replaceAll(/\|/g, String.raw`\|`).replaceAll(/\r?\n/g, "<br>")).join(" | ")} |`;
 }
 
 function serializeSqlIn(table: ClipboardTable): string {

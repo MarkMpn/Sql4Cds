@@ -9,7 +9,7 @@ export async function dotnetHost() {
   const roots = configuredRoot
     ? [configuredRoot]
     : process.platform === "win32"
-      ? [join(process.env.ProgramFiles || "C:\\Program Files", "dotnet")]
+      ? [join(process.env.ProgramFiles || String.raw`C:\Program Files`, "dotnet")]
       : ["/usr/local/share/dotnet", "/usr/share/dotnet", join(homedir(), ".dotnet")];
   for (const root of roots) {
     if (!isAbsolute(root)) { throw new Error("DOTNET_ROOT must be an absolute installation directory."); }

@@ -36,12 +36,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 {
                     // Authenticate on a temporary owner. A superseded or cancelled attempt
                     // must never change the editor's currently attached environment.
-                    var session = _connectionManager.Connect(request.Connection, pendingOwnerUri);
+                    _connectionManager.Connect(request.Connection, pendingOwnerUri);
                     lock (_attemptLock)
                     {
                         if (!_attempts.TryGetValue(request.OwnerUri, out var current) || !ReferenceEquals(current, request))
                             return;
-                        session = _connectionManager.AssociateConnection(pendingOwnerUri, request.OwnerUri);
+                        var session = _connectionManager.AssociateConnection(pendingOwnerUri, request.OwnerUri);
                         _attempts.Remove(request.OwnerUri);
 
                         _ = _lsp.NotifyWithParameterObjectAsync("connection/complete", new ConnectionCompleteParams

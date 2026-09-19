@@ -186,7 +186,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     return LikeExpression(column, EscapeLikePattern(filter.Value) + "%", notDefined: false);
 
                 case ResultSetFilterOperator.EndsWith:
-                    return LikeExpression(column, "%" + EscapeLikePattern(filter.Value), notDefined: true /* see note */ == false);
+                    return LikeExpression(column, "%" + EscapeLikePattern(filter.Value), notDefined: false);
 
                 case ResultSetFilterOperator.Equals:
                     return ComparisonExpression(column, value, BooleanComparisonType.Equals);
