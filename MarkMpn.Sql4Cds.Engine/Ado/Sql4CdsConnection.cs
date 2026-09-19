@@ -4,14 +4,12 @@ using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
-using System.Text;
 using Microsoft.Crm.Sdk.Messages;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using System.Threading;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
-using System.Data.SqlTypes;
 using Microsoft.ApplicationInsights;
-using System.Reflection;
+using Microsoft.ApplicationInsights.Extensibility;
+using Microsoft.ApplicationInsights.Channel;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -62,17 +60,19 @@ namespace MarkMpn.Sql4Cds.Engine
             _options = new DefaultQueryExecutionOptions(this, dataSources.First().Value, CancellationToken.None);
             _session = new SessionContext(dataSources, _options);
 
-            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
+            var aiConfig = new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
             {
-                ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6"
-            });
+                ConnectionString = "InstrumentationKey=79761278-a908-4575-afbf-2f4d82560da6",
+            };
+            aiConfig.TelemetryProcessorChainBuilder.Use(StripDeviceNameTelemetry);
+            _ai = new TelemetryClient(aiConfig);
 
-            var app = System.Reflection.Assembly.GetEntryAssembly();
+            ApplicationName = "SQL 4 CDS ADO.NET Provider";
+        }
 
-            if (app != null)
-                ApplicationName = System.IO.Path.GetFileNameWithoutExtension(app.Location);
-            else
-                ApplicationName = "SQL 4 CDS ADO.NET Provider";
+        private ITelemetryProcessor StripDeviceNameTelemetry(ITelemetryProcessor next)
+        {
+            return new StripDeviceNameTelemetryProcessor(next);
         }
 
         private static IOrganizationService Connect(string connectionString)
@@ -226,6 +226,14 @@ namespace MarkMpn.Sql4Cds.Engine
             set => _options.ColumnOrdering = value;
         }
 
+        /// <summary>
+        /// Indicates if error telemetry should include full details including stack trace and SQL statement
+        /// </summary>
+        /// <remarks>
+        /// When this is <c>false</c>, only the fact that an error occurred and the associated SQL error number will be included.
+        /// </remarks>
+        public bool IncludeDetailedErrorTelemetry { get; set; }
+
         internal TelemetryClient TelemetryClient => _ai;
 
         /// <summary>
@@ -368,6 +376,23 @@ namespace MarkMpn.Sql4Cds.Engine
         public new Sql4CdsCommand CreateCommand()
         {
             return new Sql4CdsCommand(this);
+        }
+
+        private class StripDeviceNameTelemetryProcessor : ITelemetryProcessor
+        {
+            private readonly ITelemetryProcessor _next;
+
+            public StripDeviceNameTelemetryProcessor(ITelemetryProcessor next)
+            {
+                _next = next;
+            }
+
+            public void Process(ITelemetry item)
+            {
+                item.Context.Cloud.RoleInstance = null;
+                item.Context.Cloud.RoleName = null;
+                _next.Process(item);
+            }
         }
     }
 }

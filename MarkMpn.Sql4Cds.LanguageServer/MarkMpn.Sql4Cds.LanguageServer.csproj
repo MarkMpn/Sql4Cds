@@ -9,7 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Data8.PowerPlatform.Dataverse.Client" Version="2.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.2.2" />
+    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.2.27" />
     <PackageReference Include="Microsoft.VisualStudio.LanguageServer.Protocol" Version="17.2.8" />
     <PackageReference Include="StreamJsonRpc" Version="2.20.20" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.3.0" />
