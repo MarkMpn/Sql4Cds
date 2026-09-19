@@ -45,5 +45,5 @@ export class StructuredValueViewer implements vscode.Disposable, vscode.TextDocu
 }
 
 function sanitizeTitle(title: string): string {
-  return title.trim().replace(/[\\/:*?"<>|]/g, "_") || "Result value";
+  return title.trim().replaceAll(/[\\/:*?"<>|]/g, "_") || "Result value";
 }

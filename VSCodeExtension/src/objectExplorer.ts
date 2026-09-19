@@ -206,14 +206,14 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
 
 export function selectTopQuery(metadata: ObjectMetadata | undefined): string | undefined {
   if (!metadata?.name) { return undefined; }
-  const quote = (value: string) => `[${value.replace(/]/g, ']]')}]`;
+  const quote = (value: string) => `[${value.replaceAll(/]/g, ']]')}]`;
   return `SELECT TOP 1000 *\nFROM ${quote(metadata.schema || "dbo")}.${quote(metadata.name)};`;
 }
 
 export function sqlIdentifier(metadata: ObjectMetadata | undefined, fallback?: string): string | undefined {
   const name = metadata?.name ?? fallback;
   if (!name) { return undefined; }
-  const quote = (value: string) => `[${value.replace(/]/g, "]]")}]`;
+  const quote = (value: string) => `[${value.replaceAll(/]/g, "]]")}]`;
   if (metadata?.metadataTypeName?.toLowerCase() === "column" || (!metadata?.schema && name.includes("."))) {
     return quote(name.split(".").pop()!);
   }

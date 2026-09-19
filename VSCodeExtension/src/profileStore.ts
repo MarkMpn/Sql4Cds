@@ -337,7 +337,7 @@ export function validateProfile(profile: ConnectionProfile): string | undefined 
 
 function validateConnectionString(value: string): string | undefined {
   if (!value.trim()) { return "Enter the Dataverse connection string."; }
-  const url = /(?:^|;)\s*(?:Service\s*Uri|ServiceUri|Url|Server)\s*=\s*([^;]+)/i.exec(value)?.[1]?.trim().replace(/^["']|["']$/g, "");
+  const url = /(?:^|;)\s*(?:Service\s*Uri|ServiceUri|Url|Server)\s*=\s*([^;]+)/i.exec(value)?.[1]?.trim().replaceAll(/^["']|["']$/g, "");
   if (!url) { return "The connection string must include Url, ServiceUri, or Server."; }
   return validateDataverseUrl(url);
 }

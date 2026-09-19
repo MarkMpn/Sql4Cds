@@ -100,7 +100,7 @@ function serializeDelimited(table: ClipboardTable, delimiter: string, includeHea
 }
 
 function quoteDelimited(value: string, delimiter: string): string {
-  return value.includes(delimiter) || /[\r\n"]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  return value.includes(delimiter) || /[\r\n"]/.test(value) ? `"${value.replaceAll(/"/g, '""')}"` : value;
 }
 
 function serializeJson(table: ClipboardTable): string {
@@ -131,14 +131,14 @@ function serializeXml(table: ClipboardTable): string {
 }
 
 function xmlName(value: string): string {
-  let name = value.replace(/[^A-Za-z0-9_.-]/g, "_");
+  let name = value.replaceAll(/[^A-Za-z0-9_.-]/g, "_");
   if (!/^[A-Za-z_]/.test(name)) { name = `_${name}`; }
   return name || "Column";
 }
 
 function escapeXml(value: string): string {
-  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "\uFFFD")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  return value.replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "\uFFFD")
+    .replaceAll(/&/g, "&amp;").replaceAll(/</g, "&lt;").replaceAll(/>/g, "&gt;").replaceAll(/"/g, "&quot;").replaceAll(/'/g, "&apos;");
 }
 
 function serializeMarkdown(table: ClipboardTable, includeHeaders: boolean): string {
@@ -151,7 +151,7 @@ function serializeMarkdown(table: ClipboardTable, includeHeaders: boolean): stri
 }
 
 function markdownRow(row: readonly ClipboardValue[]): string {
-  return `| ${row.map(value => displayValue(value).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>")).join(" | ")} |`;
+  return `| ${row.map(value => displayValue(value).replaceAll(/\\/g, "\\\\").replaceAll(/\|/g, "\\|").replaceAll(/\r?\n/g, "<br>")).join(" | ")} |`;
 }
 
 function serializeSqlIn(table: ClipboardTable): string {
@@ -165,7 +165,7 @@ function sqlLiteral(value: ClipboardValue): string {
   if (typeof value === "bigint") { return value.toString(); }
   if (typeof value === "boolean") { return value ? "1" : "0"; }
   const text = value instanceof Date ? value.toISOString() : displayValue(value);
-  return `N'${text.replace(/'/g, "''")}'`;
+  return `N'${text.replaceAll(/'/g, "''")}'`;
 }
 
 function displayValue(value: ClipboardValue): string {
