@@ -416,6 +416,11 @@
           "default": null,
           "description": "Optional development override containing the language-service DLL. Reload VS Code after changing this setting.",
           "scope": "machine"
+        },
+        "SQL4CDS.useSchemaColumnOrdering": {
+          "type": "boolean",
+          "default": false,
+          "description": "Order columns in result sets according to the schema rather than alphabetically."
         }
       }
     }

@@ -270,6 +270,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 session.Connection.UseLocalTimeZone = Sql4CdsSettings.Instance.UseLocalTimeZone;
                 session.Connection.BypassCustomPlugins = Sql4CdsSettings.Instance.BypassCustomPlugins;
                 session.Connection.QuotedIdentifiers = Sql4CdsSettings.Instance.QuotedIdentifiers;
+                session.Connection.ColumnOrdering = Sql4CdsSettings.Instance.UseSchemaColumnOrdering ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
 
                 using (var cmd = session.Connection.CreateCommand())
                 {
