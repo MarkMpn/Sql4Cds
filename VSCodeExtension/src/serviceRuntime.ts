@@ -10,7 +10,7 @@ export const requiredDotnetMajor = 10;
 export function redactSensitiveText(value: string): string {
   return value
     .replaceAll(/((?:password|pwd|client\s*secret|access\s*token|refresh\s*token|connection\s*string)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^;\s,]+)/gi, "$1[redacted]")
-    .replaceAll(/(\bBearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]")
+    .replaceAll(/(\bBearer\s+)[A-Z0-9._~+/=-]+/gi, "$1[redacted]")
     .replaceAll(/(https?:\/\/[^/:@\s]+:)[^@/\s]+@/gi, "$1[redacted]@");
 }
 
