@@ -100,7 +100,7 @@ function serializeDelimited(table: ClipboardTable, delimiter: string, includeHea
 }
 
 function quoteDelimited(value: string, delimiter: string): string {
-  return value.includes(delimiter) || /[\r\n"]/.test(value) ? `"${value.replaceAll(/"/g, '""')}"` : value;
+  return value.includes(delimiter) || /[\r\n"]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 function serializeJson(table: ClipboardTable): string {
@@ -138,7 +138,7 @@ function xmlName(value: string): string {
 
 function escapeXml(value: string): string {
   return value.replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "\uFFFD")
-    .replaceAll(/&/g, "&amp;").replaceAll(/</g, "&lt;").replaceAll(/>/g, "&gt;").replaceAll(/"/g, "&quot;").replaceAll(/'/g, "&apos;");
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 }
 
 function serializeMarkdown(table: ClipboardTable, includeHeaders: boolean): string {
@@ -151,7 +151,7 @@ function serializeMarkdown(table: ClipboardTable, includeHeaders: boolean): stri
 }
 
 function markdownRow(row: readonly ClipboardValue[]): string {
-  return `| ${row.map(value => displayValue(value).replaceAll(/\\/g, String.raw`\\`).replaceAll(/\|/g, String.raw`\|`).replaceAll(/\r?\n/g, "<br>")).join(" | ")} |`;
+  return `| ${row.map(value => displayValue(value).replaceAll("\\", String.raw`\\`).replaceAll("|", String.raw`\|`).replaceAll(/\r?\n/g, "<br>")).join(" | ")} |`;
 }
 
 function serializeSqlIn(table: ClipboardTable): string {
@@ -165,7 +165,7 @@ function sqlLiteral(value: ClipboardValue): string {
   if (typeof value === "bigint") { return value.toString(); }
   if (typeof value === "boolean") { return value ? "1" : "0"; }
   const text = value instanceof Date ? value.toISOString() : displayValue(value);
-  return `N'${text.replaceAll(/'/g, "''")}'`;
+  return `N'${text.replaceAll("'", "''")}'`;
 }
 
 function displayValue(value: ClipboardValue): string {

@@ -744,7 +744,7 @@ class CopyCancelledError extends Error {}
 function affectedRowCount(message: string): number | undefined {
   const match = message.match(/^\(?\s*([\d,]+)\s+.+?\s+(?:created|inserted|updated|deleted|affected)\)?\s*$/i);
   if (!match) { return undefined; }
-  const value = Number(match[1].replaceAll(/,/g, ""));
+  const value = Number(match[1].replaceAll(",", ""));
   return Number.isSafeInteger(value) ? value : undefined;
 }
 
