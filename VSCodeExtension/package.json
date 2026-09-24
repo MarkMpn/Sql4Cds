@@ -343,7 +343,7 @@
         },
         "SQL4CDS.maxDegreeOfParallelism": {
           "type": "integer",
-          "default": 10,
+          "default": 0,
           "minimum": 0,
           "description": "Maximum parallel requests to Dataverse (0 lets the engine choose)."
         },
