@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (server.IndexOf('\\') != -1 || !server.EndsWith(".dynamics.com", StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            if (parts.Length == 2 && parts[1].Trim() != "5558")
+            if (parts.Length == 2 && parts[1].Trim() != "1433" && parts[1].Trim() != "5558")
                 return false;
 
             host = server.ToLowerInvariant();
