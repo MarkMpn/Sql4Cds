@@ -4,6 +4,7 @@ By [Mark Carrington](https://markcarrington.dev/sql-4-cds/), supported by [Data8
 
 SQL 4 CDS provides an [engine](https://www.nuget.org/packages/MarkMpn.Sql4Cds.Engine/),
 [XrmToolBox tool](https://www.xrmtoolbox.com/plugins/MarkMpn.SQL4CDS/),
+[Visual Studio Code extension](VSCodeExtension/README.md),
 [Azure Data Studio plugin](https://github.com/microsoft/azuredatastudio/wiki/List-of-Extensions)
 and [SSMS plugin](https://markcarrington.dev/sql-4-cds/sql-4-cds-ssms-edition/)
 for using standard SQL syntax to query data stored in Microsoft Dataverse / Dynamics 365.

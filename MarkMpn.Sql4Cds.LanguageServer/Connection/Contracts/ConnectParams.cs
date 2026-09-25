@@ -10,6 +10,7 @@
         /// or a virtual file representing an object in a database.         
         /// </summary>
         public string OwnerUri { get; set; }
+        public string RequestId { get; set; }
 
         /// <summary>
         /// Contains the required parameters to initialize a connection to a database.

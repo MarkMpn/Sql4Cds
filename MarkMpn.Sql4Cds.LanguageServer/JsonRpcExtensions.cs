@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 
         public static Task NotifyAsync<TIn>(this JsonRpc lsp, LspNotification<TIn> notification, TIn param)
         {
-            return lsp.NotifyAsync(notification.Name, param);
+            return lsp.NotifyWithParameterObjectAsync(notification.Name, param);
         }
     }
 }

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQL 4 CDS",
+  "scopeName": "source.sql4cds",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" }
+  ],
+  "repository": {
+    "comments": { "patterns": [
+      { "name": "comment.line.double-dash.sql", "begin": "--", "end": "$" },
+      { "name": "comment.block.sql", "begin": "/\\*", "end": "\\*/" }
+    ] },
+    "strings": { "patterns": [
+      { "name": "string.quoted.single.sql", "begin": "'", "end": "'", "patterns": [{ "match": "''", "name": "constant.character.escape.sql" }] },
+      { "name": "entity.name.sql", "begin": "\\[", "end": "\\]" }
+    ] },
+    "numbers": { "patterns": [{ "name": "constant.numeric.sql", "match": "\\b\\d+(?:\\.\\d+)?\\b" }] },
+    "keywords": { "patterns": [{
+      "name": "keyword.control.sql",
+      "match": "(?i)\\b(select|from|where|join|inner|left|right|full|on|group|by|order|having|insert|into|values|update|set|delete|create|alter|drop|exec|execute|declare|begin|end|as|and|or|not|null|is|in|exists|case|when|then|else|distinct|top|union|all|with|offset|fetch)\\b"
+    }] }
+  }
+}

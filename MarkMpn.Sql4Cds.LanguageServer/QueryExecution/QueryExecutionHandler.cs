@@ -270,6 +270,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 session.Connection.UseLocalTimeZone = Sql4CdsSettings.Instance.UseLocalTimeZone;
                 session.Connection.BypassCustomPlugins = Sql4CdsSettings.Instance.BypassCustomPlugins;
                 session.Connection.QuotedIdentifiers = Sql4CdsSettings.Instance.QuotedIdentifiers;
+                session.Connection.ColumnOrdering = Sql4CdsSettings.Instance.UseSchemaColumnOrdering ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
 
                 using (var cmd = session.Connection.CreateCommand())
                 {
@@ -349,7 +350,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 var schemaTable = reader.GetSchemaTable();
 
                                 for (var i = 0; i < reader.FieldCount; i++)
-                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(schemaTable.Rows[i]["ColumnName"] as string, (string)schemaTable.Rows[i]["DataTypeName"], (short?)schemaTable.Rows[i]["NumericScale"]);
+                                    resultSet.ColumnInfo[i] = new DbColumnWrapper(
+                                        schemaTable.Rows[i]["ColumnName"] as string,
+                                        (string)schemaTable.Rows[i]["DataTypeName"],
+                                        (short?)schemaTable.Rows[i]["NumericScale"],
+                                        reader.GetProviderSpecificFieldType(i));
 
                                 resultSetInProgress = resultSet;
                                 resultSets.Add(resultSet);
@@ -365,6 +370,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     var row = new object[reader.FieldCount];
                                     reader.GetValues(row);
                                     resultSet.Values.Add(row);
+
+                                    var providerSpecificRow = new object[reader.FieldCount];
+                                    reader.GetProviderSpecificValues(providerSpecificRow);
+                                    resultSet.ProviderSpecificValues.Add(providerSpecificRow);
+
                                     resultSet.RowCount++;
                                 }
 
@@ -1005,6 +1015,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     ResultSubset = new ResultSetSubset
                     {
                         RowCount = 1,
+                        TotalRowCount = 1,
+                        ViewVersion = request.ViewVersion,
                         Rows = new[]
                         {
                             new[]
@@ -1022,22 +1034,48 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 };
             }
 
+            var hasTransform = !String.IsNullOrWhiteSpace(request.SearchText) ||
+                request.Filters?.Length > 0 ||
+                request.Sort != null;
+
+            var session = _connectionManager.GetConnection(request.OwnerUri);
+
+            // Preserve the inexpensive Skip/Take path for ordinary paging. Transformations need
+            // a snapshot so filtering, sorting and pagination all observe the same row set.
+            IReadOnlyList<object[]> transformedRows = hasTransform
+                ? ResultSetViewTransformer.Transform(
+                    resultSet.Values.ToArray(),
+                    resultSet.ProviderSpecificValues.ToArray(),
+                    resultSet.ColumnInfo,
+                    request,
+                    session.Connection.Session,
+                    session.Connection.Options,
+                    (value, col) => ValueFormatter.Format(
+                        value,
+                        col.DataTypeName,
+                        col.NumericScale.GetValueOrDefault(),
+                        Sql4CdsSettings.Instance.LocalFormatDates).DisplayValue)
+                : resultSet.Values;
+            var rows = transformedRows
+                .Skip((int)Math.Min(Math.Max(0, request.RowsStartIndex), Int32.MaxValue))
+                .Take(Math.Max(0, request.RowsCount))
+                .Select(row => row
+                    .Select((value, colIndex) =>
+                    {
+                        var col = resultSet.ColumnInfo[colIndex];
+                        return ValueFormatter.Format(value, col.DataTypeName, col.NumericScale.GetValueOrDefault(), Sql4CdsSettings.Instance.LocalFormatDates);
+                    })
+                    .ToArray())
+                .ToArray();
+
             return new SubsetResult
             {
                 ResultSubset = new ResultSetSubset
                 {
-                    RowCount = 1,
-                    Rows = resultSet.Values
-                        .Skip((int)request.RowsStartIndex)
-                        .Take(request.RowsCount)
-                        .Select(row => row
-                            .Select((value, colIndex) =>
-                            {
-                                var col = resultSet.ColumnInfo[colIndex];
-                                return ValueFormatter.Format(value, col.DataTypeName, col.NumericScale.GetValueOrDefault(), Sql4CdsSettings.Instance.LocalFormatDates);
-                            })
-                            .ToArray())
-                        .ToArray()
+                    RowCount = rows.Length,
+                    TotalRowCount = transformedRows.Count,
+                    ViewVersion = request.ViewVersion,
+                    Rows = rows
                 }
             };
         }
