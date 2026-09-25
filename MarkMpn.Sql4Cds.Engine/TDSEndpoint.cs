@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var host = svc.CrmConnectOrgUriActual.Host;
 #endif
-            if (!host.EndsWith(".dynamics.com"))
+            if (!TryGetDataverseHost(host, out host))
                 return false;
 
             if (_cache.TryGetValue(host, out var enabled))
@@ -57,6 +57,43 @@ namespace MarkMpn.Sql4Cds.Engine
             _cache[host] = enabled;
 
             return enabled;
+        }
+
+        /// <summary>
+        /// Extracts the Dataverse host name from a SQL Server data source.
+        /// </summary>
+        /// <param name="dataSource">The SQL Server data source</param>
+        /// <param name="host">The normalized Dataverse host name</param>
+        /// <returns><c>true</c> if the data source identifies a Dataverse TDS endpoint; otherwise, <c>false</c></returns>
+        public static bool TryGetDataverseHost(string dataSource, out string host)
+        {
+            host = null;
+
+            if (String.IsNullOrWhiteSpace(dataSource))
+                return false;
+
+            var parts = dataSource.Split(',');
+
+            if (parts.Length > 2)
+                return false;
+
+            var server = parts[0].Trim();
+
+            if (server.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase))
+                server = server.Substring(4).Trim();
+            else if (server.IndexOf(':') != -1)
+                return false;
+
+            server = server.TrimEnd('.');
+
+            if (server.IndexOf('\\') != -1 || !server.EndsWith(".dynamics.com", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (parts.Length == 2 && parts[1].Trim() != "1433" && parts[1].Trim() != "5558")
+                return false;
+
+            host = server.ToLowerInvariant();
+            return true;
         }
 
 #if NETCOREAPP
