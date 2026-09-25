@@ -87,13 +87,6 @@ steps:
     targetPath: '$(Build.ArtifactStagingDirectory)'
     artifact: 'NuGetPackages'
     publishLocation: 'pipeline'
-
-- task: PublishPipelineArtifact@1
-  displayName: Publish SSMS 21 installer to pipeline
-  inputs:
-    targetPath: 'MarkMpn.Sql4Cds.SSMS.21\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.21.vsix'
-    artifact: 'SSMS21Installer'
-    publishLocation: 'pipeline'
     
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS 22 installer to pipeline

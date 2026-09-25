@@ -998,7 +998,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // or for troublesome virtual entity providers, we might get values for attributes we're not expecting.
             foreach (var attribute in entity.Attributes.ToList())
             {
-                var entityName = entity.LogicalName;
+                var entityName = entity.LogicalName ?? Entity.name;
                 var attributeName = attribute.Key;
 
                 if (attribute.Value is AliasedValue alias)

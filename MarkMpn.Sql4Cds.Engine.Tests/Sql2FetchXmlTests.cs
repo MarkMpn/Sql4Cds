@@ -1812,7 +1812,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = planBuilder.Build(query, null, out _);
 
             var selectNode = (SelectNode)queries[0];
-            var computeScalarNode = (ComputeScalarNode)selectNode.Source;
+            var tryCastNode  = (TryCatchNode)selectNode.Source;
+            var computeScalarNode = (ComputeScalarNode)tryCastNode.TrySource;
             var count = (RetrieveTotalRecordCountNode)computeScalarNode.Source;
         }
 

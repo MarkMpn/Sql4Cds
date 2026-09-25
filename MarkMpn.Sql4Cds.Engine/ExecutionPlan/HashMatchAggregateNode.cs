@@ -104,28 +104,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var count = new RetrieveTotalRecordCountNode { DataSource = fetch.DataSource, EntityName = fetch.Entity.name };
                 var countName = count.GetSchema(context).Schema.Single().Key;
 
-                if (countName == Aggregates.Single().Key)
-                    return count;
-
+                // RetrieveTotalRecordCount returns a bigint, count(*) should return an int, so apply a cast
                 var rename = new ComputeScalarNode
                 {
                     Source = count,
                     Columns =
                     {
-                        [Aggregates.Single().Key] = new ColumnReferenceExpression
+                        [Aggregates.Single().Key] = new CastCall
                         {
-                            MultiPartIdentifier = new MultiPartIdentifier
+                            Parameter = new ColumnReferenceExpression
                             {
-                                Identifiers = { new Identifier { Value = countName } }
-                            }
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers = { new Identifier { Value = countName } }
+                                }
+                            },
+                            DataType = DataTypeHelpers.Int
                         }
                     }
                 };
                 count.Parent = rename;
 
-                return rename;
+                // RetrieveTotalRecordCount can fail with some entities, so wrap it in a try/catch and fall back to the normal aggregate
+                var tryCatch = new TryCatchNode
+                {
+                    TrySource = rename,
+                    CatchSource = FoldInner(context, hints)
+                };
+
+                tryCatch.TrySource.Parent = tryCatch;
+                tryCatch.CatchSource.Parent = tryCatch;
+
+                return tryCatch;
             }
 
+            return FoldInner(context, hints);
+        }
+
+        private IDataExecutionPlanNodeInternal FoldInner(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
             // If we're doing a GROUP BY without any aggregates, this is equivalent to a DISTINCT
             if (Aggregates.Count == 0)
             {
