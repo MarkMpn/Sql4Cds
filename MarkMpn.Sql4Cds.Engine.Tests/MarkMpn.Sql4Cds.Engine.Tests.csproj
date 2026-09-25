@@ -117,6 +117,7 @@
     <Compile Include="StubTableSizeCache.cs" />
     <Compile Include="WindowFunctionTests.cs" />
     <Compile Include="TempTableTests.cs" />
+    <Compile Include="TDSEndpointTests.cs" />
     <Compile Include="XmlTests.cs" />
   </ItemGroup>
   <ItemGroup>

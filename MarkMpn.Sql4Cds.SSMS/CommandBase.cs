@@ -119,18 +119,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (conStr == null)
                 return false;
 
-            var serverParts = conStr.DataSource.Split(',');
-
-            if (serverParts.Length > 2)
-                return false;
-
-            if (!serverParts[0].EndsWith(".dynamics.com"))
-                return false;
-
-            if (serverParts.Length > 1 && serverParts[1] != "5558")
-                return false;
-
-            return true;
+            return TDSEndpoint.TryGetDataverseHost(conStr.DataSource, out _);
         }
 
         /// <summary>
@@ -142,7 +131,8 @@ namespace MarkMpn.Sql4Cds.SSMS
             ThreadHelper.ThrowIfNotOnUIThread();
 
             var conStr = GetConnectionInfo(true);
-            var name = conStr.DataSource.Split('.')[0];
+            var server = GetDataverseHost(conStr);
+            var name = server.Split('.')[0];
             var con = ConnectCDS(conStr);
             var metadata = GetMetadataCache(conStr);
             var tableSizeCache = GetTableSizeCache(conStr, metadata);
@@ -180,7 +170,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (conStr == null)
                 return null;
 
-            var server = conStr.DataSource.Split(',')[0];
+            var server = GetDataverseHost(conStr);
 
             if (_clientCache.TryGetValue(server, out var con))
                 return con.Clone();
@@ -229,7 +219,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (conStr == null)
                 return null;
 
-            var server = conStr.DataSource.Split(',')[0];
+            var server = GetDataverseHost(conStr);
 
             if (_metadataCache.TryGetValue(server, out var metadata))
                 return metadata;
@@ -245,7 +235,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (conStr == null)
                 return null;
 
-            var server = conStr.DataSource.Split(',')[0];
+            var server = GetDataverseHost(conStr);
 
             if (_tableSizeCache.TryGetValue(server, out var tableSizeCache))
                 return tableSizeCache;
@@ -261,7 +251,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (conStr == null)
                 return null;
 
-            var server = conStr.DataSource.Split(',')[0];
+            var server = GetDataverseHost(conStr);
 
             if (_messageCache.TryGetValue(server, out var messageCache))
                 return messageCache;
@@ -270,6 +260,14 @@ namespace MarkMpn.Sql4Cds.SSMS
             _messageCache[server] = messageCache;
 
             return messageCache;
+        }
+
+        private static string GetDataverseHost(SqlConnectionStringBuilder conStr)
+        {
+            if (!TDSEndpoint.TryGetDataverseHost(conStr.DataSource, out var server))
+                throw new ArgumentOutOfRangeException(nameof(conStr), $"The data source '{conStr.DataSource}' is not a Dataverse TDS endpoint");
+
+            return server;
         }
     }
 }
