@@ -94,7 +94,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                 var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
 
                 var constr = GetConnectionInfo(true);
-                var server = constr.DataSource.Split(',')[0];
+                TDSEndpoint.TryGetDataverseHost(constr.DataSource, out var server);
 
                 _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "M", ["Source"] = "SSMS" });
 
