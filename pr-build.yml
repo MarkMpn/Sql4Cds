@@ -58,16 +58,13 @@ steps:
       !**\obj\**
   
 - task: NodeTool@0
-  displayName: Install Node.js
+  displayName: Install Node.js for VS Code extension
   inputs:
-    versionSpec: '20.x'
+    versionSpec: '24.x'
 
 - script: |
-    call npm --no-git-tag-version version $(GitVersion.SemVer)
-    call npm i -g vsce
-    call git config --global url."https://github".insteadOf ssh://git@github
-    call git config --global url."https://github.com/".insteadOf git@github.com:
-    call yarn install
-    call gulp build
-  displayName: Build ADS extension
-  workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
+    call npm ci --ignore-scripts
+    call npm --no-git-tag-version --allow-same-version version $(GitVersion.SemVer)
+    call npm run package
+  displayName: Build VS Code extension
+  workingDirectory: '$(Build.SourcesDirectory)\VSCodeExtension'

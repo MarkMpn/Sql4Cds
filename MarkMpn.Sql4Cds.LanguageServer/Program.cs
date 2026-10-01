@@ -9,6 +9,7 @@ using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Serialization;
 using StreamJsonRpc;
+using System.Diagnostics;
 
 namespace MarkMpn.Sql4Cds.LanguageServer
 {
@@ -33,6 +34,20 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             var messageHandler = new HeaderDelimitedMessageHandler(Console.OpenStandardOutput(), Console.OpenStandardInput(), formatter);
             var rpc = new JsonRpc(messageHandler);
             
+            rpc.ExceptionStrategy = ExceptionProcessing.ISerializable; // richer error detail to client
+
+            var enableLogging = Array.IndexOf(args, "--enable-logging") != -1;
+
+            if (enableLogging)
+            {
+                Directory.CreateDirectory(logDir);
+                var listener = new TextWriterTraceListener(Path.Join(logDir, $"sql4cds-lsp-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
+                Trace.AutoFlush = true;
+
+                rpc.TraceSource = new TraceSource("SQL4CDS.LSP", SourceLevels.Verbose);
+                rpc.TraceSource.Listeners.Add(listener);
+            }
+
             var serviceCollection = new ServiceCollection();
             serviceCollection.AddSingleton(rpc);
             serviceCollection.AddSingleton<ConnectionManager>();
