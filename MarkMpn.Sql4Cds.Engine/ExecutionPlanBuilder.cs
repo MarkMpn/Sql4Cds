@@ -97,29 +97,35 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (hintValidator.TdsCompatible && TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource))
             {
-                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource))
+                var tdsEndpointPossibleCompatibilityVisitor = new TDSEndpointPossibleCompatibilityVisitor();
+                fragment.Accept(tdsEndpointPossibleCompatibilityVisitor);
+
+                if (tdsEndpointPossibleCompatibilityVisitor.IsCompatible && !tdsEndpointPossibleCompatibilityVisitor.RequiresCteRewrite)
                 {
-                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata);
-                    fragment.Accept(tdsEndpointCompatibilityVisitor);
-
-                    if (tdsEndpointCompatibilityVisitor.IsCompatible && !tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
+                    using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource))
                     {
-                        useTDSEndpointDirectly = true;
-                        var sqlNode = new SqlNode
-                        {
-                            DataSource = Options.PrimaryDataSource,
-                            Sql = sql,
-                            Index = 0,
-                            Length = sql.Length
-                        };
+                        var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata);
+                        fragment.Accept(tdsEndpointCompatibilityVisitor);
 
-                        if (parameters != null)
+                        if (tdsEndpointCompatibilityVisitor.IsCompatible && !tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
                         {
-                            foreach (var param in parameters.Keys)
-                                sqlNode.Parameters.Add(param);
+                            useTDSEndpointDirectly = true;
+                            var sqlNode = new SqlNode
+                            {
+                                DataSource = Options.PrimaryDataSource,
+                                Sql = sql,
+                                Index = 0,
+                                Length = sql.Length
+                            };
+
+                            if (parameters != null)
+                            {
+                                foreach (var param in parameters.Keys)
+                                    sqlNode.Parameters.Add(param);
+                            }
+
+                            return new IRootExecutionPlanNode[] { sqlNode };
                         }
-
-                        return new IRootExecutionPlanNode[] { sqlNode };
                     }
                 }
             }
@@ -2700,35 +2706,41 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (TDSEndpoint.CanUseTDSEndpoint(Options, PrimaryDataSource))
             {
-                using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource))
+                var tdsEndpointPossibleCompatibilityVisitor = new TDSEndpointPossibleCompatibilityVisitor(false, parameterTypes: _nodeContext.ParameterTypes);
+                select.Accept(tdsEndpointPossibleCompatibilityVisitor);
+
+                if (tdsEndpointPossibleCompatibilityVisitor.IsCompatible)
                 {
-                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata, false, parameterTypes: _nodeContext.ParameterTypes);
-                    select.Accept(tdsEndpointCompatibilityVisitor);
-
-                    // Remove any custom optimizer hints
-                    var hintCompatibilityVisitor = new OptimizerHintValidatingVisitor(true);
-                    select.Accept(hintCompatibilityVisitor);
-
-                    if (tdsEndpointCompatibilityVisitor.IsCompatible && hintCompatibilityVisitor.TdsCompatible)
+                    using (var con = PrimaryDataSource.Connection == null ? null : TDSEndpoint.Connect(PrimaryDataSource))
                     {
-                        if (tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
-                            select.Accept(new ReplaceCtesWithSubqueriesVisitor());
+                        var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, PrimaryDataSource.Metadata, false, parameterTypes: _nodeContext.ParameterTypes);
+                        select.Accept(tdsEndpointCompatibilityVisitor);
 
-                        select.ScriptTokenStream = null;
-                        var sql = new SqlNode
+                        // Remove any custom optimizer hints
+                        var hintCompatibilityVisitor = new OptimizerHintValidatingVisitor(true);
+                        select.Accept(hintCompatibilityVisitor);
+
+                        if (tdsEndpointCompatibilityVisitor.IsCompatible && hintCompatibilityVisitor.TdsCompatible)
                         {
-                            DataSource = Options.PrimaryDataSource,
-                            Sql = select.ToSql(),
-                            SelectStatement = select
-                        };
+                            if (tdsEndpointCompatibilityVisitor.RequiresCteRewrite)
+                                select.Accept(new ReplaceCtesWithSubqueriesVisitor());
 
-                        var variables = new VariableCollectingVisitor();
-                        select.Accept(variables);
+                            select.ScriptTokenStream = null;
+                            var sql = new SqlNode
+                            {
+                                DataSource = Options.PrimaryDataSource,
+                                Sql = select.ToSql(),
+                                SelectStatement = select
+                            };
 
-                        foreach (var variable in variables.Variables)
-                            sql.Parameters.Add(variable.Name);
+                            var variables = new VariableCollectingVisitor();
+                            select.Accept(variables);
 
-                        return sql;
+                            foreach (var variable in variables.Variables)
+                                sql.Parameters.Add(variable.Name);
+
+                            return sql;
+                        }
                     }
                 }
             }
