@@ -4,9 +4,9 @@ import { buildDataverseRecordUrl, extractDataverseRecordReference } from "../src
 
 test("extractDataverseRecordReference returns normalized values", () => {
   const reference = extractDataverseRecordReference({
-    DataSource: " Sales ",
-    LogicalName: " account ",
-    Id: " 11111111-1111-1111-1111-111111111111 "
+    dataSource: " Sales ",
+    logicalName: " account ",
+    id: " 11111111-1111-1111-1111-111111111111 "
   });
 
   assert.deepEqual(reference, {
@@ -19,8 +19,8 @@ test("extractDataverseRecordReference returns normalized values", () => {
 test("extractDataverseRecordReference rejects invalid shapes", () => {
   assert.equal(extractDataverseRecordReference(null), undefined);
   assert.equal(extractDataverseRecordReference({}), undefined);
-  assert.equal(extractDataverseRecordReference({ DataSource: "Sales", LogicalName: "account" }), undefined);
-  assert.equal(extractDataverseRecordReference({ DataSource: "Sales", LogicalName: "account", Id: 123 }), undefined);
+  assert.equal(extractDataverseRecordReference({ dataSource: "Sales", logicalName: "account" }), undefined);
+  assert.equal(extractDataverseRecordReference({ dataSource: "Sales", logicalName: "account", id: 123 }), undefined);
 });
 
 test("buildDataverseRecordUrl appends entity record query", () => {
