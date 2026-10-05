@@ -1,0 +1,36 @@
+{
+  "Select Dataverse rows": {
+    "prefix": "select",
+    "description": "Select rows from a Dataverse table",
+    "body": [
+      "SELECT TOP ${1:100} ${2:*}",
+      "FROM [dbo].[${3:account}]",
+      "WHERE ${4:1 = 1};"
+    ]
+  },
+  "Insert Dataverse row": {
+    "prefix": "insert",
+    "description": "Insert a Dataverse row",
+    "body": [
+      "INSERT INTO [dbo].[${1:account}] (${2:name})",
+      "VALUES (${3:'Example'});"
+    ]
+  },
+  "Update Dataverse rows": {
+    "prefix": "update",
+    "description": "Update Dataverse rows with an explicit filter",
+    "body": [
+      "UPDATE [dbo].[${1:account}]",
+      "SET ${2:name} = ${3:'Example'}",
+      "WHERE ${4:accountid = @accountid};"
+    ]
+  },
+  "Delete Dataverse rows": {
+    "prefix": "delete",
+    "description": "Delete Dataverse rows with an explicit filter",
+    "body": [
+      "DELETE FROM [dbo].[${1:account}]",
+      "WHERE ${2:accountid = @accountid};"
+    ]
+  }
+}

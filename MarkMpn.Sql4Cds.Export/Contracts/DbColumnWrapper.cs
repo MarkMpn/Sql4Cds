@@ -10,6 +10,7 @@ using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Diagnostics;
+using System.Text.Json.Serialization;
 using MarkMpn.Sql4Cds.Export.Utility;
 
 namespace MarkMpn.Sql4Cds.Export.Contracts
@@ -122,6 +123,11 @@ namespace MarkMpn.Sql4Cds.Export.Contracts
         }
 
         public DbColumnWrapper(string name, string dataTypeName, int? numericScale)
+            : this(name, dataTypeName, numericScale, null)
+        {
+        }
+
+        public DbColumnWrapper(string name, string dataTypeName, int? numericScale, Type providerSpecificDataType)
         {
             DataTypeName = dataTypeName.ToLowerInvariant();
             DetermineSqlDbType();
@@ -132,6 +138,7 @@ namespace MarkMpn.Sql4Cds.Export.Contracts
             }
             AddNameAndDataFields(name);
             NumericScale = numericScale;
+            ProviderSpecificDataType = providerSpecificDataType;
         }
 
         /// <summary>
@@ -182,6 +189,13 @@ namespace MarkMpn.Sql4Cds.Export.Contracts
         /// Whther this is a HierarchyId column
         /// </summary>
         public bool IsHierarchyId { get; set; }
+
+        /// <summary>
+        /// The provider-specific (SQL) type of the column, as reported by
+        /// <see cref="System.Data.Common.DbDataReader.GetProviderSpecificFieldType"/>.
+        /// </summary>
+        [JsonIgnore]
+        public Type ProviderSpecificDataType { get; private set; }
 
         /// <summary>
         /// Whether or not the column is an XML Reader type.
