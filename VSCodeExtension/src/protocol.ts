@@ -208,6 +208,7 @@ export const Methods = {
   objectExplorerExpanded: "objectexplorer/expandCompleted",
   closeObjectExplorerSession: "objectexplorer/closesession",
   executeString: "query/executeString",
+  executeDocumentSelection: "query/executeDocumentSelection",
   cancelQuery: "query/cancel",
   disposeQuery: "query/dispose",
   queryMessage: "query/message",

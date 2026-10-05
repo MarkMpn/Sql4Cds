@@ -131,6 +131,12 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     if (!this.connections.get(uri) && !await this.connections.connectEditor(undefined, editor)) { return; }
     const selection = editor.selection;
     const query = selection.isEmpty ? editor.document.getText() : editor.document.getText(selection);
+    const querySelection = selection.isEmpty ? undefined : {
+      startLine: selection.start.line,
+      startColumn: selection.start.character,
+      endLine: selection.end.line,
+      endColumn: selection.end.character
+    };
     if (!query.trim()) {
       void vscode.window.showInformationMessage("There is no SQL to execute.");
       return;
@@ -162,9 +168,9 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       if (this.states.get(uri) !== state || editor.document.isClosed) { return; }
       this.publishState(uri);
       this.updateRunningContext();
-      await this.service.languageClient.sendRequest(Methods.executeString, {
+      await this.service.languageClient.sendRequest(Methods.executeDocumentSelection, {
         ownerUri: uri,
-        query,
+        querySelection,
         getFullColumnSchema: false,
         executionPlanOptions: undefined
       });

@@ -4,6 +4,8 @@ import { State } from "vscode-languageclient/node";
 import { DocumentConnectionManager } from "../../src/documentConnections";
 import { ObjectExplorerProvider, Sql4CdsTreeItem } from "../../src/objectExplorer";
 import { ProfileStore } from "../../src/profileStore";
+import { QueryController } from "../../src/queryController";
+import { Methods } from "../../src/protocol";
 import type { ConnectionProfile, SessionCreatedParams } from "../../src/protocol";
 import type { Sql4CdsService } from "../../src/serviceClient";
 
@@ -69,6 +71,35 @@ async function runSuite(): Promise<void> {
   assert.ok(disconnected.includes(document.uri.toString()));
   connections.dispose();
   console.log("PASS: disconnect during authentication prevents a late connection from being attached");
+
+  const queryDocument = await vscode.workspace.openTextDocument({ language: "sql4cds", content: "SELECT 1;\n    SELECT missing\nFROM account;" });
+  const queryEditor = await vscode.window.showTextDocument(queryDocument);
+  const executionCases = [
+    { selection: new vscode.Selection(0, 0, 0, 0), expected: undefined },
+    { selection: new vscode.Selection(2, 13, 1, 4), expected: { startLine: 1, startColumn: 4, endLine: 2, endColumn: 13 } }
+  ];
+  for (const executionCase of executionCases) {
+    queryEditor.selection = executionCase.selection;
+    const requests: Array<{ method: string; params: any }> = [];
+    const queryService = {
+      languageClient: {
+        onDidChangeState: stopped.event,
+        onNotification: () => new vscode.Disposable(() => {}),
+        sendRequest: async (method: string, params: any) => { requests.push({ method, params }); return {}; }
+      }
+    } as unknown as Sql4CdsService;
+    const queryConnections = { get: () => profile } as unknown as DocumentConnectionManager;
+    const controller = new QueryController(queryService, queryConnections);
+    try {
+      await controller.execute();
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].method, Methods.executeDocumentSelection);
+      assert.equal(requests[0].params.ownerUri, queryDocument.uri.toString());
+      assert.deepEqual(requests[0].params.querySelection, executionCase.expected);
+      assert.equal(requests[0].params.query, undefined);
+    } finally { controller.dispose(); }
+  }
+  console.log("PASS: query execution preserves document offsets for selections and whole documents");
 
   let creates = 0;
   let expands = 0;
