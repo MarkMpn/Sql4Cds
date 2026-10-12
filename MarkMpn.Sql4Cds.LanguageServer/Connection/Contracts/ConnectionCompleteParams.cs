@@ -12,6 +12,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts
         /// or a virtual file representing an object in a database.
         /// </summary>
         public string OwnerUri { get; set; }
+        public string RequestId { get; set; }
 
         /// <summary>
         /// A GUID representing a unique connection ID

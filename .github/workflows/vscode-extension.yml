@@ -1,0 +1,90 @@
+name: VS Code extension
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "VSCodeExtension/**"
+      - "MarkMpn.Sql4Cds.LanguageServer/**"
+      - "MarkMpn.Sql4Cds.Engine/**"
+      - "MarkMpn.Sql4Cds.Export/**"
+      - ".github/workflows/vscode-extension.yml"
+  pull_request:
+    paths:
+      - "VSCodeExtension/**"
+      - "MarkMpn.Sql4Cds.LanguageServer/**"
+      - "MarkMpn.Sql4Cds.Engine/**"
+      - "MarkMpn.Sql4Cds.Export/**"
+      - ".github/workflows/vscode-extension.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-package:
+    name: Verify (${{ matrix.os }}, VS Code ${{ matrix.vscode }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        vscode: ["1.96.0"]
+        include:
+          - os: ubuntu-latest
+            vscode: stable
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: VSCodeExtension/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: VSCodeExtension
+        run: npm ci --ignore-scripts
+
+      - name: Check, test, and package the release
+        working-directory: VSCodeExtension
+        run: npm run package
+
+      - name: Test authentication retry and cancellation
+        working-directory: VSCodeExtension
+        run: npm run test:connections
+
+      - name: Smoke-test language service initialization
+        working-directory: VSCodeExtension
+        run: npm run test:service
+
+      - name: Test VS Code extension host (Linux)
+        if: runner.os == 'Linux'
+        working-directory: VSCodeExtension
+        env:
+          VSCODE_TEST_VERSION: ${{ matrix.vscode }}
+        run: xvfb-run -a npm run test:host
+
+      - name: Test VS Code extension host (Windows and macOS)
+        if: runner.os != 'Linux'
+        working-directory: VSCodeExtension
+        env:
+          VSCODE_TEST_VERSION: ${{ matrix.vscode }}
+        run: npm run test:host
+
+      - name: Upload VSIX
+        if: matrix.os == 'ubuntu-latest' && matrix.vscode == '1.96.0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql4cds-vsix-${{ github.sha }}
+          path: VSCodeExtension/sql4cds.vsix
+          if-no-files-found: error

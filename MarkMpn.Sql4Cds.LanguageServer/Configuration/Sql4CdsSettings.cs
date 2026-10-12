@@ -32,6 +32,8 @@
 
         public bool LocalFormatDates { get; set; }
 
+        public bool UseSchemaColumnOrdering { get; set; }
+
         public static Sql4CdsSettings Instance { get; set; }
     }
 }
