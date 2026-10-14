@@ -61,7 +61,7 @@ const settingDescriptors: SettingDescriptor[] = [
     { key: "localFormatDates", label: "Locally format dates", description: "Formats date/time values using your local formatting preferences" },
     { key: "useSchemaColumnOrdering", label: "Schema column ordering", description: "Orders columns by schema position rather than alphabetically" },
     { key: "useTdsEndpoint", label: "Use TDS Endpoint", description: "Not available in Power Platform ToolBox", unsupported: true },
-    { key: "useBulkDelete", label: "Use bulk delete", description: "Not available in Power Platform ToolBox", unsupported: true },
+    { key: "useBulkDelete", label: "Use bulk delete", description: "Submit eligible DELETE queries as asynchronous Dataverse bulk delete jobs" },
     { key: "maxDegreeOfParallelism", label: "Max degree of parallelism", description: "Maximum concurrent operations (0 = Dataverse recommendation, or 1 until a recommendation is received)", min: 0 },
 ];
 

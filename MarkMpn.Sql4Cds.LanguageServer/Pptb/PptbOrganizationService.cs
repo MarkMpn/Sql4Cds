@@ -468,9 +468,33 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     return PrepareDeleteMultiple(request);
 
                 case "BulkDelete":
+                    return Single(CreateBulkDeleteRequest((BulkDeleteRequest)request), response =>
+                    {
+                        response.EnsureSuccess();
+                        var result = new BulkDeleteResponse();
+                        result.Results["JobId"] = Guid.Parse(response.Json.Value<string>("JobId") ??
+                            throw new InvalidOperationException("Dataverse did not return the bulk delete job ID"));
+                        return result;
+                    });
+
                 case "FetchXmlToQueryExpression":
+                    return Single(CreateFunctionRequest(request), response =>
+                    {
+                        response.EnsureSuccess();
+                        var result = new FetchXmlToQueryExpressionResponse();
+                        result.Results["Query"] = WebApiQuerySerializer.Deserialize(response.Json["Query"]);
+                        return result;
+                    });
+
                 case "QueryExpressionToFetchXml":
-                    throw CreateFault($"The {request.RequestName} message is not supported when connected through Power Platform ToolBox");
+                    return Single(CreateActionRequest(request), response =>
+                    {
+                        response.EnsureSuccess();
+                        var result = new QueryExpressionToFetchXmlResponse();
+                        result.Results["FetchXml"] = response.Json.Value<string>("FetchXml") ??
+                            throw new InvalidOperationException("Dataverse did not return FetchXML");
+                        return result;
+                    });
 
                 default:
                     return PrepareGeneric(request);
@@ -899,6 +923,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return Serializer.GetRecordUrl(binding.entity, id) + "/Microsoft.Dynamics.CRM.";
         }
 
+        private WebApiRequest CreateBulkDeleteRequest(BulkDeleteRequest request)
+        {
+            var action = CreateActionRequest(request);
+            var body = (JObject)WebApiJson.Parse(action.Body);
+            foreach (var name in new[] { "ToRecipients", "CCRecipients" })
+            {
+                if (request.Parameters.TryGetValue(name, out var recipients))
+                {
+                    body[name] = new JArray(((Guid[])recipients ?? Array.Empty<Guid>()).Select(id => new JObject
+                    {
+                        ["partyid_systemuser@odata.bind"] = $"systemusers({id:D})"
+                    }));
+                }
+            }
+            action.Body = WebApiJson.Serialize(body);
+            return action;
+        }
+
         private WebApiRequest CreateActionRequest(OrganizationRequest request)
         {
             var prefix = GetBoundPrefix(request, out var boundParameter);
@@ -1040,6 +1082,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                         ["AllColumns"] = columnSet.AllColumns,
                         ["Columns"] = new JArray(columnSet.Columns)
                     };
+
+                case QueryExpression query:
+                    return WebApiQuerySerializer.Serialize(query);
 
                 case QueryBase query:
                     return new JObject

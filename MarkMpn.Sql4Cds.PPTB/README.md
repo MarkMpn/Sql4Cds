@@ -11,6 +11,7 @@ Query and modify Dataverse data using standard SQL syntax inside [Power Platform
 - Entity-reference links in results open records in the browser profile of their source connection, including cross-instance query results
 - Query against any of the connections assigned to the tool, including cross-instance queries using the connection name as the database name (e.g. `SELECT * FROM contoso.dbo.account`)
 - Confirmation prompts before large `INSERT`/`UPDATE`/`DELETE` operations
+- Optional asynchronous bulk delete jobs for eligible `DELETE` queries, with the job reference available through `@@IDENTITY`
 - Light and dark themes following the PPTB theme
 
 ## Architecture
@@ -55,7 +56,7 @@ To load the tool locally:
 
 The following are not available when running inside PPTB:
 
-- The TDS endpoint and the `BulkDelete` job-based delete option
+- The TDS endpoint
 - Impersonation (`EXECUTE AS`)
 - Updating party-list attributes (e.g. `to`/`from` on activities)
 - Some bound actions / messages that can't be mapped to the Web API automatically
