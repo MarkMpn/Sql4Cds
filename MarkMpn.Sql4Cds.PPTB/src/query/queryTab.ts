@@ -1,7 +1,7 @@
 import { monaco, applyDiagnostics } from "../editor/monacoSetup";
 import { ConnectionRegistry } from "../connections";
 import type { Sql4CdsClient } from "../lsp/client";
-import type { ConfirmationParams, ConnectionCompleteParams, PptbConnectionOptions, ResultSetEventParams, SelectionData } from "../lsp/protocol";
+import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, PptbConnectionOptions, ResultSetEventParams, SelectionData } from "../lsp/protocol";
 import { ResultsGrid } from "./resultsGrid";
 
 export interface QueryTabHost {
@@ -11,6 +11,7 @@ export interface QueryTabHost {
     confirm(params: ConfirmationParams): void;
     onStateChanged(tab: QueryTab): void;
     copyToClipboard(text: string): void;
+    openRecord(reference: EntityReferenceValue): void;
 }
 
 type ResultsView = "results" | "messages";
@@ -194,6 +195,7 @@ export class QueryTab {
                 return result.resultSubset.rows;
             },
             (text) => this.host.copyToClipboard(text),
+            (reference) => this.host.openRecord(reference),
         );
         grid.setRowCount(summary.rowCount, summary.complete);
         this.grids.set(summary.id, grid);

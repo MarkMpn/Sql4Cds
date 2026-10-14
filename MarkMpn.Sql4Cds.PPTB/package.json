@@ -41,6 +41,7 @@
         "node": ">=18.0.0"
     },
     "scripts": {
+        "test": "node --test tests/*.test.cjs",
         "build": "tsc && vite build",
         "dev": "vite",
         "watch": "vite build --watch",

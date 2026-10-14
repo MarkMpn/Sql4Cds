@@ -8,6 +8,7 @@ Query and modify Dataverse data using standard SQL syntax inside [Power Platform
 - IntelliSense: autocomplete, hover information, signature help and live error diagnostics
 - Run the whole script or just the selected text (`F5` / `Ctrl+E`), and cancel long-running queries
 - Virtualized results grids that fetch rows on demand, so large result sets are not held in the browser
+- Entity-reference links in results open records in the browser profile of their source connection, including cross-instance query results
 - Query against any of the connections assigned to the tool, including cross-instance queries using the connection name as the database name (e.g. `SELECT * FROM contoso.dbo.account`)
 - Confirmation prompts before large `INSERT`/`UPDATE`/`DELETE` operations
 - Light and dark themes following the PPTB theme
@@ -54,9 +55,11 @@ To load the tool locally:
 
 The following are not available when running inside PPTB:
 
-- The TDS endpoint, parallel execution (`maxDegreeOfParallelism`) and the `BulkDelete` job-based delete option
+- The TDS endpoint and the `BulkDelete` job-based delete option
 - Impersonation (`EXECUTE AS`)
 - Updating party-list attributes (e.g. `to`/`from` on activities)
 - Some bound actions / messages that can't be mapped to the Web API automatically
 
 Requests that include custom HTTP headers (e.g. `BypassCustomPluginExecution` or `Prefer` headers) may cause PPTB to ask for consent the first time they are used.
+
+Parallel execution is supported through the Dataverse bridge. Set **Max degree of parallelism** to a positive value to cap concurrent operations, or leave it at `0` to use Dataverse's `x-ms-dop-hint` recommendation (defaulting to one until a hint is received). SQL `OPTION (MAXDOP n)` overrides this setting for an individual query. Each parallel worker uses a cloned proxy sharing the correlated RPC transport and metadata caches; authentication and HTTP connection management remain with PPTB.

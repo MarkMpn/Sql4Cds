@@ -149,6 +149,22 @@ export interface QueryCompleteParams {
 export interface DbCellValue {
     displayValue: string;
     isNull: boolean;
+    rawObject?: unknown;
+}
+
+export interface EntityReferenceValue {
+    dataSource: string;
+    id: string;
+    isNull: false;
+    logicalName: string;
+}
+
+export function isEntityReferenceValue(value: unknown): value is EntityReferenceValue {
+    return typeof value === "object" && value !== null &&
+        "dataSource" in value && typeof value.dataSource === "string" && value.dataSource.length > 0 &&
+        "id" in value && typeof value.id === "string" && value.id.length > 0 &&
+        "isNull" in value && value.isNull === false &&
+        "logicalName" in value && typeof value.logicalName === "string" && value.logicalName.length > 0;
 }
 
 export interface SubsetResult {

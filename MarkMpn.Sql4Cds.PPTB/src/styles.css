@@ -359,6 +359,17 @@ input[type="number"] {
     font-style: italic;
 }
 
+.grid-record-link {
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.grid-record-link:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+}
+
 .grid-cell.loading::after {
     content: "…";
     color: var(--fg-muted);

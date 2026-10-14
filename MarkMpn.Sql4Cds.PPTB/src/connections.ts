@@ -1,5 +1,5 @@
 import type { Sql4CdsClient } from "./lsp/client";
-import type { ConnectionCompleteParams, PptbConnectionOptions } from "./lsp/protocol";
+import type { ConnectionCompleteParams, EntityReferenceValue, PptbConnectionOptions } from "./lsp/protocol";
 
 export interface ConnectionSlot {
     slot: number;
@@ -26,6 +26,22 @@ export class ConnectionRegistry {
 
     get(slot: number): ConnectionSlot | null {
         return this.slots[slot] ?? null;
+    }
+
+    async openRecord(reference: EntityReferenceValue): Promise<void> {
+        const entry = this.all.find((s) => s.options.connectionName.toLowerCase() === reference.dataSource.toLowerCase());
+        if (!entry) throw new Error(`The connection "${reference.dataSource}" is no longer available`);
+
+        const baseUrl = entry.connection.url.includes("://") ? entry.connection.url : `https://${entry.connection.url}`;
+        const url = new URL(baseUrl);
+        if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("The connection URL must use HTTP or HTTPS");
+        url.pathname = `${url.pathname.replace(/\/+$/, "")}/main.aspx`;
+        url.search = "";
+        url.hash = "";
+        url.searchParams.set("pagetype", "entityrecord");
+        url.searchParams.set("etn", reference.logicalName);
+        url.searchParams.set("id", reference.id);
+        await window.toolboxAPI.utils.openInConnectionBrowser(url.toString(), entry.slot);
     }
 
     static ownerUri(slot: number): string {

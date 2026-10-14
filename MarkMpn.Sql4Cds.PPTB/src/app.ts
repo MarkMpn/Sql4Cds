@@ -2,7 +2,7 @@ import "./styles.css";
 import { ConnectionRegistry } from "./connections";
 import { configureMonaco, monaco } from "./editor/monacoSetup";
 import { Sql4CdsClient } from "./lsp/client";
-import { ConfirmationResult, type ConfirmationParams } from "./lsp/protocol";
+import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue } from "./lsp/protocol";
 import { QueryTab, type QueryTabHost } from "./query/queryTab";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 
@@ -289,6 +289,11 @@ class App implements QueryTabHost {
 
     getConnectionOptions(slot: number) {
         return this.connections.get(slot)?.options ?? null;
+    }
+
+    openRecord(reference: EntityReferenceValue): void {
+        void this.connections.openRecord(reference).catch((err) =>
+            notify("Unable to open record", errorMessage(err), "error"));
     }
 
     onStateChanged(tab: QueryTab): void {

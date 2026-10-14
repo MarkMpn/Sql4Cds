@@ -1,4 +1,5 @@
 import type { DbCellValue, DbColumn } from "../lsp/protocol";
+import { isEntityReferenceValue, type EntityReferenceValue } from "../lsp/protocol";
 
 export type RowFetcher = (start: number, count: number) => Promise<DbCellValue[][]>;
 
@@ -43,7 +44,12 @@ export class ResultsGrid {
     private selected: { row: number; col: number } | null = null;
     private autoSized = false;
 
-    constructor(private readonly columns: DbColumn[], private readonly fetchRows: RowFetcher, private readonly onCopy: (text: string) => void) {
+    constructor(
+        private readonly columns: DbColumn[],
+        private readonly fetchRows: RowFetcher,
+        private readonly onCopy: (text: string) => void,
+        private readonly onOpenRecord: (reference: EntityReferenceValue) => void,
+    ) {
         this.columnWidths = columns.map((c) => Math.min(320, Math.max(90, c.columnName.length * 8 + 24)));
 
         this.element = document.createElement("div");
@@ -225,7 +231,21 @@ export class ResultsGrid {
                     cell.classList.add("null");
                     cell.textContent = "NULL";
                 } else {
-                    cell.textContent = value.displayValue;
+                    if (isEntityReferenceValue(value.rawObject)) {
+                        const reference = value.rawObject;
+                        const link = document.createElement("a");
+                        link.className = "grid-record-link";
+                        link.href = "#";
+                        link.textContent = value.displayValue;
+                        link.title = `Open ${reference.logicalName} record in ${reference.dataSource}`;
+                        link.addEventListener("click", (e) => {
+                            e.preventDefault();
+                            this.onOpenRecord(reference);
+                        });
+                        cell.appendChild(link);
+                    } else {
+                        cell.textContent = value.displayValue;
+                    }
                     cell.title = value.displayValue.length > 30 ? value.displayValue : "";
                 }
             }
@@ -304,6 +324,8 @@ export class ResultsGrid {
     }
 
     private onCellClick(e: MouseEvent): void {
+        // Rerendering on mousedown would remove the link before its click event.
+        if ((e.target as HTMLElement).closest(".grid-record-link")) return;
         const cell = (e.target as HTMLElement).closest<HTMLElement>(".grid-cell");
         const row = cell?.parentElement?.dataset.row;
         const col = cell?.dataset.col;
