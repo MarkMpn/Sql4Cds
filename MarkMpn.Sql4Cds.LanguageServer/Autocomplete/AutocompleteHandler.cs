@@ -31,9 +31,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
         public void Initialize(JsonRpc lsp)
         {
-            lsp.AddHandler(Methods.TextDocumentCompletion, HandleCompletion);
-            lsp.AddHandler(Methods.TextDocumentHover, HandleHover);
-            lsp.AddHandler(Methods.TextDocumentSignatureHelp, HandleSignatureHelp);
+            // Cache misses can require reverse RPC calls. Do not block the RPC dispatcher while waiting for them.
+            lsp.AddAsyncHandler(Methods.TextDocumentCompletion, request => Task.Run(() => HandleCompletion(request)));
+            lsp.AddAsyncHandler(Methods.TextDocumentHover, request => Task.Run(() => HandleHover(request)));
+            lsp.AddAsyncHandler(Methods.TextDocumentSignatureHelp, request => Task.Run(() => HandleSignatureHelp(request)));
         }
 
         public SumType<CompletionItem[], CompletionList>? HandleCompletion(CompletionParams request)
@@ -60,7 +61,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 .Select(s => new CompletionItem
                 {
                     Label = s.MenuText,
-                    InsertText = s.GetTextForReplace(),
+                    InsertText = s.GetTextForReplace(false),
                     Documentation = s.ToolTipText,
                     Detail = s.ToolTipTitle,
                     Kind = s.ImageIndex

@@ -1,0 +1,66 @@
+{
+    "name": "@markmpn/pptb-sql4cds",
+    "version": "0.1.0",
+    "displayName": "SQL 4 CDS",
+    "description": "Query and modify Dataverse data using standard SQL syntax, powered by the SQL 4 CDS engine.",
+    "main": "index.html",
+    "icon": "icons/sql4cds.svg",
+    "author": "Mark Carrington",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Mark Carrington",
+            "url": "https://markcarrington.dev"
+        }
+    ],
+    "configurations": {
+        "repository": "https://github.com/MarkMpn/Sql4Cds",
+        "website": "https://markcarrington.dev/sql-4-cds/",
+        "readmeUrl": "https://raw.githubusercontent.com/MarkMpn/Sql4Cds/master/MarkMpn.Sql4Cds.PPTB/README.md"
+    },
+    "features": {
+        "minAPI": "1.2.7-dev.20261012",
+        "connections": {
+            "min": 1,
+            "max": 10
+        }
+    },
+    "keywords": [
+        "dataverse",
+        "power-platform",
+        "sql",
+        "fetchxml",
+        "sql4cds"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/MarkMpn/Sql4Cds.git",
+        "directory": "MarkMpn.Sql4Cds.PPTB"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "scripts": {
+        "build": "tsc && vite build",
+        "dev": "vite",
+        "watch": "vite build --watch",
+        "dev-watch": "vite build --mode development --watch",
+        "preview": "vite preview",
+        "pack:worker": "dotnet pack ../MarkMpn.Sql4Cds.LanguageServer/MarkMpn.Sql4Cds.LanguageServer.csproj --configuration Release --output dotnet/feed",
+        "finalize-package": "npm shrinkwrap",
+        "validate": "pptb-validate",
+        "version-stable": "npm version patch --no-git-tag-version",
+        "publish-package": "npm run build && npm run version-stable && npm publish --access public"
+    },
+    "devDependencies": {
+        "@pptb/types": "^1.2.7",
+        "monaco-editor": "^0.52.2",
+        "typescript": "^5.0.0",
+        "vite": "^6.4.1"
+    },
+    "files": [
+        "dist",
+        "npm-shrinkwrap.json",
+        "pptb.config.json"
+    ]
+}

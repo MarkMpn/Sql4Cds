@@ -468,7 +468,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var completed = new CancellationTokenSource();
 
             // Set up one background thread to monitor the performance for debugging
-            var performanceMonitor = Task.Factory.StartNew(async () =>
+            var performanceMonitor = Task.Run(async () =>
             {
                 var lastSuccess = 0;
                 var lastBatchCount = 0;
@@ -477,7 +477,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     try
                     {
-                        await Task.Delay(TimeSpan.FromMinutes(1), completed.Token);
+                        await Task.Delay(TimeSpan.FromMinutes(1), completed.Token).ConfigureAwait(false);
                     }
                     catch (TaskCanceledException)
                     {
@@ -579,8 +579,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     await UpdateNextBatchSize(threadLocalState, async () =>
                                     {
-                                        executed = await ExecuteSingleRequest(request, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
-                                    });
+                                        executed = await ExecuteSingleRequest(request, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState).ConfigureAwait(false);
+                                    }).ConfigureAwait(false);
                                 }
                                 else
                                 {
@@ -604,8 +604,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                     await UpdateNextBatchSize(threadLocalState, async () =>
                                     {
-                                        executed = await ProcessBatch(threadLocalState.EMR, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
-                                    });
+                                        executed = await ProcessBatch(threadLocalState.EMR, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState).ConfigureAwait(false);
+                                    }).ConfigureAwait(false);
 
                                     threadLocalState.EMR = null;
                                 }
@@ -629,9 +629,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     return;
 
                                 if (retryReq is ExecuteMultipleRequest emr)
-                                    executed = await ProcessBatch(emr, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
+                                    executed = await ProcessBatch(emr, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState).ConfigureAwait(false);
                                 else
-                                    executed = await ExecuteSingleRequest(retryReq, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
+                                    executed = await ExecuteSingleRequest(retryReq, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState).ConfigureAwait(false);
                             }
 
                             if (executed)
@@ -641,7 +641,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             // If we've got a partial batch, execute it now
                             if (threadLocalState.EMR != null && !threadLocalState.Error)
-                                await ProcessBatch(threadLocalState.EMR, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
+                                await ProcessBatch(threadLocalState.EMR, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState).ConfigureAwait(false);
 
                             // If this is the final thread, execute any remaining requests in the retry queue
                             if (!loopState.IsStopped &&
@@ -661,9 +661,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                         return;
 
                                     if (retryReq is ExecuteMultipleRequest emr)
-                                        await ProcessBatch(emr, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
+                                        await ProcessBatch(emr, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState).ConfigureAwait(false);
                                     else
-                                        await ExecuteSingleRequest(retryReq, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState);
+                                        await ExecuteSingleRequest(retryReq, operationNames, meta, options, dataSource, threadLocalState.Service, context, responseHandler, threadLocalState, loopState).ConfigureAwait(false);
                                 }
                             }
 
@@ -729,7 +729,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var completed = new CancellationTokenSource();
 
             // Set up one background thread to monitor the performance for debugging
-            var performanceMonitor = Task.Factory.StartNew(async () =>
+            var performanceMonitor = Task.Run(async () =>
             {
                 var lastSuccess = 0;
                 var lastBatchCount = 0;
@@ -738,7 +738,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     try
                     {
-                        await Task.Delay(TimeSpan.FromMinutes(1), completed.Token);
+                        await Task.Delay(TimeSpan.FromMinutes(1), completed.Token).ConfigureAwait(false);
                     }
                     catch (TaskCanceledException)
                     {
@@ -831,7 +831,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var timer = new Timer();
             using (timer.Run())
             {
-                await action();
+                await action().ConfigureAwait(false);
             }
 
             // Adjust the batch size based on the time taken to try and keep the total time around 10sec
@@ -903,7 +903,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         ShowProgress(options, operationNames, meta, null);
 
                         loopState.RequestReduceThreadCount();
-                        await Task.Delay(retryDelay, options.CancellationToken);
+                        await Task.Delay(retryDelay, options.CancellationToken).ConfigureAwait(false);
                         Interlocked.Decrement(ref _pausedThreadCount);
                         _delayedUntil.TryRemove(threadState, out _);
                         ShowProgress(options, operationNames, meta, null); 
@@ -1042,7 +1042,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             retryReq.Requests.Add(retryRequest);
 
                         // Wait and retry
-                        await Task.Delay(TimeSpan.FromSeconds(2), options.CancellationToken);
+                        await Task.Delay(TimeSpan.FromSeconds(2), options.CancellationToken).ConfigureAwait(false);
                         req = retryReq;
                         continue;
                     }
@@ -1077,7 +1077,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     ShowProgress(options, operationNames, meta, null);
 
                     loopState.RequestReduceThreadCount();
-                    await Task.Delay(retryDelay, options.CancellationToken);
+                    await Task.Delay(retryDelay, options.CancellationToken).ConfigureAwait(false);
                     Interlocked.Decrement(ref _pausedThreadCount);
                     _delayedUntil.TryRemove(threadState, out _);
                     ShowProgress(options, operationNames, meta, null);

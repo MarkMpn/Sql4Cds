@@ -4,6 +4,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Sdk.Query;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.ServiceModel;
@@ -18,11 +19,12 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private readonly IOrganizationService _org;
         private readonly IDictionary<string, EntityMetadata> _metadata;
-        private readonly ISet<string> _loading;
+        private readonly ConcurrentDictionary<string, byte> _loading;
         private readonly IDictionary<string, EntityMetadata> _minimalMetadata;
-        private readonly ISet<string> _minimalLoading;
+        private readonly ConcurrentDictionary<string, byte> _minimalLoading;
         private readonly IDictionary<string, Exception> _invalidEntities;
         private readonly Lazy<string[]> _recycleBinEntities;
+        private readonly Lazy<Task<string[]>> _recycleBinLoad;
 
         /// <summary>
         /// Creates a new <see cref="AttributeMetadataCache"/>
@@ -31,11 +33,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public AttributeMetadataCache(IOrganizationService org)
         {
             _org = org;
-            _metadata = new Dictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
-            _loading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            _minimalMetadata = new Dictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
-            _minimalLoading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            _invalidEntities = new Dictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
+            _metadata = new ConcurrentDictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
+            _loading = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+            _minimalMetadata = new ConcurrentDictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
+            _minimalLoading = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+            _invalidEntities = new ConcurrentDictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
             _recycleBinEntities = new Lazy<string[]>(() =>
             {
                 // Check the recyclebinconfig entity exists
@@ -76,6 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     .Select(e => e.GetAttributeValue<AliasedValue>("entity.logicalname").Value as string)
                     .ToArray();
             });
+            _recycleBinLoad = new Lazy<Task<string[]>>(() => Task.Run(() => _recycleBinEntities.Value));
         }
 
         /// <inheritdoc cref="IAttributeMetadataCache.this{string}"/>
@@ -151,7 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_metadata.TryGetValue(logicalName, out metadata))
                 return true;
 
-            if (_loading.Add(logicalName))
+            if (_loading.TryAdd(logicalName, 0))
             {
                 var task = Task.Run(() => this[logicalName]);
                 OnMetadataLoading(new MetadataLoadingEventArgs(logicalName, task));
@@ -169,7 +172,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_minimalMetadata.TryGetValue(logicalName, out metadata))
                 return true;
 
-            if (!_loading.Contains(logicalName) && _minimalLoading.Add(logicalName))
+            if (!_loading.ContainsKey(logicalName) && _minimalLoading.TryAdd(logicalName, 0))
             {
                 var task = Task.Run(() =>
                 {
@@ -269,7 +272,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_recycleBinEntities.IsValueCreated)
                 return _recycleBinEntities.Value;
 
-            _ = Task.Run(() => _recycleBinEntities.Value);
+            var load = _recycleBinLoad.Value;
+            if (load.IsCompleted)
+                return load.GetAwaiter().GetResult();
             return Array.Empty<string>();
         }
     }

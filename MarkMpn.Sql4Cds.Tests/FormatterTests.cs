@@ -183,7 +183,7 @@ WHERE  b.name = '';";
                 Name = "test",
                 Connection = _service,
                 Metadata = new AttributeMetadataCache(_service),
-                TableSizeCache = new TableSizeCache(_service, new AttributeMetadataCache(_service)),
+                TableSizeCache = new TableSizeCache(_service, new AttributeMetadataCache(_service), null),
                 MessageCache = new MessageCache(_service, new AttributeMetadataCache(_service)),
             };
             var dataSources = new Dictionary<string, DataSource>

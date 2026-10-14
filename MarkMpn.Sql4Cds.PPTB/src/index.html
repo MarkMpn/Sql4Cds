@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>SQL 4 CDS</title>
+    </head>
+    <body>
+        <div id="app">
+            <div class="toolbar" role="toolbar">
+                <button id="btn-new" title="New query (Ctrl+Alt+N)"><span class="icon">＋</span> New Query</button>
+                <button id="btn-run" class="primary" title="Run the selected text, or the whole query if nothing is selected (F5 / Ctrl+E)" disabled><span class="icon">▶</span> Run</button>
+                <button id="btn-cancel" title="Cancel the running query" disabled><span class="icon">■</span> Cancel</button>
+                <span class="toolbar-separator"></span>
+                <label for="connection-select">Connection</label>
+                <select id="connection-select" disabled></select>
+                <span class="toolbar-spacer"></span>
+                <button id="btn-settings" title="Settings"><span class="icon">⚙</span> Settings</button>
+            </div>
+            <div id="tab-strip" class="tab-strip" role="tablist"></div>
+            <div id="workspace" class="workspace">
+                <div id="editor" class="editor"></div>
+                <div id="splitter" class="splitter" role="separator" aria-orientation="horizontal"></div>
+                <div id="results-host" class="results-host"></div>
+            </div>
+            <div class="status-bar">
+                <span id="status-text">Loading…</span>
+                <span id="status-progress" class="status-progress"></span>
+            </div>
+        </div>
+        <script type="module" src="./app.ts"></script>
+    </body>
+</html>

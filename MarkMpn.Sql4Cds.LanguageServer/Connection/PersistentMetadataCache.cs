@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.ServiceModel;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
@@ -36,6 +37,88 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             {
                 MetadataCacheContractResolver.Instance.PreloadContracts(typeof(MetadataCache));
             });
+        }
+
+        public EntityMetadata GetEntityMetadata(Guid orgId, string version, string key, Func<EntityMetadata> load)
+        {
+            var filename = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))) + ".json.gz";
+            var cachePath = Path.Combine(_path, orgId + ".lazy", filename);
+            var serializer = new JsonSerializer
+            {
+                ContractResolver = MetadataCacheContractResolver.Instance,
+                TypeNameHandling = TypeNameHandling.Auto
+            };
+
+            if (File.Exists(cachePath))
+            {
+                try
+                {
+                    using (var stream = File.OpenRead(cachePath))
+                    using (var gz = new GZipStream(stream, CompressionMode.Decompress))
+                    using (var reader = new StreamReader(gz))
+                    using (var jsonReader = new JsonTextReader(reader))
+                    {
+                        var cached = serializer.Deserialize<LazyMetadataEntry>(jsonReader);
+                        if (cached?.Version == version && cached.QueryVersion == 1 && cached.Entity != null)
+                            return cached.Entity;
+                    }
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is JsonException)
+                {
+                    ReportLazyLoadFailure(key, ex);
+                }
+            }
+
+            var entity = load();
+            var directory = Path.GetDirectoryName(cachePath);
+            var tempPath = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                Directory.CreateDirectory(directory);
+                using (var stream = File.Create(tempPath))
+                using (var gz = new GZipStream(stream, CompressionLevel.Optimal))
+                using (var writer = new StreamWriter(gz))
+                using (var jsonWriter = new JsonTextWriter(writer))
+                {
+                    serializer.Serialize(jsonWriter, new LazyMetadataEntry { Version = version, QueryVersion = 1, Entity = entity });
+                }
+
+                File.Move(tempPath, cachePath, true);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is JsonException)
+            {
+                ReportLazyLoadFailure(key, ex);
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempPath))
+                        File.Delete(tempPath);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    ReportLazyLoadFailure(key, ex);
+                }
+            }
+
+            return entity;
+        }
+
+        public void ReportLazyLoadFailure(string key, Exception error)
+        {
+            _ = _lsp.NotifyAsync(Methods.WindowLogMessage, new LogMessageParams
+            {
+                MessageType = MessageType.Warning,
+                Message = $"Metadata cache for {key}: {error.Message}"
+            });
+        }
+
+        private class LazyMetadataEntry
+        {
+            public string Version { get; set; }
+            public int QueryVersion { get; set; }
+            public EntityMetadata Entity { get; set; }
         }
 
         public async Task<EntityMetadata[]> GetMetadataAsync(IOrganizationService org, bool flush)

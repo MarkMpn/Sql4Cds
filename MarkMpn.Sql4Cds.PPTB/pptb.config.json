@@ -1,0 +1,16 @@
+{
+    "workers": {
+        "sql4cds": {
+            "kind": "dotnet-tool",
+            "packageId": "MarkMpn.Sql4Cds.LanguageServer",
+            "packageVersion": "0.1.0",
+            "command": "sql4cds-lsp",
+            "dotnet": {
+                "targetFramework": "net10.0",
+                "minimumRuntimeVersion": "10.0.0",
+                "rollForward": "Major"
+            },
+            "platforms": ["all"]
+        }
+    }
+}

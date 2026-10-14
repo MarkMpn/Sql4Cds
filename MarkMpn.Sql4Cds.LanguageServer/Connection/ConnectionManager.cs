@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 using Data8.PowerPlatform.Dataverse.Client;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
+using MarkMpn.Sql4Cds.LanguageServer.Pptb;
+using StreamJsonRpc;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.PowerPlatform.Dataverse.Client.Model;
@@ -23,13 +25,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
     class ConnectionManager
     {
         private readonly PersistentMetadataCache _persistentMetadataCache;
+        private readonly PptbRpcChunking _pptbRpcChunking;
+        private readonly JsonRpc _rpc;
         private readonly ConcurrentDictionary<string, DataSource> _dataSources;
         private readonly ConcurrentDictionary<string, string> _connectedDataSource;
         private readonly ConcurrentDictionary<string, Sql4CdsConnection> _connections;
 
-        public ConnectionManager(PersistentMetadataCache persistentMetadataCache)
+        public ConnectionManager(PersistentMetadataCache persistentMetadataCache, PptbRpcChunking pptbRpcChunking, JsonRpc rpc)
         {
             _persistentMetadataCache = persistentMetadataCache;
+            _pptbRpcChunking = pptbRpcChunking;
+            _rpc = rpc;
             _dataSources = new ConcurrentDictionary<string, DataSource>();
             _connectedDataSource = new ConcurrentDictionary<string, string>();
             _connections = new ConcurrentDictionary<string, Sql4CdsConnection>();
@@ -69,6 +75,21 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (_connections.TryRemove(pendingOwnerUri, out var connection))
                 _connections[ownerUri] = connection;
             _connectedDataSource.TryRemove(pendingOwnerUri, out _);
+            return GetConnection(ownerUri);
+        }
+
+        public Session AttachConnection(string sourceOwnerUri, string ownerUri)
+        {
+            if (String.IsNullOrEmpty(sourceOwnerUri) ||
+                !_connectedDataSource.TryGetValue(sourceOwnerUri, out var dataSourceName) ||
+                !_dataSources.ContainsKey(dataSourceName))
+                throw new InvalidOperationException("The selected connection has not been registered");
+
+            if (sourceOwnerUri == ownerUri)
+                throw new InvalidOperationException("A document cannot be associated with itself");
+
+            Disconnect(ownerUri);
+            _connectedDataSource[ownerUri] = dataSourceName;
             return GetConnection(ownerUri);
         }
 
@@ -248,6 +269,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                         org = new OnPremiseClient(url);
                         break;
 
+                    case "PPTB":
+                        // Power Platform ToolBox never exposes the access token, so all requests are proxied
+                        // back to the tool which executes them using its own Dataverse API
+                        if (!connection.Options.TryGetValue("connectionTarget", out var connectionTarget) || connectionTarget == null)
+                            connectionTarget = "primary";
+
+                        org = new PptbOrganizationService(new JsonRpcWebApiTransport(_rpc, _pptbRpcChunking, connectionTarget), url, GetDataSourceName(connection));
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException("Unknown authenticationType " + authType);
                 }
@@ -320,19 +350,20 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
             if (org is ServiceClient svc)
             {
-                Version = svc.ConnectedOrgVersion.ToString();
                 OrgId = svc.ConnectedOrgId;
             }
             else
             {
-                var resp = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
-                Version = resp.Version;
-
                 var whoAmI = (WhoAmIResponse)org.Execute(new WhoAmIRequest());
                 OrgId = whoAmI.OrganizationId;
             }
 
-            Metadata = new CachedMetadata(org, persistentMetadataCache);
+            Metadata = new CachedMetadata(org, persistentMetadataCache, OrgId, Version.ToString(), org is PptbOrganizationService);
+            if (org is PptbOrganizationService)
+            {
+                TableSizeCache = new TableSizeCache(org, Metadata, Version);
+                MessageCache = new MessageCache(org, Metadata);
+            }
         }
 
         public string UniqueName { get; set; }
@@ -340,8 +371,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public Guid OrgId { get; set; }
 
         public string ServerName { get; set; }
-
-        public string Version { get; set; }
 
         public string Username { get; set; }
 

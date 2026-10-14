@@ -48,8 +48,9 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly IOrganizationService _org;
         private readonly IAttributeMetadataCache _metadata;
         private readonly object _loaderLock;
-        private Dictionary<string, Message> _cache;
+        private volatile Dictionary<string, Message> _cache;
         private Dictionary<string, bool> _entityMessages;
+        private readonly Lazy<Task> _backgroundLoad;
 
         /// <summary>
         /// Loads a list of messages from a specific instance
@@ -61,6 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _org = org;
             _metadata = metadata;
             _loaderLock = new object();
+            _backgroundLoad = new Lazy<Task>(() => Task.Run(() => Load()));
         }
 
         private void Load()
@@ -261,7 +263,9 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (lazy && _cache == null)
             {
-                _ = Task.Run(() => Load());
+                var load = _backgroundLoad.Value;
+                if (load.IsCompleted)
+                    load.GetAwaiter().GetResult();
                 return Enumerable.Empty<Message>();
             }
 

@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.LanguageServer.Capabilities.Contracts;
+using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
+using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
@@ -12,10 +14,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
     {
         private JsonRpc _lsp;
         private readonly VersionChecker _versionChecker;
+        private readonly PptbRpcChunking _pptbRpcChunking;
 
-        public CapabilitiesHandler(VersionChecker versionChecker)
+        public CapabilitiesHandler(VersionChecker versionChecker, PptbRpcChunking pptbRpcChunking)
         {
             _versionChecker = versionChecker;
+            _pptbRpcChunking = pptbRpcChunking;
         }
 
         public void Initialize(JsonRpc lsp)
@@ -28,6 +32,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
 
         private InitializeResult HandleInitialize(InitializeParams arg)
         {
+            var experimental = arg.Capabilities?.Experimental;
+            var experimentalToken = experimental as JToken ?? (experimental == null ? null : JToken.FromObject(experimental));
+            var maxMessageSize = experimentalToken?["pptb"]?["maxMessageSizeBytes"]?.Value<int?>();
+            _pptbRpcChunking.SetMaxMessageSize(maxMessageSize);
+
             return new InitializeResult
             {
                 Capabilities = new ServerCapabilities
