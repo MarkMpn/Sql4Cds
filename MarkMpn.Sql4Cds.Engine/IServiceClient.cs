@@ -29,10 +29,41 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The name of the connected organisation.
         /// </summary>
         string Name { get; }
+
+        /// <summary>
+        /// Whether cloned connections can execute requests concurrently.
+        /// </summary>
+        bool CanParallelise { get; }
+
+        /// <summary>
+        /// The server's recommended maximum number of concurrent requests.
+        /// </summary>
+        int RecommendedDegreesOfParallelism { get; }
+
+        /// <summary>
+        /// Creates a connection for a parallel worker. Thread-safe caches and transports may be shared.
+        /// </summary>
+        IOrganizationService Clone();
     }
 
     static class ServiceClientExtensions
     {
+        public static IOrganizationService CloneConnection(this IOrganizationService org)
+        {
+#if NETCOREAPP
+            if (org is ServiceClient svc)
+                return svc.Clone();
+#else
+            if (org is CrmServiceClient svc)
+                return svc.Clone();
+#endif
+
+            if (org is IServiceClient sc)
+                return sc.Clone();
+
+            throw new NotSupportedException("The connection does not support cloning for parallel execution");
+        }
+
         public static Version GetConnectedOrgVersion(this IOrganizationService org)
         {
 #if NETCOREAPP

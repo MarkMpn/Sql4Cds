@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -49,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly IAttributeMetadataCache _metadata;
         private readonly object _loaderLock;
         private volatile Dictionary<string, Message> _cache;
-        private Dictionary<string, bool> _entityMessages;
+        private ConcurrentDictionary<string, bool> _entityMessages;
         private readonly Lazy<Task> _backgroundLoad;
 
         /// <summary>
@@ -72,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (_cache != null)
                     return;
 
-                _entityMessages = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                _entityMessages = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
                 // Load the requests and input parameters
                 var requestQry = new QueryExpression("sdkmessagerequest");
@@ -292,7 +293,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         new ConditionExpression(
                             attributeName:"primaryobjecttypecode",
                             conditionOperator: ConditionOperator.Equal,
-                            value: entityLogicalName)
+                            value: _metadata[entityLogicalName].ObjectTypeCode)
                     }
                 },
                 LinkEntities =

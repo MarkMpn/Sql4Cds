@@ -39,6 +39,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
 #endif
 
+            if (org is IServiceClient sc)
+                recommendedMaxDop = Math.Max(1, sc.RecommendedDegreesOfParallelism);
+
             var maxDopHint = (queryHints ?? Array.Empty<OptimizerHint>())
                 .OfType<LiteralOptimizerHint>()
                 .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
@@ -68,6 +71,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns></returns>
         public static bool CanParallelise(IOrganizationService org)
         {
+            if (org is IServiceClient sc)
+                return sc.CanParallelise;
+
 #if NETCOREAPP
             var svc = org as ServiceClient;
 

@@ -78,6 +78,7 @@
   <ItemGroup>
     <Compile Include="CollationTests.cs" />
     <Compile Include="CacheConcurrencyTests.cs" />
+    <Compile Include="ServiceClientTests.cs" />
     <Compile Include="CursorTests.cs" />
     <Compile Include="OpenRowsetBulkTests.cs" />
     <Compile Include="SerializerTests.cs" />

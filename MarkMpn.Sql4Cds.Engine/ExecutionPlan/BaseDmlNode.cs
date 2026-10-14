@@ -446,12 +446,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _threadCount = 0;
             _batchExecutionCount = 0;
 
-#if NETCOREAPP
-            var svc = dataSource.Connection as ServiceClient;
-#else
-            var svc = dataSource.Connection as CrmServiceClient;
-#endif
-
             var threadCountHistory = new List<int>();
             var rpmHistory = new List<int>();
             var batchSizeHistory = new List<float>();
@@ -460,9 +454,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (!ParallelismHelper.CanParallelise(dataSource.Connection))
                 maxDop = 1;
-
-            if (maxDop == 1)
-                svc = null;
 
             var useAffinityCookie = maxDop == 1 || _entityCount < 100;
             var completed = new CancellationTokenSource();
@@ -523,7 +514,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         _parallelOptions,
                         () =>
                         {
-                            var service = svc?.Clone() ?? dataSource.Connection;
+                            var service = maxDop > 1 ? dataSource.Connection.CloneConnection() : dataSource.Connection;
 
 #if NETCOREAPP
                             if (service is ServiceClient crmService)

@@ -113,6 +113,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         private readonly string _serviceRoot;
         private readonly ConcurrentDictionary<string, bool> _functions;
         private Version _version;
+        private readonly ParallelismRecommendation _parallelism = new ParallelismRecommendation();
+
+        private sealed class ParallelismRecommendation
+        {
+            public int Value = 1;
+        }
 
         public PptbOrganizationService(IWebApiTransport transport, string url, string name)
         {
@@ -146,6 +152,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         }
 
         public string Name { get; init; }
+
+        public bool CanParallelise => true;
+
+        public int RecommendedDegreesOfParallelism => Volatile.Read(ref _parallelism.Value);
+
+        /// <summary>
+        /// Shares the correlated RPC transport and thread-safe, read-only-after-loading metadata caches.
+        /// </summary>
+        public IOrganizationService Clone() => (PptbOrganizationService)MemberwiseClone();
 
         #region IOrganizationService
 
@@ -224,6 +239,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             catch (ConnectionLostException ex)
             {
                 throw CreateFault("Connection to Power Platform ToolBox lost: " + ex.Message);
+            }
+
+            foreach (var response in responses)
+            {
+                if (Int32.TryParse(response.GetHeader("x-ms-dop-hint"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var recommendedDop) && recommendedDop > 0)
+                    Volatile.Write(ref _parallelism.Value, recommendedDop);
             }
 
             if (!transaction && !continueOnError && responses.Count < requests.Count && responses.Count > 0 && !responses[responses.Count - 1].IsSuccess)
