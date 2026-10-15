@@ -27,6 +27,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             public string Aggregate { get; set; }
             public string DateGrouping { get; set; }
             public bool IsLinkEntity { get; set; }
+            public string LinkAlias { get; set; }
         }
 
         private readonly WebApiMetadataProvider _metadata;
@@ -145,6 +146,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
             foreach (var prop in record.Properties())
             {
+                if (prop.Name == "@odata.etag" && prop.Value.Type == JTokenType.String)
+                {
+                    var etag = (string)prop.Value;
+                    if (etag.StartsWith("W/\"") && etag.EndsWith("\""))
+                        entity.RowVersion = etag.Substring(3, etag.Length - 4);
+                }
+
                 if (prop.Name.Contains('@'))
                     continue;
 
