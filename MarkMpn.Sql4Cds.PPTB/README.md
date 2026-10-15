@@ -58,9 +58,10 @@ The following are not available when running inside PPTB:
 
 - The TDS endpoint
 - Impersonation (`EXECUTE AS`)
-- Updating party-list attributes (e.g. `to`/`from` on activities)
 - Some bound actions / messages that can't be mapped to the Web API automatically
 
-Requests that include custom HTTP headers (e.g. `BypassCustomPluginExecution` or `Prefer` headers) may cause PPTB to ask for consent the first time they are used.
+Party-list updates (such as `to` and `from` on activities) retrieve the existing party-list values and include unchanged roles in the activity's combined Web API payload. This may cause plugins to be triggered differently to when the same
+Retrieved activity-party collections are split into individual party-list columns by participation type. This may cause plugins to be triggered differently to when the same
+`UPDATE` query is executed via the XrmToolBox version.
 
-Parallel execution is supported through the Dataverse bridge. Set **Max degree of parallelism** to a positive value to cap concurrent operations, or leave it at `0` to use Dataverse's `x-ms-dop-hint` recommendation (defaulting to one until a hint is received). SQL `OPTION (MAXDOP n)` overrides this setting for an individual query. Each parallel worker uses a cloned proxy sharing the correlated RPC transport and metadata caches; authentication and HTTP connection management remain with PPTB.
+Requests that include custom HTTP headers (e.g. `BypassCustomPluginExecution` or `Prefer` headers) may cause PPTB to ask for consent the first time they are used.

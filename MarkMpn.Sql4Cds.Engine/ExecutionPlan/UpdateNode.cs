@@ -453,6 +453,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                         }
                                     }
 
+                                    if (dataSource.Connection is IServiceClient webApiClient && webApiClient.UsesWebAPI &&
+                                        update.Attributes.Keys.Any(a => attributes[a].AttributeType == AttributeTypeCode.PartyList))
+                                    {
+                                        foreach (var attribute in meta.Attributes.Where(a => a.AttributeType == AttributeTypeCode.PartyList))
+                                        {
+                                            if (!update.Contains(attribute.LogicalName))
+                                                update[attribute.LogicalName] = preImage.GetAttributeValue<EntityCollection>(attribute.LogicalName);
+                                        }
+                                    }
+
                                     if (update.Attributes.Any())
                                         requests.Add(updateRequest);
 

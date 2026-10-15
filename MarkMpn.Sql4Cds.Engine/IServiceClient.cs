@@ -36,6 +36,11 @@ namespace MarkMpn.Sql4Cds.Engine
         bool CanParallelise { get; }
 
         /// <summary>
+        /// Whether requests are translated to the Dataverse Web API.
+        /// </summary>
+        bool UsesWebAPI { get; }
+
+        /// <summary>
         /// The server's recommended maximum number of concurrent requests.
         /// </summary>
         int RecommendedDegreesOfParallelism { get; }

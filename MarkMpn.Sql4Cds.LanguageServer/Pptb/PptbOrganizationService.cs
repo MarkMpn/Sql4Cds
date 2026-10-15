@@ -155,6 +155,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public bool CanParallelise => true;
 
+        public bool UsesWebAPI => true;
+
         public int RecommendedDegreesOfParallelism => Volatile.Read(ref _parallelism.Value);
 
         /// <summary>

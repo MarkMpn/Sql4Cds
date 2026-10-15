@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
     /// </summary>
     public class WebApiEntitySerializer
     {
-        private static readonly Dictionary<string, int> _partyListParticipationTypes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        internal static readonly Dictionary<string, int> PartyListParticipationTypes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
             ["from"] = 1,
             ["to"] = 2,
@@ -25,7 +25,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             ["ownerid"] = 9,
             ["resources"] = 10,
             ["customers"] = 11,
-            ["partners"] = 12
+            ["partners"] = 12,
+            ["related"] = 13,
         };
 
         private readonly WebApiMetadataProvider _metadata;
@@ -121,9 +122,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 if (!isCreate && attr.Key.Equals(info.PrimaryIdAttribute, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (attr.Value is EntityCollection partyList)
+                if (attr.Value is EntityCollection || attrInfo?.AttributeType == "PartyList")
                 {
-                    SerializePartyList(json, info, attr.Key, partyList, isCreate);
+                    SerializePartyList(json, info, attr.Key, (EntityCollection)attr.Value, isCreate);
                     continue;
                 }
 
@@ -165,10 +166,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         private void SerializePartyList(JObject json, WebApiEntityInfo info, string attribute, EntityCollection parties, bool isCreate)
         {
-            if (!isCreate)
-                throw new NotSupportedException($"Updating party list attribute {attribute} is not supported");
-
-            if (!_partyListParticipationTypes.TryGetValue(attribute, out var participationType))
+            if (!PartyListParticipationTypes.TryGetValue(attribute, out var participationType))
                 throw new NotSupportedException($"Unknown party list attribute {attribute}");
 
             var collectionName = info.LogicalName + "_activity_parties";
@@ -179,6 +177,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 json[collectionName] = array;
             }
 
+            if (parties == null || parties.Entities.Count == 0)
+                return;
+
             var activityParty = _metadata.GetEntity("activityparty");
 
             foreach (var party in parties.Entities)
@@ -187,6 +188,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 {
                     ["participationtypemask"] = participationType
                 };
+
+                if (!isCreate && party.Id != Guid.Empty)
+                    partyJson["activitypartyid"] = party.Id.ToString("D");
 
                 foreach (var partyAttr in party.Attributes)
                 {

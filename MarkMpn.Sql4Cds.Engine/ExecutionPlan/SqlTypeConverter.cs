@@ -10,6 +10,8 @@ using System.Linq.Expressions;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -123,7 +125,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             AddNullableTypeConversion<SqlMoney, Money>((ds, v, dt) => v.Value, null);
             AddNullableTypeConversion<SqlInt32, OptionSetValue>((ds, v, dt) => v.Value, null);
             AddNullableTypeConversion<SqlString, OptionSetValueCollection>((ds, v, dt) => ds.DefaultCollation.ToSqlString(String.Join(",", v.Select(osv => osv.Value))), null);
-            AddNullableTypeConversion<SqlString, EntityCollection>((ds, v, dt) => ds.DefaultCollation.ToSqlString(String.Join(",", v.Entities.Select(e => FormatEntityCollectionEntry(e)))), null);
+            AddNullableTypeConversion<SqlString, EntityCollection>((ds, v, dt) => ds.DefaultCollation.ToSqlString(FormatEntityCollection(v)), null);
             AddNullableTypeConversion<SqlEntityReference, EntityReference>((ds, v, dt) => new SqlEntityReference(ds.Name, v), v => v);
         }
 
@@ -1659,8 +1661,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (value.IsNull)
                 return null;
 
-            // Convert the string from the same format used by FormatEntityCollectionEntry
-            // Could be logicalname:guid or email address
+            if (value.Value.TrimStart().StartsWith("{", StringComparison.Ordinal))
+            {
+                using (var reader = new JsonTextReader(new StringReader(value.Value))
+                {
+                    DateParseHandling = DateParseHandling.None,
+                    FloatParseHandling = FloatParseHandling.Decimal
+                })
+                {
+                    var json = JObject.Load(reader);
+                    if (!(json["entities"] is JArray jsonEntities) || jsonEntities.Any(e => !(e is JObject)))
+                        throw new FormatException("An entity collection must contain an entities array");
+                    if (reader.Read())
+                        throw new FormatException("Unexpected content after the entity collection");
+
+                    return json.ToObject<EntityCollection>(JsonSerializer.Create(new JsonSerializerSettings
+                    {
+                        Converters = DataverseMessageResponseConverters.GetConverters()
+                    }));
+                }
+            }
+
+            // Retain support for comma-separated logicalname:guid references and email addresses.
 
             var parts = value.Value.Split(',');
             var entities = parts
@@ -2162,20 +2184,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             throw new ArgumentOutOfRangeException("Unsupported type " + value.GetType().FullName);
         }
 
-        private static string FormatEntityCollectionEntry(Entity e)
+        private static string FormatEntityCollection(EntityCollection collection)
         {
-            if (e.LogicalName == "activityparty")
+            if (collection.EntityName == "activityparty" || collection.Entities.All(e => e.LogicalName == "activityparty"))
             {
-                // Show the details of the party
-                var partyId = e.GetAttributeValue<EntityReference>("partyid");
-
-                if (partyId != null)
-                    return $"{partyId.LogicalName}:{partyId.Id}";
-
-                return e.GetAttributeValue<string>("addressused");
+                return JsonConvert.SerializeObject(collection, new JsonSerializerSettings
+                {
+                    Converters = DataverseMessageResponseConverters.GetConverters()
+                });
             }
 
-            return e.Id.ToString();
+            return String.Join(",", collection.Entities.Select(e => e.Id.ToString()));
         }
 
         /// <summary>

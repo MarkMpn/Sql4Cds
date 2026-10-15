@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public string RootEntity => _rootEntity;
 
-        private void Process(XElement element, string entityName, bool isLinkEntity)
+        private void Process(XElement element, string entityName, bool isLinkEntity, string linkAlias = null)
         {
             foreach (var child in element.Elements())
             {
@@ -63,7 +63,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                             AttributeName = (string)child.Attribute("name"),
                             Aggregate = (string)child.Attribute("aggregate"),
                             DateGrouping = (string)child.Attribute("dategrouping"),
-                            IsLinkEntity = isLinkEntity
+                            IsLinkEntity = isLinkEntity,
+                            LinkAlias = linkAlias
                         };
                     }
                 }
@@ -76,7 +77,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                         _linkAliases[alias] = name;
 
                     _linkEntityNames.Add(name);
-                    Process(child, name, true);
+                    Process(child, name, true, alias ?? name);
                 }
                 else if (child.Name.LocalName == "filter")
                 {
@@ -175,6 +176,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 }
 
                 var entityInfo = entityName == null ? null : TryGetEntity(entityName);
+                if (entityInfo != null && attributeName.Equals(entityInfo.LogicalName + "_activity_parties", StringComparison.OrdinalIgnoreCase))
+                {
+                    ParseActivityParties(entity, prop.Value, entityInfo, key.Contains('.') ? key.Substring(0, key.IndexOf('.') + 1) : "");
+                    continue;
+                }
+
                 var attrInfo = entityInfo?.GetAttribute(attributeName);
 
                 object value;
@@ -199,6 +206,48 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
 
             return entity;
+        }
+
+        private void ParseActivityParties(Entity entity, JToken token, WebApiEntityInfo info, string prefix)
+        {
+            var parties = (EntityCollection)ConvertValue(token, new WebApiAttributeInfo { AttributeType = "PartyList" }, null, null);
+            if (parties == null)
+                throw new InvalidOperationException("Dataverse returned a null activity-party collection");
+
+            var groups = parties.Entities.GroupBy(p =>
+            {
+                if (!p.Attributes.TryGetValue("participationtypemask", out var mask))
+                    throw new InvalidOperationException("Dataverse returned an activity party without a participation type");
+                if (mask is int number)
+                    return number;
+                if (mask is long longNumber)
+                    return checked((int)longNumber);
+                if (mask is OptionSetValue option)
+                    return option.Value;
+                throw new InvalidOperationException("Dataverse returned an invalid activity-party participation type");
+            }).ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var attribute in info.Attributes.Values.Where(a => a.AttributeType == "PartyList"))
+            {
+                if (!WebApiEntitySerializer.PartyListParticipationTypes.TryGetValue(attribute.LogicalName, out var mask))
+                    throw new NotSupportedException($"Unknown party list attribute {attribute.LogicalName}");
+
+                var collection = new EntityCollection { EntityName = "activityparty" };
+                if (groups.TryGetValue(mask, out var roleParties))
+                    collection.Entities.AddRange(roleParties);
+
+                if (prefix.Length == 0)
+                    entity[attribute.LogicalName] = collection;
+                else
+                    entity[prefix + attribute.LogicalName] = new AliasedValue(info.LogicalName, attribute.LogicalName, collection);
+
+                foreach (var alias in _attributeAliases.Where(a => a.Value.EntityName == info.LogicalName &&
+                    a.Value.AttributeName.Equals(attribute.LogicalName, StringComparison.OrdinalIgnoreCase) &&
+                    a.Value.IsLinkEntity == (prefix.Length != 0) &&
+                    (prefix.Length == 0 || String.Equals(a.Value.LinkAlias + ".", prefix, StringComparison.OrdinalIgnoreCase)) &&
+                    a.Value.Aggregate == null && a.Value.DateGrouping == null))
+                    entity[alias.Key] = new AliasedValue(info.LogicalName, attribute.LogicalName, collection);
+            }
         }
 
         private WebApiEntityInfo TryGetEntity(string logicalName)
@@ -293,6 +342,20 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
             switch (attrInfo?.AttributeType)
             {
+                case "PartyList":
+                    if (!(token is JArray parties))
+                        throw new InvalidOperationException("Dataverse returned an invalid party list");
+                    return new EntityCollection(parties.Select(p =>
+                    {
+                        if (!(p is JObject party))
+                            throw new InvalidOperationException("Dataverse returned an invalid activity party");
+                        var entity = WebApiJson.ToEntity(party);
+                        entity.LogicalName = "activityparty";
+                        if (party["activitypartyid"]?.Type == JTokenType.String)
+                            entity.Id = Guid.Parse(party.Value<string>("activitypartyid"));
+                        return entity;
+                    }).ToList()) { EntityName = "activityparty" };
+
                 case "Lookup":
                 case "Customer":
                 case "Owner":
