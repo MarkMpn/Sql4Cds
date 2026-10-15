@@ -120,6 +120,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (dataSource.Connection is CrmServiceClient svc)
                         callerIdProp = Expr.GetPropertyInfo(() => svc.CallerId);
 #endif
+                    else if (dataSource.Connection is IServiceClient client)
+                        callerIdProp = Expr.GetPropertyInfo(() => client.CallerId);
                     else
                         throw new QueryExecutionException("Unexpected organization service type");
 

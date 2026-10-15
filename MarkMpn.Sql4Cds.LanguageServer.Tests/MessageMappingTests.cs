@@ -260,7 +260,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         {
             public List<WebApiRequest> Operations { get; } = new List<WebApiRequest>();
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(requests.Select(request =>
                 {

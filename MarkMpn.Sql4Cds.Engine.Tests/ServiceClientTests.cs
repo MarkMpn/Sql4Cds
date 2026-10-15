@@ -14,6 +14,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     [TestClass]
     public class ServiceClientTests : FakeXrmEasyTestsBase
     {
+        [DataTestMethod]
+        [DataRow(false)]
+        [DataRow(true)]
+        public void CustomClientImpersonationVerifiesCallerAndRestoresOnFailure(bool verificationFails)
+        {
+            var id = Guid.NewGuid();
+            _context.Initialize(new[] { new Entity("systemuser", id) { ["domainname"] = "test-user" } });
+            var service = new ParallelService(_service) { FailImpersonation = verificationFails, CallerId = Guid.NewGuid() };
+            var previousCallerId = service.CallerId;
+            _localDataSource.Connection = service;
+            using (var con = new Sql4CdsConnection(_localDataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "EXECUTE AS LOGIN = 'test-user'";
+                if (verificationFails)
+                {
+                    Assert.ThrowsException<Sql4CdsException>(() => cmd.ExecuteNonQuery());
+                    Assert.AreEqual(previousCallerId, service.CallerId);
+                    return;
+                }
+                cmd.ExecuteNonQuery();
+                Assert.AreEqual(id, service.CallerId);
+                cmd.CommandText = "SELECT CURRENT_USER";
+                Assert.AreEqual(id, ((SqlEntityReference)cmd.ExecuteScalar()).Id);
+                cmd.CommandText = "REVERT";
+                cmd.ExecuteNonQuery();
+                Assert.AreEqual(Guid.Empty, service.CallerId);
+            }
+        }
+
         [TestMethod]
         public void CustomClientParallelismRespectsSettingsAndHints()
         {
@@ -45,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CustomClientCanClonePartitionExecutionContext()
         {
-            var service = new ParallelService(_service);
+            var service = new ParallelService(_service) { CallerId = Guid.NewGuid() };
             _localDataSource.Connection = service;
             var options = new StubOptions();
             var context = new NodeExecutionContext(new SessionContext(_localDataSources, options), options, null, null, null);
@@ -54,6 +84,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreSame(_localDataSource.Metadata, cloned.Session.DataSources["local"].Metadata);
             Assert.AreEqual(1, service.State.Clones);
             Assert.AreSame(service, context.Session.DataSources["local"].Connection);
+            var clonedClient = (IServiceClient)cloned.Session.DataSources["local"].Connection;
+            Assert.AreEqual(service.CallerId, clonedClient.CallerId);
+            clonedClient.CallerId = Guid.Empty;
+            Assert.AreNotEqual(Guid.Empty, service.CallerId);
         }
 
         [TestMethod]
@@ -115,6 +149,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             public string Name => "local";
             public bool CanParallelise { get; set; } = true;
             public bool UsesWebAPI => false;
+            public Guid CallerId { get; set; }
+            public bool FailImpersonation { get; set; }
             public int RecommendedDegreesOfParallelism { get; set; } = 2;
 
             public IOrganizationService Clone()
@@ -125,6 +161,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             public OrganizationResponse Execute(OrganizationRequest request)
             {
+                if (request is RetrieveMultipleRequest retrieve && retrieve.Query is Microsoft.Xrm.Sdk.Query.QueryExpression query &&
+                    query.EntityName == "systemuser" && query.Criteria.Conditions.Any(c => c.Operator == ConditionOperator.EqualUserId))
+                {
+                    var response = new RetrieveMultipleResponse();
+                    response.Results["EntityCollection"] = new EntityCollection(new[]
+                    {
+                        new Entity("systemuser", FailImpersonation ? Guid.NewGuid() : CallerId)
+                    });
+                    return response;
+                }
+
                 if (!(request is CreateRequest))
                     return _inner.Execute(request);
 

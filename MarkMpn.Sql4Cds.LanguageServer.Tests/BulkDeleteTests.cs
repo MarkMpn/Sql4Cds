@@ -187,7 +187,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             public readonly Guid JobId = Guid.NewGuid();
             public readonly List<WebApiRequest> Requests = new List<WebApiRequest>();
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
                 var request = requests.Single();
                 Requests.Add(request);
@@ -222,7 +222,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
 
         private sealed class RejectTransport : IWebApiTransport
         {
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
                 => throw new InvalidOperationException("Tests must not submit real bulk delete jobs");
         }
     }

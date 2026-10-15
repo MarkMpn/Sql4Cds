@@ -410,10 +410,16 @@ async function executeBatch(params: ExecuteBatchParams): Promise<WebApiResponse[
         contentId: r.contentId,
     }));
 
+    const headers = { ...params.headers };
+    if (!params.transaction && params.continueOnError && requests.length > 1) {
+        const preferKey = Object.keys(headers).find((key) => key.toLowerCase() === "prefer") ?? "Prefer";
+        headers[preferKey] = headers[preferKey] ? `${headers[preferKey]},odata.continue-on-error` : "odata.continue-on-error";
+    }
+
     try {
         const results = params.transaction
-            ? await window.dataverseAPI.executeTransaction(requests, params.target)
-            : await window.dataverseAPI.executeBatch(requests, params.target, params.continueOnError && requests.length > 1 ? { Prefer: "odata.continue-on-error" } : undefined);
+            ? await window.dataverseAPI.executeTransaction(requests, params.target, headers)
+            : await window.dataverseAPI.executeBatch(requests, params.target, headers);
 
         return results.map((r) => ({
             contentId: r.contentId,

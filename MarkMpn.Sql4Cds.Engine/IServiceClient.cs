@@ -41,6 +41,11 @@ namespace MarkMpn.Sql4Cds.Engine
         bool UsesWebAPI { get; }
 
         /// <summary>
+        /// The system user to impersonate, or <see cref="Guid.Empty"/> to use the authenticated user.
+        /// </summary>
+        Guid CallerId { get; set; }
+
+        /// <summary>
         /// The server's recommended maximum number of concurrent requests.
         /// </summary>
         int RecommendedDegreesOfParallelism { get; }

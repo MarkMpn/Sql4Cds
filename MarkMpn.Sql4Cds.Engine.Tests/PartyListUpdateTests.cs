@@ -117,6 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             public Version Version => new Version(9, 2);
             public string Name => "local";
             public bool UsesWebAPI { get; }
+            public Guid CallerId { get; set; }
             public bool CanParallelise => false;
             public int RecommendedDegreesOfParallelism => 1;
             public IOrganizationService Clone() => throw new NotSupportedException();

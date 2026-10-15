@@ -203,6 +203,7 @@ export interface ExecuteBatchParams {
     requests: WebApiRequest[];
     transaction: boolean;
     continueOnError: boolean;
+    headers: Record<string, string>;
 }
 
 export interface DataverseChunkParams {

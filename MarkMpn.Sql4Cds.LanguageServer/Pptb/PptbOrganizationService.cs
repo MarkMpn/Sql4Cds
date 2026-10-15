@@ -91,6 +91,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public bool UsesWebAPI => true;
 
+        public Guid CallerId { get; set; }
+
         public int RecommendedDegreesOfParallelism => Volatile.Read(ref _parallelism.Value);
 
         /// <summary>
@@ -155,6 +157,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             if (requests.Count == 0)
                 return Array.Empty<WebApiResponse>();
 
+            var headers = new Dictionary<string, string>();
+            var callerId = CallerId;
+            if (callerId != Guid.Empty)
+                headers["MSCRMCallerID"] = callerId.ToString("D");
+
             IReadOnlyList<WebApiResponse> responses;
 
             // PPTB reports an error for the whole batch if a non-transactional batch stops early without
@@ -166,7 +173,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             try
             {
                 // Run the RPC call on the thread pool to avoid deadlocks if the caller has a synchronization context
-                responses = Task.Run(() => _transport.ExecuteBatchAsync(requests, transaction, continueOnError, CancellationToken.None)).GetAwaiter().GetResult();
+                responses = Task.Run(() => _transport.ExecuteBatchAsync(requests, transaction, continueOnError, headers, CancellationToken.None)).GetAwaiter().GetResult();
             }
             catch (RemoteInvocationException ex)
             {

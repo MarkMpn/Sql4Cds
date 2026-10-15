@@ -2613,6 +2613,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (context.PrimaryDataSource.Connection is CrmServiceClient svc)
                 callerId = svc.CallerId;
 #endif
+            else if (context.PrimaryDataSource.Connection is IServiceClient client)
+                callerId = client.CallerId;
 
             if (callerId == Guid.Empty)
                 callerId = context.Options.UserId;
