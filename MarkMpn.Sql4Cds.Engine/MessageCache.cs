@@ -473,7 +473,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     continue;
                 var key = part.Substring(0, separator).Trim();
                 var value = part.Substring(separator + 1).Trim();
-                if (key.Equals("OTC", StringComparison.OrdinalIgnoreCase) && Int32.TryParse(value, CultureInfo.InvariantCulture, out var otc))
+                if (key.Equals("OTC", StringComparison.OrdinalIgnoreCase) && Int32.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var otc))
                     OTC = otc;
                 else if (key.Equals("Bound", StringComparison.OrdinalIgnoreCase))
                     IsBindingParameter = Boolean.Parse(value);

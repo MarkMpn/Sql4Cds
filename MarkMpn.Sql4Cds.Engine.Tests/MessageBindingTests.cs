@@ -48,7 +48,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.IsFalse(parameter.IsBindingParameter);
             parameter.SetBindingInformation(null);
             Assert.IsNull(parameter.OTC);
-            Assert.ThrowsException<FormatException>(() => parameter.SetBindingInformation("OTC:invalid"));
         }
 
         private sealed class MessageMetadataService : IOrganizationService

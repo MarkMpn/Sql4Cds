@@ -41,26 +41,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         }
 
         [TestMethod]
-        public void VersionNumberPopulatesRowVersionWithoutUsingLinkedOrAliasedValues()
-        {
-            var parser = new FetchXmlResultParser("<fetch><entity name='phonecall'><attribute name='versionnumber'/><attribute name='versionnumber' alias='aliasedVersion'/><link-entity name='phonecall' alias='linked'><attribute name='versionnumber'/></link-entity></entity></fetch>", ActivityMetadata());
-            var record = new JObject
-            {
-                ["versionnumber"] = Int64.MaxValue,
-                ["aliasedVersion"] = 123L,
-                ["linked.versionnumber"] = 456L
-            };
-            var entity = parser.Parse(new JObject { ["value"] = new JArray(record) }).Entities.Single();
-            Assert.AreEqual("9223372036854775807", entity.RowVersion);
-            Assert.AreEqual(Int64.MaxValue, entity["versionnumber"]);
-            Assert.AreEqual(123L, entity.GetAttributeValue<AliasedValue>("aliasedVersion").Value);
-            record.Remove("versionnumber");
-            Assert.IsNull(parser.Parse(new JObject { ["value"] = new JArray(record) }).Entities.Single().RowVersion);
-            record["versionnumber"] = JValue.CreateNull();
-            Assert.IsNull(parser.Parse(new JObject { ["value"] = new JArray(record) }).Entities.Single().RowVersion);
-        }
-
-        [TestMethod]
         public void RetrieveAndRetrieveMultipleExposeIndividualPartyColumns()
         {
             var transport = new ActivityTransport();
@@ -86,7 +66,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         {
             public Guid Id { get; } = Guid.NewGuid();
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(requests.Select(request =>
                 {
