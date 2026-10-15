@@ -122,11 +122,38 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
     {
         private readonly Func<IReadOnlyList<WebApiRequest>, IReadOnlyList<WebApiResponse>> _send;
         private readonly ConcurrentDictionary<string, Lazy<WebApiEntityInfo>> _entities = new ConcurrentDictionary<string, Lazy<WebApiEntityInfo>>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<int, Lazy<WebApiEntityInfo>> _entitiesByCode = new ConcurrentDictionary<int, Lazy<WebApiEntityInfo>>();
         private readonly ConcurrentDictionary<string, Lazy<WebApiRelationshipInfo>> _relationships = new ConcurrentDictionary<string, Lazy<WebApiRelationshipInfo>>(StringComparer.OrdinalIgnoreCase);
 
         public WebApiMetadataProvider(Func<IReadOnlyList<WebApiRequest>, IReadOnlyList<WebApiResponse>> send)
         {
             _send = send;
+        }
+
+        public WebApiEntityInfo GetEntity(int objectTypeCode)
+        {
+            var lazy = _entitiesByCode.GetOrAdd(objectTypeCode, code => new Lazy<WebApiEntityInfo>(() =>
+            {
+                var responses = _send(new[]
+                {
+                    new WebApiRequest { Method = "GET", Url = $"EntityDefinitions?$select=LogicalName&$filter=ObjectTypeCode eq {code}" }
+                });
+                var response = responses.Single();
+                response.EnsureSuccess();
+                var entities = response.Json["value"] as JArray;
+                if (entities == null || entities.Count != 1 || String.IsNullOrEmpty(entities[0].Value<string>("LogicalName")))
+                    throw new InvalidOperationException($"Cannot resolve entity object type code {code}");
+                return GetEntity(entities[0].Value<string>("LogicalName"));
+            }, LazyThreadSafetyMode.ExecutionAndPublication));
+            try
+            {
+                return lazy.Value;
+            }
+            catch
+            {
+                _entitiesByCode.TryRemove(objectTypeCode, out _);
+                throw;
+            }
         }
 
         public WebApiEntityInfo GetEntity(string logicalName)

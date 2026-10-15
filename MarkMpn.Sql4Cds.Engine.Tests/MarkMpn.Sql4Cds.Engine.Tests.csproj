@@ -80,6 +80,7 @@
     <Compile Include="CacheConcurrencyTests.cs" />
     <Compile Include="BulkDeleteJobTests.cs" />
     <Compile Include="PartyListUpdateTests.cs" />
+    <Compile Include="MessageBindingTests.cs" />
     <Compile Include="ServiceClientTests.cs" />
     <Compile Include="CursorTests.cs" />
     <Compile Include="OpenRowsetBulkTests.cs" />

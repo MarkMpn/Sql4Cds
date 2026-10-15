@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -43,75 +42,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             ["tag"] = "MSCRM.tag",
         };
 
-        /// <summary>
-        /// Messages that are implemented as functions rather than actions in the Web API
-        /// </summary>
-        private static readonly string[] _knownFunctions = new[]
-        {
-            "CalculateTotalTimeIncident",
-            "CheckIncomingEmail",
-            "DownloadReportDefinition",
-            "ExpandCalendar",
-            "FormatAddress",
-            "GetAllTimeZonesWithDisplayName",
-            "GetDefaultPriceLevel",
-            "GetTimeZoneCodeByLocalizedName",
-            "GetValidManyToMany",
-            "GetValidReferencedEntities",
-            "GetValidReferencingEntities",
-            "IsValidStateTransition",
-            "LocalTimeFromUtcTime",
-            "RetrieveAadUserPrivileges",
-            "RetrieveAadUserRoles",
-            "RetrieveAadUserSetOfPrivilegesByNames",
-            "RetrieveAllEntities",
-            "RetrieveAppComponents",
-            "RetrieveBusinessHierarchyBusinessUnit",
-            "RetrieveCurrentOrganization",
-            "RetrieveDeploymentLicenseType",
-            "RetrieveDuplicates",
-            "RetrieveFormattedImportJobResults",
-            "RetrieveLocLabels",
-            "RetrieveMissingComponents",
-            "RetrieveOrganizationInfo",
-            "RetrieveOrganizationResources",
-            "RetrieveParsedDataImportFile",
-            "RetrievePrincipalAccess",
-            "RetrievePrincipalAccessInfo",
-            "RetrieveProvisionedLanguagePackVersion",
-            "RetrieveProvisionedLanguages",
-            "RetrieveTeamPrivileges",
-            "RetrieveTimelineWallRecords",
-            "RetrieveTotalRecordCount",
-            "RetrieveUserLicenseInfo",
-            "RetrieveUserPrivilegeByPrivilegeId",
-            "RetrieveUserPrivilegeByPrivilegeName",
-            "RetrieveUserPrivileges",
-            "RetrieveUserQueues",
-            "RetrieveUserSetOfPrivilegesByIds",
-            "RetrieveUserSetOfPrivilegesByNames",
-            "RetrieveUserSettingsRecord",
-            "RetrieveVersion",
-            "SearchByBodyLegacy",
-            "SearchByKeywordsLegacy",
-            "SearchByTitleLegacy",
-            "UtcTimeFromLocalTime",
-            "ValidateFetchXmlExpression",
-            "WhoAmI",
-        };
-
-        /// <summary>
-        /// Messages that are bound to a specific record, and the parameter that identifies the record
-        /// </summary>
-        private static readonly Dictionary<string, (string parameter, string entity)> _boundActions = new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["AddMemberList"] = ("ListId", "list"),
-            ["RemoveMemberList"] = ("ListId", "list"),
-        };
-
         private readonly IWebApiTransport _transport;
         private readonly string _serviceRoot;
-        private readonly ConcurrentDictionary<string, bool> _functions;
         private Version _version;
         private readonly ParallelismRecommendation _parallelism = new ParallelismRecommendation();
 
@@ -124,11 +56,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _serviceRoot = (url ?? "").TrimEnd('/') + "/api/data/v9.2/";
-            _functions = new ConcurrentDictionary<string, bool>(_knownFunctions.ToDictionary(f => f, f => true), StringComparer.OrdinalIgnoreCase);
 
             Metadata = new WebApiMetadataProvider(requests => Send(requests));
             Serializer = new WebApiEntitySerializer(Metadata);
             MetadataQuery = new WebApiMetadataQuery(request => SendSingle(request));
+            MessageCache = new MessageCache(this, new AttributeMetadataCache(this));
 
             Name = name;
         }
@@ -138,6 +70,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         public WebApiEntitySerializer Serializer { get; }
 
         public WebApiMetadataQuery MetadataQuery { get; }
+
+        public IMessageCache MessageCache { get; set; }
 
         public Version Version
         {
@@ -875,54 +809,37 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         private PreparedOperation PrepareGeneric(OrganizationRequest request)
         {
-            if (_functions.TryGetValue(request.RequestName, out var isFunction) && isFunction)
-                return Single(CreateFunctionRequest(request), response => MapGenericResponse(request, response));
+            if (!MessageCache.TryGetValue(request.RequestName, out var message))
+                throw CreateFault($"Web API metadata was not found for message {request.RequestName}");
 
-            var action = CreateActionRequest(request);
-
-            if (_functions.ContainsKey(request.RequestName))
-                return Single(action, response => MapGenericResponse(request, response));
-
-            // We don't know if this message is an action or a function yet, so try it as an action first and fall
-            // back to a function if that fails
-            return new PreparedOperation
-            {
-                Requests = new List<WebApiRequest> { action },
-                Map = responses => MapGenericResponse(request, responses[0]),
-                Custom = () =>
-                {
-                    var response = SendSingle(action);
-
-                    if (response.Status == 404 || response.Status == 405 || (response.Status == 400 && request.Parameters.Count == 0))
-                    {
-                        var functionResponse = SendSingle(CreateFunctionRequest(request));
-
-                        if (functionResponse.IsSuccess)
-                        {
-                            _functions[request.RequestName] = true;
-                            return MapGenericResponse(request, functionResponse);
-                        }
-                    }
-
-                    response.EnsureSuccess();
-                    _functions[request.RequestName] = false;
-                    return MapGenericResponse(request, response);
-                }
-            };
+            var operation = message.IsReadOnly ? CreateFunctionRequest(request, message) : CreateActionRequest(request, message);
+            return Single(operation, response => MapGenericResponse(request, response, message));
         }
 
-        private string GetBoundPrefix(OrganizationRequest request, out string boundParameter)
+        private string GetBoundPrefix(OrganizationRequest request, Message message, out string boundParameter)
         {
             boundParameter = null;
 
-            if (!_boundActions.TryGetValue(request.RequestName, out var binding))
+            if (String.IsNullOrEmpty(message?.BoundEntityLogicalName))
                 return "";
 
-            if (!request.Parameters.TryGetValue(binding.parameter, out var value) || !(value is Guid id))
-                return "";
-
-            boundParameter = binding.parameter;
-            return Serializer.GetRecordUrl(binding.entity, id) + "/Microsoft.Dynamics.CRM.";
+            var binding = message.InputParameters.SingleOrDefault(p => p.IsBindingParameter) ??
+                throw new InvalidOperationException($"No binding parameter is defined for {request.RequestName}");
+            if (!request.Parameters.TryGetValue(binding.Name, out var value))
+                throw CreateFault($"Missing binding parameter {binding.Name} for {request.RequestName}");
+            Guid id;
+            if (value is Guid guid)
+                id = guid;
+            else if (value is EntityReference reference && String.Equals(reference.LogicalName, message.BoundEntityLogicalName, StringComparison.OrdinalIgnoreCase))
+                id = reference.Id;
+            else if (value is Entity entity && String.Equals(entity.LogicalName, message.BoundEntityLogicalName, StringComparison.OrdinalIgnoreCase))
+                id = entity.Id;
+            else
+                throw CreateFault($"Invalid binding parameter {binding.Name} for {request.RequestName}");
+            if (id == Guid.Empty)
+                throw CreateFault($"Empty binding ID for {request.RequestName}");
+            boundParameter = binding.Name;
+            return Serializer.GetRecordUrl(message.BoundEntityLogicalName, id) + "/Microsoft.Dynamics.CRM.";
         }
 
         private WebApiRequest CreateBulkDeleteRequest(BulkDeleteRequest request)
@@ -943,9 +860,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return action;
         }
 
-        private WebApiRequest CreateActionRequest(OrganizationRequest request)
+        private WebApiRequest CreateActionRequest(OrganizationRequest request, Message message = null)
         {
-            var prefix = GetBoundPrefix(request, out var boundParameter);
+            var prefix = GetBoundPrefix(request, message, out var boundParameter);
             var body = new JObject();
 
             foreach (var param in request.Parameters)
@@ -953,7 +870,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 if (_headerParameters.ContainsKey(param.Key) || param.Key == boundParameter)
                     continue;
 
-                body[param.Key] = SerializeParameter(param.Value);
+                var metadata = message?.InputParameters.SingleOrDefault(p => p.Name.Equals(param.Key, StringComparison.OrdinalIgnoreCase));
+                body[metadata?.EntityParameterName ?? param.Key] = SerializeMessageParameter(param.Value, metadata);
             }
 
             return new WebApiRequest
@@ -965,9 +883,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             };
         }
 
-        private WebApiRequest CreateFunctionRequest(OrganizationRequest request)
+        private WebApiRequest CreateFunctionRequest(OrganizationRequest request, Message message = null)
         {
-            var prefix = GetBoundPrefix(request, out var boundParameter);
+            var prefix = GetBoundPrefix(request, message, out var boundParameter);
             var parameters = new List<string>();
             var values = new List<string>();
             var i = 1;
@@ -977,8 +895,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 if (_headerParameters.ContainsKey(param.Key) || param.Key == boundParameter)
                     continue;
 
-                parameters.Add($"{param.Key}=@p{i}");
-                values.Add($"@p{i}=" + Uri.EscapeDataString(FormatFunctionParameter(param.Value)));
+                var metadata = message?.InputParameters.SingleOrDefault(p => p.Name.Equals(param.Key, StringComparison.OrdinalIgnoreCase));
+                parameters.Add($"{metadata?.EntityParameterName ?? param.Key}=@p{i}");
+                values.Add($"@p{i}=" + Uri.EscapeDataString(metadata?.EntityParameterName == null ?
+                    FormatFunctionParameter(param.Value) : WebApiJson.Serialize(SerializeMessageParameter(param.Value, metadata))));
                 i++;
             }
 
@@ -1121,11 +1041,29 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
         }
 
-        private static OrganizationResponse MapGenericResponse(OrganizationRequest request, WebApiResponse response)
+        private JToken SerializeMessageParameter(object value, MessageParameter parameter)
+        {
+            if (parameter?.EntityParameterName == null || value == null)
+                return SerializeParameter(value);
+            if (value is Guid id)
+                return SerializeParameter(new EntityReference(Metadata.GetEntity(parameter.OTC ??
+                    throw new InvalidOperationException($"Missing object type code for {parameter.Name}")).LogicalName, id));
+            if (value is Guid[] ids)
+                return new JArray(ids.Select(g => SerializeMessageParameter(g, parameter)));
+            return SerializeParameter(value);
+        }
+
+        private OrganizationResponse MapGenericResponse(OrganizationRequest request, WebApiResponse response, Message message)
         {
             response.EnsureSuccess();
+            if (!(response.Json is JObject) && message?.OutputParameters.Any(p => p.EntityParameterName != null) == true)
+                throw new InvalidOperationException($"Dataverse did not return the entity response for {request.RequestName}");
 
-            var result = new OrganizationResponse { ResponseName = request.RequestName };
+            var responseType = request.GetType().FullName.EndsWith("Request", StringComparison.Ordinal) ?
+                request.GetType().Assembly.GetType(request.GetType().FullName.Substring(0, request.GetType().FullName.Length - 7) + "Response") : null;
+            var result = responseType != null && typeof(OrganizationResponse).IsAssignableFrom(responseType) ?
+                (OrganizationResponse)Activator.CreateInstance(responseType) : new OrganizationResponse();
+            result.ResponseName = request.RequestName;
 
             if (response.Json is JObject json)
             {
@@ -1135,6 +1073,49 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                         continue;
 
                     result.Results[prop.Name] = WebApiJson.ToClrValue(prop.Value);
+                }
+
+                foreach (var parameter in message?.OutputParameters ?? Array.Empty<MessageParameter>())
+                {
+                    if (parameter.EntityParameterName == null)
+                        continue;
+                    var token = json[parameter.EntityParameterName];
+                    // Actions returning a single entity expose its properties directly rather than a response wrapper.
+                    if (token == null && message.OutputParameters.Count == 1)
+                    {
+                        token = json;
+                        result.Results.Clear();
+                    }
+                    if (token == null)
+                        throw new InvalidOperationException($"Dataverse did not return {parameter.EntityParameterName} for {request.RequestName}");
+                    var info = Metadata.GetEntity(parameter.OTC ??
+                        throw new InvalidOperationException($"Missing object type code for {parameter.Name}"));
+                    Guid ReadId(JToken entity)
+                    {
+                        if (!(entity is JObject objectValue))
+                            throw new InvalidOperationException($"Dataverse returned an invalid entity for {parameter.Name}");
+                        var idValue = objectValue.Value<string>(info.PrimaryIdAttribute);
+                        if (idValue != null)
+                            return Guid.Parse(idValue);
+                        return WebApiJson.ParseEntityId(objectValue.Value<string>("@odata.id")) ??
+                            throw new InvalidOperationException($"Dataverse did not return {info.PrimaryIdAttribute} for {request.RequestName}");
+                    }
+                    object value;
+                    if (parameter.Type == typeof(Guid))
+                        value = ReadId(token);
+                    else if (parameter.Type == typeof(Guid[]))
+                        value = token is JArray entities ? entities.Select(ReadId).ToArray() :
+                            throw new InvalidOperationException($"Dataverse did not return an entity array for {parameter.Name}");
+                    else if (parameter.Type == typeof(EntityReference))
+                        value = new EntityReference(info.LogicalName, ReadId(token));
+                    else if (parameter.Type == typeof(EntityReferenceCollection))
+                        value = token is JArray references ?
+                            new EntityReferenceCollection(references.Select(e => new EntityReference(info.LogicalName, ReadId(e))).ToList()) :
+                            throw new InvalidOperationException($"Dataverse did not return an entity array for {parameter.Name}");
+                    else
+                        value = WebApiJson.ToClrValue(token);
+                    result.Results.Remove(parameter.EntityParameterName);
+                    result.Results[parameter.Name] = value;
                 }
             }
 

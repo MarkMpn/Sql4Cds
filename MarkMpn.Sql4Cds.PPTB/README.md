@@ -58,10 +58,11 @@ The following are not available when running inside PPTB:
 
 - The TDS endpoint
 - Impersonation (`EXECUTE AS`)
-- Some bound actions / messages that can't be mapped to the Web API automatically
 
 Party-list updates (such as `to` and `from` on activities) retrieve the existing party-list values and include unchanged roles in the activity's combined Web API payload. This may cause plugins to be triggered differently to when the same
 Retrieved activity-party collections are split into individual party-list columns by participation type. This may cause plugins to be triggered differently to when the same
 `UPDATE` query is executed via the XrmToolBox version.
 
 Requests that include custom HTTP headers (e.g. `BypassCustomPluginExecution` or `Prefer` headers) may cause PPTB to ask for consent the first time they are used.
+
+Message bindings and entity-parameter conversions are inferred from the `sdkmessage*` metadata. The `sdkmessage.isreadonly` flag selects GET for functions and POST for actions, without trial requests. This supports bound operations such as `SendEmail`, `ExecuteWorkflow`, and `AddMembersTeam`; messages still require an available Web API operation and supported parameter types.

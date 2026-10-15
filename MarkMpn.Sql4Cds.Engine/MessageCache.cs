@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -77,18 +78,27 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Load the requests and input parameters
                 var requestQry = new QueryExpression("sdkmessagerequest");
-                requestQry.ColumnSet = new ColumnSet("name");
+                requestQry.ColumnSet = new ColumnSet("name", "primaryobjecttypecode");
                 var messagePairLink = requestQry.AddLink("sdkmessagepair", "sdkmessagepairid", "sdkmessagepairid");
                 messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "api/data");
+                var messageLink = messagePairLink.AddLink("sdkmessage", "sdkmessageid", "sdkmessageid");
+                messageLink.EntityAlias = "sdkmessage";
+                messageLink.Columns = new ColumnSet("isreadonly");
                 var fieldLink = requestQry.AddLink("sdkmessagerequestfield", "sdkmessagerequestid", "sdkmessagerequestid", JoinOperator.LeftOuter);
                 fieldLink.EntityAlias = "sdkmessagerequestfield";
                 fieldLink.Columns = new ColumnSet("name", "clrparser", "position", "optional", "parameterbindinginformation");
 
                 var messageRequestFields = new Dictionary<string, List<MessageParameter>>();
+                var boundEntities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var readOnlyMessages = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var entity in RetrieveAll(requestQry))
                 {
                     var messageName = entity.GetAttributeValue<string>("name");
+                    readOnlyMessages[messageName] = (bool)(entity.GetAttributeValue<AliasedValue>("sdkmessage.isreadonly")?.Value ?? false);
+                    var boundEntity = entity.GetAttributeValue<string>("primaryobjecttypecode");
+                    if (!String.IsNullOrEmpty(boundEntity))
+                        boundEntities[messageName] = boundEntity;
 
                     if (!messageRequestFields.TryGetValue(messageName, out var requestFields))
                     {
@@ -104,14 +114,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (fieldName != null)
                     {
-                        requestFields.Add(new MessageParameter
+                        var parameter = new MessageParameter
                         {
                             Name = (string)fieldName.Value,
                             Type = fieldType == null ? null : GetType((string)fieldType.Value),
                             Position = (int)fieldPosition.Value,
-                            Optional = (bool)(fieldOptional?.Value ?? false),
-                            OTC = fieldBindingInfo == null ? null : ExtractOTC((string)fieldBindingInfo.Value)
-                        });
+                            Optional = (bool)(fieldOptional?.Value ?? false)
+                        };
+                        parameter.SetBindingInformation((string)fieldBindingInfo?.Value);
+                        requestFields.Add(parameter);
                     }
                 }
 
@@ -143,13 +154,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     var fieldPosition = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.position");
                     var fieldBindingInfo = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.parameterbindinginformation");
 
-                    responseFields.Add(new MessageParameter
+                    var parameter = new MessageParameter
                     {
                         Name = (string)fieldName.Value,
                         Type = fieldType == null ? null : GetType((string)fieldType.Value),
-                        Position = (int)fieldPosition.Value,
-                        OTC = fieldBindingInfo == null ? null : ExtractOTC((string)fieldBindingInfo.Value)
-                    });
+                        Position = (int)fieldPosition.Value
+                    };
+                    parameter.SetBindingInformation((string)fieldBindingInfo?.Value);
+                    responseFields.Add(parameter);
                 }
 
                 _cache = messageRequestFields.ToDictionary(kvp => kvp.Key, kvp =>
@@ -161,6 +173,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     return new Message
                     {
                         Name = kvp.Key,
+                        IsReadOnly = readOnlyMessages[kvp.Key],
+                        BoundEntityLogicalName = boundEntities.TryGetValue(kvp.Key, out var boundEntity) ? boundEntity : null,
                         InputParameters = requestFields.AsReadOnly(),
                         OutputParameters = (IReadOnlyList<MessageParameter>)responseFields?.AsReadOnly() ?? Array.Empty<MessageParameter>()
                     };
@@ -238,20 +252,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 return null;
             }
-        }
-
-        private int? ExtractOTC(string fieldBindingInfo)
-        {
-            if (String.IsNullOrEmpty(fieldBindingInfo))
-                return null;
-
-            if (!fieldBindingInfo.StartsWith("OTC:"))
-                return null;
-
-            if (!Int32.TryParse(fieldBindingInfo.Substring(4), out var otc))
-                return null;
-
-            return otc;
         }
 
         public bool TryGetValue(string name, out Message message)
@@ -336,6 +336,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns or sets the name of the message
         /// </summary>
         public string Name { get; set; }
+
+        /// <summary>
+        /// The logical name of the entity to which the Web API operation is bound.
+        /// </summary>
+        public string BoundEntityLogicalName { get; set; }
+
+        /// <summary>
+        /// Whether the message is a read-only Web API function rather than an action.
+        /// </summary>
+        public bool IsReadOnly { get; set; }
 
         /// <summary>
         /// Returns or sets the list of input parameters for the message
@@ -434,6 +444,44 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates whether the input parameter is optional
         /// </summary>
         public bool Optional { get; set; }
+
+        /// <summary>
+        /// Whether this parameter identifies the record to which the Web API operation is bound.
+        /// </summary>
+        public bool IsBindingParameter { get; set; }
+
+        /// <summary>
+        /// The Web API parameter name when the SDK value is represented as an entity.
+        /// </summary>
+        public string EntityParameterName { get; set; }
+
+        /// <summary>
+        /// Parses the SDK message field's Web API binding information.
+        /// </summary>
+        public void SetBindingInformation(string information)
+        {
+            OTC = null;
+            IsBindingParameter = false;
+            EntityParameterName = null;
+            if (String.IsNullOrEmpty(information))
+                return;
+
+            foreach (var part in information.Split(','))
+            {
+                var separator = part.IndexOf(':');
+                if (separator < 0)
+                    continue;
+                var key = part.Substring(0, separator).Trim();
+                var value = part.Substring(separator + 1).Trim();
+                if (key.Equals("OTC", StringComparison.OrdinalIgnoreCase) && Int32.TryParse(value, CultureInfo.InvariantCulture, out var otc))
+                    OTC = otc;
+                else if (key.Equals("Bound", StringComparison.OrdinalIgnoreCase))
+                    IsBindingParameter = Boolean.Parse(value);
+                else if (key.Equals("AsEntityParameter", StringComparison.OrdinalIgnoreCase))
+                    EntityParameterName = String.IsNullOrEmpty(value) ?
+                        throw new FormatException("An entity parameter binding must specify a parameter name") : value;
+            }
+        }
 
         /// <summary>
         /// Checks if the parameter is a scalar type

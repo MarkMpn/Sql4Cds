@@ -359,10 +359,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             }
 
             Metadata = new CachedMetadata(org, persistentMetadataCache, OrgId, Version.ToString(), org is PptbOrganizationService);
-            if (org is PptbOrganizationService)
+            if (org is PptbOrganizationService pptb)
             {
                 TableSizeCache = new TableSizeCache(org, Metadata, Version);
                 MessageCache = new MessageCache(org, Metadata);
+                pptb.MessageCache = MessageCache;
             }
         }
 
