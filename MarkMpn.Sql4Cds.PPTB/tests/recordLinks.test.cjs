@@ -90,15 +90,21 @@ class Element {
     append(...children) { children.forEach((child) => this.appendChild(child)); }
     replaceChildren(...children) { this.children = []; this.append(...children); }
     addEventListener(name, handler) { this.events[name] = handler; }
-    closest(selector) { return selector === ".grid-record-link" && this.className === "grid-record-link" ? this : null; }
+    focus() {}
+    closest(selector) {
+        if (selector === ".grid-record-link" && this.className === "grid-record-link") return this;
+        if (selector === ".grid-cell" && this.className === "grid-cell") return this;
+        return this.parentElement?.closest(selector) ?? null;
+    }
 }
 
 test("renders references as clickable links without breaking text, NULLs, or copying", () => {
     const opened = [];
     const copied = [];
     const { ResultsGrid } = loadModule("query/resultsGrid.ts", {
-        document: { createElement: (tag) => new Element(tag) },
+        document: { createElement: (tag) => new Element(tag), addEventListener() {}, removeEventListener() {} },
         ResizeObserver: class { observe() {} },
+        requestAnimationFrame() {},
     });
     const values = [
         { displayValue: "Account <name>", isNull: false, rawObject: reference },
@@ -117,7 +123,7 @@ test("renders references as clickable links without breaking text, NULLs, or cop
     assert.equal(row.children[3].textContent, "NULL");
     assert.equal(row.children[4].textContent, "null reference");
     grid.render = () => { throw new Error("Link must not be removed before click"); };
-    grid.onCellClick({ target: link });
+    grid.onCellClick({ target: link, button: 0, preventDefault() {} });
     let prevented = false;
     link.events.click({ preventDefault: () => { prevented = true; } });
     assert.equal(prevented, true);

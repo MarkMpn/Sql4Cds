@@ -21,6 +21,11 @@ interface CachedPage {
     pending: Promise<void> | null;
 }
 
+interface CellPosition {
+    row: number;
+    col: number;
+}
+
 /**
  * A virtualized grid showing a single result set. Only the rows that are currently visible are rendered, and
  * only a limited number of pages of rows are held in memory. Rows are requested from the language server on
@@ -41,7 +46,13 @@ export class ResultsGrid {
     private complete = false;
     private renderScheduled = false;
     private disposed = false;
-    private selected: { row: number; col: number } | null = null;
+    private selected: CellPosition | null = null;
+    private selectionAnchor: CellPosition | null = null;
+    private dragging = false;
+    private dragPoint: { x: number; y: number } | null = null;
+    private dragFrame: number | null = null;
+    private copying = false;
+    private copyError: string | null = null;
     private autoSized = false;
 
     constructor(
@@ -82,7 +93,9 @@ export class ResultsGrid {
             this.scheduleRender();
         });
         this.body.addEventListener("mousedown", (e) => this.onCellClick(e));
+        this.header.addEventListener("mousedown", (e) => this.onCellClick(e));
         this.element.addEventListener("keydown", (e) => this.onKeyDown(e));
+        document.addEventListener("copy", this.onDocumentCopy);
         new ResizeObserver(() => this.scheduleRender()).observe(this.viewport);
     }
 
@@ -98,6 +111,8 @@ export class ResultsGrid {
 
     dispose(): void {
         this.disposed = true;
+        this.endDrag();
+        document.removeEventListener("copy", this.onDocumentCopy);
         this.pages.clear();
         this.element.remove();
     }
@@ -120,6 +135,7 @@ export class ResultsGrid {
         this.columns.forEach((column, index) => {
             const cell = document.createElement("div");
             cell.className = "grid-cell";
+            cell.dataset.col = String(index);
             cell.style.width = `${this.columnWidths[index]}px`;
             cell.textContent = column.columnName || "(No column name)";
             cell.title = column.dataTypeName ? `${column.columnName} (${column.dataTypeName})` : column.columnName;
@@ -158,7 +174,26 @@ export class ResultsGrid {
 
     private updateStatus(): void {
         const rows = `${this.rowCount.toLocaleString()} row${this.rowCount === 1 ? "" : "s"}`;
-        this.statusBar.textContent = this.complete ? rows : `${rows} (retrieving…)`;
+        let text = this.complete ? rows : `${rows} (retrieving…)`;
+        const range = this.selectionRange;
+        if (range) {
+            const count = (range.lastRow - range.firstRow + 1) * (range.lastCol - range.firstCol + 1);
+            text += ` | ${count.toLocaleString()} cell${count === 1 ? "" : "s"} selected`;
+        }
+        if (this.copying) text += " | Copying…";
+        if (this.copyError) text += ` | ${this.copyError}`;
+        this.statusBar.textContent = text;
+    }
+
+    private get selectionRange(): { firstRow: number; lastRow: number; firstCol: number; lastCol: number } | null {
+        if (!this.selected) return null;
+        const anchor = this.selectionAnchor ?? this.selected;
+        return {
+            firstRow: Math.min(anchor.row, this.selected.row),
+            lastRow: Math.max(anchor.row, this.selected.row),
+            firstCol: Math.min(anchor.col, this.selected.col),
+            lastCol: Math.max(anchor.col, this.selected.col),
+        };
     }
 
     private scheduleRender(): void {
@@ -170,13 +205,23 @@ export class ResultsGrid {
         });
     }
 
+    /** The number of rows that fit entirely within the viewport */
+    private get fullyVisibleRows(): number {
+        return Math.max(1, Math.floor(this.viewport.clientHeight / ROW_HEIGHT));
+    }
+
+    /** The highest first visible row when the scroll range is scaled, which still allows the last row to be fully shown */
+    private get maxScaledFirstRow(): number {
+        return Math.max(0, this.rowCount - this.fullyVisibleRows);
+    }
+
     /** Works out the first visible row, allowing for the scroll range being scaled for very large result sets */
-    private getFirstVisibleRow(visibleRows: number): number {
+    private getFirstVisibleRow(): number {
         const fullHeight = this.rowCount * ROW_HEIGHT;
         if (fullHeight <= MAX_SCROLL_HEIGHT) return Math.floor(this.viewport.scrollTop / ROW_HEIGHT);
 
         const maxScroll = Math.max(1, MAX_SCROLL_HEIGHT - this.viewport.clientHeight);
-        const maxFirstRow = Math.max(0, this.rowCount - visibleRows);
+        const maxFirstRow = this.maxScaledFirstRow;
         return Math.min(maxFirstRow, Math.floor((this.viewport.scrollTop / maxScroll) * maxFirstRow));
     }
 
@@ -186,7 +231,7 @@ export class ResultsGrid {
         this.spacer.style.width = `${this.totalWidth}px`;
 
         const visibleRows = Math.ceil(this.viewport.clientHeight / ROW_HEIGHT) + 1;
-        const first = this.getFirstVisibleRow(visibleRows);
+        const first = this.getFirstVisibleRow();
         const last = Math.min(this.rowCount, first + visibleRows);
 
         // Position the rendered rows so they line up with the current scroll position
@@ -216,6 +261,7 @@ export class ResultsGrid {
         row.appendChild(rowNum);
 
         const values = this.getRow(rowIndex);
+        const range = this.selectionRange;
 
         this.columns.forEach((_, colIndex) => {
             const cell = document.createElement("div");
@@ -241,6 +287,7 @@ export class ResultsGrid {
                         link.addEventListener("click", (e) => {
                             e.preventDefault();
                             this.onOpenRecord(reference);
+                            this.scheduleRender();
                         });
                         cell.appendChild(link);
                     } else {
@@ -250,7 +297,8 @@ export class ResultsGrid {
                 }
             }
 
-            if (this.selected?.row === rowIndex && this.selected.col === colIndex) cell.classList.add("selected");
+            if (range && rowIndex >= range.firstRow && rowIndex <= range.lastRow &&
+                colIndex >= range.firstCol && colIndex <= range.lastCol) cell.classList.add("selected");
             row.appendChild(cell);
         });
 
@@ -324,56 +372,305 @@ export class ResultsGrid {
     }
 
     private onCellClick(e: MouseEvent): void {
-        // Rerendering on mousedown would remove the link before its click event.
-        if ((e.target as HTMLElement).closest(".grid-record-link")) return;
+        if (e.button !== 0) return;
+        if ((e.target as HTMLElement).closest(".grid-resizer")) return;
+        const recordLink = (e.target as HTMLElement).closest(".grid-record-link");
         const cell = (e.target as HTMLElement).closest<HTMLElement>(".grid-cell");
+        if (!cell) return;
         const row = cell?.parentElement?.dataset.row;
         const col = cell?.dataset.col;
-        if (row === undefined || col === undefined) return;
-
-        this.selected = { row: Number(row), col: Number(col) };
-        this.element.focus();
-        this.render();
-    }
-
-    private onKeyDown(e: KeyboardEvent): void {
-        if (!this.selected) return;
-
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-            const value = this.getRow(this.selected.row)?.[this.selected.col];
-            if (value) {
-                this.onCopy(value.isNull ? "" : value.displayValue);
-                e.preventDefault();
-            }
+        if (row === undefined || col === undefined) {
+            e.preventDefault();
+            this.selectRectangle(
+                { row: row === undefined ? 0 : Number(row), col: col === undefined ? 0 : Number(col) },
+                {
+                    row: row === undefined ? this.rowCount - 1 : Number(row),
+                    col: col === undefined ? this.columns.length - 1 : Number(col),
+                },
+            );
             return;
         }
 
-        const moves: Record<string, [number, number]> = {
-            ArrowUp: [-1, 0],
-            ArrowDown: [1, 0],
-            ArrowLeft: [0, -1],
-            ArrowRight: [0, 1],
-        };
-        const move = moves[e.key];
-        if (!move) return;
-
+        // Keep the browser's default mousedown action from moving focus after the clicked cell is replaced.
         e.preventDefault();
-        this.selected = {
-            row: Math.max(0, Math.min(this.rowCount - 1, this.selected.row + move[0])),
-            col: Math.max(0, Math.min(this.columns.length - 1, this.selected.col + move[1])),
-        };
-        this.scrollIntoView(this.selected.row);
+        this.endDrag();
+        if (!e.shiftKey || !this.selected) {
+            this.selectionAnchor = { row: Number(row), col: Number(col) };
+        } else {
+            this.selectionAnchor ??= this.selected;
+        }
+        this.selected = { row: Number(row), col: Number(col) };
+        this.copyError = null;
+        this.element.focus();
+        this.updateStatus();
+        // A plain link click must reach its handler; dragging can replace it once the mouse moves.
+        if (!recordLink || e.shiftKey) this.render();
+        this.dragging = true;
+        document.addEventListener("mousemove", this.onDragMove);
+        document.addEventListener("mouseup", this.endDrag);
+        document.defaultView?.addEventListener("blur", this.endDrag);
+    }
+
+    private selectRectangle(anchor: CellPosition, end: CellPosition): void {
+        this.endDrag();
+        this.selectionAnchor = this.rowCount > 0 && this.columns.length > 0 ? anchor : null;
+        this.selected = this.selectionAnchor ? end : null;
+        this.copyError = null;
+        this.element.focus();
+        this.updateStatus();
         this.render();
     }
 
-    private scrollIntoView(rowIndex: number): void {
-        if (this.rowCount * ROW_HEIGHT > MAX_SCROLL_HEIGHT) return;
+    private readonly onDragMove = (e: MouseEvent): void => {
+        if (!(e.buttons & 1)) {
+            this.endDrag();
+            return;
+        }
+        e.preventDefault();
+        this.dragPoint = { x: e.clientX, y: e.clientY };
+        if (this.dragFrame !== null) cancelAnimationFrame(this.dragFrame);
+        this.updateDragSelection();
+    };
 
-        const top = rowIndex * ROW_HEIGHT;
-        if (top < this.viewport.scrollTop) {
-            this.viewport.scrollTop = top;
-        } else if (top + ROW_HEIGHT > this.viewport.scrollTop + this.viewport.clientHeight) {
-            this.viewport.scrollTop = top + ROW_HEIGHT - this.viewport.clientHeight;
+    private readonly updateDragSelection = (): void => {
+        this.dragFrame = null;
+        if (!this.dragging || !this.dragPoint || !this.selected) return;
+        const rect = this.viewport.getBoundingClientRect();
+        const x = this.dragPoint.x - rect.left - this.viewport.clientLeft;
+        const y = this.dragPoint.y - rect.top - this.viewport.clientTop;
+        const height = this.viewport.clientHeight;
+        const width = this.viewport.clientWidth;
+        if (height <= 0 || width <= 0) return;
+
+        const offset = this.rowCount * ROW_HEIGHT <= MAX_SCROLL_HEIGHT ? this.viewport.scrollTop % ROW_HEIGHT : 0;
+        let row = this.getFirstVisibleRow() + Math.floor((clamp(y, 0, height - 1) + offset) / ROW_HEIGHT);
+        const contentX = this.viewport.scrollLeft + clamp(x, 0, width - 1);
+        let col = 0;
+        let right = ROW_NUMBER_WIDTH + this.columnWidths[0];
+        while (col < this.columns.length - 1 && contentX >= right) right += this.columnWidths[++col];
+
+        // Extend by one cell per frame outside the viewport, including scaled scroll ranges.
+        if (y < 0) row--;
+        else if (y >= height) row++;
+        if (x < 0) col--;
+        else if (x >= width) col++;
+        row = clamp(row, 0, this.rowCount - 1);
+        col = clamp(col, 0, this.columns.length - 1);
+        if (this.selected.row !== row || this.selected.col !== col) {
+            this.selected = { row, col };
+            this.updateStatus();
+            this.scheduleRender();
+        }
+        if (x < 0 || x >= width || y < 0 || y >= height) this.scrollIntoView(row, col);
+        this.dragFrame = requestAnimationFrame(this.updateDragSelection);
+    };
+
+    private readonly endDrag = (): void => {
+        this.dragging = false;
+        this.dragPoint = null;
+        if (this.dragFrame !== null) cancelAnimationFrame(this.dragFrame);
+        this.dragFrame = null;
+        document.removeEventListener("mousemove", this.onDragMove);
+        document.removeEventListener("mouseup", this.endDrag);
+        document.defaultView?.removeEventListener("blur", this.endDrag);
+    };
+
+    private onKeyDown(e: KeyboardEvent): void {
+        if (e.defaultPrevented || e.altKey) return;
+
+        const primary = isMac() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+        if (primary && !e.shiftKey && e.key.toLowerCase() === "a") {
+            e.preventDefault();
+            this.selectRectangle({ row: 0, col: 0 }, { row: this.rowCount - 1, col: this.columns.length - 1 });
+            return;
+        }
+
+        const copy = getCopyShortcut(e);
+        if (copy) {
+            if (!this.selected) return;
+            e.preventDefault();
+            void this.copySelection(copy === "withHeaders");
+            return;
+        }
+
+        const target = this.getNavigationTarget(e);
+        if (!target) return;
+
+        e.preventDefault();
+        if (this.rowCount === 0 || this.columns.length === 0) return;
+
+        const previous = this.selected;
+        this.selected = {
+            row: clamp(target.row, 0, this.rowCount - 1),
+            col: clamp(target.col, 0, this.columns.length - 1),
+        };
+        if (e.shiftKey) this.selectionAnchor ??= previous ?? this.selected;
+        else this.selectionAnchor = this.selected;
+        this.copyError = null;
+        this.updateStatus();
+        this.scrollIntoView(this.selected.row, this.selected.col);
+        this.render();
+    }
+
+    /** Handles copy requests that don't come from a keyboard shortcut, e.g. from an application Edit menu */
+    private readonly onDocumentCopy = (e: ClipboardEvent): void => {
+        if (!this.selected || !this.element.contains(document.activeElement)) return;
+        // Leave any text the user has explicitly selected to be copied as normal
+        if (!document.getSelection()?.isCollapsed) return;
+
+        e.preventDefault();
+        void this.copySelection(false);
+    };
+
+    /** Works out which cell to move to for an SSMS-style navigation key, or null if the key isn't a navigation key */
+    private getNavigationTarget(e: KeyboardEvent): { row: number; col: number } | null {
+        const mac = isMac();
+        const ctrl = mac ? e.metaKey : e.ctrlKey;
+        if (mac ? e.ctrlKey : e.metaKey) return null;
+
+        const lastRow = this.rowCount - 1;
+        const lastCol = this.columns.length - 1;
+        const page = Math.max(1, this.fullyVisibleRows - 1);
+
+        // With nothing selected yet, the first navigation key just selects the first cell
+        if (!this.selected) {
+            const keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"];
+            return keys.includes(e.key) ? { row: 0, col: 0 } : null;
+        }
+
+        const { row, col } = this.selected;
+        switch (e.key) {
+            case "ArrowUp":
+                return { row: ctrl ? 0 : row - 1, col };
+            case "ArrowDown":
+                return { row: ctrl ? lastRow : row + 1, col };
+            case "ArrowLeft":
+                return { row, col: ctrl ? 0 : col - 1 };
+            case "ArrowRight":
+                return { row, col: ctrl ? lastCol : col + 1 };
+            case "Home":
+                return { row: ctrl ? 0 : row, col: 0 };
+            case "End":
+                return { row: ctrl ? lastRow : row, col: lastCol };
+            case "PageUp":
+                return ctrl ? null : { row: row - page, col };
+            case "PageDown":
+                return ctrl ? null : { row: row + page, col };
+            default:
+                return null;
         }
     }
+
+    private async copySelection(withHeaders: boolean): Promise<void> {
+        // Snapshot the rectangle: scrolling or changing selection during a fetch must not change the copied data.
+        const range = this.selectionRange;
+        if (!range || this.copying || this.disposed) return;
+        this.copying = true;
+        this.copyError = null;
+        this.updateStatus();
+        try {
+            const lines: string[] = [];
+            if (withHeaders) {
+                lines.push(this.columns.slice(range.firstCol, range.lastCol + 1).map((c) => c.columnName).join("\t"));
+            }
+            for (let first = range.firstRow; first <= range.lastRow;) {
+                const pageIndex = Math.floor(first / PAGE_SIZE);
+                const start = pageIndex * PAGE_SIZE;
+                const last = Math.min(range.lastRow + 1, start + PAGE_SIZE);
+                const page = this.pages.get(pageIndex);
+                let rows = page?.rows;
+                if ((!rows || rows.length < last - start) && page?.pending) {
+                    await page.pending;
+                    rows = page.rows;
+                }
+                if (!rows || rows.length < last - start) {
+                    // Copy-only pages are not cached, so large copies don't evict visible rows or grow the cache.
+                    rows = await this.fetchRows(start, Math.min(PAGE_SIZE, this.rowCount - start));
+                }
+                if (this.disposed) return;
+                for (let rowIndex = first; rowIndex < last; rowIndex++) {
+                    const values = rows[rowIndex - start];
+                    const cells: string[] = [];
+                    for (let col = range.firstCol; col <= range.lastCol; col++) {
+                        const value = values?.[col];
+                        if (!value) throw new Error(`Cell at row ${rowIndex + 1}, column ${col + 1} is unavailable`);
+                        cells.push(value.isNull ? "NULL" : value.displayValue);
+                    }
+                    lines.push(cells.join("\t"));
+                }
+                first = last;
+            }
+            this.onCopy(lines.join("\r\n"));
+        } catch (err) {
+            console.error("Failed to copy selected cells", err);
+            this.copyError = `Copy failed: ${err instanceof Error ? err.message : String(err)}`;
+        } finally {
+            this.copying = false;
+            if (!this.disposed) this.updateStatus();
+        }
+    }
+
+    private scrollIntoView(rowIndex: number, colIndex: number): void {
+        const visibleRows = this.fullyVisibleRows;
+        const fullHeight = this.rowCount * ROW_HEIGHT;
+
+        if (fullHeight <= MAX_SCROLL_HEIGHT) {
+            const top = rowIndex * ROW_HEIGHT;
+            if (top < this.viewport.scrollTop) {
+                this.viewport.scrollTop = top;
+            } else if (top + ROW_HEIGHT > this.viewport.scrollTop + this.viewport.clientHeight) {
+                this.viewport.scrollTop = top + ROW_HEIGHT - this.viewport.clientHeight;
+            }
+        } else {
+            // The scroll range is scaled, so work in terms of the first visible row instead of pixels
+            const first = this.getFirstVisibleRow();
+            let newFirst = first;
+            if (rowIndex < first) newFirst = rowIndex;
+            else if (rowIndex >= first + visibleRows) newFirst = rowIndex - visibleRows + 1;
+
+            if (newFirst !== first) {
+                const maxScroll = Math.max(1, MAX_SCROLL_HEIGHT - this.viewport.clientHeight);
+                const maxFirstRow = Math.max(1, this.maxScaledFirstRow);
+                this.viewport.scrollTop = Math.min(maxScroll, Math.ceil((newFirst / maxFirstRow) * maxScroll));
+            }
+        }
+
+        // The row number column scrolls with the data, so show it when moving to the first column
+        const left = colIndex === 0 ? 0 : ROW_NUMBER_WIDTH + this.columnWidths.slice(0, colIndex).reduce((a, b) => a + b, 0);
+        const right = ROW_NUMBER_WIDTH + this.columnWidths.slice(0, colIndex + 1).reduce((a, b) => a + b, 0);
+        if (left < this.viewport.scrollLeft) {
+            this.viewport.scrollLeft = left;
+        } else if (right > this.viewport.scrollLeft + this.viewport.clientWidth) {
+            this.viewport.scrollLeft = Math.min(left, right - this.viewport.clientWidth);
+        }
+        this.header.scrollLeft = this.viewport.scrollLeft;
+    }
+}
+
+let isMacPlatform: boolean | undefined;
+
+/** Whether the app is running on an Apple platform, where Cmd replaces Ctrl for standard shortcuts */
+function isMac(): boolean {
+    if (isMacPlatform === undefined) {
+        const nav = typeof navigator === "undefined" ? undefined : (navigator as Navigator & { userAgentData?: { platform?: string } });
+        isMacPlatform = /mac|iphone|ipad|ipod/i.test(nav?.userAgentData?.platform || nav?.platform || nav?.userAgent || "");
+    }
+    return isMacPlatform;
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Checks for the platform's standard copy shortcut (Cmd+C on macOS, Ctrl+C or Ctrl+Insert elsewhere), plus the
+ * SSMS Ctrl+Shift+C shortcut to copy with column headers.
+ */
+function getCopyShortcut(e: KeyboardEvent): "plain" | "withHeaders" | null {
+    const primary = isMac() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+    if (!primary) return null;
+
+    if (e.code === "KeyC" || e.key.toLowerCase() === "c") return e.shiftKey ? "withHeaders" : "plain";
+    if (!isMac() && !e.shiftKey && e.key === "Insert") return "plain";
+    return null;
 }
