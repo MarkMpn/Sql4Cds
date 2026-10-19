@@ -15,13 +15,26 @@
                 <label for="connection-select">Connection</label>
                 <select id="connection-select" disabled></select>
                 <span class="toolbar-spacer"></span>
+                <button id="btn-explorer" title="Show or hide Object Explorer" aria-pressed="true" aria-controls="object-explorer">Object Explorer</button>
                 <button id="btn-settings" title="Settings"><span class="icon">⚙</span> Settings</button>
             </div>
-            <div id="tab-strip" class="tab-strip" role="tablist"></div>
-            <div id="workspace" class="workspace">
-                <div id="editor" class="editor"></div>
-                <div id="splitter" class="splitter" role="separator" aria-orientation="horizontal"></div>
-                <div id="results-host" class="results-host"></div>
+            <div class="tool-content">
+                <aside id="object-explorer" class="object-explorer" aria-label="Object Explorer">
+                    <div class="explorer-heading">
+                        <strong>Object Explorer</strong>
+                        <button id="btn-explorer-refresh" title="Refresh selected node (F5)" aria-label="Refresh Object Explorer" disabled>&#x21BB;</button>
+                    </div>
+                    <div id="explorer-tree" class="explorer-tree"></div>
+                </aside>
+                <div id="explorer-splitter" class="explorer-splitter" role="separator" aria-label="Resize Object Explorer" aria-orientation="vertical"></div>
+                <div class="query-area">
+                    <div id="tab-strip" class="tab-strip" role="tablist"></div>
+                    <div id="workspace" class="workspace">
+                        <div id="editor" class="editor"></div>
+                        <div id="splitter" class="splitter" role="separator" aria-orientation="horizontal"></div>
+                        <div id="results-host" class="results-host"></div>
+                    </div>
+                </div>
             </div>
             <div class="status-bar">
                 <span id="status-message" role="status">

@@ -12,6 +12,9 @@ import type {
     ExecuteBatchParams,
     LogMessageParams,
     MessageParams,
+    ObjectExplorerSessionCreated,
+    ObjectExplorerExpandComplete,
+    ObjectExplorerSessionDisconnected,
     PptbConnectionOptions,
     PublishDiagnosticsParams,
     QueryCompleteParams,
@@ -28,6 +31,9 @@ const MAX_RPC_MESSAGE_SIZE = 32 * 1024 * 1024;
 const DATAVERSE_CHUNK_METHOD = "dataverse/executeBatch/chunk";
 
 export interface ClientEvents {
+    objectExplorerSessionCreated?(params: ObjectExplorerSessionCreated): void;
+    objectExplorerExpandComplete?(params: ObjectExplorerExpandComplete): void;
+    objectExplorerSessionDisconnected?(params: ObjectExplorerSessionDisconnected): void;
     /** Status messages such as metadata cache loading progress */
     progress?(message: string): void;
     log?(params: LogMessageParams): void;
@@ -143,6 +149,9 @@ export class Sql4CdsClient {
             notifications: {
                 [DATAVERSE_CHUNK_METHOD]: (p) => this.receiveDataverseChunk(p as DataverseChunkParams),
                 "connection/complete": logRpcNotification("connection/complete", (p) => this.route(p as ConnectionCompleteParams, "connectionComplete")),
+                "objectexplorer/sessioncreated": logRpcNotification("objectexplorer/sessioncreated", (p) => this.events.objectExplorerSessionCreated?.(p as ObjectExplorerSessionCreated)),
+                "objectexplorer/expandCompleted": logRpcNotification("objectexplorer/expandCompleted", (p) => this.events.objectExplorerExpandComplete?.(p as ObjectExplorerExpandComplete)),
+                "objectexplorer/sessiondisconnected": logRpcNotification("objectexplorer/sessiondisconnected", (p) => this.events.objectExplorerSessionDisconnected?.(p as ObjectExplorerSessionDisconnected)),
                 "query/batchStart": logRpcNotification("query/batchStart", (p) => this.route(p as BatchEventParams, "batchStart")),
                 "query/batchComplete": logRpcNotification("query/batchComplete", (p) => this.route(p as BatchEventParams, "batchComplete")),
                 "query/message": logRpcNotification("query/message", (p) => this.route(p as MessageParams, "message")),
@@ -368,6 +377,24 @@ export class Sql4CdsClient {
 
     disconnect(ownerUri: string): Promise<boolean> {
         return this.request<boolean>("connection/disconnect", { ownerUri });
+    }
+
+    // Object Explorer
+
+    createObjectExplorerSession(options: PptbConnectionOptions): Promise<{ sessionId: string }> {
+        return this.request("objectexplorer/createsession", { options });
+    }
+
+    expandObjectExplorerNode(sessionId: string, nodePath: string): Promise<boolean> {
+        return this.request("objectexplorer/expand", { sessionId, nodePath });
+    }
+
+    refreshObjectExplorerNode(sessionId: string, nodePath: string): Promise<boolean> {
+        return this.request("objectexplorer/refresh", { sessionId, nodePath });
+    }
+
+    closeObjectExplorerSession(sessionId: string): Promise<ObjectExplorerSessionDisconnected> {
+        return this.request("objectexplorer/closesession", { sessionId });
     }
 
     // Query execution

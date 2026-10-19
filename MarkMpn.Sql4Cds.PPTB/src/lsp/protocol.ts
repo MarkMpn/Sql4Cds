@@ -96,6 +96,40 @@ export interface ConnectionCompleteParams {
     };
 }
 
+export interface ObjectExplorerNode {
+    nodePath: string;
+    nodeType: string;
+    label: string;
+    isLeaf: boolean;
+    nodeSubType?: string;
+    errorMessage?: string;
+    metadata?: {
+        schema?: string;
+        name?: string;
+        metadataTypeName?: string;
+    };
+}
+
+export interface ObjectExplorerSessionCreated {
+    sessionId: string;
+    success: boolean;
+    rootNode?: ObjectExplorerNode;
+    errorMessage?: string;
+}
+
+export interface ObjectExplorerExpandComplete {
+    sessionId: string;
+    nodePath: string;
+    nodes?: ObjectExplorerNode[];
+    errorMessage?: string;
+}
+
+export interface ObjectExplorerSessionDisconnected {
+    sessionId: string;
+    success: boolean;
+    errorMessage?: string;
+}
+
 export interface SelectionData {
     startLine: number;
     startColumn: number;

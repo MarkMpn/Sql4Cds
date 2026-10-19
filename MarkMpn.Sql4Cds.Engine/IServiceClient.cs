@@ -31,6 +31,11 @@ namespace MarkMpn.Sql4Cds.Engine
         string Name { get; }
 
         /// <summary>
+        /// The URI of the connected organisation.
+        /// </summary>
+        Uri Uri { get; }
+
+        /// <summary>
         /// Whether cloned connections can execute requests concurrently.
         /// </summary>
         bool CanParallelise { get; }

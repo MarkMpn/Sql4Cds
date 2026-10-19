@@ -90,12 +90,65 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 Assert.AreEqual("Accounts description", metadata.Description.LocalizedLabels.Single().Label);
                 Assert.AreEqual(1, metadata.ObjectTypeCode);
                 Assert.AreEqual(MetadataService.ProviderId, metadata.DataProviderId);
+                Assert.AreEqual(true, metadata.IsArchivalEnabled);
+                Assert.AreEqual(false, metadata.IsRetentionEnabled);
                 Assert.IsNull(metadata.Attributes);
                 Assert.AreEqual(run == 0 ? 1 : 0, service.EntityListLoads);
                 Assert.AreEqual(0, service.FullEntityLoads);
                 Assert.AreEqual(1, service.StampLoads);
                 Assert.IsTrue(File.Exists(CacheFile("autocomplete:entities")));
             }
+        }
+
+        private static Task EnsureAllEntitiesLoadedAsync(IAttributeMetadataCache cache)
+        {
+            return (Task)cache.GetType().GetMethod("EnsureAllEntitiesLoadedAsync",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(cache, null);
+        }
+
+        [TestMethod]
+        public async Task ObjectExplorerWaitsForSharedEntityListWithoutDuplicatingDownloads()
+        {
+            using var release = new ManualResetEventSlim();
+            using var started = new ManualResetEventSlim();
+            var service = new MetadataService { Release = release, ListStarted = started };
+            var cache = Cache(service);
+            cache.GetAllEntities();
+            Assert.IsTrue(started.Wait(TimeSpan.FromSeconds(10)));
+            var first = EnsureAllEntitiesLoadedAsync(cache);
+            var second = EnsureAllEntitiesLoadedAsync(cache);
+            try
+            {
+                Assert.IsFalse(first.IsCompleted);
+                Assert.IsFalse(second.IsCompleted);
+            }
+            finally
+            {
+                release.Set();
+            }
+            await Task.WhenAll(first, second);
+            Assert.AreEqual("account", cache.GetAllEntities().Single().LogicalName);
+            Assert.AreEqual(1, service.EntityListLoads);
+            Assert.AreEqual(0, service.FullEntityLoads);
+            var diskService = new MetadataService { AllowDownloads = false };
+            var diskCache = Cache(diskService);
+            await EnsureAllEntitiesLoadedAsync(diskCache);
+            Assert.AreEqual(true, diskCache.GetAllEntities().Single().IsArchivalEnabled);
+            Assert.AreEqual(0, diskService.EntityListLoads);
+        }
+
+        [TestMethod]
+        public async Task ObjectExplorerPreservesEmptyEntityListsAndReportsLoadFailures()
+        {
+            var empty = new MetadataService { EmptyEntityList = true };
+            var emptyCache = Cache(empty);
+            await EnsureAllEntitiesLoadedAsync(emptyCache);
+            Assert.AreEqual(0, emptyCache.GetAllEntities().Count());
+            await EnsureAllEntitiesLoadedAsync(emptyCache);
+            Assert.AreEqual(1, empty.EntityListLoads);
+
+            var failure = new MetadataService { AllowDownloads = false, Stamp = "changed!1" };
+            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => EnsureAllEntitiesLoadedAsync(Cache(failure)));
         }
 
         [DataTestMethod]
@@ -344,6 +397,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             public string Stamp = "2506169!10/16/2026 18:09:38";
             public bool AllowDownloads = true;
             public bool EmptyRecycleBin;
+            public bool EmptyEntityList;
             public bool RecycleBinUnavailable;
             public bool FailEntityListOnce;
             public bool FailRecycleBin;
@@ -364,7 +418,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 {
                     LogicalName = "account",
                     DisplayName = new Label("Account", 1033),
-                    Description = new Label("Accounts description", 1033)
+                    Description = new Label("Accounts description", 1033),
+                    IsArchivalEnabled = true,
+                    IsRetentionEnabled = false
                 };
                 typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 1);
                 typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.DataProviderId)).SetValue(entity, ProviderId);
@@ -422,8 +478,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                     Assert.IsNull(list.Query.AttributeQuery);
                     Assert.IsNull(list.Query.RelationshipQuery);
                     CollectionAssert.Contains(list.Query.Properties.PropertyNames.ToArray(), nameof(EntityMetadata.DataProviderId));
+                    CollectionAssert.Contains(list.Query.Properties.PropertyNames.ToArray(), nameof(EntityMetadata.IsArchivalEnabled));
+                    CollectionAssert.Contains(list.Query.Properties.PropertyNames.ToArray(), nameof(EntityMetadata.IsRetentionEnabled));
                     var response = new RetrieveMetadataChangesResponse();
-                    response.Results["EntityMetadata"] = new EntityMetadataCollection { Entity(false) };
+                    response.Results["EntityMetadata"] = EmptyEntityList
+                        ? new EntityMetadataCollection()
+                        : new EntityMetadataCollection { Entity(false) };
                     return response;
                 }
 

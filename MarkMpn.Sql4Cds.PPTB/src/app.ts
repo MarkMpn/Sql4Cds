@@ -4,6 +4,7 @@ import { configureMonaco, monaco } from "./editor/monacoSetup";
 import { Sql4CdsClient } from "./lsp/client";
 import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue } from "./lsp/protocol";
 import { QueryTab, type QueryTabHost } from "./query/queryTab";
+import { ObjectExplorer } from "./objectExplorer";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 
 const DEFAULT_QUERY = "-- Enter your SQL query here and press F5 or Ctrl+E to run it\nSELECT TOP 10 *\nFROM   account\n";
@@ -11,6 +12,7 @@ const DEFAULT_QUERY = "-- Enter your SQL query here and press F5 or Ctrl+E to ru
 class App implements QueryTabHost {
     readonly client: Sql4CdsClient;
     private readonly connections: ConnectionRegistry;
+    private readonly objectExplorer: ObjectExplorer;
     private readonly tabs: QueryTab[] = [];
     private activeTab: QueryTab | null = null;
     private editor!: monaco.editor.IStandaloneCodeEditor;
@@ -19,6 +21,7 @@ class App implements QueryTabHost {
     private confirmationQueue: Promise<void> = Promise.resolve();
     private statusTimer: ReturnType<typeof setInterval> | null = null;
     private progressMessage = "";
+    private connectionChangeQueue: Promise<void> = Promise.resolve();
 
     private readonly el = {
         tabStrip: byId("tab-strip"),
@@ -26,6 +29,11 @@ class App implements QueryTabHost {
         results: byId("results-host"),
         splitter: byId("splitter"),
         workspace: byId("workspace"),
+        explorer: byId("object-explorer"),
+        explorerTree: byId("explorer-tree"),
+        explorerSplitter: byId("explorer-splitter"),
+        explorerToggle: byId<HTMLButtonElement>("btn-explorer"),
+        explorerRefresh: byId<HTMLButtonElement>("btn-explorer-refresh"),
         newTab: byId<HTMLButtonElement>("btn-new"),
         run: byId<HTMLButtonElement>("btn-run"),
         cancel: byId<HTMLButtonElement>("btn-cancel"),
@@ -46,6 +54,9 @@ class App implements QueryTabHost {
 
     constructor() {
         this.client = new Sql4CdsClient({
+            objectExplorerSessionCreated: (params) => this.objectExplorer.sessionCreated(params),
+            objectExplorerExpandComplete: (params) => this.objectExplorer.expandComplete(params),
+            objectExplorerSessionDisconnected: (params) => this.objectExplorer.sessionDisconnected(params),
             progress: (message) => {
                 this.progressMessage = message;
                 this.updateStatusBar();
@@ -56,11 +67,15 @@ class App implements QueryTabHost {
             },
             exit: (snapshot) => {
                 this.ready = false;
+                this.objectExplorer.engineStopped();
                 this.updateToolbar();
                 this.setStatus(`SQL 4 CDS engine stopped${snapshot.failure ? `: ${snapshot.failure}` : ""}`, "error");
             },
         });
         this.connections = new ConnectionRegistry(this.client);
+        this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
+            (message) => { void notify("Object Explorer", message, "error"); },
+            (text) => this.insertObjectName(text));
     }
 
     async start(): Promise<void> {
@@ -69,11 +84,16 @@ class App implements QueryTabHost {
         this.createEditor();
         this.bindToolbar();
         this.bindSplitter();
+        this.bindObjectExplorer();
 
         configureMonaco(this.client, (uri) => this.tabs.some((t) => t.uri === uri && t.connected));
 
         window.toolboxAPI.events.on((_event, payload) => {
-            if (payload.event.startsWith("connection:")) void this.onConnectionsChanged();
+            if (payload.event.startsWith("connection:")) {
+                this.connectionChangeQueue = this.connectionChangeQueue
+                    .then(() => this.onConnectionsChanged())
+                    .catch((error) => notify("Unable to update connections", errorMessage(error), "error"));
+            }
             else if (payload.event === "settings:updated") void this.applyTheme();
         });
 
@@ -100,6 +120,7 @@ class App implements QueryTabHost {
         );
         this.renderConnectionList();
         this.addTab(DEFAULT_QUERY);
+        await this.objectExplorer.setConnections(this.connections.all);
     }
 
     // Editor & tabs
@@ -264,8 +285,12 @@ class App implements QueryTabHost {
         if (!this.ready) return;
 
         const changed = await this.connections.refresh();
-        if (changed.length === 0) return;
+        if (changed.length === 0) {
+            await this.objectExplorer.setConnections(this.connections.all);
+            return;
+        }
 
+        await Promise.all(changed.map((slot) => this.objectExplorer.removeConnection(slot)));
         for (const slot of changed) {
             const tabs = this.tabs.filter((t) => t.connectionSlot === slot);
             await Promise.all(tabs.map((t) => t.disconnect()));
@@ -281,9 +306,19 @@ class App implements QueryTabHost {
         this.renderConnectionList();
         this.renderTabs();
         this.updateToolbar();
+        await this.objectExplorer.setConnections(this.connections.all);
     }
 
     // Query execution
+
+    private insertObjectName(text: string): void {
+        const selection = this.editor.getSelection();
+        if (!this.activeTab || !selection) return;
+        this.editor.pushUndoStop();
+        this.editor.executeEdits("object-explorer", [{ range: selection, text, forceMoveMarkers: true }]);
+        this.editor.pushUndoStop();
+        this.editor.focus();
+    }
 
     private async runQuery(): Promise<void> {
         const tab = this.activeTab;
@@ -356,8 +391,37 @@ class App implements QueryTabHost {
         this.el.run.disabled = !this.ready || !tab?.connected || tab.running;
         this.el.cancel.disabled = !this.ready || !tab?.running;
         this.el.connection.disabled = !this.ready || !tab || tab.running || tab.connecting;
+        this.el.explorerRefresh.disabled = !this.ready;
 
         this.updateStatusBar();
+    }
+
+    private bindObjectExplorer(): void {
+        this.el.explorerToggle.addEventListener("click", () => {
+            const hidden = !this.el.explorer.hidden;
+            this.el.explorer.hidden = hidden;
+            this.el.explorerSplitter.hidden = hidden;
+            this.el.explorerToggle.setAttribute("aria-pressed", String(!hidden));
+        });
+        this.el.explorerRefresh.addEventListener("click", () => this.objectExplorer.refresh());
+        this.el.explorerSplitter.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            const startX = event.clientX;
+            const width = this.el.explorer.getBoundingClientRect().width;
+            const move = (moveEvent: MouseEvent) => {
+                const max = Math.max(160, document.body.clientWidth - 300);
+                this.el.explorer.style.width = `${Math.min(max, Math.max(160, width + moveEvent.clientX - startX))}px`;
+            };
+            const up = () => {
+                document.body.classList.remove("resizing-explorer");
+                window.removeEventListener("mousemove", move);
+                window.removeEventListener("mouseup", up);
+            };
+            document.body.classList.add("resizing-explorer");
+            window.addEventListener("mousemove", move);
+            window.addEventListener("mouseup", up);
+        });
+        window.addEventListener("pagehide", () => { void this.objectExplorer.dispose(); });
     }
 
     private updateStatusBar(): void {

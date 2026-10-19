@@ -129,6 +129,129 @@ input[type="number"] {
     max-width: 400px;
 }
 
+/* Object Explorer */
+
+.tool-content {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.query-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.object-explorer {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    width: 250px;
+    min-width: 160px;
+    max-width: 60%;
+    background: var(--bg);
+}
+
+.object-explorer[hidden],
+.explorer-splitter[hidden] {
+    display: none;
+}
+
+.explorer-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 32px;
+    padding: 0 6px 0 10px;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+}
+
+.explorer-heading button {
+    padding: 1px 6px;
+    font-size: 17px;
+}
+
+.explorer-tree {
+    flex: 1;
+    overflow: auto;
+    padding: 4px 0;
+    min-height: 0;
+}
+
+.explorer-node {
+    outline: none;
+}
+
+.explorer-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 24px;
+    width: max-content;
+    min-width: 100%;
+    padding-right: 8px;
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+}
+
+.explorer-row:hover {
+    background: var(--bg-hover);
+}
+
+.explorer-node[aria-selected="true"] > .explorer-row {
+    background: var(--selection);
+}
+
+.explorer-node:focus > .explorer-row {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.explorer-expander,
+.explorer-icon {
+    flex: 0 0 16px;
+    text-align: center;
+}
+
+.explorer-expander {
+    cursor: pointer;
+}
+
+.explorer-icon {
+    color: var(--accent);
+}
+
+.explorer-icon-folder {
+    color: #a46b00;
+}
+
+.explorer-message {
+    padding: 6px 10px;
+    color: var(--fg-muted);
+}
+
+.explorer-message.error {
+    color: var(--error);
+    overflow-wrap: anywhere;
+}
+
+.explorer-splitter {
+    flex: 0 0 5px;
+    cursor: col-resize;
+    background: var(--bg-alt);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+}
+
+body.resizing-explorer {
+    cursor: col-resize;
+    user-select: none;
+}
+
 /* Tabs */
 
 .tab-strip {

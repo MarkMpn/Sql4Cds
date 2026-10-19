@@ -14,6 +14,8 @@ class Element {
     }
     append(...children) { this.children.push(...children); }
     appendChild(child) { this.children.push(child); }
+    setAttribute() {}
+    contains() { return false; }
     replaceChildren(...children) { this.children = children; }
     addEventListener() {}
     remove() {}
@@ -73,6 +75,7 @@ function setup() {
         "./lsp/client": { Sql4CdsClient: class { constructor() { return client; } } },
         "./lsp/protocol": {},
         "./query/queryTab": {},
+        "./objectExplorer": { ObjectExplorer: class {} },
         "./settings": {},
     }, {
         document, window: {},
@@ -119,6 +122,30 @@ function setup() {
 function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };
 }
+
+test("Object Explorer insertion replaces the current editor selection as a single undoable edit and restores focus", () => {
+    const { app, createTab } = setup();
+    createTab();
+    const selection = { startLineNumber: 2, startColumn: 8, endLineNumber: 2, endColumn: 12 };
+    const actions = [];
+    app.editor = {
+        getSelection: () => selection,
+        pushUndoStop: () => actions.push("undo"),
+        executeEdits: (source, edits) => {
+            assert.equal(source, "object-explorer");
+            assert.equal(edits[0].range, selection);
+            assert.equal(edits[0].text, "dbo.account");
+            assert.equal(edits[0].forceMoveMarkers, true);
+            actions.push("edit");
+        },
+        focus: () => actions.push("focus"),
+    };
+    app.insertObjectName("dbo.account");
+    assert.deepEqual(actions, ["undo", "edit", "undo", "focus"]);
+    app.activeTab = null;
+    app.insertObjectName("ignored");
+    assert.equal(actions.length, 4);
+});
 
 test("one global status bar shows connection details and accurately ticks elapsed time and all result rows", async () => {
     const { app, createTab, elements, timers, setNow } = setup();

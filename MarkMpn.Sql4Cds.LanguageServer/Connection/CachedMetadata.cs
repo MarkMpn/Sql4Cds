@@ -30,6 +30,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         private readonly object _backgroundLoadLock = new object();
         private readonly SemaphoreSlim _backgroundLoader = new SemaphoreSlim(1);
         private readonly object _autocompleteLock = new object();
+        private Task _autocompleteLoad;
+        private readonly Task _initialMetadataLoad = Task.CompletedTask;
         private Lazy<string[]> _recycleBinEntities;
         private Task<string[]> _recycleBinLoad;
 
@@ -70,7 +72,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 return;
             }
 
-            _ = Task.Run(() => persistentMetadataCache.GetMetadataAsync(org, false))
+            _initialMetadataLoad = Task.Run(() => persistentMetadataCache.GetMetadataAsync(org, false))
                 .ContinueWith(loader =>
                 {
                     if (loader.IsCanceled || loader.IsFaulted || loader.Result == null)
@@ -244,7 +246,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 if (_cacheUnavailable && _autocompleteCache == null)
                 {
                     if (_lazyEntities != null && _persistentMetadataCache.TryGetLazyMetadata(
-                        _orgId, () => _version.Value, "autocomplete:entities", 1, out EntityMetadata[] cached))
+                        _orgId, () => _version.Value, "autocomplete:entities", 2, out EntityMetadata[] cached))
                     {
                         _autocompleteCache = cached;
                         _cacheUnavailable = false;
@@ -255,12 +257,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                     _autocompleteCache = Array.Empty<EntityMetadata>();
                     _cacheUnavailable = false;
 
-                    var load = Task.Run(() =>
+                    var load = _autocompleteLoad = Task.Run(() =>
                     {
                         var properties = new MetadataPropertiesExpression(
                             nameof(EntityMetadata.LogicalName),
                             nameof(EntityMetadata.DisplayName),
-                            nameof(EntityMetadata.Description));
+                            nameof(EntityMetadata.Description),
+                            nameof(EntityMetadata.IsArchivalEnabled),
+                            nameof(EntityMetadata.IsRetentionEnabled));
                         if (_lazyEntities != null)
                         {
                             properties.PropertyNames.Add(nameof(EntityMetadata.ObjectTypeCode));
@@ -277,7 +281,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                         .ToArray();
 
                         _autocompleteCache = _lazyEntities != null
-                            ? _persistentMetadataCache.GetLazyMetadata(_orgId, _version.Value, "autocomplete:entities", 1, LoadEntities)
+                            ? _persistentMetadataCache.GetLazyMetadata(_orgId, _version.Value, "autocomplete:entities", 2, LoadEntities)
                             : LoadEntities();
                     });
                     if (_lazyEntities != null)
@@ -299,6 +303,19 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
                 return _autocompleteCache ?? Array.Empty<EntityMetadata>();
             }
+        }
+
+        internal async Task EnsureAllEntitiesLoadedAsync()
+        {
+            await _initialMetadataLoad.ConfigureAwait(false);
+            Task load;
+            lock (_autocompleteLock)
+            {
+                GetAllEntities();
+                load = _autocompleteLoad;
+            }
+            if (load != null)
+                await load.ConfigureAwait(false);
         }
 
         public string[] TryGetRecycleBinEntities()

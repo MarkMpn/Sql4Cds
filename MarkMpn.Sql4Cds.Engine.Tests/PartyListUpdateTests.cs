@@ -116,6 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             public int Reads { get; private set; }
             public Version Version => new Version(9, 2);
             public string Name => "local";
+            public Uri Uri => new Uri("https://example.invalid");
             public bool UsesWebAPI { get; }
             public Guid CallerId { get; set; }
             public bool CanParallelise => false;

@@ -57,6 +57,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _serviceRoot = (url ?? "").TrimEnd('/') + "/api/data/v9.2/";
+            Uri = new Uri(url);
 
             SetMetadataCache(new AttributeMetadataCache(this));
             MetadataQuery = new WebApiMetadataQuery(request => SendSingle(request));
@@ -95,6 +96,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         }
 
         public string Name { get; init; }
+
+        public Uri Uri { get; }
 
         public bool CanParallelise => true;
 
@@ -483,7 +486,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return Single(new WebApiRequest
             {
                 Method = "GET",
-                Url = "RetrieveTotalRecordCount(EntityNames=@p1)?@p1=" + Uri.EscapeDataString(WebApiJson.Serialize(names))
+                Url = "RetrieveTotalRecordCount(EntityNames=@p1)?@p1=" + System.Uri.EscapeDataString(WebApiJson.Serialize(names))
             }, response =>
             {
                 var json = (JObject)response.Json;
@@ -549,7 +552,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return new WebApiRequest
             {
                 Method = "GET",
-                Url = entitySetName + "?fetchXml=" + Uri.EscapeDataString(fetchXml),
+                Url = entitySetName + "?fetchXml=" + System.Uri.EscapeDataString(fetchXml),
                 Headers = new Dictionary<string, string> { ["Prefer"] = WebApiJson.IncludeAnnotationsPreference }
             };
         }
@@ -927,7 +930,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
                 var metadata = message?.InputParameters.SingleOrDefault(p => p.Name.Equals(param.Key, StringComparison.OrdinalIgnoreCase));
                 parameters.Add($"{metadata?.EntityParameterName ?? param.Key}=@p{i}");
-                values.Add($"@p{i}=" + Uri.EscapeDataString(metadata?.EntityParameterName == null ?
+                values.Add($"@p{i}=" + System.Uri.EscapeDataString(metadata?.EntityParameterName == null ?
                     FormatFunctionParameter(param.Value) : WebApiJson.Serialize(SerializeMessageParameter(param.Value, metadata))));
                 i++;
             }

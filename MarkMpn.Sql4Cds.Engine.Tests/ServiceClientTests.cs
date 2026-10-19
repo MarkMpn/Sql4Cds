@@ -147,6 +147,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             public ParallelService(IOrganizationService inner) => _inner = inner;
             public Version Version => new Version(9, 2);
             public string Name => "local";
+            public Uri Uri => new Uri("https://example.invalid");
             public bool CanParallelise { get; set; } = true;
             public bool UsesWebAPI => false;
             public Guid CallerId { get; set; }
