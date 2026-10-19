@@ -32,8 +32,8 @@ class App implements QueryTabHost {
         explorer: byId("object-explorer"),
         explorerTree: byId("explorer-tree"),
         explorerSplitter: byId("explorer-splitter"),
-        explorerToggle: byId<HTMLButtonElement>("btn-explorer"),
-        explorerRefresh: byId<HTMLButtonElement>("btn-explorer-refresh"),
+        explorerPin: byId<HTMLButtonElement>("explorer-pin"),
+        explorerTab: byId<HTMLButtonElement>("explorer-tab"),
         newTab: byId<HTMLButtonElement>("btn-new"),
         run: byId<HTMLButtonElement>("btn-run"),
         cancel: byId<HTMLButtonElement>("btn-cancel"),
@@ -391,19 +391,65 @@ class App implements QueryTabHost {
         this.el.run.disabled = !this.ready || !tab?.connected || tab.running;
         this.el.cancel.disabled = !this.ready || !tab?.running;
         this.el.connection.disabled = !this.ready || !tab || tab.running || tab.connecting;
-        this.el.explorerRefresh.disabled = !this.ready;
 
         this.updateStatusBar();
     }
 
+    private explorerPinned = true;
+    private explorerOpen = true;
+
+    private updateExplorerVisibility(): void {
+        this.el.explorer.hidden = !this.explorerOpen;
+        this.el.explorer.classList.toggle("auto-hide", !this.explorerPinned);
+        this.el.explorerSplitter.hidden = !this.explorerPinned;
+        this.el.explorerTab.hidden = this.explorerPinned;
+        this.el.explorerTab.setAttribute("aria-expanded", String(this.explorerOpen && !this.explorerPinned));
+        this.el.explorerPin.setAttribute("aria-pressed", String(this.explorerPinned));
+        const label = this.explorerPinned ? "Unpin Object Explorer" : "Pin Object Explorer";
+        this.el.explorerPin.title = label;
+        this.el.explorerPin.setAttribute("aria-label", label);
+    }
+
     private bindObjectExplorer(): void {
-        this.el.explorerToggle.addEventListener("click", () => {
-            const hidden = !this.el.explorer.hidden;
-            this.el.explorer.hidden = hidden;
-            this.el.explorerSplitter.hidden = hidden;
-            this.el.explorerToggle.setAttribute("aria-pressed", String(!hidden));
+        this.explorerPinned = this.settings.objectExplorerPinned;
+        this.explorerOpen = this.explorerPinned;
+        this.updateExplorerVisibility();
+        this.el.explorerPin.addEventListener("click", async () => {
+            this.explorerPinned = !this.explorerPinned;
+            this.explorerOpen = this.explorerPinned;
+            this.settings = { ...this.settings, objectExplorerPinned: this.explorerPinned };
+            this.updateExplorerVisibility();
+            if (!this.explorerPinned) this.el.explorerTab.focus();
+            this.el.explorerPin.disabled = true;
+            try {
+                await saveSettings(this.settings);
+            } catch (err) {
+                await notify("Unable to save settings", errorMessage(err), "error");
+            } finally {
+                this.el.explorerPin.disabled = false;
+            }
         });
-        this.el.explorerRefresh.addEventListener("click", () => this.objectExplorer.refresh());
+        this.el.explorerTab.addEventListener("click", () => {
+            this.explorerOpen = !this.explorerOpen;
+            this.updateExplorerVisibility();
+            if (this.explorerOpen) this.el.explorerTree.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
+        });
+        const collapseOutside = (event: Event) => {
+            if (this.explorerPinned || !this.explorerOpen || !(event.target instanceof Node)) return;
+            if (this.el.explorer.contains(event.target) || this.el.explorerTab.contains(event.target)) return;
+            if (event.target instanceof Element && event.target.closest(".explorer-context-menu")) return;
+            this.explorerOpen = false;
+            this.updateExplorerVisibility();
+        };
+        document.addEventListener("pointerdown", collapseOutside);
+        document.addEventListener("focusin", collapseOutside);
+        document.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape" || this.explorerPinned || !this.explorerOpen) return;
+            event.preventDefault();
+            this.explorerOpen = false;
+            this.updateExplorerVisibility();
+            this.el.explorerTab.focus();
+        });
         this.el.explorerSplitter.addEventListener("mousedown", (event) => {
             event.preventDefault();
             const startX = event.clientX;
@@ -499,6 +545,7 @@ class App implements QueryTabHost {
         const updated = await showSettingsDialog(this.settings);
         if (!updated) return;
 
+        updated.objectExplorerPinned = this.explorerPinned;
         this.settings = updated;
         try {
             await saveSettings(updated);

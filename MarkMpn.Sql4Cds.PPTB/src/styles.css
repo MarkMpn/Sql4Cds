@@ -132,6 +132,7 @@ input[type="number"] {
 /* Object Explorer */
 
 .tool-content {
+    position: relative;
     display: flex;
     flex: 1;
     min-height: 0;
@@ -155,8 +156,51 @@ input[type="number"] {
 }
 
 .object-explorer[hidden],
+.explorer-tab[hidden],
 .explorer-splitter[hidden] {
     display: none;
+}
+
+.object-explorer.auto-hide {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+    border-right: 1px solid var(--border);
+    box-shadow: 3px 0 8px #0004;
+}
+
+.explorer-tab {
+    flex: 0 0 28px;
+    align-self: flex-start;
+    writing-mode: vertical-rl;
+    padding: 10px 4px;
+    border-radius: 0;
+    border-top: none;
+    border-left: none;
+    background: var(--bg-alt);
+}
+
+.explorer-tab[aria-expanded="true"] {
+    visibility: hidden;
+}
+
+.explorer-pin {
+    display: flex;
+    padding: 3px;
+    border: none;
+    background: transparent;
+}
+
+.explorer-pin svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+}
+
+.explorer-pin[aria-pressed="false"] svg {
+    transform: rotate(45deg);
 }
 
 .explorer-heading {
@@ -169,9 +213,28 @@ input[type="number"] {
     border-bottom: 1px solid var(--border);
 }
 
-.explorer-heading button {
-    padding: 1px 6px;
-    font-size: 17px;
+.explorer-context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 140px;
+    padding: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px #0004;
+}
+
+.explorer-context-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+}
+
+.explorer-context-menu button:hover,
+.explorer-context-menu button:focus {
+    background: var(--selection);
+    outline: 1px solid var(--accent);
 }
 
 .explorer-tree {
@@ -417,9 +480,10 @@ body.resizing-explorer {
     border-bottom: 1px solid var(--border);
 }
 
-/* When there are multiple result sets, give each a fixed height and scroll the results pane */
+/* Leave the next result set visible, even when the results pane is resized. */
 .results-pane:not([data-count="1"]) .results-grid {
-    flex: 0 0 260px;
+    flex: 0 0 calc(100% * 2 / 3);
+    min-height: 0;
 }
 
 .grid-header {

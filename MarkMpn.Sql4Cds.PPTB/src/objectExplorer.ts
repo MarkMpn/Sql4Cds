@@ -38,6 +38,7 @@ export class ObjectExplorer {
     private readonly items = new Map<TreeNode, HTMLElement>();
     private selected: TreeNode | null = null;
     private available = true;
+    private closeContextMenu: (() => void) | null = null;
 
     constructor(
         private readonly client: Sql4CdsClient,
@@ -101,6 +102,7 @@ export class ObjectExplorer {
     }
 
     async dispose(): Promise<void> {
+        this.closeContextMenu?.();
         await Promise.all(Array.from(this.connections.keys(), (slot) => this.removeConnection(slot)));
         this.earlySessions.clear();
     }
@@ -269,10 +271,71 @@ export class ObjectExplorer {
         this.items.get(node)?.focus();
     }
 
+    private showContextMenu(node: TreeNode, x: number, y: number): void {
+        this.closeContextMenu?.();
+        if (!this.available) return;
+        this.select(node);
+        const menu = document.createElement("div");
+        menu.className = "explorer-context-menu";
+        menu.setAttribute("role", "menu");
+        menu.setAttribute("aria-label", node.info.label);
+        const refresh = document.createElement("button");
+        refresh.setAttribute("role", "menuitem");
+        refresh.textContent = "Refresh";
+        refresh.title = "Refresh (F5)";
+        menu.appendChild(refresh);
+        document.body.appendChild(menu);
+        const bounds = menu.getBoundingClientRect();
+        menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - bounds.width))}px`;
+        menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - bounds.height))}px`;
+        const dismiss = () => this.closeContextMenu?.();
+        const outside = (event: Event) => {
+            if (event.target instanceof Node && !menu.contains(event.target)) dismiss();
+        };
+        this.closeContextMenu = () => {
+            this.closeContextMenu = null;
+            document.removeEventListener("pointerdown", outside, true);
+            document.removeEventListener("focusin", outside);
+            window.removeEventListener("resize", dismiss);
+            window.removeEventListener("blur", dismiss);
+            this.tree.removeEventListener("scroll", dismiss);
+            menu.remove();
+        };
+        document.addEventListener("pointerdown", outside, true);
+        document.addEventListener("focusin", outside);
+        window.addEventListener("resize", dismiss);
+        window.addEventListener("blur", dismiss);
+        this.tree.addEventListener("scroll", dismiss);
+        refresh.addEventListener("click", () => {
+            dismiss();
+            this.select(node);
+            this.refresh();
+        });
+        menu.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" || event.key === "Tab") {
+                dismiss();
+                this.select(node);
+                if (event.key === "Escape") event.preventDefault();
+            } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                event.preventDefault();
+                refresh.focus();
+            }
+            event.stopPropagation();
+        });
+        refresh.focus();
+    }
+
     private onKeyDown(event: KeyboardEvent): void {
         const nodes = this.visibleNodes();
         const node = this.selected ?? nodes[0];
         if (!node) return;
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+            event.preventDefault();
+            event.stopPropagation();
+            const bounds = this.items.get(node)!.getBoundingClientRect();
+            this.showContextMenu(node, bounds.left, bounds.top + 24);
+            return;
+        }
         let next: TreeNode | undefined;
         switch (event.key) {
             case "ArrowDown": next = nodes[Math.min(nodes.length - 1, nodes.indexOf(node) + 1)]; break;
@@ -299,6 +362,7 @@ export class ObjectExplorer {
     }
 
     private render(focus = false): void {
+        this.closeContextMenu?.();
         const hadFocus = this.tree.contains(document.activeElement);
         const visible = this.visibleNodes();
         if (!this.selected || !visible.includes(this.selected)) this.selected = visible[0] ?? null;
@@ -338,6 +402,11 @@ export class ObjectExplorer {
             label.textContent = node.info.label;
             row.append(expander, icon, label);
             row.addEventListener("click", () => this.select(node));
+            row.addEventListener("contextmenu", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.showContextMenu(node, event.clientX, event.clientY);
+            });
             row.addEventListener("dblclick", () => {
                 this.selected = node;
                 if (["Table", "Column", "TableValuedFunction", "StoredProcedure"].includes(node.info.nodeType)) {

@@ -1,4 +1,4 @@
-/** Settings passed to the language server in `workspace/didChangeConfiguration` */
+/** User settings, including query options passed to the language server. */
 export interface Sql4CdsSettings {
     useTdsEndpoint: boolean;
     blockDeleteWithoutWhere: boolean;
@@ -16,6 +16,7 @@ export interface Sql4CdsSettings {
     maxRetrievesPerQuery: number;
     localFormatDates: boolean;
     useSchemaColumnOrdering: boolean;
+    objectExplorerPinned: boolean;
 }
 
 export const defaultSettings: Sql4CdsSettings = {
@@ -35,6 +36,7 @@ export const defaultSettings: Sql4CdsSettings = {
     maxRetrievesPerQuery: 100,
     localFormatDates: false,
     useSchemaColumnOrdering: false,
+    objectExplorerPinned: true,
 };
 
 interface SettingDescriptor {
@@ -82,6 +84,7 @@ export async function saveSettings(settings: Sql4CdsSettings): Promise<void> {
 
 /** Forces settings that can't be supported when running through PPTB back to their defaults */
 function sanitize(settings: Sql4CdsSettings): Sql4CdsSettings {
+    if (typeof settings.objectExplorerPinned !== "boolean") settings.objectExplorerPinned = defaultSettings.objectExplorerPinned;
     for (const descriptor of settingDescriptors) {
         if (descriptor.unsupported) {
             (settings as unknown as Record<string, unknown>)[descriptor.key] = defaultSettings[descriptor.key];

@@ -10,14 +10,20 @@ class Element {
         this.children = [];
         this.dataset = {};
         this.textContent = "";
-        this.classList = { toggle() {} };
+        this.attributes = {};
+        this.events = {};
+        this.classes = new Set();
+        this.classList = { toggle: (name, value) => value ? this.classes.add(name) : this.classes.delete(name) };
     }
     append(...children) { this.children.push(...children); }
     appendChild(child) { this.children.push(child); }
-    setAttribute() {}
+    setAttribute(name, value) { this.attributes[name] = value; }
     contains() { return false; }
     replaceChildren(...children) { this.children = children; }
-    addEventListener() {}
+    addEventListener(name, handler) { this.events[name] = handler; }
+    focus() { this.focused = true; }
+    querySelector() { return this.children[0]; }
+    closest() { return null; }
     remove() {}
 }
 
@@ -32,15 +38,17 @@ function load(relativePath, dependencies, globals = {}, extra = "") {
             assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
             return dependencies[name];
         },
-        URL, console, ...globals,
+        URL, Error, console, ...globals,
     }, { filename });
     return module.exports;
 }
 
-function setup() {
+function setup(pinned = true) {
     let now = 1000;
     const elements = new Map();
     const document = {
+        events: {},
+        addEventListener(name, handler) { this.events[name] = handler; },
         createElement: () => new Element(),
         getElementById: (id) => {
             if (!elements.has(id)) elements.set(id, new Element());
@@ -68,6 +76,11 @@ function setup() {
     };
     const timers = new Map();
     let nextTimer = 0;
+    const savedSettings = [];
+    const settingsApi = {
+        saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
+    };
+    const window = { addEventListener() {} };
     const { App } = load("app.ts", {
         "./styles.css": {},
         "./connections": { ConnectionRegistry: class { constructor() { return registry; } } },
@@ -76,13 +89,14 @@ function setup() {
         "./lsp/protocol": {},
         "./query/queryTab": {},
         "./objectExplorer": { ObjectExplorer: class {} },
-        "./settings": {},
+        "./settings": settingsApi,
     }, {
-        document, window: {},
+        document, window, Node: Element, Element,
         setInterval: (callback) => { timers.set(++nextTimer, callback); return nextTimer; },
         clearInterval: (id) => timers.delete(id),
     }, "\nexports.App = App;");
     const app = new App();
+    app.settings = { objectExplorerPinned: pinned, batchSize: 100 };
     app.ready = true;
     app.renderTabs = () => {};
     app.renderConnectionList = () => {};
@@ -116,12 +130,115 @@ function setup() {
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, registry, createTab, elements, timers, grids, setNow: (value) => { now = value; } };
+    return { app, client, registry, createTab, elements, timers, grids, document, savedSettings, settingsApi, window, setNow: (value) => { now = value; } };
 }
 
 function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };
 }
+
+test("Object Explorer pin collapses to a side tab, opens as a flyout and pins back without losing width or tree", async () => {
+    const { app, elements, document } = setup();
+    app.bindObjectExplorer();
+    const pane = elements.get("object-explorer");
+    const pin = elements.get("explorer-pin");
+    const tab = elements.get("explorer-tab");
+    const splitter = elements.get("explorer-splitter");
+    const tree = elements.get("explorer-tree");
+    const item = new Element();
+    tree.appendChild(item);
+    pane.style = { width: "320px" };
+    await pin.events.click();
+    assert.equal(pane.hidden, true);
+    assert.equal(splitter.hidden, true);
+    assert.equal(tab.hidden, false);
+    assert.equal(tab.focused, true);
+    assert.equal(pin.attributes["aria-label"], "Pin Object Explorer");
+    tab.events.click();
+    assert.equal(pane.hidden, false);
+    assert.equal(pane.classes.has("auto-hide"), true);
+    assert.equal(tab.hidden, false, "The side tab keeps its layout space while the flyout covers it");
+    assert.equal(tab.attributes["aria-expanded"], "true");
+    assert.equal(item.focused, true);
+    const menuItem = new Element();
+    menuItem.closest = () => new Element();
+    document.events.focusin({ target: menuItem });
+    assert.equal(pane.hidden, false, "Object Explorer context menu does not collapse the flyout");
+    document.events.pointerdown({ target: new Element() });
+    assert.equal(pane.hidden, true);
+    assert.equal(tab.hidden, false, "The side tab returns when the flyout collapses");
+    tab.events.click();
+    document.events.keydown({ key: "Escape", preventDefault() {} });
+    assert.equal(pane.hidden, true);
+    assert.equal(tab.hidden, false);
+    tab.events.click();
+    document.events.focusin({ target: new Element() });
+    assert.equal(pane.hidden, true);
+    tab.events.click();
+    await pin.events.click();
+    assert.equal(pane.hidden, false);
+    assert.equal(pane.classes.has("auto-hide"), false);
+    assert.equal(splitter.hidden, false);
+    assert.equal(tab.hidden, true);
+    assert.equal(pin.attributes["aria-label"], "Unpin Object Explorer");
+    document.events.pointerdown({ target: new Element() });
+    assert.equal(pane.hidden, false, "Pinned pane remains docked");
+    assert.equal(pane.style.width, "320px");
+    assert.equal(tree.children[0], item);
+});
+
+test("pin state is saved with other user settings and an unpinned launch stays collapsed until opened", async () => {
+    const { app, elements, savedSettings } = setup(false);
+    app.bindObjectExplorer();
+    const pane = elements.get("object-explorer");
+    const tab = elements.get("explorer-tab");
+    const pin = elements.get("explorer-pin");
+    assert.equal(pane.hidden, true);
+    assert.equal(tab.hidden, false);
+    assert.equal(savedSettings.length, 0, "Restoring settings does not write them again");
+    tab.events.click();
+    assert.equal(pane.hidden, false);
+    assert.equal(savedSettings.length, 0, "Opening the flyout does not change the pin preference");
+    await pin.events.click();
+    assert.deepEqual(savedSettings[0], { objectExplorerPinned: true, batchSize: 100 });
+    await pin.events.click();
+    assert.deepEqual(savedSettings[1], { objectExplorerPinned: false, batchSize: 100 });
+});
+
+test("pin setting save errors are notified and the pin is re-enabled", async () => {
+    const { app, elements, settingsApi, window } = setup();
+    const notifications = [];
+    window.toolboxAPI = { utils: { showNotification: async (message) => notifications.push(message) } };
+    settingsApi.saveSettings = async () => { throw new Error("Settings storage unavailable"); };
+    app.bindObjectExplorer();
+    await elements.get("explorer-pin").events.click();
+    assert.equal(notifications[0].title, "Unable to save settings");
+    assert.equal(notifications[0].body, "Settings storage unavailable");
+    assert.equal(notifications[0].type, "error");
+    assert.equal(elements.get("explorer-pin").disabled, false);
+});
+
+test("stored pin preference loads from the user settings API, with pinned as the default for older settings", async () => {
+    let stored;
+    let saved;
+    const { loadSettings, saveSettings } = load("settings.ts", {}, {
+        window: { toolboxAPI: { settings: {
+            get: async (key) => { assert.equal(key, "settings"); return stored; },
+            set: async (key, value) => { assert.equal(key, "settings"); saved = value; },
+        } } },
+    });
+    assert.equal((await loadSettings()).objectExplorerPinned, true);
+    stored = { batchSize: 250 };
+    assert.equal((await loadSettings()).objectExplorerPinned, true);
+    stored = { ...stored, objectExplorerPinned: false };
+    const settings = await loadSettings();
+    assert.equal(settings.objectExplorerPinned, false);
+    assert.equal(settings.batchSize, 250);
+    await saveSettings(settings);
+    assert.equal(saved.objectExplorerPinned, false);
+    stored = { objectExplorerPinned: "false" };
+    assert.equal((await loadSettings()).objectExplorerPinned, true);
+});
 
 test("Object Explorer insertion replaces the current editor selection as a single undoable edit and restores focus", () => {
     const { app, createTab } = setup();

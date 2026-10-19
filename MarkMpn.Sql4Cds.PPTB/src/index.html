@@ -15,14 +15,16 @@
                 <label for="connection-select">Connection</label>
                 <select id="connection-select" disabled></select>
                 <span class="toolbar-spacer"></span>
-                <button id="btn-explorer" title="Show or hide Object Explorer" aria-pressed="true" aria-controls="object-explorer">Object Explorer</button>
                 <button id="btn-settings" title="Settings"><span class="icon">⚙</span> Settings</button>
             </div>
             <div class="tool-content">
+                <button id="explorer-tab" class="explorer-tab" aria-label="Show Object Explorer" aria-controls="object-explorer" aria-expanded="false" hidden>Object Explorer</button>
                 <aside id="object-explorer" class="object-explorer" aria-label="Object Explorer">
                     <div class="explorer-heading">
                         <strong>Object Explorer</strong>
-                        <button id="btn-explorer-refresh" title="Refresh selected node (F5)" aria-label="Refresh Object Explorer" disabled>&#x21BB;</button>
+                        <button id="explorer-pin" class="explorer-pin" title="Unpin Object Explorer" aria-label="Unpin Object Explorer" aria-pressed="true">
+                            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2h6M6 2v5l-2 3h8l-2-3V2M8 10v5" /></svg>
+                        </button>
                     </div>
                     <div id="explorer-tree" class="explorer-tree"></div>
                 </aside>
