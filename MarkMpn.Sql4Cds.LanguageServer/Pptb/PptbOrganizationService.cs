@@ -12,6 +12,7 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
@@ -57,17 +58,25 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _serviceRoot = (url ?? "").TrimEnd('/') + "/api/data/v9.2/";
 
-            Metadata = new WebApiMetadataProvider(requests => Send(requests));
-            Serializer = new WebApiEntitySerializer(Metadata);
+            SetMetadataCache(new AttributeMetadataCache(this));
             MetadataQuery = new WebApiMetadataQuery(request => SendSingle(request));
-            MessageCache = new MessageCache(this, new AttributeMetadataCache(this));
+            MessageCache = new MessageCache(this, Metadata);
 
             Name = name;
         }
 
-        public WebApiMetadataProvider Metadata { get; }
+        public IAttributeMetadataCache Metadata { get; private set; }
 
-        public WebApiEntitySerializer Serializer { get; }
+        public WebApiEntitySerializer Serializer { get; private set; }
+
+        /// <summary>
+        /// Uses the data source's metadata cache for Web API request and response translation.
+        /// </summary>
+        public void SetMetadataCache(IAttributeMetadataCache metadata)
+        {
+            Metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
+            Serializer = new WebApiEntitySerializer(metadata);
+        }
 
         public WebApiMetadataQuery MetadataQuery { get; }
 
@@ -495,7 +504,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         private PreparedOperation PrepareCreate(CreateRequest request)
         {
             var target = request.Target;
-            var info = Metadata.GetEntity(target.LogicalName);
+            var info = Metadata[target.LogicalName];
 
             return Single(new WebApiRequest
             {
@@ -551,7 +560,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 throw CreateFault("Retrieving related entities is not supported when connected through Power Platform ToolBox");
 
             var target = request.Target;
-            var info = Metadata.GetEntity(target.LogicalName);
+            var info = Metadata[target.LogicalName];
             var entity = new XElement("entity", new XAttribute("name", info.LogicalName));
             var columns = request.ColumnSet ?? new ColumnSet();
 
@@ -611,9 +620,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         {
             var fetchXml = QueryExpressionConverter.ToFetchXml(request.Query);
             var parser = new FetchXmlResultParser(fetchXml, Metadata);
-            var info = Metadata.GetEntity(parser.RootEntity);
 
-            return Single(CreateFetchXmlRequest(info.EntitySetName, fetchXml), response =>
+            // Hard-code some well known entity set names to speed up loading the required information when establishing
+            // a connection
+            var entitySetName = parser.RootEntity switch
+            {
+                "organization" => "organizations",
+                "systemuser" => "systemusers",
+                _ => Metadata[parser.RootEntity].EntitySetName
+            };
+
+            return Single(CreateFetchXmlRequest(entitySetName, fetchXml), response =>
             {
                 var result = new RetrieveMultipleResponse();
                 result.Results["EntityCollection"] = parser.Parse((JObject)response.Json);
@@ -623,22 +640,28 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         private (string navigationProperty, bool isCollection) GetAssociationNavigationProperty(EntityReference target, Relationship relationship)
         {
-            var rel = Metadata.GetRelationship(relationship.SchemaName);
+            var entity = Metadata[target.LogicalName];
+            var manyToMany = entity.ManyToManyRelationships?.FirstOrDefault(r =>
+                String.Equals(r.SchemaName, relationship.SchemaName, StringComparison.OrdinalIgnoreCase));
 
-            if (rel.IsManyToMany)
+            if (manyToMany != null)
             {
                 string nav;
 
-                if (rel.Entity1LogicalName == rel.Entity2LogicalName)
-                    nav = relationship.PrimaryEntityRole == EntityRole.Referenced ? rel.Entity2NavigationPropertyName : rel.Entity1NavigationPropertyName;
-                else if (target.LogicalName.Equals(rel.Entity1LogicalName, StringComparison.OrdinalIgnoreCase))
-                    nav = rel.Entity1NavigationPropertyName;
+                if (manyToMany.Entity1LogicalName == manyToMany.Entity2LogicalName)
+                    nav = relationship.PrimaryEntityRole == EntityRole.Referenced ? manyToMany.Entity2NavigationPropertyName : manyToMany.Entity1NavigationPropertyName;
+                else if (target.LogicalName.Equals(manyToMany.Entity1LogicalName, StringComparison.OrdinalIgnoreCase))
+                    nav = manyToMany.Entity1NavigationPropertyName;
                 else
-                    nav = rel.Entity2NavigationPropertyName;
+                    nav = manyToMany.Entity2NavigationPropertyName;
 
                 return (nav, true);
             }
 
+            var rel = (entity.OneToManyRelationships ?? Array.Empty<OneToManyRelationshipMetadata>())
+                .Concat(entity.ManyToOneRelationships ?? Array.Empty<OneToManyRelationshipMetadata>())
+                .FirstOrDefault(r => String.Equals(r.SchemaName, relationship.SchemaName, StringComparison.OrdinalIgnoreCase))
+                ?? throw new NotSupportedException($"Cannot find relationship {relationship.SchemaName} for {target.LogicalName}");
             bool targetIsReferenced;
 
             if (rel.ReferencedEntity == rel.ReferencingEntity)
@@ -733,7 +756,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         private PreparedOperation PrepareCreateMultiple(OrganizationRequest request)
         {
             var targets = GetTargets(request);
-            var info = Metadata.GetEntity(targets.EntityName ?? targets.Entities[0].LogicalName);
+            var info = Metadata[targets.EntityName ?? targets.Entities[0].LogicalName];
 
             var body = new JObject
             {
@@ -761,7 +784,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         private PreparedOperation PrepareUpdateMultiple(OrganizationRequest request)
         {
             var targets = GetTargets(request);
-            var info = Metadata.GetEntity(targets.EntityName ?? targets.Entities[0].LogicalName);
+            var info = Metadata[targets.EntityName ?? targets.Entities[0].LogicalName];
 
             var body = new JObject
             {
@@ -790,7 +813,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             if (!request.Parameters.TryGetValue("Targets", out var value) || !(value is EntityReferenceCollection targets) || targets.Count == 0)
                 throw CreateFault("Missing Targets parameter for DeleteMultiple");
 
-            var info = Metadata.GetEntity(targets[0].LogicalName);
+            var info = Metadata[targets[0].LogicalName];
 
             var body = new JObject
             {
@@ -987,7 +1010,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
                 case EntityReference er:
                     {
-                        var info = Metadata.GetEntity(er.LogicalName);
+                        var info = Metadata[er.LogicalName];
 
                         return new JObject
                         {
@@ -1053,8 +1076,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             if (parameter?.EntityParameterName == null || value == null)
                 return SerializeParameter(value);
             if (value is Guid id)
-                return SerializeParameter(new EntityReference(Metadata.GetEntity(parameter.OTC ??
-                    throw new InvalidOperationException($"Missing object type code for {parameter.Name}")).LogicalName, id));
+                return SerializeParameter(new EntityReference(Metadata[parameter.OTC ??
+                    throw new InvalidOperationException($"Missing object type code for {parameter.Name}")].LogicalName, id));
             if (value is Guid[] ids)
                 return new JArray(ids.Select(g => SerializeMessageParameter(g, parameter)));
             return SerializeParameter(value);
@@ -1095,8 +1118,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     }
                     if (token == null)
                         throw new InvalidOperationException($"Dataverse did not return {parameter.EntityParameterName} for {request.RequestName}");
-                    var info = Metadata.GetEntity(parameter.OTC ??
-                        throw new InvalidOperationException($"Missing object type code for {parameter.Name}"));
+                    var info = Metadata[parameter.OTC ??
+                        throw new InvalidOperationException($"Missing object type code for {parameter.Name}")];
                     Guid ReadId(JToken entity)
                     {
                         if (!(entity is JObject objectValue))

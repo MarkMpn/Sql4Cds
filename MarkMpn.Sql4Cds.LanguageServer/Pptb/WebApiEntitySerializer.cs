@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Newtonsoft.Json.Linq;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
@@ -29,9 +31,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             ["related"] = 13,
         };
 
-        private readonly WebApiMetadataProvider _metadata;
+        private readonly IAttributeMetadataCache _metadata;
 
-        public WebApiEntitySerializer(WebApiMetadataProvider metadata)
+        public WebApiEntitySerializer(IAttributeMetadataCache metadata)
         {
             _metadata = metadata;
         }
@@ -41,7 +43,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// </summary>
         public string GetRecordUrl(string logicalName, Guid id)
         {
-            var info = _metadata.GetEntity(logicalName);
+            var info = _metadata[logicalName];
             return $"{info.EntitySetName}({id:D})";
         }
 
@@ -50,7 +52,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// </summary>
         public string GetRecordUrl(EntityReference entityRef)
         {
-            var info = _metadata.GetEntity(entityRef.LogicalName);
+            var info = _metadata[entityRef.LogicalName];
 
             if (entityRef.Id != Guid.Empty)
                 return $"{info.EntitySetName}({entityRef.Id:D})";
@@ -66,7 +68,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// </summary>
         public string GetRecordUrl(Entity entity)
         {
-            var info = _metadata.GetEntity(entity.LogicalName);
+            var info = _metadata[entity.LogicalName];
             var id = entity.Id;
 
             if (id == Guid.Empty && info.PrimaryIdAttribute != null && entity.Attributes.TryGetValue(info.PrimaryIdAttribute, out var pk) && pk is Guid pkGuid)
@@ -81,14 +83,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             throw new NotSupportedException($"No ID or alternate key specified for {entity.LogicalName} record");
         }
 
-        private string FormatKey(WebApiEntityInfo info, KeyAttributeCollection keys)
+        private string FormatKey(EntityMetadata info, KeyAttributeCollection keys)
         {
             return String.Join(",", keys.Select(kvp =>
             {
                 var attr = info.GetAttribute(kvp.Key);
                 var name = kvp.Key;
 
-                if (attr?.IsLookup == true)
+                if (attr.IsLookup())
                     name = "_" + name + "_value";
 
                 return name + "=" + WebApiJson.FormatLiteral(kvp.Value);
@@ -103,7 +105,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// <param name="includeType">Indicates if the <c>@odata.type</c> annotation should be included</param>
         public JObject Serialize(Entity entity, bool isCreate, bool includeType = false)
         {
-            var info = _metadata.GetEntity(entity.LogicalName);
+            var info = _metadata[entity.LogicalName];
             var json = new JObject();
 
             if (includeType)
@@ -122,13 +124,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 if (!isCreate && attr.Key.Equals(info.PrimaryIdAttribute, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (attr.Value is EntityCollection || attrInfo?.AttributeType == "PartyList")
+                if (attr.Value is EntityCollection || attrInfo?.AttributeType == AttributeTypeCode.PartyList)
                 {
                     SerializePartyList(json, info, attr.Key, (EntityCollection)attr.Value, isCreate);
                     continue;
                 }
 
-                if (attr.Value is EntityReference entityRef || (attr.Value == null && attrInfo?.IsLookup == true))
+                if (attr.Value is EntityReference entityRef || (attr.Value == null && attrInfo.IsLookup()))
                 {
                     SerializeLookup(json, info, attr.Key, (EntityReference)attr.Value);
                     continue;
@@ -140,7 +142,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return json;
         }
 
-        private void SerializeLookup(JObject json, WebApiEntityInfo info, string attribute, EntityReference value)
+        private void SerializeLookup(JObject json, EntityMetadata info, string attribute, EntityReference value)
         {
             if (value == null)
             {
@@ -164,7 +166,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             json[nav + "@odata.bind"] = "/" + GetRecordUrl(value);
         }
 
-        private void SerializePartyList(JObject json, WebApiEntityInfo info, string attribute, EntityCollection parties, bool isCreate)
+        private void SerializePartyList(JObject json, EntityMetadata info, string attribute, EntityCollection parties, bool isCreate)
         {
             if (!PartyListParticipationTypes.TryGetValue(attribute, out var participationType))
                 throw new NotSupportedException($"Unknown party list attribute {attribute}");
@@ -180,7 +182,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             if (parties == null || parties.Entities.Count == 0)
                 return;
 
-            var activityParty = _metadata.GetEntity("activityparty");
+            var activityParty = _metadata["activityparty"];
 
             foreach (var party in parties.Entities)
             {
@@ -220,7 +222,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// <summary>
         /// Converts a simple attribute value to the equivalent JSON value
         /// </summary>
-        public static JToken SerializeValue(object value, WebApiAttributeInfo attrInfo)
+        public static JToken SerializeValue(object value, AttributeMetadata attrInfo)
         {
             switch (value)
             {
@@ -237,7 +239,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     return money.Value;
 
                 case DateTime dt:
-                    return WebApiJson.FormatDateTime(dt, attrInfo?.IsDateOnly == true);
+                    return WebApiJson.FormatDateTime(dt, attrInfo is DateTimeAttributeMetadata date && date.Format == DateTimeFormat.DateOnly);
 
                 case Guid guid:
                     return guid.ToString("D");

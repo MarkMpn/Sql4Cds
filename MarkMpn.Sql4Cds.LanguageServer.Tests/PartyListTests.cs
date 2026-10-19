@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Newtonsoft.Json.Linq;
 
@@ -15,9 +17,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
     [TestClass]
     public class PartyListTests
     {
-        private static WebApiMetadataProvider ActivityMetadata()
+        private static IAttributeMetadataCache ActivityMetadata()
         {
-            return new WebApiMetadataProvider(requests => requests.Select(request => ActivityMetadataResponse()).ToArray());
+            return MetadataTestHelper.Cache((JObject)ActivityMetadataResponse().Json);
         }
 
         private static WebApiResponse ActivityMetadataResponse()
@@ -70,8 +72,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             {
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(requests.Select(request =>
                 {
-                    if (request.Url.StartsWith("EntityDefinitions(", StringComparison.Ordinal))
-                        return ActivityMetadataResponse();
+                    if (request.Url.StartsWith("RetrieveMetadataChanges(", StringComparison.Ordinal))
+                        return MetadataTestHelper.Response((JObject)ActivityMetadataResponse().Json);
                     StringAssert.StartsWith(request.Url, "phonecalls?fetchXml=");
                     return new WebApiResponse
                     {
@@ -160,7 +162,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [TestMethod]
         public void RetrievedPartyListsHaveSdkTypesIncludingEmptyLists()
         {
-            var attribute = new WebApiAttributeInfo { AttributeType = "PartyList" };
+            var attribute = ActivityMetadata()["phonecall"].Attributes.First(a => a.AttributeType == AttributeTypeCode.PartyList);
             var id = Guid.NewGuid();
             var json = new JArray(new JObject
             {
@@ -179,23 +181,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [TestMethod]
         public void UpdatesCombineRolesAndSupportClearingWithoutChangingCreate()
         {
-            var metadata = new WebApiMetadataProvider(requests => requests.Select(request =>
-            {
-                var name = request.Url.Contains("'phonecall'") ? "phonecall" :
-                    request.Url.Contains("'contact'") ? "contact" : "activityparty";
-                return new WebApiResponse
-                {
-                    Status = 200,
-                    Body = new JObject
+            var metadata = MetadataTestHelper.Cache(new[] { "phonecall", "contact", "activityparty" }
+                .Select(name => new JObject
                     {
                         ["LogicalName"] = name,
                         ["EntitySetName"] = name == "activityparty" ? "activityparties" : name + "s",
                         ["PrimaryIdAttribute"] = name + "id",
                         ["Attributes"] = new JArray(new JObject { ["LogicalName"] = "to", ["AttributeType"] = "PartyList" },
                             new JObject { ["LogicalName"] = "from", ["AttributeType"] = "PartyList" })
-                    }.ToString()
-                };
-            }).ToArray());
+                    }).ToArray());
             var serializer = new WebApiEntitySerializer(metadata);
             var id = Guid.NewGuid();
             var entity = new Entity("phonecall", Guid.NewGuid())

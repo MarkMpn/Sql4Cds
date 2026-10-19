@@ -30,36 +30,41 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         private readonly object _backgroundLoadLock = new object();
         private readonly SemaphoreSlim _backgroundLoader = new SemaphoreSlim(1);
         private readonly object _autocompleteLock = new object();
+        private Lazy<string[]> _recycleBinEntities;
+        private Task<string[]> _recycleBinLoad;
 
         public CachedMetadata(IOrganizationService org, PersistentMetadataCache persistentMetadataCache, Guid orgId, string version, bool lazy)
         {
             _org = org;
             _defaultCache = new AttributeMetadataCache(org);
+            _persistentMetadataCache = persistentMetadataCache;
+            _orgId = orgId;
+            _version = new Lazy<string>(() =>
+            {
+                // An impossible entity ID returns the metadata stamp without loading any entities.
+                var response = (RetrieveMetadataChangesResponse)org.Execute(new RetrieveMetadataChangesRequest
+                {
+                    Query = new EntityQueryExpression
+                    {
+                        Criteria = new MetadataFilterExpression
+                        {
+                            Conditions =
+                            {
+                                new MetadataConditionExpression(nameof(EntityMetadata.MetadataId), MetadataConditionOperator.Equals, Guid.Empty)
+                            }
+                        },
+                        Properties = new MetadataPropertiesExpression(nameof(EntityMetadata.MetadataId))
+                    }
+                });
+                if (String.IsNullOrEmpty(response.ServerVersionStamp))
+                    throw new InvalidOperationException("Dataverse did not return a metadata version stamp");
+                return version + ":" + response.ServerVersionStamp;
+            }, LazyThreadSafetyMode.ExecutionAndPublication);
+            _recycleBinEntities = new Lazy<string[]>(() => _persistentMetadataCache.GetLazyMetadata(
+                _orgId, _version.Value, "autocomplete:recyclebin", 1, () => _defaultCache.RecycleBinEntities, allowNull: true),
+                LazyThreadSafetyMode.ExecutionAndPublication);
             if (lazy)
             {
-                _persistentMetadataCache = persistentMetadataCache;
-                _orgId = orgId;
-                _version = new Lazy<string>(() =>
-                {
-                    // An impossible entity ID returns the metadata stamp without loading any entities.
-                    var response = (RetrieveMetadataChangesResponse)org.Execute(new RetrieveMetadataChangesRequest
-                    {
-                        Query = new EntityQueryExpression
-                        {
-                            Criteria = new MetadataFilterExpression
-                            {
-                                Conditions =
-                                {
-                                    new MetadataConditionExpression(nameof(EntityMetadata.MetadataId), MetadataConditionOperator.Equals, Guid.Empty)
-                                }
-                            },
-                            Properties = new MetadataPropertiesExpression(nameof(EntityMetadata.MetadataId))
-                        }
-                    });
-                    if (String.IsNullOrEmpty(response.ServerVersionStamp))
-                        throw new InvalidOperationException("Dataverse did not return a metadata version stamp");
-                    return version + ":" + response.ServerVersionStamp;
-                }, LazyThreadSafetyMode.ExecutionAndPublication);
                 _lazyEntities = new ConcurrentDictionary<string, Lazy<EntityMetadata>>(StringComparer.OrdinalIgnoreCase);
                 _cacheUnavailable = true;
                 return;
@@ -154,7 +159,20 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 lock (_backgroundLoadLock)
                 {
                     if (!_lazyLoading.TryGetValue(logicalName, out var load) || load.IsCompleted)
+                    {
+                        var key = "name:" + logicalName.ToLowerInvariant();
+                        if (_persistentMetadataCache.TryGetLazyMetadata(_orgId, () => _version.Value, key, 2, out metadata))
+                        {
+                            var cached = metadata;
+                            var diskEntry = new Lazy<EntityMetadata>(() => cached, LazyThreadSafetyMode.ExecutionAndPublication);
+                            _ = diskEntry.Value;
+                            _lazyEntities[key] = diskEntry;
+                            if (cached.ObjectTypeCode != null)
+                                _lazyEntities.TryAdd("otc:" + cached.ObjectTypeCode.Value, diskEntry);
+                            return true;
+                        }
                         _lazyLoading[logicalName] = LoadLazyEntityAsync(logicalName);
+                    }
                 }
                 metadata = null;
                 return false;
@@ -166,7 +184,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             return _defaultCache.TryGetValue(logicalName, out metadata);
         }
 
-        public string[] RecycleBinEntities => _defaultCache.RecycleBinEntities;
+        public string[] RecycleBinEntities
+        {
+            get
+            {
+                Lazy<string[]> entities;
+                lock (_backgroundLoadLock)
+                    entities = _recycleBinEntities;
+                return entities.Value;
+            }
+        }
 
         private async Task LoadLazyEntityAsync(string logicalName)
         {
@@ -197,7 +224,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             var entry = GetLazyEntry(key, load);
             try
             {
-                return entry.Value;
+                var entity = entry.Value;
+                _lazyEntities.TryAdd("name:" + entity.LogicalName.ToLowerInvariant(), entry);
+                if (entity.ObjectTypeCode != null)
+                    _lazyEntities.TryAdd("otc:" + entity.ObjectTypeCode.Value, entry);
+                return entity;
             }
             catch
             {
@@ -212,6 +243,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             {
                 if (_cacheUnavailable && _autocompleteCache == null)
                 {
+                    if (_lazyEntities != null && _persistentMetadataCache.TryGetLazyMetadata(
+                        _orgId, () => _version.Value, "autocomplete:entities", 1, out EntityMetadata[] cached))
+                    {
+                        _autocompleteCache = cached;
+                        _cacheUnavailable = false;
+                        return cached;
+                    }
+
                     // Start loading a basic cache in the background to use for autocomplete
                     _autocompleteCache = Array.Empty<EntityMetadata>();
                     _cacheUnavailable = false;
@@ -228,7 +267,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                             properties.PropertyNames.Add(nameof(EntityMetadata.DataProviderId));
                         }
 
-                        _autocompleteCache = ((RetrieveMetadataChangesResponse)_org.Execute(new RetrieveMetadataChangesRequest
+                        EntityMetadata[] LoadEntities() => ((RetrieveMetadataChangesResponse)_org.Execute(new RetrieveMetadataChangesRequest
                         {
                             Query = new EntityQueryExpression
                             {
@@ -236,6 +275,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                             }
                         })).EntityMetadata
                         .ToArray();
+
+                        _autocompleteCache = _lazyEntities != null
+                            ? _persistentMetadataCache.GetLazyMetadata(_orgId, _version.Value, "autocomplete:entities", 1, LoadEntities)
+                            : LoadEntities();
                     });
                     if (_lazyEntities != null)
                     {
@@ -258,6 +301,25 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             }
         }
 
-        public string[] TryGetRecycleBinEntities() => _defaultCache.TryGetRecycleBinEntities();
+        public string[] TryGetRecycleBinEntities()
+        {
+            Task<string[]> load;
+            lock (_backgroundLoadLock)
+            {
+                if (_recycleBinEntities.IsValueCreated)
+                    return _recycleBinEntities.Value;
+
+                if (_recycleBinLoad == null && _persistentMetadataCache.TryGetLazyMetadata(
+                    _orgId, () => _version.Value, "autocomplete:recyclebin", 1, out string[] cached, allowNull: true))
+                {
+                    _recycleBinEntities = new Lazy<string[]>(() => cached, LazyThreadSafetyMode.ExecutionAndPublication);
+                    return _recycleBinEntities.Value;
+                }
+                load = _recycleBinLoad ??= Task.Run(() => _recycleBinEntities.Value);
+            }
+            if (load.IsCompleted)
+                return load.GetAwaiter().GetResult();
+            return Array.Empty<string>();
+        }
     }
 }

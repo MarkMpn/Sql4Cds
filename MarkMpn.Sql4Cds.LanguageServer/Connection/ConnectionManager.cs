@@ -19,6 +19,8 @@ using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.PowerPlatform.Dataverse.Client.Model;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 {
@@ -340,14 +342,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             ServerName = new Uri(url).Host;
             _url = url;
 
-            using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource> { [Name] = this }))
-            using (var cmd = con.CreateCommand())
-            {
-                con.ApplicationName = "VS Code";
-                cmd.CommandText = "SELECT fullname FROM systemuser WHERE systemuserid = CURRENT_USER";
-                Username = (string)cmd.ExecuteScalar();
-            }
-
             if (org is ServiceClient svc)
             {
                 OrgId = svc.ConnectedOrgId;
@@ -361,10 +355,32 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             Metadata = new CachedMetadata(org, persistentMetadataCache, OrgId, Version.ToString(), org is PptbOrganizationService);
             if (org is PptbOrganizationService pptb)
             {
+                pptb.SetMetadataCache(Metadata);
                 TableSizeCache = new TableSizeCache(org, Metadata, Version);
                 MessageCache = new MessageCache(org, Metadata);
                 pptb.MessageCache = MessageCache;
             }
+
+            // Get the LocaleId and Username in one query. We need to get the OrgId separately earlier so the
+            // PersistentMetadataCache can store the metadata appropriately when translating this query (for PPTB)
+            var query = """
+                <fetch>
+                    <entity name="systemuser">
+                        <attribute name="fullname" />
+                        <link-entity name="organization" from="organizationid" to="organizationid" link-type="inner" alias="organization">
+                            <attribute name="localeid" />
+                        </link-entity>
+                        <filter>
+                            <condition attribute="systemuserid" operator="eq-userid" />
+                        </filter>
+                    </entity>
+                </fetch>
+                """;
+
+            var response = org.Execute(new RetrieveMultipleRequest { Query = new FetchExpression(query) }) as RetrieveMultipleResponse;
+            var user = response.EntityCollection.Entities.Single();
+            Username = user.GetAttributeValue<string>("fullname");
+            DefaultCollation = CollationFromLocaleId((int)user.GetAttributeValue<AliasedValue>("organization.localeid")?.Value);
         }
 
         public string UniqueName { get; set; }

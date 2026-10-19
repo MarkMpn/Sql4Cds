@@ -41,6 +41,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
         public EntityMetadata GetEntityMetadata(Guid orgId, string version, string key, Func<EntityMetadata> load)
         {
+            // Object type code lookups now include attributes and relationships.
+            return GetLazyMetadata(orgId, version, key, 2, load);
+        }
+
+        public T GetLazyMetadata<T>(Guid orgId, string version, string key, int queryVersion, Func<T> load, bool allowNull = false)
+            where T : class
+        {
+            if (TryGetLazyMetadata(orgId, () => version, key, queryVersion, out T cached, allowNull))
+                return cached;
+
+            var entity = load();
             var filename = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))) + ".json.gz";
             var cachePath = Path.Combine(_path, orgId + ".lazy", filename);
             var serializer = new JsonSerializer
@@ -49,27 +60,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 TypeNameHandling = TypeNameHandling.Auto
             };
 
-            if (File.Exists(cachePath))
-            {
-                try
-                {
-                    using (var stream = File.OpenRead(cachePath))
-                    using (var gz = new GZipStream(stream, CompressionMode.Decompress))
-                    using (var reader = new StreamReader(gz))
-                    using (var jsonReader = new JsonTextReader(reader))
-                    {
-                        var cached = serializer.Deserialize<LazyMetadataEntry>(jsonReader);
-                        if (cached?.Version == version && cached.QueryVersion == 1 && cached.Entity != null)
-                            return cached.Entity;
-                    }
-                }
-                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is JsonException)
-                {
-                    ReportLazyLoadFailure(key, ex);
-                }
-            }
-
-            var entity = load();
             var directory = Path.GetDirectoryName(cachePath);
             var tempPath = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".tmp");
             try
@@ -80,7 +70,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 using (var writer = new StreamWriter(gz))
                 using (var jsonWriter = new JsonTextWriter(writer))
                 {
-                    serializer.Serialize(jsonWriter, new LazyMetadataEntry { Version = version, QueryVersion = 1, Entity = entity });
+                    serializer.Serialize(jsonWriter, new LazyMetadataEntry<T> { Version = version, QueryVersion = queryVersion, Entity = entity });
                 }
 
                 File.Move(tempPath, cachePath, true);
@@ -105,6 +95,52 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             return entity;
         }
 
+        public bool TryGetLazyMetadata<T>(Guid orgId, Func<string> version, string key, int queryVersion, out T value, bool allowNull = false)
+            where T : class
+        {
+            value = null;
+            var filename = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))) + ".json.gz";
+            var cachePath = Path.Combine(_path, orgId + ".lazy", filename);
+            if (!File.Exists(cachePath))
+                return false;
+
+            // Only resolve the stamp when there is a disk entry to validate.
+            var currentVersion = version();
+            var serializer = new JsonSerializer
+            {
+                ContractResolver = MetadataCacheContractResolver.Instance,
+                TypeNameHandling = TypeNameHandling.Auto
+            };
+            try
+            {
+                using (var stream = File.OpenRead(cachePath))
+                using (var gz = new GZipStream(stream, CompressionMode.Decompress))
+                using (var reader = new StreamReader(gz))
+                using (var jsonReader = new JsonTextReader(reader))
+                {
+                    var cached = serializer.Deserialize<LazyMetadataEntry<T>>(jsonReader);
+                    if (GetMetadataVersion(cached?.Version) == GetMetadataVersion(currentVersion) &&
+                        cached?.QueryVersion == queryVersion && (cached.Entity != null || allowNull))
+                    {
+                        value = cached.Entity;
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is UnauthorizedAccessException || ex is JsonException)
+            {
+                ReportLazyLoadFailure(key, ex);
+            }
+            return false;
+        }
+
+        private static string GetMetadataVersion(string version)
+        {
+            // The suffix records when the stamp was retrieved, not a metadata change.
+            var separator = version?.IndexOf('!') ?? -1;
+            return separator < 0 ? version : version.Substring(0, separator);
+        }
+
         public void ReportLazyLoadFailure(string key, Exception error)
         {
             _ = _lsp.NotifyAsync(Methods.WindowLogMessage, new LogMessageParams
@@ -114,11 +150,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             });
         }
 
-        private class LazyMetadataEntry
+        private class LazyMetadataEntry<T>
         {
             public string Version { get; set; }
             public int QueryVersion { get; set; }
-            public EntityMetadata Entity { get; set; }
+            public T Entity { get; set; }
         }
 
         public async Task<EntityMetadata[]> GetMetadataAsync(IOrganizationService org, bool flush)

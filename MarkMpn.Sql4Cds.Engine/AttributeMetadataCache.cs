@@ -45,7 +45,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     _ = this["recyclebinconfig"];
                 }
-                catch
+                catch (FaultException<OrganizationServiceFault> ex) when (
+                    ex.Detail.ErrorCode == unchecked((int)0x80040217) ||
+                    ex.Detail.ErrorCode == unchecked((int)0x80041102))
                 {
                     return null;
                 }
@@ -137,11 +139,22 @@ namespace MarkMpn.Sql4Cds.Engine
                                 new MetadataConditionExpression(nameof(EntityMetadata.ObjectTypeCode), MetadataConditionOperator.Equals, otc)
                             }
                         },
-                        Properties = new MetadataPropertiesExpression { AllProperties = true }
+                        Properties = new MetadataPropertiesExpression { AllProperties = true },
+                        AttributeQuery = new AttributeQueryExpression
+                        {
+                            Properties = new MetadataPropertiesExpression { AllProperties = true }
+                        },
+                        RelationshipQuery = new RelationshipQueryExpression
+                        {
+                            Properties = new MetadataPropertiesExpression { AllProperties = true }
+                        }
                     }
                 };
 
                 var resp = (RetrieveMetadataChangesResponse) _org.Execute(qry);
+
+                if (resp.EntityMetadata.Count == 0)
+                    throw new FaultException("Unknown entity " + otc);
 
                 _metadata[resp.EntityMetadata[0].LogicalName] = resp.EntityMetadata[0];
                 return resp.EntityMetadata[0];

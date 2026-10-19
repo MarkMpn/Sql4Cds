@@ -279,6 +279,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var lcid = org.GetAttributeValue<int>("localeid");
 
+            return CollationFromLocaleId(lcid);
+        }
+
+        protected Collation CollationFromLocaleId(int lcid)
+        {
             // Collation options are set based on the default language. Most are CI/AI but a few are not
             // https://learn.microsoft.com/en-us/power-platform/admin/language-collations#language-and-associated-collation-used-with-dataverse
             // On-prem databases may be configured with any default collation, but this is not exposed through any API.

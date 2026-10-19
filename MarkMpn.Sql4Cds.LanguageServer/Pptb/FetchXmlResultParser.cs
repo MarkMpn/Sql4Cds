@@ -4,7 +4,9 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Xml.Linq;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Newtonsoft.Json.Linq;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
@@ -30,13 +32,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             public string LinkAlias { get; set; }
         }
 
-        private readonly WebApiMetadataProvider _metadata;
+        private readonly IAttributeMetadataCache _metadata;
         private readonly string _rootEntity;
         private readonly Dictionary<string, AttributeDetails> _attributeAliases = new Dictionary<string, AttributeDetails>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _linkAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _linkEntityNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public FetchXmlResultParser(string fetchXml, WebApiMetadataProvider metadata)
+        public FetchXmlResultParser(string fetchXml, IAttributeMetadataCache metadata)
         {
             _metadata = metadata;
 
@@ -142,7 +144,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         private Entity ParseEntity(JObject record)
         {
             var entity = new Entity(_rootEntity);
-            var rootInfo = _metadata.GetEntity(_rootEntity);
+            var rootInfo = _metadata[_rootEntity];
 
             foreach (var prop in record.Properties())
             {
@@ -216,9 +218,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return entity;
         }
 
-        private void ParseActivityParties(Entity entity, JToken token, WebApiEntityInfo info, string prefix)
+        private void ParseActivityParties(Entity entity, JToken token, EntityMetadata info, string prefix)
         {
-            var parties = (EntityCollection)ConvertValue(token, new WebApiAttributeInfo { AttributeType = "PartyList" }, null, null);
+            var parties = token.Type == JTokenType.Null ? null : ParsePartyList(token);
             if (parties == null)
                 throw new InvalidOperationException("Dataverse returned a null activity-party collection");
 
@@ -235,7 +237,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 throw new InvalidOperationException("Dataverse returned an invalid activity-party participation type");
             }).ToDictionary(g => g.Key, g => g.ToList());
 
-            foreach (var attribute in info.Attributes.Values.Where(a => a.AttributeType == "PartyList"))
+            foreach (var attribute in (info.Attributes ?? Array.Empty<AttributeMetadata>()).Where(a => a.AttributeType == AttributeTypeCode.PartyList))
             {
                 if (!WebApiEntitySerializer.PartyListParticipationTypes.TryGetValue(attribute.LogicalName, out var mask))
                     throw new NotSupportedException($"Unknown party list attribute {attribute.LogicalName}");
@@ -258,11 +260,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
         }
 
-        private WebApiEntityInfo TryGetEntity(string logicalName)
+        private EntityMetadata TryGetEntity(string logicalName)
         {
             try
             {
-                return _metadata.GetEntity(logicalName);
+                return _metadata[logicalName];
             }
             catch
             {
@@ -292,7 +294,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return attributeName;
         }
 
-        private static object ConvertAggregate(JToken token, AttributeDetails details, WebApiAttributeInfo attrInfo, string lookupLogicalName, string formattedValue)
+        private static object ConvertAggregate(JToken token, AttributeDetails details, AttributeMetadata attrInfo, string lookupLogicalName, string formattedValue)
         {
             if (token.Type == JTokenType.Null)
                 return null;
@@ -309,10 +311,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 case "avg":
                     switch (attrInfo?.AttributeType)
                     {
-                        case "Money":
+                        case AttributeTypeCode.Money:
                             return new Money(token.Value<decimal>());
 
-                        case "Double":
+                        case AttributeTypeCode.Double:
                             return token.Value<double>();
 
                         default:
@@ -340,7 +342,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// <summary>
         /// Converts a JSON value to the SDK type for an attribute
         /// </summary>
-        public static object ConvertValue(JToken token, WebApiAttributeInfo attrInfo, string lookupLogicalName, string formattedValue)
+        public static object ConvertValue(JToken token, AttributeMetadata attrInfo, string lookupLogicalName, string formattedValue)
         {
             if (token == null || token.Type == JTokenType.Null)
                 return null;
@@ -350,34 +352,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
             switch (attrInfo?.AttributeType)
             {
-                case "PartyList":
-                    if (!(token is JArray parties))
-                        throw new InvalidOperationException("Dataverse returned an invalid party list");
-                    return new EntityCollection(parties.Select(p =>
-                    {
-                        if (!(p is JObject party))
-                            throw new InvalidOperationException("Dataverse returned an invalid activity party");
-                        var entity = WebApiJson.ToEntity(party);
-                        entity.LogicalName = "activityparty";
-                        if (party["activitypartyid"]?.Type == JTokenType.String)
-                            entity.Id = Guid.Parse(party.Value<string>("activitypartyid"));
-                        return entity;
-                    }).ToList()) { EntityName = "activityparty" };
+                case AttributeTypeCode.PartyList:
+                    return ParsePartyList(token);
 
-                case "Lookup":
-                case "Customer":
-                case "Owner":
+                case AttributeTypeCode.Lookup:
+                case AttributeTypeCode.Customer:
+                case AttributeTypeCode.Owner:
                     if (Guid.TryParse((string)token, out var refId))
                         return new EntityReference(lookupLogicalName, refId) { Name = formattedValue };
                     break;
 
-                case "Picklist":
-                case "State":
-                case "Status":
+                case AttributeTypeCode.Picklist:
+                case AttributeTypeCode.State:
+                case AttributeTypeCode.Status:
                     return new OptionSetValue(token.Value<int>());
 
-                case "Virtual":
-                    if (attrInfo.AttributeTypeName == "MultiSelectPicklistType")
+                case AttributeTypeCode.Virtual:
+                    if (attrInfo.AttributeTypeName?.Value == "MultiSelectPicklistType")
                     {
                         var str = (string)token;
 
@@ -391,43 +382,43 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     }
                     break;
 
-                case "Money":
+                case AttributeTypeCode.Money:
                     return new Money(token.Value<decimal>());
 
-                case "DateTime":
+                case AttributeTypeCode.DateTime:
                     return WebApiJson.ParseDateTime(token);
 
-                case "Uniqueidentifier":
+                case AttributeTypeCode.Uniqueidentifier:
                     return Guid.Parse((string)token);
 
-                case "Boolean":
+                case AttributeTypeCode.Boolean:
                     if (token.Type == JTokenType.Boolean)
                         return (bool)token;
                     if (token.Type == JTokenType.Integer)
                         return token.Value<int>() != 0;
                     return Boolean.Parse((string)token);
 
-                case "Integer":
+                case AttributeTypeCode.Integer:
                     return token.Value<int>();
 
-                case "BigInt":
+                case AttributeTypeCode.BigInt:
                     return token.Value<long>();
 
-                case "Decimal":
+                case AttributeTypeCode.Decimal:
                     return token.Value<decimal>();
 
-                case "Double":
+                case AttributeTypeCode.Double:
                     return token.Value<double>();
 
-                case "String":
-                case "Memo":
-                case "EntityName":
+                case AttributeTypeCode.String:
+                case AttributeTypeCode.Memo:
+                case AttributeTypeCode.EntityName:
                     return (string)token;
             }
 
-            if (attrInfo?.AttributeTypeName == "ImageType" || attrInfo?.AttributeTypeName == "FileType")
+            if (attrInfo?.AttributeTypeName?.Value == "ImageType" || attrInfo?.AttributeTypeName?.Value == "FileType")
             {
-                if (token.Type == JTokenType.String && attrInfo.AttributeTypeName == "ImageType")
+                if (token.Type == JTokenType.String && attrInfo.AttributeTypeName.Value == "ImageType")
                 {
                     try
                     {
@@ -441,6 +432,22 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
 
             return WebApiJson.ToClrValue(token);
+        }
+
+        private static EntityCollection ParsePartyList(JToken token)
+        {
+            if (!(token is JArray parties))
+                throw new InvalidOperationException("Dataverse returned an invalid party list");
+            return new EntityCollection(parties.Select(p =>
+            {
+                if (!(p is JObject party))
+                    throw new InvalidOperationException("Dataverse returned an invalid activity party");
+                var entity = WebApiJson.ToEntity(party);
+                entity.LogicalName = "activityparty";
+                if (party["activitypartyid"]?.Type == JTokenType.String)
+                    entity.Id = Guid.Parse(party.Value<string>("activitypartyid"));
+                return entity;
+            }).ToList()) { EntityName = "activityparty" };
         }
     }
 }

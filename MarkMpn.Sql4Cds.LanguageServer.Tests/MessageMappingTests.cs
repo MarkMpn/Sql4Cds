@@ -231,18 +231,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [TestMethod]
         public void ObjectTypeCodeResolutionIsCachedAndMissingEntitiesFail()
         {
-            var calls = 0;
-            var provider = new WebApiMetadataProvider(requests =>
+            var provider = MetadataTestHelper.Cache(new JObject
             {
-                calls++;
-                return requests.Select(request => Response(request.Url.StartsWith("EntityDefinitions?", StringComparison.Ordinal) ?
-                    new JObject { ["value"] = new JArray(new JObject { ["LogicalName"] = "systemuser" }) } :
-                    new JObject { ["LogicalName"] = "systemuser", ["EntitySetName"] = "systemusers", ["PrimaryIdAttribute"] = "systemuserid" })).ToArray();
+                ["LogicalName"] = "systemuser", ["ObjectTypeCode"] = 8,
+                ["EntitySetName"] = "systemusers", ["PrimaryIdAttribute"] = "systemuserid"
             });
-            Assert.AreSame(provider.GetEntity(8), provider.GetEntity(8));
-            Assert.AreEqual(2, calls);
-            provider = new WebApiMetadataProvider(requests => new[] { Response(new JObject { ["value"] = new JArray() }) });
-            Assert.ThrowsException<InvalidOperationException>(() => provider.GetEntity(8));
+            Assert.AreSame(provider[8], provider[8]);
+            Assert.AreSame(provider[8], provider["systemuser"]);
+            provider = MetadataTestHelper.Cache();
+            Assert.ThrowsException<FaultException>(() => _ = provider[8]);
         }
 
         private static WebApiResponse Response(JObject json) => new WebApiResponse { Status = 200, Body = json.ToString() };
@@ -264,21 +261,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             {
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(requests.Select(request =>
                 {
-                    if (request.Url.StartsWith("EntityDefinitions?", StringComparison.Ordinal))
-                        return Response(new JObject { ["value"] = new JArray(new JObject
-                        {
-                            ["LogicalName"] = request.Url.EndsWith("4700", StringComparison.Ordinal) ? "asyncoperation" : "systemuser"
-                        }) });
-                    if (!request.Url.StartsWith("EntityDefinitions(", StringComparison.Ordinal))
+                    if (!request.Url.StartsWith("RetrieveMetadataChanges(", StringComparison.Ordinal))
                     {
                         Operations.Add(request);
                         if (request.Url.Contains("CustomFunction") && request.Method == "POST")
                             return new WebApiResponse { Status = 405, Body = "{\"error\":{\"message\":\"Use GET\"}}" };
                         return Response(new JObject { ["Result"] = "test" });
                     }
-                    Assert.IsTrue(request.Url.StartsWith("EntityDefinitions(", StringComparison.Ordinal));
-                    var name = new[] { "email", "team", "workflow", "systemuser", "asyncoperation" }.Single(n => request.Url.Contains("'" + n + "'"));
-                    return Response(new JObject { ["LogicalName"] = name, ["EntitySetName"] = name + "s", ["PrimaryIdAttribute"] = name + "id" });
+                    var condition = MetadataTestHelper.Query(request)["Criteria"]["Conditions"].Single();
+                    var value = condition["Value"].Value<string>("Value");
+                    var name = condition.Value<string>("PropertyName") == "ObjectTypeCode"
+                        ? (value == "4700" ? "asyncoperation" : "systemuser")
+                        : value;
+                    return MetadataTestHelper.Response(new JObject
+                    {
+                        ["LogicalName"] = name, ["EntitySetName"] = name + "s", ["PrimaryIdAttribute"] = name + "id",
+                        ["ObjectTypeCode"] = name == "asyncoperation" ? 4700 : name == "team" ? 9 :
+                            name == "email" ? 4202 : name == "workflow" ? 4703 : 8
+                    });
                 }).ToArray());
             }
         }
