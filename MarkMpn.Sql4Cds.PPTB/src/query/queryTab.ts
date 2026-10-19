@@ -1,7 +1,7 @@
 import { monaco, applyDiagnostics } from "../editor/monacoSetup";
 import { ConnectionRegistry } from "../connections";
 import type { Sql4CdsClient } from "../lsp/client";
-import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, PptbConnectionOptions, ResultSetEventParams, SelectionData } from "../lsp/protocol";
+import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, PptbConnectionOptions, ResultSetEventParams, ResultSetSummary, SelectionData } from "../lsp/protocol";
 import { ResultsGrid } from "./resultsGrid";
 
 export interface QueryTabHost {
@@ -10,6 +10,7 @@ export interface QueryTabHost {
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
     onStateChanged(tab: QueryTab): void;
+    onStatusChanged(tab: QueryTab): void;
     copyToClipboard(text: string): void;
     openRecord(reference: EntityReferenceValue): void;
 }
@@ -35,14 +36,30 @@ export class QueryTab {
     connecting = false;
     running = false;
     startTime = 0;
+    connectionSummary: ConnectionCompleteParams["connectionSummary"];
+    statusMessage = "Not connected";
+    statusKind: "success" | "error" | "warning" | "busy" = "warning";
+    gridStatus = "";
+    gridStatusIsError = false;
 
     private readonly resultsPane: HTMLElement;
     private readonly messagesPane: HTMLElement;
     private readonly resultsTabButtons = new Map<ResultsView, HTMLButtonElement>();
-    private readonly grids = new Map<number, ResultsGrid>();
+    private readonly grids = new Map<string, ResultsGrid>();
+    private readonly rowCounts = new Map<string, number>();
     private readonly changeListener: monaco.IDisposable;
     private pendingConnect: ((params: ConnectionCompleteParams) => void) | null = null;
     private hasErrors = false;
+    private cancelled = false;
+    private endTime = 0;
+
+    get elapsedMilliseconds(): number {
+        return this.startTime === 0 ? 0 : (this.running ? Date.now() : this.endTime) - this.startTime;
+    }
+
+    get totalRowCount(): number {
+        return Array.from(this.rowCounts.values()).reduce((total, count) => total + count, 0);
+    }
 
     constructor(private readonly host: QueryTabHost, initialText = "") {
         this.id = nextTabId++;
@@ -80,12 +97,18 @@ export class QueryTab {
             batchStart: () => {},
             message: (p) => this.addMessage(p.message.message, p.message.isError),
             resultSetAvailable: (p) => this.onResultSetAvailable(p),
-            resultSetUpdated: (p) => this.grids.get(p.resultSetSummary.id)?.setRowCount(p.resultSetSummary.rowCount, p.resultSetSummary.complete),
-            resultSetComplete: (p) => this.grids.get(p.resultSetSummary.id)?.setRowCount(p.resultSetSummary.rowCount, true),
+            resultSetUpdated: (p) => this.updateResultSet(p.resultSetSummary),
+            resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
             batchComplete: (p) => {
                 if (p.batchSummary.hasError) this.hasErrors = true;
             },
-            queryComplete: () => this.onQueryComplete(),
+            queryComplete: (p) => {
+                for (const batch of p.batchSummaries) {
+                    if (batch.hasError) this.hasErrors = true;
+                    for (const summary of batch.resultSetSummaries ?? []) this.updateResultSet(summary);
+                }
+                this.onQueryComplete();
+            },
             confirmation: (p) => host.confirm(p),
             diagnostics: (p) => applyDiagnostics(this.model, p),
         });
@@ -104,7 +127,10 @@ export class QueryTab {
         if (this.connected) await this.disconnect();
 
         this.connectionSlot = slot;
+        this.connectionSummary = undefined;
         this.connecting = true;
+        this.statusMessage = "Connecting…";
+        this.statusKind = "busy";
         this.host.onStateChanged(this);
 
         try {
@@ -116,6 +142,13 @@ export class QueryTab {
             if (result.errorMessage) throw new Error(result.errorMessage);
 
             this.connected = true;
+            this.connectionSummary = result.connectionSummary;
+            this.statusMessage = "Connected";
+            this.statusKind = "success";
+        } catch (err) {
+            this.statusMessage = `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
+            this.statusKind = "error";
+            throw err;
         } finally {
             this.pendingConnect = null;
             this.connecting = false;
@@ -126,6 +159,9 @@ export class QueryTab {
     async disconnect(): Promise<void> {
         if (!this.connected) return;
         this.connected = false;
+        this.connectionSummary = undefined;
+        this.statusMessage = "Not connected";
+        this.statusKind = "warning";
         this.host.onStateChanged(this);
         try {
             await this.host.client.disconnect(this.uri);
@@ -147,7 +183,11 @@ export class QueryTab {
 
         this.running = true;
         this.hasErrors = false;
+        this.cancelled = false;
         this.startTime = Date.now();
+        this.endTime = 0;
+        this.statusMessage = "Executing query…";
+        this.statusKind = "busy";
         this.host.onStateChanged(this);
 
         let querySelection: SelectionData | undefined;
@@ -170,16 +210,30 @@ export class QueryTab {
 
     async cancel(): Promise<void> {
         if (!this.running) return;
-        const result = await this.host.client.cancelQuery(this.uri);
-        if (result?.messages) this.addMessage(result.messages, true);
+        this.cancelled = true;
+        this.statusMessage = "Cancelling query…";
+        this.host.onStatusChanged(this);
+        try {
+            const result = await this.host.client.cancelQuery(this.uri);
+            if (result?.messages) {
+                this.cancelled = false;
+                this.addMessage(result.messages, true);
+            }
+        } catch (err) {
+            this.cancelled = false;
+            this.addMessage(`Unable to cancel query: ${err instanceof Error ? err.message : String(err)}`, true);
+        }
     }
 
     private onQueryComplete(): void {
         if (!this.running) return;
         this.running = false;
+        this.endTime = Date.now();
 
-        const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
-        this.addMessage(`Query ${this.hasErrors ? "completed with errors" : "completed"} in ${elapsed}s`, false, true);
+        const elapsed = (this.elapsedMilliseconds / 1000).toFixed(1);
+        this.statusMessage = this.cancelled ? "Query cancelled" : this.hasErrors ? "Query completed with errors" : "Query completed successfully";
+        this.statusKind = this.cancelled ? "warning" : this.hasErrors ? "error" : "success";
+        this.addMessage(`${this.statusMessage} in ${elapsed}s`, false, true);
 
         // Switch to the messages if there's nothing else to show
         if (this.grids.size === 0 || this.hasErrors) this.showResultsView("messages");
@@ -196,20 +250,42 @@ export class QueryTab {
             },
             (text) => this.host.copyToClipboard(text),
             (reference) => this.host.openRecord(reference),
+            (text, isError) => {
+                this.gridStatus = text;
+                this.gridStatusIsError = isError;
+                this.host.onStatusChanged(this);
+            },
         );
-        grid.setRowCount(summary.rowCount, summary.complete);
-        this.grids.set(summary.id, grid);
+        this.grids.set(this.resultSetKey(summary), grid);
+        this.updateResultSet(summary);
         this.resultsPane.appendChild(grid.element);
         this.resultsPane.dataset.count = String(this.grids.size);
         this.showResultsView("results");
     }
 
     private addMessage(text: string, isError: boolean, isSummary = false): void {
+        if (isError) {
+            this.hasErrors = true;
+            this.statusMessage = text;
+            this.statusKind = "error";
+            this.host.onStatusChanged(this);
+        }
         const line = document.createElement("div");
         line.className = isError ? "message error" : isSummary ? "message summary" : "message";
         line.textContent = text;
         this.messagesPane.appendChild(line);
         this.messagesPane.scrollTop = this.messagesPane.scrollHeight;
+    }
+
+    private resultSetKey(summary: ResultSetSummary): string {
+        return `${summary.batchId}:${summary.id}`;
+    }
+
+    private updateResultSet(summary: ResultSetSummary): void {
+        const key = this.resultSetKey(summary);
+        this.rowCounts.set(key, summary.rowCount);
+        this.grids.get(key)?.setRowCount(summary.rowCount, summary.complete);
+        this.host.onStatusChanged(this);
     }
 
     private showResultsView(view: ResultsView): void {
@@ -221,6 +297,9 @@ export class QueryTab {
     private async clearResults(): Promise<void> {
         for (const grid of this.grids.values()) grid.dispose();
         this.grids.clear();
+        this.rowCounts.clear();
+        this.gridStatus = "";
+        this.gridStatusIsError = false;
         this.resultsPane.dataset.count = "0";
         this.messagesPane.replaceChildren();
         monaco.editor.setModelMarkers(this.model, "sql4cds", []);

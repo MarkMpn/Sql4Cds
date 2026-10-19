@@ -24,8 +24,19 @@
                 <div id="results-host" class="results-host"></div>
             </div>
             <div class="status-bar">
-                <span id="status-text">Loading…</span>
+                <span id="status-message" role="status">
+                    <span id="status-icon" aria-hidden="true"></span>
+                    <span id="status-text">Loading…</span>
+                </span>
                 <span id="status-progress" class="status-progress"></span>
+                <span id="status-server">
+                    <span id="status-lock" aria-hidden="true"></span>
+                    <span id="status-domain"></span>
+                </span>
+                <span id="status-user"></span>
+                <span id="status-database"></span>
+                <span id="status-elapsed" title="Elapsed query time">00:00:00</span>
+                <span id="status-rows" title="Total rows across all result sets">0 rows</span>
             </div>
         </div>
         <script type="module" src="./app.ts"></script>

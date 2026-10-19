@@ -4,6 +4,11 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { test } = require("node:test");
 const ts = require("typescript");
+const gridStatuses = new WeakMap();
+
+function gridStatus(grid) {
+    return gridStatuses.get(grid).text;
+}
 
 class Element {
     constructor(tag) {
@@ -61,12 +66,15 @@ function createGrid({ platform = "Win32", rowCount = 1000, columns = 5, fetchRow
     }, { filename });
 
     const copied = [];
+    const status = { text: "" };
     const grid = new module.exports.ResultsGrid(
         Array.from({ length: columns }, (_, i) => ({ columnName: `col${i}` })),
         fetchRows,
         (text) => copied.push(text),
         () => {},
+        (text) => { status.text = text; },
     );
+    gridStatuses.set(grid, status);
     grid.render = () => {};
     grid.rowCount = rowCount;
     return { grid, copied, documentListeners, frames, errors };
@@ -242,7 +250,7 @@ test("Ctrl+A and Cmd+A select all cells using the platform shortcut without a pr
         assert.equal(grid.selected, null);
         assert.equal(key(grid, "A", modifiers), true);
         assert.deepEqual({ ...grid.selectionRange }, { firstRow: 0, lastRow: 402, firstCol: 0, lastCol: 1 });
-        assert.match(grid.statusBar.textContent, /806 cells selected/);
+        assert.equal(gridStatus(grid), "");
         await grid.copySelection(false);
         assert.equal(copied[0].split("\r\n").length, 403);
         assert.equal(copied[0].split("\r\n").at(-1), "402:0\t402:1");
@@ -309,7 +317,7 @@ test("select-all and header clicks on empty results never select invalid cells",
         assert.equal(grid.selectionRange, null);
         clickHeader(grid, grid.header.children[0].children[0]);
         assert.equal(grid.selectionRange, null);
-        assert.doesNotMatch(grid.statusBar.textContent, /cells selected/);
+        assert.doesNotMatch(gridStatus(grid), /cells selected/);
     }
 });
 
@@ -318,7 +326,7 @@ test("Shift+click selects a rectangle in either direction and a plain click rese
     clickCell(grid, 450, 3);
     clickCell(grid, 2, 1, true);
     assert.deepEqual({ ...grid.selectionRange }, { firstRow: 2, lastRow: 450, firstCol: 1, lastCol: 3 });
-    assert.match(grid.statusBar.textContent, /1,347 cells selected/);
+    assert.equal(gridStatus(grid), "");
     clickCell(grid, 700, 4, true);
     assert.deepEqual({ ...grid.selectionRange }, { firstRow: 450, lastRow: 700, firstCol: 3, lastCol: 4 });
     clickCell(grid, 8, 2);
@@ -433,14 +441,14 @@ test("copy waits for in-flight pages and snapshots the selection while scrolling
     clickCell(grid, 1, 1);
     clickCell(grid, 2, 2, true);
     const copying = grid.copySelection(false);
-    assert.match(grid.statusBar.textContent, /Copying/);
+    assert.match(gridStatus(grid), /Copying/);
     grid.pages.clear();
     clickCell(grid, 20, 4);
     page.rows = Array.from({ length: 200 }, (_, i) => rowValues(i));
     finish();
     await copying;
     assert.deepEqual(copied, ["1:1\t1:2\r\n2:1\t2:2"]);
-    assert.doesNotMatch(grid.statusBar.textContent, /Copying/);
+    assert.doesNotMatch(gridStatus(grid), /Copying/);
 });
 
 test("copy refreshes partially loaded pages, preserving empty values and NULLs", async () => {
@@ -511,7 +519,7 @@ test("copy failures or incomplete pages never write a partial selection to the c
         await grid.copySelection(false);
         assert.deepEqual(copied, []);
         assert.equal(errors.length, 1);
-        assert.match(grid.statusBar.textContent, /Copy failed:/);
+        assert.match(gridStatus(grid), /Copy failed:/);
         assert.equal(grid.copying, false);
     }
 });

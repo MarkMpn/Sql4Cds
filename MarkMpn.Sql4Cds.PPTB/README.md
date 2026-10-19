@@ -8,6 +8,7 @@ Query and modify Dataverse data using standard SQL syntax inside [Power Platform
 - IntelliSense: autocomplete, hover information, signature help and live error diagnostics
 - Run the whole script or just the selected text (`F5` / `Ctrl+E`), and cancel long-running queries
 - Virtualized results grids that fetch rows on demand, so large result sets are not held in the browser
+- A single tool-wide status bar follows the active query tab: status with a success/error/warning icon, organization domain and connection security, connected user's login name (`systemuser.domainname`), database name, elapsed query time, and total rows across all result sets. Time and row totals update during execution and remain visible afterwards; copy progress and errors also appear here.
 - Select a rectangle of result cells by dragging, Shift+clicking, or using Shift+navigation keys. Selection highlighting survives scrolling and page eviction. Ctrl+C (Cmd+C on macOS) copies the rectangle as tab-separated columns and newline-separated rows, fetching missing pages as needed; add Shift to include column headers. Drag beyond the grid's edges to scroll while extending the selection.
 - Click a row or column header to select that entire row or column. Ctrl+A (Cmd+A on macOS), or the top-left header square, selects all result cells currently available.
 - Entity-reference links in results open records in the browser profile of their source connection, including cross-instance query results

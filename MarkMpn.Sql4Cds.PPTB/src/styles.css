@@ -388,19 +388,13 @@ input[type="number"] {
     cursor: col-resize;
 }
 
-.grid-status {
-    flex: 0 0 auto;
-    padding: 2px 8px;
-    font-size: 12px;
-    color: var(--fg-muted);
-    background: var(--bg-alt);
-}
-
 /* Status bar */
 
 .status-bar {
     display: flex;
-    gap: 12px;
+    align-items: center;
+    flex: 0 0 auto;
+    min-height: 26px;
     padding: 3px 8px;
     font-size: 12px;
     border-top: 1px solid var(--border);
@@ -408,8 +402,63 @@ input[type="number"] {
     color: var(--fg-muted);
 }
 
-#status-text.error {
+.status-bar > span {
+    padding: 0 8px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.status-bar > span:empty {
+    display: none;
+}
+
+.status-bar > span + span:not(.status-progress) {
+    border-left: 1px solid var(--border);
+}
+
+#status-message {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 1 auto;
+}
+
+#status-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-icon {
+    flex: 0 0 auto;
+    font-weight: bold;
+}
+
+.status-icon.success {
+    color: #16803c;
+}
+
+.status-icon.error {
     color: var(--error);
+}
+
+.status-icon.warning {
+    color: #a46b00;
+}
+
+body.dark .status-icon.success {
+    color: #73c991;
+}
+
+body.dark .status-icon.warning {
+    color: #ecca62;
+}
+
+#status-elapsed,
+#status-rows {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
 }
 
 .status-progress {
@@ -417,6 +466,10 @@ input[type="number"] {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+.status-bar > .status-progress:empty {
+    display: block;
 }
 
 /* Dialogs */

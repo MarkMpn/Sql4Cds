@@ -38,7 +38,6 @@ export class ResultsGrid {
     private readonly viewport: HTMLElement;
     private readonly spacer: HTMLElement;
     private readonly body: HTMLElement;
-    private readonly statusBar: HTMLElement;
 
     private readonly columnWidths: number[];
     private readonly pages = new Map<number, CachedPage>();
@@ -60,6 +59,7 @@ export class ResultsGrid {
         private readonly fetchRows: RowFetcher,
         private readonly onCopy: (text: string) => void,
         private readonly onOpenRecord: (reference: EntityReferenceValue) => void,
+        private readonly onStatus: (text: string, isError: boolean) => void = () => {},
     ) {
         this.columnWidths = columns.map((c) => Math.min(320, Math.max(90, c.columnName.length * 8 + 24)));
 
@@ -79,14 +79,10 @@ export class ResultsGrid {
         this.body = document.createElement("div");
         this.body.className = "grid-body";
 
-        this.statusBar = document.createElement("div");
-        this.statusBar.className = "grid-status";
-
         this.viewport.append(this.spacer, this.body);
-        this.element.append(this.header, this.viewport, this.statusBar);
+        this.element.append(this.header, this.viewport);
 
         this.renderHeader();
-        this.updateStatus();
 
         this.viewport.addEventListener("scroll", () => {
             this.header.scrollLeft = this.viewport.scrollLeft;
@@ -95,6 +91,7 @@ export class ResultsGrid {
         this.body.addEventListener("mousedown", (e) => this.onCellClick(e));
         this.header.addEventListener("mousedown", (e) => this.onCellClick(e));
         this.element.addEventListener("keydown", (e) => this.onKeyDown(e));
+        this.element.addEventListener("focusin", () => this.updateStatus());
         document.addEventListener("copy", this.onDocumentCopy);
         new ResizeObserver(() => this.scheduleRender()).observe(this.viewport);
     }
@@ -105,7 +102,6 @@ export class ResultsGrid {
 
         this.rowCount = rowCount;
         this.complete = complete;
-        this.updateStatus();
         this.scheduleRender();
     }
 
@@ -173,16 +169,10 @@ export class ResultsGrid {
     }
 
     private updateStatus(): void {
-        const rows = `${this.rowCount.toLocaleString()} row${this.rowCount === 1 ? "" : "s"}`;
-        let text = this.complete ? rows : `${rows} (retrieving…)`;
-        const range = this.selectionRange;
-        if (range) {
-            const count = (range.lastRow - range.firstRow + 1) * (range.lastCol - range.firstCol + 1);
-            text += ` | ${count.toLocaleString()} cell${count === 1 ? "" : "s"} selected`;
-        }
-        if (this.copying) text += " | Copying…";
-        if (this.copyError) text += ` | ${this.copyError}`;
-        this.statusBar.textContent = text;
+        const parts: string[] = [];
+        if (this.copying) parts.push("Copying…");
+        if (this.copyError) parts.push(this.copyError);
+        this.onStatus(parts.join(" | "), this.copyError !== null);
     }
 
     private get selectionRange(): { firstRow: number; lastRow: number; firstCol: number; lastCol: number } | null {

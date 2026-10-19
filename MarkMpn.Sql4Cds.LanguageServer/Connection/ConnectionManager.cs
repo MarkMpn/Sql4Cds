@@ -366,7 +366,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             var query = """
                 <fetch>
                     <entity name="systemuser">
-                        <attribute name="fullname" />
+                        <attribute name="domainname" />
                         <link-entity name="organization" from="organizationid" to="organizationid" link-type="inner" alias="organization">
                             <attribute name="localeid" />
                         </link-entity>
@@ -379,7 +379,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
             var response = org.Execute(new RetrieveMultipleRequest { Query = new FetchExpression(query) }) as RetrieveMultipleResponse;
             var user = response.EntityCollection.Entities.Single();
-            Username = user.GetAttributeValue<string>("fullname");
+            Username = user.GetAttributeValue<string>("domainname");
             DefaultCollation = CollationFromLocaleId((int)user.GetAttributeValue<AliasedValue>("organization.localeid")?.Value);
         }
 

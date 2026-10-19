@@ -17,6 +17,8 @@ class App implements QueryTabHost {
     private settings!: Sql4CdsSettings;
     private ready = false;
     private confirmationQueue: Promise<void> = Promise.resolve();
+    private statusTimer: ReturnType<typeof setInterval> | null = null;
+    private progressMessage = "";
 
     private readonly el = {
         tabStrip: byId("tab-strip"),
@@ -30,20 +32,32 @@ class App implements QueryTabHost {
         settings: byId<HTMLButtonElement>("btn-settings"),
         connection: byId<HTMLSelectElement>("connection-select"),
         status: byId("status-text"),
+        statusMessage: byId("status-message"),
+        statusIcon: byId("status-icon"),
         progress: byId("status-progress"),
+        server: byId("status-server"),
+        lock: byId("status-lock"),
+        domain: byId("status-domain"),
+        user: byId("status-user"),
+        database: byId("status-database"),
+        elapsed: byId("status-elapsed"),
+        rows: byId("status-rows"),
     };
 
     constructor() {
         this.client = new Sql4CdsClient({
-            progress: (message) => (this.el.progress.textContent = message),
+            progress: (message) => {
+                this.progressMessage = message;
+                this.updateStatusBar();
+            },
             log: (params) => {
                 if (params.type === 1) console.error(params.message);
                 else console.log(params.message);
             },
             exit: (snapshot) => {
                 this.ready = false;
-                this.setStatus(`SQL 4 CDS engine stopped${snapshot.failure ? `: ${snapshot.failure}` : ""}`, true);
                 this.updateToolbar();
+                this.setStatus(`SQL 4 CDS engine stopped${snapshot.failure ? `: ${snapshot.failure}` : ""}`, "error");
             },
         });
         this.connections = new ConnectionRegistry(this.client);
@@ -67,13 +81,13 @@ class App implements QueryTabHost {
         try {
             await this.client.start({ ...this.settings });
         } catch (err) {
-            this.setStatus(`Unable to start the SQL 4 CDS engine: ${errorMessage(err)}`, true);
+            this.setStatus(`Unable to start the SQL 4 CDS engine: ${errorMessage(err)}`, "error");
             await notify("Unable to start SQL 4 CDS", errorMessage(err), "error");
             return;
         }
 
         this.ready = true;
-        this.setStatus("Ready");
+        this.setStatus("Ready", "success");
 
         await this.connections.refresh();
         this.renderConnectionList();
@@ -239,6 +253,9 @@ class App implements QueryTabHost {
             await this.connections.register(slot);
             await tab.connect(slot);
         } catch (err) {
+            tab.statusMessage = `Connection failed: ${errorMessage(err)}`;
+            tab.statusKind = "error";
+            this.onStateChanged(tab);
             await notify("Connection failed", errorMessage(err), "error");
         }
     }
@@ -273,6 +290,7 @@ class App implements QueryTabHost {
         if (!tab || tab.running || !this.ready) return;
 
         try {
+            this.progressMessage = "";
             await tab.execute(this.editor.getSelection());
         } catch (err) {
             await notify("Unable to run query", errorMessage(err), "warning");
@@ -302,6 +320,10 @@ class App implements QueryTabHost {
             this.renderConnectionList();
             this.updateToolbar();
         }
+    }
+
+    onStatusChanged(tab: QueryTab): void {
+        if (tab === this.activeTab) this.updateStatusBar();
     }
 
     copyToClipboard(text: string): void {
@@ -335,11 +357,41 @@ class App implements QueryTabHost {
         this.el.cancel.disabled = !this.ready || !tab?.running;
         this.el.connection.disabled = !this.ready || !tab || tab.running || tab.connecting;
 
-        if (tab?.running) this.setStatus("Executing query…");
-        else if (tab?.connecting) this.setStatus("Connecting…");
-        else if (this.ready) this.setStatus(tab?.connected ? "Connected" : "Not connected");
+        this.updateStatusBar();
+    }
 
-        if (!tab?.running) this.el.progress.textContent = "";
+    private updateStatusBar(): void {
+        const tab = this.activeTab;
+        if (this.statusTimer !== null && (!this.ready || !tab?.running)) {
+            clearInterval(this.statusTimer);
+            this.statusTimer = null;
+        } else if (this.ready && tab?.running && this.statusTimer === null) {
+            this.statusTimer = setInterval(() => this.updateStatusBar(), 100);
+        }
+
+        if (this.ready) {
+            this.setStatus(tab?.gridStatusIsError ? tab.gridStatus : tab?.statusMessage ?? "Ready",
+                tab?.gridStatusIsError ? "error" : tab?.statusKind ?? "success");
+        }
+        this.el.progress.textContent = [tab?.gridStatusIsError ? "" : tab?.gridStatus, tab?.running ? this.progressMessage : ""]
+            .filter(Boolean).join(" | ");
+
+        const entry = tab?.connected && tab.connectionSlot !== null ? this.connections.get(tab.connectionSlot) : null;
+        const summary = tab?.connectionSummary;
+        this.el.domain.textContent = entry ? summary?.serverName ?? new URL(entry.options.url.includes("://") ? entry.options.url : `https://${entry.options.url}`).hostname : "";
+        const secure = entry !== null && (!entry.options.url.includes("://") || new URL(entry.options.url).protocol === "https:");
+        this.el.lock.textContent = entry ? secure ? "\uD83D\uDD12" : "\uD83D\uDD13" : "";
+        this.el.server.title = entry ? `${secure ? "Secure connection" : "Unencrypted connection"}: ${entry.options.url}` : "Not connected";
+        this.el.user.textContent = entry ? summary?.userName ?? "" : "";
+        this.el.user.title = `Connected user: ${this.el.user.textContent}`;
+        this.el.database.textContent = entry ? summary?.databaseName ?? entry.options.connectionName : "";
+        this.el.database.title = `Current database: ${this.el.database.textContent}`;
+
+        const seconds = Math.floor((tab?.elapsedMilliseconds ?? 0) / 1000);
+        this.el.elapsed.textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+            .map((part) => String(part).padStart(2, "0")).join(":");
+        const rows = tab?.totalRowCount ?? 0;
+        this.el.rows.textContent = `${rows.toLocaleString()} row${rows === 1 ? "" : "s"}`;
     }
 
     private bindSplitter(): void {
@@ -392,9 +444,11 @@ class App implements QueryTabHost {
         }
     }
 
-    private setStatus(text: string, isError = false): void {
+    private setStatus(text: string, kind: QueryTab["statusKind"] = "busy"): void {
         this.el.status.textContent = text;
-        this.el.status.classList.toggle("error", isError);
+        this.el.statusMessage.title = text;
+        this.el.statusIcon.textContent = { success: "\u2713", error: "\u2757", warning: "\u26A0", busy: "\u25F7" }[kind];
+        this.el.statusIcon.className = `status-icon ${kind}`;
     }
 }
 

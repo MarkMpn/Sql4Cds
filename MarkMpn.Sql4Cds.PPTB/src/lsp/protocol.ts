@@ -89,6 +89,11 @@ export interface ConnectionCompleteParams {
     errorMessage?: string;
     messages?: string;
     errorNumber?: number;
+    connectionSummary?: {
+        serverName: string;
+        databaseName: string;
+        userName: string;
+    };
 }
 
 export interface SelectionData {
