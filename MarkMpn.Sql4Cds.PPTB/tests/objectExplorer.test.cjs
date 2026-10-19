@@ -87,7 +87,7 @@ function connection(slot = 0) {
     return {
         slot,
         connection: { name: `Contoso ${slot}`, id: `c${slot}`, url: "https://contoso.crm.dynamics.com" },
-        options: { authenticationType: "PPTB", connectionName: `contoso_${slot}`, connectionId: `c${slot}`, connectionTarget: slot, url: "https://contoso.crm.dynamics.com" },
+        options: { authenticationType: "PPTB", connectionName: `Contoso ${slot}`, connectionId: `c${slot}`, connectionTarget: slot, url: "https://contoso.crm.dynamics.com" },
     };
 }
 
@@ -112,6 +112,21 @@ test("columns, table-valued functions and stored procedures have distinct icons 
         ["\u25A4", "\u25B0", "\u25A6", "\u25A5", "\u0192", "\u2699", "\u25A6"]);
     assert.equal(new Set(icons.slice(2, 6).map((icon) => icon.textContent)).size, 4);
     assert.ok(icons.every((icon) => icon.attributes["aria-hidden"] === "true"));
+});
+
+test("root labels use the exact registered connection name, including duplicate suffixes and session notifications", async () => {
+    const { explorer, tree, key, session } = setup();
+    const slot = connection();
+    slot.options.connectionName = "Contoso 0_2";
+    await explorer.setConnections([slot]);
+    assert.equal(explorer.selected.info.label, "Contoso 0_2");
+    key("ArrowRight");
+    await settle();
+    session();
+    assert.equal(explorer.selected.info.label, "Contoso 0_2");
+    await explorer.setConnections([{ ...slot, connection: { ...slot.connection, name: "Ignored alternate name" } }]);
+    assert.equal(explorer.selected.info.label, "Contoso 0_2");
+    assert.ok(walk(tree).some((element) => element.textContent === "Contoso 0_2"));
 });
 
 test("double-click inserts object names without expanding them, while arrows still expand tables", async () => {

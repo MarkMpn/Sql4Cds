@@ -61,14 +61,14 @@ export class ObjectExplorer {
             const existing = this.connections.get(connection.slot);
             if (existing) {
                 existing.connection = connection;
-                existing.root.info.label = connection.connection.name;
+                existing.root.info.label = connection.options.connectionName;
                 continue;
             }
             const entry: ExplorerConnection = {
                 connection,
                 ready: false,
                 root: {
-                    info: { nodePath: `connection:${connection.slot}`, nodeType: "Server", label: connection.connection.name, isLeaf: false },
+                    info: { nodePath: `connection:${connection.slot}`, nodeType: "Server", label: connection.options.connectionName, isLeaf: false },
                     connection,
                     children: [],
                     expanded: false,
@@ -132,7 +132,7 @@ export class ObjectExplorer {
             return;
         }
         entry.ready = true;
-        entry.root.info = { ...params.rootNode, label: entry.connection.connection.name };
+        entry.root.info = { ...params.rootNode, label: entry.connection.options.connectionName };
         entry.root.loading = false;
         if (entry.root.expanded) void this.load(entry.root, false);
         else this.render();

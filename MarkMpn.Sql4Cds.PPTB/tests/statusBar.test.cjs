@@ -137,6 +137,19 @@ function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };
 }
 
+test("connection dropdown shows only the registered Object Explorer name", () => {
+    const { app, registry, elements } = setup();
+    registry.all = [
+        { slot: 0, connection: { name: "Old alternate", url: "https://org.crm.dynamics.com" }, options: { connectionName: "Contoso Dev" } },
+        { slot: 1, connection: { name: "Old alternate", url: "https://org2.crm.dynamics.com" }, options: { connectionName: "Contoso Dev_2" }, error: "Connection failed" },
+    ];
+    Object.getPrototypeOf(app).renderConnectionList.call(app);
+    const options = elements.get("connection-select").children;
+    assert.equal(options[1].textContent, "Contoso Dev");
+    assert.equal(options[2].textContent, "Contoso Dev_2 ⚠");
+    assert.equal(options[2].title, "Connection failed");
+});
+
 test("Object Explorer pin collapses to a side tab, opens as a flyout and pins back without losing width or tree", async () => {
     const { app, elements, document } = setup();
     app.bindObjectExplorer();

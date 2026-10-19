@@ -115,7 +115,7 @@ class App implements QueryTabHost {
         // Register every connection so they can all be used in cross-instance queries
         await Promise.all(
             this.connections.all.map((c) =>
-                this.connections.register(c.slot).catch((err) => notify(`Unable to connect to ${c.connection.name}`, errorMessage(err), "error")),
+                this.connections.register(c.slot).catch((err) => notify(`Unable to connect to ${c.options.connectionName}`, errorMessage(err), "error")),
             ),
         );
         this.renderConnectionList();
@@ -214,7 +214,7 @@ class App implements QueryTabHost {
             el.className = "tab";
             el.classList.toggle("active", tab === this.activeTab);
             el.classList.toggle("running", tab.running);
-            el.title = tab.connectionSlot !== null ? `${tab.title} - ${this.connections.get(tab.connectionSlot)?.connection.name ?? ""}` : tab.title;
+            el.title = tab.connectionSlot !== null ? `${tab.title} - ${this.connections.get(tab.connectionSlot)?.options.connectionName ?? ""}` : tab.title;
             el.addEventListener("click", () => this.activateTab(tab));
             el.addEventListener("auxclick", (e) => {
                 if (e.button === 1) void this.closeTab(tab);
@@ -260,7 +260,7 @@ class App implements QueryTabHost {
         for (const entry of this.connections.all) {
             const option = document.createElement("option");
             option.value = String(entry.slot);
-            option.textContent = `${entry.connection.name} (${entry.options.connectionName})${entry.error ? " ⚠" : ""}`;
+            option.textContent = `${entry.options.connectionName}${entry.error ? " ⚠" : ""}`;
             option.title = entry.error ?? entry.connection.url;
             select.appendChild(option);
         }

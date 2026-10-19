@@ -52,7 +52,7 @@ test("opens the named source connection's record URL using its actual slot", asy
     });
     const registry = new ConnectionRegistry({});
     await registry.refresh();
-    await registry.openRecord({ ...reference, dataSource: "CONTOSO_2", logicalName: "account & test" });
+    await registry.openRecord({ ...reference, dataSource: "SECOND", logicalName: "account & test" });
     const [url, slot] = opened[0];
     const parsed = new URL(url);
     assert.equal(slot, 2);
@@ -74,7 +74,45 @@ test("propagates connection-browser failures", async () => {
     });
     const registry = new ConnectionRegistry({});
     await registry.refresh();
-    await assert.rejects(registry.openRecord({ ...reference, dataSource: "contoso" }), /Browser failed/);
+    await assert.rejects(registry.openRecord({ ...reference, dataSource: "First" }), /Browser failed/);
+});
+
+test("registers display names unchanged, disambiguates case-insensitive duplicates and reconnects renamed connections", async () => {
+    let connections = [
+        { id: "first", name: "Contoso Dev", url: "https://org123.crm.dynamics.com" },
+        { id: "second", name: "contoso dev", url: "https://org456.crm.dynamics.com" },
+        { id: "third", name: "Contoso Dev_2", url: "https://org789.crm.dynamics.com" },
+    ];
+    const listeners = new Map();
+    const calls = [];
+    const client = {
+        addListener: (uri, listener) => listeners.set(uri, listener),
+        removeListener: (uri) => listeners.delete(uri),
+        connect: async (uri, options) => {
+            calls.push(["connect", uri, options.connectionName]);
+            listeners.get(uri).connectionComplete({ ownerUri: uri });
+            return true;
+        },
+        disconnect: async (uri) => { calls.push(["disconnect", uri]); return true; },
+    };
+    const { ConnectionRegistry } = loadModule("connections.ts", {
+        window: { toolboxAPI: { connections: { getConnections: async () => connections } } },
+    });
+    const registry = new ConnectionRegistry(client);
+    await registry.refresh();
+    assert.deepEqual(Array.from(registry.all, (entry) => entry.options.connectionName),
+        ["Contoso Dev", "contoso dev_2", "Contoso Dev_2_2"]);
+    await Promise.all(registry.all.map((entry) => registry.register(entry.slot)));
+    assert.deepEqual(calls, [
+        ["connect", "pptb://connection/0", "Contoso Dev"],
+        ["connect", "pptb://connection/1", "contoso dev_2"],
+        ["connect", "pptb://connection/2", "Contoso Dev_2_2"],
+    ]);
+    assert.deepEqual(Array.from(await registry.refresh()), []);
+    connections = [{ ...connections[0], name: "Production (EU)" }];
+    assert.deepEqual(Array.from(await registry.refresh()), [0, 1, 2]);
+    await registry.register(0);
+    assert.deepEqual(calls.at(-1), ["connect", "pptb://connection/0", "Production (EU)"]);
 });
 
 class Element {

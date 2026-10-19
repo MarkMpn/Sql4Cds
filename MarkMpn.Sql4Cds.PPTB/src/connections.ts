@@ -64,7 +64,7 @@ export class ConnectionRegistry {
                 options: {
                     authenticationType: "PPTB",
                     url: connection.url,
-                    connectionName: uniqueName(getConnectionName(connection), usedNames),
+                    connectionName: uniqueName(connection.name, usedNames),
                     connectionId: connection.id,
                     connectionTarget: slot,
                 },
@@ -128,23 +128,10 @@ export class ConnectionRegistry {
     }
 }
 
-/** Generates a short name for the connection to use as its database name in SQL queries */
-function getConnectionName(connection: ToolBoxAPI.Connection): string {
-    try {
-        const url = new URL(connection.url.includes("://") ? connection.url : `https://${connection.url}`);
-        const label = url.hostname.split(".")[0];
-        if (label) return label.toLowerCase();
-    } catch {
-        // Fall back to the display name
-    }
-
-    return connection.name.replace(/[^A-Za-z0-9_]+/g, "_").toLowerCase() || "dataverse";
-}
-
 function uniqueName(name: string, used: Set<string>): string {
     let candidate = name;
-    for (let i = 2; used.has(candidate); i++) candidate = `${name}_${i}`;
-    used.add(candidate);
+    for (let i = 2; used.has(candidate.toLowerCase()); i++) candidate = `${name}_${i}`;
+    used.add(candidate.toLowerCase());
     return candidate;
 }
 
