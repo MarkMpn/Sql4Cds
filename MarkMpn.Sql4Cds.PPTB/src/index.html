@@ -12,23 +12,26 @@
                 <button id="btn-run" class="primary" title="Run the selected text, or the whole query if nothing is selected (F5 / Ctrl+E)" disabled><span class="icon">▶</span> Run</button>
                 <button id="btn-cancel" title="Cancel the running query" disabled><span class="icon">■</span> Cancel</button>
                 <span class="toolbar-separator"></span>
+                <button id="btn-estimated-plan" title="Display the estimated execution plan without running the query (Ctrl+L)" disabled><svg class="icon plan-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1 6h4v4H1zM11 1.5h4v4h-4zM11 10.5h4v4h-4zM5 8h3M8 3.5v9M8 3.5h3M8 12.5h3" /></svg> Estimated Plan</button>
+                <button id="btn-actual-plan" class="toggle" title="Include the actual execution plan when running the query (Ctrl+M)" aria-pressed="false"><svg class="icon plan-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1 6h4v4H1zM11 1.5h4v4h-4zM11 10.5h4v4h-4zM5 8h3M8 3.5v9M8 3.5h3M8 12.5h3" /></svg> Include Actual Plan</button>
+                <span class="toolbar-separator"></span>
                 <label for="connection-select">Connection</label>
                 <select id="connection-select" disabled></select>
                 <span class="toolbar-spacer"></span>
                 <button id="btn-settings" title="Settings"><span class="icon">⚙</span> Settings</button>
             </div>
             <div class="tool-content">
-                <button id="explorer-tab" class="explorer-tab" aria-label="Show Object Explorer" aria-controls="object-explorer" aria-expanded="false" hidden>Object Explorer</button>
-                <aside id="object-explorer" class="object-explorer" aria-label="Object Explorer">
-                    <div class="explorer-heading">
+                <button id="explorer-tab" class="pane-tab" aria-label="Show Object Explorer" aria-controls="object-explorer" aria-expanded="false" hidden>Object Explorer</button>
+                <aside id="object-explorer" class="side-pane object-explorer" aria-label="Object Explorer">
+                    <div class="pane-heading">
                         <strong>Object Explorer</strong>
-                        <button id="explorer-pin" class="explorer-pin" title="Unpin Object Explorer" aria-label="Unpin Object Explorer" aria-pressed="true">
+                        <button id="explorer-pin" class="pane-pin" title="Unpin Object Explorer" aria-label="Unpin Object Explorer" aria-pressed="true">
                             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2h6M6 2v5l-2 3h8l-2-3V2M8 10v5" /></svg>
                         </button>
                     </div>
                     <div id="explorer-tree" class="explorer-tree"></div>
                 </aside>
-                <div id="explorer-splitter" class="explorer-splitter" role="separator" aria-label="Resize Object Explorer" aria-orientation="vertical"></div>
+                <div id="explorer-splitter" class="pane-splitter" role="separator" aria-label="Resize Object Explorer" aria-orientation="vertical"></div>
                 <div class="query-area">
                     <div id="tab-strip" class="tab-strip" role="tablist"></div>
                     <div id="workspace" class="workspace">
@@ -37,6 +40,18 @@
                         <div id="results-host" class="results-host"></div>
                     </div>
                 </div>
+                <div id="properties-splitter" class="pane-splitter" role="separator" aria-label="Resize Properties" aria-orientation="vertical"></div>
+                <aside id="properties" class="side-pane properties-pane" aria-label="Properties">
+                    <div class="pane-heading">
+                        <strong>Properties</strong>
+                        <button id="properties-pin" class="pane-pin" title="Unpin Properties" aria-label="Unpin Properties" aria-pressed="true">
+                            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2h6M6 2v5l-2 3h8l-2-3V2M8 10v5" /></svg>
+                        </button>
+                    </div>
+                    <div id="properties-title" class="properties-title"></div>
+                    <div id="properties-grid" class="properties-grid" aria-label="Properties of the selected item"></div>
+                </aside>
+                <button id="properties-tab" class="pane-tab" aria-label="Show Properties" aria-controls="properties" aria-expanded="false" hidden>Properties</button>
             </div>
             <div class="status-bar">
                 <span id="status-message" role="status">

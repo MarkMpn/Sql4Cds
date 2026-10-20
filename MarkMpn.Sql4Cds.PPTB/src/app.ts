@@ -5,6 +5,8 @@ import { Sql4CdsClient } from "./lsp/client";
 import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue } from "./lsp/protocol";
 import { QueryTab, type QueryTabHost } from "./query/queryTab";
 import { ObjectExplorer } from "./objectExplorer";
+import { PinnablePane } from "./pinnablePane";
+import { PropertiesPanel } from "./propertiesPanel";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 
 const DEFAULT_QUERY = "-- Enter your SQL query here and press F5 or Ctrl+E to run it\nSELECT TOP 10 *\nFROM   account\n";
@@ -22,6 +24,9 @@ class App implements QueryTabHost {
     private statusTimer: ReturnType<typeof setInterval> | null = null;
     private progressMessage = "";
     private connectionChangeQueue: Promise<void> = Promise.resolve();
+    private explorerPane: PinnablePane | null = null;
+    private propertiesPane: PinnablePane | null = null;
+    private propertiesPanel: PropertiesPanel | null = null;
 
     private readonly el = {
         tabStrip: byId("tab-strip"),
@@ -34,9 +39,17 @@ class App implements QueryTabHost {
         explorerSplitter: byId("explorer-splitter"),
         explorerPin: byId<HTMLButtonElement>("explorer-pin"),
         explorerTab: byId<HTMLButtonElement>("explorer-tab"),
+        properties: byId("properties"),
+        propertiesTitle: byId("properties-title"),
+        propertiesGrid: byId("properties-grid"),
+        propertiesSplitter: byId("properties-splitter"),
+        propertiesPin: byId<HTMLButtonElement>("properties-pin"),
+        propertiesTab: byId<HTMLButtonElement>("properties-tab"),
         newTab: byId<HTMLButtonElement>("btn-new"),
         run: byId<HTMLButtonElement>("btn-run"),
         cancel: byId<HTMLButtonElement>("btn-cancel"),
+        estimatedPlan: byId<HTMLButtonElement>("btn-estimated-plan"),
+        actualPlan: byId<HTMLButtonElement>("btn-actual-plan"),
         settings: byId<HTMLButtonElement>("btn-settings"),
         connection: byId<HTMLSelectElement>("connection-select"),
         status: byId("status-text"),
@@ -85,6 +98,7 @@ class App implements QueryTabHost {
         this.bindToolbar();
         this.bindSplitter();
         this.bindObjectExplorer();
+        this.bindProperties();
 
         configureMonaco(this.client, (uri) => this.tabs.some((t) => t.uri === uri && t.connected));
 
@@ -149,6 +163,20 @@ class App implements QueryTabHost {
             run: () => this.runQuery(),
         });
         this.editor.addAction({
+            id: "sql4cds.estimatedPlan",
+            label: "Display Estimated Execution Plan",
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL],
+            contextMenuGroupId: "navigation",
+            contextMenuOrder: 1,
+            run: () => this.runQuery(true),
+        });
+        this.editor.addAction({
+            id: "sql4cds.actualPlan",
+            label: "Include Actual Execution Plan",
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyM],
+            run: () => this.toggleActualPlan(),
+        });
+        this.editor.addAction({
             id: "sql4cds.newTab",
             label: "New Query",
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyN],
@@ -186,6 +214,7 @@ class App implements QueryTabHost {
         this.renderTabs();
         this.renderConnectionList();
         this.updateToolbar();
+        this.updateProperties();
     }
 
     private async closeTab(tab: QueryTab): Promise<void> {
@@ -320,16 +349,26 @@ class App implements QueryTabHost {
         this.editor.focus();
     }
 
-    private async runQuery(): Promise<void> {
+    private async runQuery(estimatedPlan = false): Promise<void> {
         const tab = this.activeTab;
         if (!tab || tab.running || !this.ready) return;
 
         try {
             this.progressMessage = "";
-            await tab.execute(this.editor.getSelection());
+            await tab.execute(this.editor.getSelection(), estimatedPlan);
         } catch (err) {
-            await notify("Unable to run query", errorMessage(err), "warning");
+            await notify(estimatedPlan ? "Unable to display estimated plan" : "Unable to run query", errorMessage(err), "warning");
         }
+    }
+
+    get includeActualPlan(): boolean {
+        return this.settings.includeActualPlan;
+    }
+
+    private async toggleActualPlan(): Promise<void> {
+        const save = this.saveSetting("includeActualPlan", !this.settings.includeActualPlan);
+        this.updateToolbar();
+        await save;
     }
 
     confirm(params: ConfirmationParams): void {
@@ -361,6 +400,15 @@ class App implements QueryTabHost {
         if (tab === this.activeTab) this.updateStatusBar();
     }
 
+    onSelectedPlanNodeChanged(tab: QueryTab): void {
+        if (tab === this.activeTab) this.updateProperties();
+    }
+
+    private updateProperties(): void {
+        const node = this.activeTab?.selectedPlanNode ?? null;
+        this.propertiesPanel?.show(node ? node.name.split(/\r?\n/)[0] : null, node ? node.properties ?? [] : null);
+    }
+
     copyToClipboard(text: string): void {
         void window.toolboxAPI.utils.copyToClipboard(text);
     }
@@ -371,6 +419,8 @@ class App implements QueryTabHost {
         this.el.newTab.addEventListener("click", () => this.addTab());
         this.el.run.addEventListener("click", () => void this.runQuery());
         this.el.cancel.addEventListener("click", () => void this.activeTab?.cancel());
+        this.el.estimatedPlan.addEventListener("click", () => void this.runQuery(true));
+        this.el.actualPlan.addEventListener("click", () => void this.toggleActualPlan());
         this.el.settings.addEventListener("click", () => void this.editSettings());
         this.el.connection.addEventListener("change", () => {
             const tab = this.activeTab;
@@ -382,6 +432,18 @@ class App implements QueryTabHost {
             if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e")) {
                 e.preventDefault();
                 void this.runQuery();
+                return;
+            }
+
+            // The editor handles these shortcuts itself when it has focus
+            if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+            if (e.target instanceof Node && this.el.editor.contains(e.target)) return;
+            if (e.key.toLowerCase() === "l") {
+                e.preventDefault();
+                void this.runQuery(true);
+            } else if (e.key.toLowerCase() === "m") {
+                e.preventDefault();
+                void this.toggleActualPlan();
             }
         });
     }
@@ -389,85 +451,53 @@ class App implements QueryTabHost {
     private updateToolbar(): void {
         const tab = this.activeTab;
         this.el.run.disabled = !this.ready || !tab?.connected || tab.running;
+        this.el.estimatedPlan.disabled = this.el.run.disabled;
         this.el.cancel.disabled = !this.ready || !tab?.running;
+        this.el.actualPlan.setAttribute("aria-pressed", String(this.settings.includeActualPlan));
         this.el.connection.disabled = !this.ready || !tab || tab.running || tab.connecting;
 
         this.updateStatusBar();
     }
 
-    private explorerPinned = true;
-    private explorerOpen = true;
-
-    private updateExplorerVisibility(): void {
-        this.el.explorer.hidden = !this.explorerOpen;
-        this.el.explorer.classList.toggle("auto-hide", !this.explorerPinned);
-        this.el.explorerSplitter.hidden = !this.explorerPinned;
-        this.el.explorerTab.hidden = this.explorerPinned;
-        this.el.explorerTab.setAttribute("aria-expanded", String(this.explorerOpen && !this.explorerPinned));
-        this.el.explorerPin.setAttribute("aria-pressed", String(this.explorerPinned));
-        const label = this.explorerPinned ? "Unpin Object Explorer" : "Pin Object Explorer";
-        this.el.explorerPin.title = label;
-        this.el.explorerPin.setAttribute("aria-label", label);
+    private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan", value: boolean): Promise<void> {
+        this.settings = { ...this.settings, [setting]: value };
+        try {
+            await saveSettings(this.settings);
+        } catch (err) {
+            await notify("Unable to save settings", errorMessage(err), "error");
+        }
     }
 
     private bindObjectExplorer(): void {
-        this.explorerPinned = this.settings.objectExplorerPinned;
-        this.explorerOpen = this.explorerPinned;
-        this.updateExplorerVisibility();
-        this.el.explorerPin.addEventListener("click", async () => {
-            this.explorerPinned = !this.explorerPinned;
-            this.explorerOpen = this.explorerPinned;
-            this.settings = { ...this.settings, objectExplorerPinned: this.explorerPinned };
-            this.updateExplorerVisibility();
-            if (!this.explorerPinned) this.el.explorerTab.focus();
-            this.el.explorerPin.disabled = true;
-            try {
-                await saveSettings(this.settings);
-            } catch (err) {
-                await notify("Unable to save settings", errorMessage(err), "error");
-            } finally {
-                this.el.explorerPin.disabled = false;
-            }
-        });
-        this.el.explorerTab.addEventListener("click", () => {
-            this.explorerOpen = !this.explorerOpen;
-            this.updateExplorerVisibility();
-            if (this.explorerOpen) this.el.explorerTree.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
-        });
-        const collapseOutside = (event: Event) => {
-            if (this.explorerPinned || !this.explorerOpen || !(event.target instanceof Node)) return;
-            if (this.el.explorer.contains(event.target) || this.el.explorerTab.contains(event.target)) return;
-            if (event.target instanceof Element && event.target.closest(".explorer-context-menu")) return;
-            this.explorerOpen = false;
-            this.updateExplorerVisibility();
-        };
-        document.addEventListener("pointerdown", collapseOutside);
-        document.addEventListener("focusin", collapseOutside);
-        document.addEventListener("keydown", (event) => {
-            if (event.key !== "Escape" || this.explorerPinned || !this.explorerOpen) return;
-            event.preventDefault();
-            this.explorerOpen = false;
-            this.updateExplorerVisibility();
-            this.el.explorerTab.focus();
-        });
-        this.el.explorerSplitter.addEventListener("mousedown", (event) => {
-            event.preventDefault();
-            const startX = event.clientX;
-            const width = this.el.explorer.getBoundingClientRect().width;
-            const move = (moveEvent: MouseEvent) => {
-                const max = Math.max(160, document.body.clientWidth - 300);
-                this.el.explorer.style.width = `${Math.min(max, Math.max(160, width + moveEvent.clientX - startX))}px`;
-            };
-            const up = () => {
-                document.body.classList.remove("resizing-explorer");
-                window.removeEventListener("mousemove", move);
-                window.removeEventListener("mouseup", up);
-            };
-            document.body.classList.add("resizing-explorer");
-            window.addEventListener("mousemove", move);
-            window.addEventListener("mouseup", up);
+        this.explorerPane = new PinnablePane({
+            name: "Object Explorer",
+            pane: this.el.explorer,
+            pin: this.el.explorerPin,
+            tab: this.el.explorerTab,
+            splitter: this.el.explorerSplitter,
+            content: this.el.explorerTree,
+            side: "left",
+            pinned: this.settings.objectExplorerPinned,
+            savePinned: (pinned) => this.saveSetting("objectExplorerPinned", pinned),
+            isPartOfPane: (target) => target.closest(".explorer-context-menu") !== null,
         });
         window.addEventListener("pagehide", () => { void this.objectExplorer.dispose(); });
+    }
+
+    private bindProperties(): void {
+        this.propertiesPanel = new PropertiesPanel(this.el.propertiesGrid, this.el.propertiesTitle);
+        this.propertiesPane = new PinnablePane({
+            name: "Properties",
+            pane: this.el.properties,
+            pin: this.el.propertiesPin,
+            tab: this.el.propertiesTab,
+            splitter: this.el.propertiesSplitter,
+            content: this.el.propertiesGrid,
+            side: "right",
+            pinned: this.settings.propertiesPinned,
+            savePinned: (pinned) => this.saveSetting("propertiesPinned", pinned),
+        });
+        this.updateProperties();
     }
 
     private updateStatusBar(): void {
@@ -545,7 +575,8 @@ class App implements QueryTabHost {
         const updated = await showSettingsDialog(this.settings);
         if (!updated) return;
 
-        updated.objectExplorerPinned = this.explorerPinned;
+        updated.objectExplorerPinned = this.explorerPane?.pinned ?? this.settings.objectExplorerPinned;
+        updated.propertiesPinned = this.propertiesPane?.pinned ?? this.settings.propertiesPinned;
         this.settings = updated;
         try {
             await saveSettings(updated);

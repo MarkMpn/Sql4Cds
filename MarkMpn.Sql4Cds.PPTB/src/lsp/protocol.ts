@@ -160,11 +160,75 @@ export interface ResultSetSummary {
     rowCount: number;
     complete: boolean;
     columnInfo: DbColumn[];
+    specialAction?: {
+        /** Set when the result set holds execution plans rather than data */
+        expectYukonXMLShowPlan?: boolean;
+    };
 }
 
 export interface ResultSetEventParams {
     ownerUri: string;
     resultSetSummary: ResultSetSummary;
+    /** Supplied with `query/resultSetUpdated` for execution plan result sets */
+    executionPlans?: ExecutionPlanGraph[];
+}
+
+export interface ExecutionPlanOptions {
+    includeActualExecutionPlanXml: boolean;
+    includeEstimatedExecutionPlanXml: boolean;
+}
+
+export const PropertyValueDataType = {
+    Number: 0,
+    String: 1,
+    Boolean: 2,
+    Nested: 3,
+} as const;
+
+export const BadgeType = {
+    Warning: 0,
+    CriticalWarning: 1,
+    Parallelism: 2,
+} as const;
+
+export interface ExecutionPlanGraphProperty {
+    name: string;
+    displayValue?: string | null;
+    displayOrder?: number;
+    showInTooltip?: boolean;
+    dataType?: (typeof PropertyValueDataType)[keyof typeof PropertyValueDataType];
+    /** A formatted string, or a list of child properties for nested properties */
+    value?: string | ExecutionPlanGraphProperty[] | null;
+}
+
+export interface ExecutionPlanEdge {
+    rowCount: number;
+    rowSize: number;
+}
+
+export interface ExecutionPlanNode {
+    id: number;
+    /** Azure Data Studio icon name for the node */
+    type: string;
+    /** SQL 4 CDS execution plan node class name, e.g. FetchXmlScan */
+    nodeType?: string;
+    /** The node's display name, which may span multiple lines */
+    name: string;
+    cost: number;
+    costDisplayString?: string;
+    elapsedTimeInMs?: number | null;
+    rowCountDisplayString?: string;
+    description?: string | null;
+    subtext?: string[];
+    properties?: ExecutionPlanGraphProperty[];
+    children?: ExecutionPlanNode[];
+    edges?: ExecutionPlanEdge[];
+    badges?: { type: number; tooltip?: string | null }[];
+}
+
+export interface ExecutionPlanGraph {
+    root: ExecutionPlanNode;
+    query?: string;
 }
 
 export interface BatchSummary {

@@ -10,6 +10,7 @@ import type {
     DataverseChunkParams,
     DocumentListener,
     ExecuteBatchParams,
+    ExecutionPlanOptions,
     LogMessageParams,
     MessageParams,
     ObjectExplorerSessionCreated,
@@ -399,11 +400,15 @@ export class Sql4CdsClient {
 
     // Query execution
 
-    executeDocumentSelection(ownerUri: string, querySelection?: SelectionData): Promise<unknown> {
+    executeDocumentSelection(
+        ownerUri: string,
+        querySelection?: SelectionData,
+        executionPlanOptions: ExecutionPlanOptions = { includeActualExecutionPlanXml: false, includeEstimatedExecutionPlanXml: false },
+    ): Promise<unknown> {
         return this.request("query/executeDocumentSelection", {
             ownerUri,
             ...(querySelection === undefined ? {} : { querySelection }),
-            executionPlanOptions: { includeActualExecutionPlanXml: false, includeEstimatedExecutionPlanXml: false },
+            executionPlanOptions,
         });
     }
 

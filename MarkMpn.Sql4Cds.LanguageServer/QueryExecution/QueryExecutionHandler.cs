@@ -750,7 +750,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 RowCountDisplayString = rows,
                 Subtext = node.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries),
                 TopOperationsData = GetTopOperations(node, executed),
-                Type = node.GetType().Name.Replace("Node", "")
+                Type = node.GetType().Name.Replace("Node", ""),
+                NodeType = node.GetType().Name
             };
 
             if (node is IExecutionPlanNodeWarning warning && warning.Warning != null)

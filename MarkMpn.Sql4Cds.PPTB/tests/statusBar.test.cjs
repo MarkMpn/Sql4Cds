@@ -56,12 +56,13 @@ function setup(pinned = true) {
         },
     };
     const listeners = new Map();
+    const executions = [];
     const client = {
         addListener: (uri, listener) => listeners.set(uri, listener),
         openDocument: async () => {},
         changeDocument: async () => {},
         disposeQuery: async () => {},
-        executeDocumentSelection: async () => {},
+        executeDocumentSelection: async (uri, selection, planOptions) => { executions.push(planOptions); },
         cancelQuery: async () => ({}),
         associateConnection: async (uri) => {
             listeners.get(uri).connectionComplete({
@@ -81,6 +82,8 @@ function setup(pinned = true) {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
     const window = { addEventListener() {} };
+    const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: Element, Element });
+    const propertiesPanels = [];
     const { App } = load("app.ts", {
         "./styles.css": {},
         "./connections": { ConnectionRegistry: class { constructor() { return registry; } } },
@@ -89,6 +92,11 @@ function setup(pinned = true) {
         "./lsp/protocol": {},
         "./query/queryTab": {},
         "./objectExplorer": { ObjectExplorer: class {} },
+        "./pinnablePane": pinnablePane,
+        "./propertiesPanel": { PropertiesPanel: class {
+            constructor() { this.shown = []; propertiesPanels.push(this); }
+            show(name, properties) { this.shown.push({ name, properties }); }
+        } },
         "./settings": settingsApi,
     }, {
         document, window, Node: Element, Element,
@@ -96,11 +104,12 @@ function setup(pinned = true) {
         clearInterval: (id) => timers.delete(id),
     }, "\nexports.App = App;");
     const app = new App();
-    app.settings = { objectExplorerPinned: pinned, batchSize: 100 };
+    app.settings = { objectExplorerPinned: pinned, batchSize: 100, includeActualPlan: false };
     app.ready = true;
     app.renderTabs = () => {};
     app.renderConnectionList = () => {};
     const grids = [];
+    const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
         "../editor/monacoSetup": {
             monaco: {
@@ -115,6 +124,20 @@ function setup(pinned = true) {
             },
         },
         "../connections": { ConnectionRegistry: { ownerUri: (slot) => `connection:${slot}` } },
+        "../executionPlan/executionPlanView": { ExecutionPlanView: class {
+            constructor(getImageUrl, onSelectionChanged) {
+                this.element = new Element();
+                this.plans = [];
+                this.selectedNode = null;
+                this.onSelectionChanged = onSelectionChanged;
+                planViews.push(this);
+            }
+            get count() { return this.plans.length; }
+            addPlan(plan) { this.plans.push(plan); }
+            clear() { this.plans = []; this.selectedNode = null; }
+            select(node) { this.selectedNode = node; this.onSelectionChanged(node); }
+        } },
+        "../executionPlan/nodeImages": { getNodeImageUrl: () => "" },
         "./resultsGrid": { ResultsGrid: class {
             constructor(_columns, _fetch, _copy, _open, status) {
                 this.element = new Element();
@@ -130,7 +153,7 @@ function setup(pinned = true) {
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, registry, createTab, elements, timers, grids, document, savedSettings, settingsApi, window, setNow: (value) => { now = value; } };
+    return { app, client, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, setNow: (value) => { now = value; } };
 }
 
 function summary(batchId, id, rowCount) {
@@ -213,9 +236,9 @@ test("pin state is saved with other user settings and an unpinned launch stays c
     assert.equal(pane.hidden, false);
     assert.equal(savedSettings.length, 0, "Opening the flyout does not change the pin preference");
     await pin.events.click();
-    assert.deepEqual(savedSettings[0], { objectExplorerPinned: true, batchSize: 100 });
+    assert.deepEqual(savedSettings[0], { objectExplorerPinned: true, batchSize: 100, includeActualPlan: false });
     await pin.events.click();
-    assert.deepEqual(savedSettings[1], { objectExplorerPinned: false, batchSize: 100 });
+    assert.deepEqual(savedSettings[1], { objectExplorerPinned: false, batchSize: 100, includeActualPlan: false });
 });
 
 test("pin setting save errors are notified and the pin is re-enabled", async () => {
@@ -390,4 +413,159 @@ test("grid elements no longer contain their own status bars", () => {
     assert.doesNotMatch(source, /grid-status|statusBar/);
     const html = fs.readFileSync(path.resolve(__dirname, "..", "src", "index.html"), "utf8");
     assert.equal((html.match(/class="status-bar"/g) ?? []).length, 1);
+});
+
+function planSummary(id, rowCount = 0) {
+    return { ...summary(0, id, rowCount), specialAction: { expectYukonXMLShowPlan: true } };
+}
+
+const samplePlan = { query: "SELECT name FROM account", root: { name: "SELECT", type: "result", properties: [{ name: "Node Type", value: "SelectNode", displayOrder: 0, dataType: 1 }], children: [], edges: [] } };
+
+test("estimated plans are requested without running the query and are shown in the Execution Plan tab", async () => {
+    const { createTab, executions, planViews, grids, elements } = setup();
+    const { tab, events } = createTab();
+    await tab.connect(0);
+    const planButton = tab.resultsTabButtons.get("plan");
+    assert.equal(planButton.hidden, true, "Execution Plan tab is hidden until there is a plan");
+
+    await tab.execute(null, true);
+    assert.deepEqual({ ...executions.at(-1) }, { includeEstimatedExecutionPlanXml: true, includeActualExecutionPlanXml: false });
+    assert.equal(elements.get("status-text").textContent, "Generating estimated execution plan…");
+    events.resultSetAvailable({ resultSetSummary: planSummary(0) });
+    events.resultSetUpdated({ resultSetSummary: planSummary(0), executionPlans: [samplePlan] });
+    events.resultSetComplete({ resultSetSummary: { ...planSummary(0), complete: true } });
+    events.queryComplete({ batchSummaries: [] });
+
+    assert.equal(grids.length, 0, "Plan result sets do not create a grid");
+    assert.equal(elements.get("status-rows").textContent, "0 rows");
+    assert.deepEqual(planViews[0].plans, [samplePlan]);
+    assert.equal(planButton.hidden, false);
+    assert.equal(tab.showingPlan, true);
+    assert.equal(planButton.attributes["aria-pressed"], "true");
+    assert.equal(elements.get("status-text").textContent, "Estimated execution plan generated");
+
+    await tab.execute(null, true);
+    assert.equal(planViews[0].plans.length, 0, "Previous plans are cleared");
+    assert.equal(planButton.hidden, true);
+    assert.equal(tab.showingPlan, false);
+    events.queryComplete({ batchSummaries: [] });
+});
+
+test("actual plans are only requested when enabled and are shown alongside the results without hiding them", async () => {
+    const { app, createTab, executions, planViews, grids, elements } = setup();
+    const { tab, events } = createTab();
+    await tab.connect(0);
+    await tab.execute(null);
+    assert.deepEqual({ ...executions.at(-1) }, { includeEstimatedExecutionPlanXml: false, includeActualExecutionPlanXml: false });
+    events.queryComplete({ batchSummaries: [] });
+
+    app.settings.includeActualPlan = true;
+    await tab.execute(null);
+    assert.deepEqual({ ...executions.at(-1) }, { includeEstimatedExecutionPlanXml: false, includeActualExecutionPlanXml: true });
+    events.resultSetAvailable({ resultSetSummary: summary(0, 0, 5) });
+    events.resultSetAvailable({ resultSetSummary: planSummary(1) });
+    // Later updates for the plan result set are still recognised even without the special action
+    events.resultSetUpdated({ resultSetSummary: summary(0, 1, 0), executionPlans: [samplePlan] });
+    events.queryComplete({ batchSummaries: [] });
+
+    assert.equal(grids.length, 1);
+    assert.equal(elements.get("status-rows").textContent, "5 rows");
+    assert.equal(planViews[0].plans.length, 1);
+    assert.equal(tab.resultsTabButtons.get("plan").hidden, false);
+    assert.equal(tab.showingPlan, false, "Results stay visible when there are grids");
+
+    await tab.execute(null, true);
+    assert.equal(executions.at(-1).includeActualExecutionPlanXml, false, "Estimated plans never execute the query");
+    events.queryComplete({ batchSummaries: [] });
+});
+
+test("the selected plan node is shown in the Properties panel only while the active tab shows its plan", async () => {
+    const { app, createTab, planViews, propertiesPanels } = setup();
+    app.bindProperties();
+    const panel = propertiesPanels[0];
+    assert.deepEqual(panel.shown.at(-1), { name: null, properties: null });
+
+    const { tab, events } = createTab();
+    await tab.connect(0);
+    await tab.execute(null, true);
+    events.resultSetAvailable({ resultSetSummary: planSummary(0) });
+    events.resultSetUpdated({ resultSetSummary: planSummary(0), executionPlans: [samplePlan] });
+    events.queryComplete({ batchSummaries: [] });
+
+    planViews[0].select({ ...samplePlan.root, name: "SELECT\r\naccount" });
+    assert.equal(panel.shown.at(-1).name, "SELECT");
+    assert.equal(panel.shown.at(-1).properties, samplePlan.root.properties);
+
+    tab.resultsTabButtons.get("messages").events.click();
+    assert.deepEqual(panel.shown.at(-1), { name: null, properties: null });
+    tab.resultsTabButtons.get("plan").events.click();
+    assert.equal(panel.shown.at(-1).name, "SELECT");
+
+    const other = createTab();
+    app.activeTab = tab;
+    planViews[1].select(samplePlan.root);
+    assert.equal(panel.shown.at(-1).name, "SELECT", "Background tabs don't update the panel");
+});
+
+test("Properties pane pins like Object Explorer and saves its own setting", async () => {
+    const { app, elements, savedSettings } = setup();
+    app.settings = { ...app.settings, propertiesPinned: false };
+    app.bindProperties();
+    const pane = elements.get("properties");
+    const tab = elements.get("properties-tab");
+    const pin = elements.get("properties-pin");
+    assert.equal(pane.hidden, true);
+    assert.equal(tab.hidden, false);
+    tab.events.click();
+    assert.equal(pane.hidden, false);
+    assert.equal(pane.classes.has("auto-hide"), true);
+    await pin.events.click();
+    assert.equal(pane.classes.has("auto-hide"), false);
+    assert.deepEqual(savedSettings[0], { objectExplorerPinned: true, batchSize: 100, includeActualPlan: false, propertiesPinned: true });
+    assert.equal(pin.attributes["aria-label"], "Unpin Properties");
+});
+
+test("the Properties pin preference defaults to unpinned", async () => {
+    let stored;
+    const { loadSettings } = load("settings.ts", {}, {
+        window: { toolboxAPI: { settings: { get: async () => stored, set: async () => {} } } },
+    });
+    assert.equal((await loadSettings()).propertiesPinned, false);
+    stored = { propertiesPinned: true };
+    assert.equal((await loadSettings()).propertiesPinned, true);
+    stored = { propertiesPinned: "yes" };
+    assert.equal((await loadSettings()).propertiesPinned, false);
+});
+
+test("Include Actual Plan is saved in user settings and applies to every query tab", async () => {
+    const { app, createTab, elements, executions, savedSettings } = setup();
+    app.bindToolbar();
+    const button = elements.get("btn-actual-plan");
+    app.updateToolbar();
+    assert.equal(button.attributes["aria-pressed"], "false");
+
+    await button.events.click();
+    assert.equal(button.attributes["aria-pressed"], "true");
+    assert.deepEqual(savedSettings.at(-1), { objectExplorerPinned: true, batchSize: 100, includeActualPlan: true });
+
+    const { tab } = createTab();
+    await tab.connect(0);
+    await tab.execute(null);
+    assert.equal(executions.at(-1).includeActualExecutionPlanXml, true);
+
+    await button.events.click();
+    assert.equal(button.attributes["aria-pressed"], "false");
+    assert.equal(savedSettings.at(-1).includeActualPlan, false);
+});
+
+test("the Include Actual Plan preference defaults to off", async () => {
+    let stored;
+    const { loadSettings } = load("settings.ts", {}, {
+        window: { toolboxAPI: { settings: { get: async () => stored, set: async () => {} } } },
+    });
+    assert.equal((await loadSettings()).includeActualPlan, false);
+    stored = { includeActualPlan: true };
+    assert.equal((await loadSettings()).includeActualPlan, true);
+    stored = { includeActualPlan: 1 };
+    assert.equal((await loadSettings()).includeActualPlan, false);
 });

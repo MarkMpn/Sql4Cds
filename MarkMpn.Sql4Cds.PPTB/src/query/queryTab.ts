@@ -1,21 +1,27 @@
 import { monaco, applyDiagnostics } from "../editor/monacoSetup";
 import { ConnectionRegistry } from "../connections";
 import type { Sql4CdsClient } from "../lsp/client";
-import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, PptbConnectionOptions, ResultSetEventParams, ResultSetSummary, SelectionData } from "../lsp/protocol";
+import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, ExecutionPlanNode, PptbConnectionOptions, ResultSetEventParams, ResultSetSummary, SelectionData } from "../lsp/protocol";
+import { ExecutionPlanView } from "../executionPlan/executionPlanView";
+import { getNodeImageUrl } from "../executionPlan/nodeImages";
 import { ResultsGrid } from "./resultsGrid";
 
 export interface QueryTabHost {
     readonly client: Sql4CdsClient;
+    /** Indicates if queries should be executed with the actual execution plan */
+    readonly includeActualPlan: boolean;
     /** Gets the connection options to use for a PPTB connection slot */
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
     onStateChanged(tab: QueryTab): void;
     onStatusChanged(tab: QueryTab): void;
+    /** Called when the execution plan node to show in the Properties panel changes */
+    onSelectedPlanNodeChanged(tab: QueryTab): void;
     copyToClipboard(text: string): void;
     openRecord(reference: EntityReferenceValue): void;
 }
 
-type ResultsView = "results" | "messages";
+type ResultsView = "results" | "messages" | "plan";
 
 let nextTabId = 1;
 
@@ -44,14 +50,19 @@ export class QueryTab {
 
     private readonly resultsPane: HTMLElement;
     private readonly messagesPane: HTMLElement;
+    private readonly planPane: HTMLElement;
+    private readonly planView: ExecutionPlanView;
     private readonly resultsTabButtons = new Map<ResultsView, HTMLButtonElement>();
     private readonly grids = new Map<string, ResultsGrid>();
     private readonly rowCounts = new Map<string, number>();
+    private readonly planResultSets = new Set<string>();
     private readonly changeListener: monaco.IDisposable;
     private pendingConnect: ((params: ConnectionCompleteParams) => void) | null = null;
     private hasErrors = false;
     private cancelled = false;
+    private estimatedPlan = false;
     private endTime = 0;
+    private view: ResultsView = "results";
 
     get elapsedMilliseconds(): number {
         return this.startTime === 0 ? 0 : (this.running ? Date.now() : this.endTime) - this.startTime;
@@ -59,6 +70,16 @@ export class QueryTab {
 
     get totalRowCount(): number {
         return Array.from(this.rowCounts.values()).reduce((total, count) => total + count, 0);
+    }
+
+    /** The execution plan node to show in the Properties panel, if the execution plan is currently visible */
+    get selectedPlanNode(): ExecutionPlanNode | null {
+        return this.view === "plan" ? this.planView.selectedNode : null;
+    }
+
+    /** Indicates if the execution plan is currently being shown */
+    get showingPlan(): boolean {
+        return this.view === "plan";
     }
 
     constructor(private readonly host: QueryTabHost, initialText = "") {
@@ -75,13 +96,14 @@ export class QueryTab {
 
         const resultsTabs = document.createElement("div");
         resultsTabs.className = "results-tabs";
-        for (const [view, label] of [["results", "Results"], ["messages", "Messages"]] as const) {
+        for (const [view, label] of [["results", "Results"], ["messages", "Messages"], ["plan", "Execution Plan"]] as const) {
             const button = document.createElement("button");
             button.textContent = label;
             button.addEventListener("click", () => this.showResultsView(view));
             this.resultsTabButtons.set(view, button);
             resultsTabs.appendChild(button);
         }
+        this.resultsTabButtons.get("plan")!.hidden = true;
 
         this.resultsPane = document.createElement("div");
         this.resultsPane.className = "results-pane";
@@ -89,7 +111,12 @@ export class QueryTab {
         this.messagesPane = document.createElement("div");
         this.messagesPane.className = "messages-pane";
 
-        this.resultsElement.append(resultsTabs, this.resultsPane, this.messagesPane);
+        this.planView = new ExecutionPlanView(getNodeImageUrl, () => host.onSelectedPlanNodeChanged(this));
+        this.planPane = document.createElement("div");
+        this.planPane.className = "plan-pane";
+        this.planPane.appendChild(this.planView.element);
+
+        this.resultsElement.append(resultsTabs, this.resultsPane, this.messagesPane, this.planPane);
         this.showResultsView("results");
 
         host.client.addListener(this.uri, {
@@ -97,7 +124,7 @@ export class QueryTab {
             batchStart: () => {},
             message: (p) => this.addMessage(p.message.message, p.message.isError),
             resultSetAvailable: (p) => this.onResultSetAvailable(p),
-            resultSetUpdated: (p) => this.updateResultSet(p.resultSetSummary),
+            resultSetUpdated: (p) => this.onResultSetUpdated(p),
             resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
             batchComplete: (p) => {
                 if (p.batchSummary.hasError) this.hasErrors = true;
@@ -174,8 +201,11 @@ export class QueryTab {
         this.pendingConnect?.(params);
     }
 
-    /** Executes the selected text, or the entire document if nothing is selected */
-    async execute(selection: monaco.Selection | null): Promise<void> {
+    /**
+     * Executes the selected text, or the entire document if nothing is selected. If `estimatedPlan` is set the query
+     * is not run and the estimated execution plan is shown instead.
+     */
+    async execute(selection: monaco.Selection | null, estimatedPlan = false): Promise<void> {
         if (this.running) return;
         if (!this.connected) throw new Error("Select a connection before running a query");
 
@@ -184,9 +214,10 @@ export class QueryTab {
         this.running = true;
         this.hasErrors = false;
         this.cancelled = false;
+        this.estimatedPlan = estimatedPlan;
         this.startTime = Date.now();
         this.endTime = 0;
-        this.statusMessage = "Executing query…";
+        this.statusMessage = estimatedPlan ? "Generating estimated execution plan…" : "Executing query…";
         this.statusKind = "busy";
         this.host.onStateChanged(this);
 
@@ -201,7 +232,10 @@ export class QueryTab {
         }
 
         try {
-            await this.host.client.executeDocumentSelection(this.uri, querySelection);
+            await this.host.client.executeDocumentSelection(this.uri, querySelection, {
+                includeEstimatedExecutionPlanXml: estimatedPlan,
+                includeActualExecutionPlanXml: !estimatedPlan && this.host.includeActualPlan,
+            });
         } catch (err) {
             this.addMessage(err instanceof Error ? err.message : String(err), true);
             this.onQueryComplete();
@@ -231,17 +265,33 @@ export class QueryTab {
         this.endTime = Date.now();
 
         const elapsed = (this.elapsedMilliseconds / 1000).toFixed(1);
-        this.statusMessage = this.cancelled ? "Query cancelled" : this.hasErrors ? "Query completed with errors" : "Query completed successfully";
+        this.statusMessage = this.cancelled ? "Query cancelled"
+            : this.hasErrors ? "Query completed with errors"
+            : this.estimatedPlan ? "Estimated execution plan generated"
+            : "Query completed successfully";
         this.statusKind = this.cancelled ? "warning" : this.hasErrors ? "error" : "success";
         this.addMessage(`${this.statusMessage} in ${elapsed}s`, false, true);
 
-        // Switch to the messages if there's nothing else to show
-        if (this.grids.size === 0 || this.hasErrors) this.showResultsView("messages");
+        // Show the estimated plan once it's available, or switch to the messages if there's nothing else to show
+        if (this.hasErrors || (this.grids.size === 0 && this.planView.count === 0)) this.showResultsView("messages");
+        else if (this.planView.count > 0 && (this.estimatedPlan || this.grids.size === 0)) this.showResultsView("plan");
         this.host.onStateChanged(this);
+    }
+
+    private isPlanResultSet(summary: ResultSetSummary): boolean {
+        return summary.specialAction?.expectYukonXMLShowPlan === true || this.planResultSets.has(this.resultSetKey(summary));
     }
 
     private onResultSetAvailable(params: ResultSetEventParams): void {
         const summary = params.resultSetSummary;
+
+        // Execution plans are returned as special result sets which are shown in the Execution Plan tab instead of a grid
+        if (this.isPlanResultSet(summary)) {
+            this.planResultSets.add(this.resultSetKey(summary));
+            this.addPlans(params);
+            return;
+        }
+
         const grid = new ResultsGrid(
             summary.columnInfo,
             async (start, count) => {
@@ -281,7 +331,26 @@ export class QueryTab {
         return `${summary.batchId}:${summary.id}`;
     }
 
+    private onResultSetUpdated(params: ResultSetEventParams): void {
+        if (this.isPlanResultSet(params.resultSetSummary)) {
+            this.planResultSets.add(this.resultSetKey(params.resultSetSummary));
+            this.addPlans(params);
+            return;
+        }
+
+        this.updateResultSet(params.resultSetSummary);
+    }
+
+    private addPlans(params: ResultSetEventParams): void {
+        if (!params.executionPlans?.length) return;
+
+        for (const plan of params.executionPlans) this.planView.addPlan(plan);
+        this.resultsTabButtons.get("plan")!.hidden = false;
+    }
+
     private updateResultSet(summary: ResultSetSummary): void {
+        if (this.isPlanResultSet(summary)) return;
+
         const key = this.resultSetKey(summary);
         this.rowCounts.set(key, summary.rowCount);
         this.grids.get(key)?.setRowCount(summary.rowCount, summary.complete);
@@ -289,15 +358,26 @@ export class QueryTab {
     }
 
     private showResultsView(view: ResultsView): void {
+        const changed = this.view !== view;
+        this.view = view;
         this.resultsPane.hidden = view !== "results";
         this.messagesPane.hidden = view !== "messages";
-        for (const [key, button] of this.resultsTabButtons) button.classList.toggle("active", key === view);
+        this.planPane.hidden = view !== "plan";
+        for (const [key, button] of this.resultsTabButtons) {
+            button.classList.toggle("active", key === view);
+            button.setAttribute("aria-pressed", String(key === view));
+        }
+        if (changed) this.host.onSelectedPlanNodeChanged(this);
     }
 
     private async clearResults(): Promise<void> {
         for (const grid of this.grids.values()) grid.dispose();
         this.grids.clear();
         this.rowCounts.clear();
+        this.planResultSets.clear();
+        this.planView.clear();
+        this.resultsTabButtons.get("plan")!.hidden = true;
+        if (this.view === "plan") this.showResultsView("results");
         this.gridStatus = "";
         this.gridStatusIsError = false;
         this.resultsPane.dataset.count = "0";

@@ -17,6 +17,8 @@ export interface Sql4CdsSettings {
     localFormatDates: boolean;
     useSchemaColumnOrdering: boolean;
     objectExplorerPinned: boolean;
+    propertiesPinned: boolean;
+    includeActualPlan: boolean;
 }
 
 export const defaultSettings: Sql4CdsSettings = {
@@ -37,6 +39,8 @@ export const defaultSettings: Sql4CdsSettings = {
     localFormatDates: false,
     useSchemaColumnOrdering: false,
     objectExplorerPinned: true,
+    propertiesPinned: false,
+    includeActualPlan: false,
 };
 
 interface SettingDescriptor {
@@ -85,6 +89,8 @@ export async function saveSettings(settings: Sql4CdsSettings): Promise<void> {
 /** Forces settings that can't be supported when running through PPTB back to their defaults */
 function sanitize(settings: Sql4CdsSettings): Sql4CdsSettings {
     if (typeof settings.objectExplorerPinned !== "boolean") settings.objectExplorerPinned = defaultSettings.objectExplorerPinned;
+    if (typeof settings.propertiesPinned !== "boolean") settings.propertiesPinned = defaultSettings.propertiesPinned;
+    if (typeof settings.includeActualPlan !== "boolean") settings.includeActualPlan = defaultSettings.includeActualPlan;
     for (const descriptor of settingDescriptors) {
         if (descriptor.unsupported) {
             (settings as unknown as Record<string, unknown>)[descriptor.key] = defaultSettings[descriptor.key];

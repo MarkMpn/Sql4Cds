@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, searchForWorkspaceRoot, type Plugin } from "vite";
 
 /**
  * PPTB loads dist/index.html directly, so the entry script must be a classic (non-module) script at the end of
@@ -30,6 +30,12 @@ export default defineConfig((configEnv) => {
         plugins: [classicScriptPlugin()],
         worker: {
             format: "iife",
+        },
+        server: {
+            fs: {
+                // The execution plan node images are shared with MarkMpn.Sql4Cds.Controls
+                allow: [searchForWorkspaceRoot(process.cwd()), "../MarkMpn.Sql4Cds.Controls/Images"],
+            },
         },
         build: {
             outDir: "../dist",
