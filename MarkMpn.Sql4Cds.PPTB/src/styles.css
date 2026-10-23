@@ -453,6 +453,11 @@ body.resizing-pane {
     content: " ⏳";
 }
 
+.tab.modified .tab-label::before {
+    content: "• ";
+    color: var(--accent);
+}
+
 .tab-close {
     border: none;
     background: transparent;

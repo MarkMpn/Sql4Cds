@@ -114,9 +114,16 @@ function setup(pinned = true) {
         "../editor/monacoSetup": {
             monaco: {
                 editor: {
-                    createModel: () => ({
-                        setEOL() {}, getValue: () => "", onDidChangeContent: () => ({ dispose() {} }),
-                    }),
+                    createModel: (initialText) => {
+                        let value = initialText;
+                        let onChange;
+                        return {
+                            setEOL() {},
+                            getValue: () => value,
+                            onDidChangeContent: (callback) => { onChange = callback; return { dispose() {} }; },
+                            setValue: (text) => { value = text; onChange?.(); },
+                        };
+                    },
                     EndOfLineSequence: { LF: 1 },
                     setModelMarkers() {},
                 },
@@ -556,6 +563,26 @@ test("Include Actual Plan is saved in user settings and applies to every query t
     await button.events.click();
     assert.equal(button.attributes["aria-pressed"], "false");
     assert.equal(savedSettings.at(-1).includeActualPlan, false);
+});
+
+test("query tabs track dirty state, saved content, undo-to-saved text, and file names", () => {
+    const { app, createTab } = setup();
+    app.onStateChanged = () => {};
+    const { tab } = createTab();
+
+    assert.equal(tab.isDirty, false);
+    tab.model.setValue("SELECT 1");
+    assert.equal(tab.isDirty, true);
+    tab.markSaved("SELECT 1");
+    assert.equal(tab.isDirty, false);
+    tab.model.setValue("SELECT 2");
+    assert.equal(tab.isDirty, true);
+    tab.model.setValue("SELECT 1");
+    assert.equal(tab.isDirty, false);
+
+    tab.setFile("C:\\queries\\accounts.sql");
+    assert.equal(tab.title, "accounts.sql");
+    assert.equal(tab.filePath, "C:\\queries\\accounts.sql");
 });
 
 test("the Include Actual Plan preference defaults to off", async () => {

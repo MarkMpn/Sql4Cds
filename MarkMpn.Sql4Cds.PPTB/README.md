@@ -5,6 +5,7 @@ Query and modify Dataverse data using standard SQL syntax inside [Power Platform
 ## Features
 
 - Multiple query tabs, each with a Monaco SQL editor
+- Open and save reusable `.sql` queries (`Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S`); saved tabs use their file name, modified tabs are marked, and unsaved work is protected from accidental tab or tool closure
 - A resizable Object Explorer pane lists the tool's connections and lazily loads tables, columns, metadata, and programmability objects from the language server. Expand or collapse with the mouse or arrow keys; right-click any node and choose **Refresh**, or press `F5` while the tree has focus. The context menu is also available with `Shift+F10` or the Menu key. Refreshing a leaf reloads its parent. Unpin the pane using its header pin to collapse it to an **Object Explorer** side tab. Click the tab to open it temporarily, hiding the side tab while open; clicking or moving focus outside, or pressing Escape, collapses it and restores the tab. Pin it to dock it alongside the editor. Its width and tree state are preserved.
 - Double-click a table, column, table-valued function, or stored procedure to insert its name at the current query selection. Tables, functions, and procedures include their schema when available; columns insert just the column name. Use the expand arrow to browse a table's columns.
 - Object Explorer's pinned state is saved in user settings and restored at the next tool launch. Unpinned windows start collapsed to the side tab; opening the flyout does not change the saved preference.

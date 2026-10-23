@@ -36,6 +36,7 @@ export class QueryTab {
     readonly resultsElement: HTMLElement;
 
     title: string;
+    filePath: string | null = null;
     viewState: monaco.editor.ICodeEditorViewState | null = null;
     connectionSlot: number | null = null;
     connected = false;
@@ -57,6 +58,7 @@ export class QueryTab {
     private readonly rowCounts = new Map<string, number>();
     private readonly planResultSets = new Set<string>();
     private readonly changeListener: monaco.IDisposable;
+    private savedText: string;
     private pendingConnect: ((params: ConnectionCompleteParams) => void) | null = null;
     private hasErrors = false;
     private cancelled = false;
@@ -90,6 +92,7 @@ export class QueryTab {
         this.model = monaco.editor.createModel(initialText, "sql", monaco.Uri.parse(this.uri));
         // The language server splits documents on \n, so keep the model line endings consistent
         this.model.setEOL(monaco.editor.EndOfLineSequence.LF);
+        this.savedText = this.model.getValue();
 
         this.resultsElement = document.createElement("div");
         this.resultsElement.className = "query-results";
@@ -143,7 +146,23 @@ export class QueryTab {
         void host.client.openDocument(this.uri, this.model.getValue());
         this.changeListener = this.model.onDidChangeContent(() => {
             void host.client.changeDocument(this.uri, this.model.getValue()).catch(() => {});
+            host.onStateChanged(this);
         });
+    }
+
+    get isDirty(): boolean {
+        return this.model.getValue() !== this.savedText;
+    }
+
+    setFile(path: string): void {
+        this.filePath = path;
+        this.title = path.split(/[\\/]/).pop() || path;
+        this.host.onStateChanged(this);
+    }
+
+    markSaved(savedText = this.model.getValue()): void {
+        this.savedText = savedText;
+        this.host.onStateChanged(this);
     }
 
     /** Connects this tab to one of the PPTB connection slots */

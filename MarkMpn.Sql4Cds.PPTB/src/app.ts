@@ -23,6 +23,8 @@ class App implements QueryTabHost {
     private confirmationQueue: Promise<void> = Promise.resolve();
     private statusTimer: ReturnType<typeof setInterval> | null = null;
     private progressMessage = "";
+    private closePreventionApplied = false;
+    private closePreventionQueue: Promise<void> = Promise.resolve();
     private connectionChangeQueue: Promise<void> = Promise.resolve();
     private explorerPane: PinnablePane | null = null;
     private propertiesPane: PinnablePane | null = null;
@@ -46,6 +48,9 @@ class App implements QueryTabHost {
         propertiesPin: byId<HTMLButtonElement>("properties-pin"),
         propertiesTab: byId<HTMLButtonElement>("properties-tab"),
         newTab: byId<HTMLButtonElement>("btn-new"),
+        open: byId<HTMLButtonElement>("btn-open"),
+        save: byId<HTMLButtonElement>("btn-save"),
+        saveAs: byId<HTMLButtonElement>("btn-save-as"),
         run: byId<HTMLButtonElement>("btn-run"),
         cancel: byId<HTMLButtonElement>("btn-cancel"),
         estimatedPlan: byId<HTMLButtonElement>("btn-estimated-plan"),
@@ -89,6 +94,66 @@ class App implements QueryTabHost {
         this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
             (message) => { void notify("Object Explorer", message, "error"); },
             (text) => this.insertObjectName(text));
+    }
+
+    private async openQuery(): Promise<void> {
+        try {
+            const path = await window.toolboxAPI.fileSystem.selectPath({
+                type: "file",
+                title: "Open SQL query",
+                buttonLabel: "Open",
+                filters: [{ name: "SQL queries", extensions: ["sql"] }, { name: "All files", extensions: ["*"] }],
+            });
+            if (!path) return;
+
+            const text = await window.toolboxAPI.fileSystem.readText(path);
+            const tab = this.addTab(text);
+            tab.setFile(path);
+            tab.markSaved();
+        } catch (err) {
+            await notify("Unable to open query", errorMessage(err), "error");
+        }
+    }
+
+    private async saveTab(tab: QueryTab, saveAs = false): Promise<boolean> {
+        try {
+            const content = tab.model.getValue();
+            if (tab.filePath && !saveAs) {
+                await window.toolboxAPI.fileSystem.writeText(tab.filePath, content);
+            } else {
+                const filename = tab.title.toLowerCase().endsWith(".sql") ? tab.title : `${tab.title}.sql`;
+                const path = await window.toolboxAPI.fileSystem.saveFile(
+                    filename,
+                    content,
+                    [{ name: "SQL queries", extensions: ["sql"] }],
+                );
+                if (!path) return false;
+                tab.setFile(path);
+            }
+
+            tab.markSaved(content);
+            return true;
+        } catch (err) {
+            await notify("Unable to save query", errorMessage(err), "error");
+            return false;
+        }
+    }
+
+    private syncClosePrevention(): void {
+        this.closePreventionQueue = this.closePreventionQueue.then(async () => {
+            const shouldPreventClose = this.tabs.some((tab) => tab.isDirty);
+            if (shouldPreventClose === this.closePreventionApplied) return;
+
+            try {
+                if (shouldPreventClose)
+                    await window.toolboxAPI.preventClose();
+                else
+                    await window.toolboxAPI.releasePreventClose();
+                this.closePreventionApplied = shouldPreventClose;
+            } catch (err) {
+                await notify("Unable to update close protection", errorMessage(err), "error");
+            }
+        });
     }
 
     async start(): Promise<void> {
@@ -221,7 +286,14 @@ class App implements QueryTabHost {
         const index = this.tabs.indexOf(tab);
         if (index < 0) return;
 
+        if (tab.isDirty) {
+            const choice = await showUnsavedChangesDialog(tab.title);
+            if (choice === "cancel") return;
+            if (choice === "save" && (!(await this.saveTab(tab)) || tab.isDirty)) return;
+        }
+
         this.tabs.splice(index, 1);
+        this.syncClosePrevention();
         if (this.activeTab === tab) {
             this.activeTab = null;
             if (this.tabs.length === 0) {
@@ -243,7 +315,9 @@ class App implements QueryTabHost {
             el.className = "tab";
             el.classList.toggle("active", tab === this.activeTab);
             el.classList.toggle("running", tab.running);
+            el.classList.toggle("modified", tab.isDirty);
             el.title = tab.connectionSlot !== null ? `${tab.title} - ${this.connections.get(tab.connectionSlot)?.options.connectionName ?? ""}` : tab.title;
+            if (tab.isDirty) el.title += " (unsaved changes)";
             el.addEventListener("click", () => this.activateTab(tab));
             el.addEventListener("auxclick", (e) => {
                 if (e.button === 1) void this.closeTab(tab);
@@ -257,6 +331,7 @@ class App implements QueryTabHost {
             const label = document.createElement("span");
             label.className = "tab-label";
             label.textContent = tab.title;
+            label.title = tab.isDirty ? "Unsaved changes" : tab.title;
 
             const close = document.createElement("button");
             close.className = "tab-close";
@@ -390,6 +465,7 @@ class App implements QueryTabHost {
 
     onStateChanged(tab: QueryTab): void {
         this.renderTabs();
+        this.syncClosePrevention();
         if (tab === this.activeTab) {
             this.renderConnectionList();
             this.updateToolbar();
@@ -417,6 +493,9 @@ class App implements QueryTabHost {
 
     private bindToolbar(): void {
         this.el.newTab.addEventListener("click", () => this.addTab());
+        this.el.open.addEventListener("click", () => void this.openQuery());
+        this.el.save.addEventListener("click", () => { if (this.activeTab) void this.saveTab(this.activeTab); });
+        this.el.saveAs.addEventListener("click", () => { if (this.activeTab) void this.saveTab(this.activeTab, true); });
         this.el.run.addEventListener("click", () => void this.runQuery());
         this.el.cancel.addEventListener("click", () => void this.activeTab?.cancel());
         this.el.estimatedPlan.addEventListener("click", () => void this.runQuery(true));
@@ -435,13 +514,26 @@ class App implements QueryTabHost {
                 return;
             }
 
+            if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+            const key = e.key.toLowerCase();
+            if (key === "o" && !e.shiftKey) {
+                e.preventDefault();
+                void this.openQuery();
+                return;
+            }
+            if (key === "s") {
+                e.preventDefault();
+                if (this.activeTab) void this.saveTab(this.activeTab, e.shiftKey);
+                return;
+            }
+            if (e.shiftKey) return;
+
             // The editor handles these shortcuts itself when it has focus
-            if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
             if (e.target instanceof Node && this.el.editor.contains(e.target)) return;
-            if (e.key.toLowerCase() === "l") {
+            if (key === "l") {
                 e.preventDefault();
                 void this.runQuery(true);
-            } else if (e.key.toLowerCase() === "m") {
+            } else if (key === "m") {
                 e.preventDefault();
                 void this.toggleActualPlan();
             }
@@ -455,6 +547,8 @@ class App implements QueryTabHost {
         this.el.cancel.disabled = !this.ready || !tab?.running;
         this.el.actualPlan.setAttribute("aria-pressed", String(this.settings.includeActualPlan));
         this.el.connection.disabled = !this.ready || !tab || tab.running || tab.connecting;
+        this.el.save.disabled = !tab || (!tab.isDirty && !!tab.filePath);
+        this.el.saveAs.disabled = !tab;
 
         this.updateStatusBar();
     }
@@ -631,6 +725,48 @@ function showConfirmation(message: string): Promise<ConfirmationResult> {
             dialog.remove();
             const value = Number.parseInt(dialog.returnValue, 10);
             resolve(value === ConfirmationResult.Yes || value === ConfirmationResult.All ? value : ConfirmationResult.No);
+        });
+
+        dialog.showModal();
+    });
+}
+
+function showUnsavedChangesDialog(title: string): Promise<"save" | "discard" | "cancel"> {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.className = "unsaved-dialog";
+
+        const form = document.createElement("form");
+        form.method = "dialog";
+
+        const heading = document.createElement("h2");
+        heading.textContent = "Unsaved changes";
+
+        const message = document.createElement("p");
+        message.textContent = `Save changes to ${title} before closing?`;
+
+        const buttons = document.createElement("div");
+        buttons.className = "dialog-buttons";
+        for (const [value, label, primary] of [
+            ["save", "Save", true],
+            ["discard", "Discard", false],
+            ["cancel", "Cancel", false],
+        ] as const) {
+            const button = document.createElement("button");
+            button.value = value;
+            button.textContent = label;
+            if (primary) button.className = "primary";
+            buttons.appendChild(button);
+        }
+
+        form.append(heading, message, buttons);
+        dialog.appendChild(form);
+        document.body.appendChild(dialog);
+
+        dialog.addEventListener("close", () => {
+            dialog.remove();
+            const value = dialog.returnValue;
+            resolve(value === "save" || value === "discard" ? value : "cancel");
         });
 
         dialog.showModal();
