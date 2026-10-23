@@ -449,15 +449,14 @@ async function executeBatch(params: ExecuteBatchParams): Promise<WebApiResponse[
     }
 
     try {
-        const results = params.transaction
-            ? await window.dataverseAPI.executeTransaction(requests, params.target, headers)
-            : await window.dataverseAPI.executeBatch(requests, params.target, headers);
+        const results = await executeBatchWithRetry(requests, params.transaction, params.target, headers);
 
-        return results.map((r) => ({
+        return results.map((r: DataverseAPI.BatchResult & { batchHeaders?: Record<string, string> }) => ({
             contentId: r.contentId,
             status: r.status,
             statusText: r.statusText,
             headers: r.headers ?? {},
+            batchHeaders: r.batchHeaders ?? {},
             body: r.body === undefined ? undefined : JSON.stringify(r.body),
         }));
     } catch (err) {
@@ -470,7 +469,73 @@ async function executeBatch(params: ExecuteBatchParams): Promise<WebApiResponse[
             status: 500,
             statusText: "Internal Server Error",
             headers: {},
+            batchHeaders: {},
             body: JSON.stringify(error),
         }));
     }
+}
+
+const MAX_BATCH_RETRY_COUNT = 10;
+
+async function executeBatchWithRetry(
+    requests: DataverseAPI.BatchRequest[],
+    transaction: boolean,
+    target: DataverseAPI.ConnectionTarget,
+    headers: Record<string, string>,
+): Promise<(DataverseAPI.BatchResult & { batchHeaders?: Record<string, string> })[]> {
+    let pendingRequests = requests;
+    let completedResults: (DataverseAPI.BatchResult & { batchHeaders?: Record<string, string> })[] = [];
+    let retryCount = 0;
+
+    while (true) {
+        const results = (transaction
+            ? await window.dataverseAPI.executeTransaction(pendingRequests, target, headers)
+            : await window.dataverseAPI.executeBatch(pendingRequests, target, headers)) as (DataverseAPI.BatchResult & { batchHeaders?: Record<string, string> })[];
+
+        if (results.length !== pendingRequests.length || retryCount >= MAX_BATCH_RETRY_COUNT) {
+            return completedResults.concat(results);
+        }
+
+        let retryStart = results.length;
+        while (retryStart > 0 && results[retryStart - 1].status === 429)
+            retryStart--;
+
+        // A transaction must be retried as a whole; never retry only part of one.
+        if (transaction && retryStart !== 0)
+            return completedResults.concat(results);
+
+        if (retryStart === results.length)
+            return completedResults.concat(results);
+
+        const retryAfter = results
+            .map((result) => getHeaderValue(result.batchHeaders, "Retry-After"))
+            .find((value) => value !== undefined);
+        const retryDelay = retryAfter?.trim();
+        if (!retryDelay || !/^\d+$/.test(retryDelay))
+            return completedResults.concat(results);
+
+        const retryAfterSeconds = Number(retryDelay);
+        if (!Number.isSafeInteger(retryAfterSeconds))
+            return completedResults.concat(results);
+
+        if (retryStart > 0) {
+            completedResults = completedResults.concat(results.slice(0, retryStart));
+            pendingRequests = pendingRequests.slice(retryStart);
+        }
+
+        await delay(retryAfterSeconds * 1000);
+        retryCount++;
+    }
+}
+
+function getHeaderValue(headers: Record<string, string> | undefined, name: string): string | undefined {
+    if (!headers)
+        return undefined;
+
+    const key = Object.keys(headers).find((header) => header.toLowerCase() === name.toLowerCase());
+    return key === undefined ? undefined : headers[key];
+}
+
+function delay(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

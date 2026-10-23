@@ -198,7 +198,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
             foreach (var response in responses)
             {
-                if (Int32.TryParse(response.GetHeader("x-ms-dop-hint"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var recommendedDop) && recommendedDop > 0)
+                if (Int32.TryParse(response.GetBatchHeader("x-ms-dop-hint"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var recommendedDop) && recommendedDop > 0)
                     Volatile.Write(ref _parallelism.Value, recommendedDop);
             }
 

@@ -322,6 +322,7 @@ export interface WebApiResponse {
     status: number;
     statusText?: string;
     headers: Record<string, string>;
+    batchHeaders: Record<string, string>;
     /** Response body serialized as JSON text */
     body?: string;
 }

@@ -51,6 +51,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public Dictionary<string, string> Headers { get; set; }
 
+        public Dictionary<string, string> BatchHeaders { get; set; }
+
         /// <summary>
         /// The response body, re-serialized as JSON text by the client
         /// </summary>
@@ -88,10 +90,20 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public string GetHeader(string name)
         {
-            if (Headers == null)
+            return GetHeader(Headers, name);
+        }
+
+        public string GetBatchHeader(string name)
+        {
+            return GetHeader(BatchHeaders, name);
+        }
+
+        private static string GetHeader(Dictionary<string, string> headers, string name)
+        {
+            if (headers == null)
                 return null;
 
-            foreach (var kvp in Headers)
+            foreach (var kvp in headers)
             {
                 if (kvp.Key.Equals(name, StringComparison.OrdinalIgnoreCase))
                     return kvp.Value;
@@ -126,15 +138,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 fault.Message = (string)value;
             }
 
-            // Map service protection limits to the error codes the engine recognises for retries
-            if (Status == 429 && fault.ErrorCode == 0)
-                fault.ErrorCode = -2147015902;
-
             if (Status == 429)
             {
-                var retryAfter = GetHeader("retry-after");
+                fault.ErrorCode = 429;
+                var retryAfter = GetBatchHeader("Retry-After");
 
-                if (retryAfter != null && Int32.TryParse(retryAfter, out var seconds))
+                if (Int32.TryParse(retryAfter, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds >= 0)
                     fault.ErrorDetails["Retry-After"] = TimeSpan.FromSeconds(seconds);
             }
 
