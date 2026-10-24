@@ -5,18 +5,24 @@ const vm = require("node:vm");
 const { test } = require("node:test");
 const ts = require("typescript");
 
-function load(relativePath) {
+function load(relativePath, dependencies = {}, globals = {}) {
     const filename = path.resolve(__dirname, "..", "src", relativePath);
     const module = { exports: {} };
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     }).outputText;
-    vm.runInNewContext(code, { module, exports: module.exports, require: () => ({}) }, { filename });
+    vm.runInNewContext(code, {
+        module,
+        exports: module.exports,
+        require: (name) => dependencies[name] ?? {},
+        ...globals,
+    }, { filename });
     return module.exports;
 }
 
 const layout = load("executionPlan/layout.ts");
 const { getNodeImageName } = load("executionPlan/nodeImageName.ts");
+const { getFetchXmlQuery } = load("executionPlan/executionPlanView.ts");
 const imagesDir = path.resolve(__dirname, "..", "..", "MarkMpn.Sql4Cds.Controls", "Images");
 const images = new Set(fs.readdirSync(imagesDir).filter((f) => f.endsWith(".ico")).map((f) => f.slice(0, -4)));
 
@@ -113,6 +119,62 @@ test("node images use the SQL 4 CDS node type reported by the language server", 
         assert.equal(images.has(nodeType), true, `${nodeType}.ico exists in MarkMpn.Sql4Cds.Controls`);
         assert.equal(getNodeImageName({ nodeType }, available), nodeType);
     }
+});
+
+test("FetchXML Scan nodes expose the full FetchXML for opening in the XML editor", () => {
+    const fetchXml = "<fetch>\n  <entity name=\"account\" />\n</fetch>";
+    assert.equal(getFetchXmlQuery(node("FetchXML Query", [], [], {
+        nodeType: "FetchXmlScan",
+        properties: [{ name: "FetchXML", value: fetchXml }],
+    })), fetchXml);
+    assert.equal(getFetchXmlQuery(node("Other", [], [], {
+        nodeType: "SelectNode",
+        properties: [{ name: "FetchXML", value: fetchXml }],
+    })), null);
+    assert.equal(getFetchXmlQuery(node("FetchXML Query", [], [], {
+        nodeType: "FetchXmlScan",
+        properties: [{ name: "FetchXML", value: null }],
+    })), null);
+});
+
+test("double-clicking a FetchXML Scan node opens its full query", () => {
+    class Element {
+        constructor() {
+            this.children = [];
+            this.events = {};
+            this.style = {};
+            this.attributes = {};
+            this.classList = { add() {}, remove() {} };
+        }
+        append(...children) { this.children.push(...children); }
+        appendChild(child) { this.children.push(child); }
+        addEventListener(name, callback) { this.events[name] = callback; }
+        setAttribute(name, value) { this.attributes[name] = value; }
+    }
+    const document = {
+        createElement: () => new Element(),
+        createElementNS: () => new Element(),
+    };
+    const { ExecutionPlanView } = load("executionPlan/executionPlanView.ts", {
+        "../lsp/protocol": { BadgeType: { Warning: 0, CriticalWarning: 1 } },
+        "./layout": layout,
+    }, { document });
+    const fetchXml = "<fetch>\n  <entity name=\"account\" />\n</fetch>";
+    const opened = [];
+    const view = new ExecutionPlanView(() => undefined, () => {}, measure, (query) => opened.push(query));
+    view.addPlan({
+        root: node("FetchXML Query", [], [], {
+            nodeType: "FetchXmlScan",
+            properties: [{ name: "FetchXML", value: fetchXml, showInTooltip: true }],
+        }),
+    });
+
+    const findNode = (element) => element.className === "plan-node"
+        ? element
+        : element.children.map(findNode).find(Boolean);
+    findNode(view.element).events.dblclick();
+
+    assert.deepEqual(opened, [fetchXml]);
 });
 
 test("node images are substituted and fall back like the WinForms plan view", () => {

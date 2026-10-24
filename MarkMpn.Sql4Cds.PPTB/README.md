@@ -13,6 +13,7 @@ Query and modify Dataverse data using standard SQL syntax inside [Power Platform
 - IntelliSense: autocomplete, hover information, signature help and live error diagnostics
 - Run the whole script or just the selected text (`F5` / `Ctrl+E`), and cancel long-running queries
 - **Estimated Plan** (`Ctrl+L`) shows the execution plan without running the query. Toggle **Include Actual Plan** (`Ctrl+M`, saved in user settings) to also capture the executed plan, including each node's cost and duration, when the query runs. Plans appear in an **Execution Plan** tab of the results pane, laid out like the SQL 4 CDS XrmToolBox plan view and using the same node icons. Nodes with warnings show a badge and tooltip. Click a node, or use the arrow keys, to select it and show its properties in the **Properties** pane.
+- Double-click a FetchXML Scan node to open its complete FetchXML in a read-only XML editor tab. Choose **Edit in FetchXML Studio** to continue editing it in the installed FetchXML Studio tool.
 - The Properties pane is unpinned by default and opens from its side tab. It can be pinned and unpinned in the same way as Object Explorer, and its pinned state is also saved in user settings. Nested properties expand with the mouse or arrow keys.
 - Virtualized results grids that fetch rows on demand, so large result sets are not held in the browser
 - Multiple result sets each use two-thirds of the results pane height so the next grid is visible without scrolling. Each grid scrolls independently; a single result set uses the full pane.

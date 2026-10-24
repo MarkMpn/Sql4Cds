@@ -77,6 +77,7 @@ function setup(pinned = true) {
     };
     const timers = new Map();
     let nextTimer = 0;
+    const modelLanguages = [];
     const savedSettings = [];
     const settingsApi = {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
@@ -114,7 +115,8 @@ function setup(pinned = true) {
         "../editor/monacoSetup": {
             monaco: {
                 editor: {
-                    createModel: (initialText) => {
+                    createModel: (initialText, language) => {
+                        modelLanguages.push(language);
                         let value = initialText;
                         let onChange;
                         return {
@@ -155,12 +157,12 @@ function setup(pinned = true) {
             dispose() {}
         } },
     }, { document, Date: { now: () => now } });
-    function createTab() {
-        const tab = new QueryTab(app);
+    function createTab(options) {
+        const tab = new QueryTab(app, "", options);
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, setNow: (value) => { now = value; } };
+    return { app, client, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, setNow: (value) => { now = value; } };
 }
 
 function summary(batchId, id, rowCount) {
@@ -583,6 +585,17 @@ test("query tabs track dirty state, saved content, undo-to-saved text, and file 
     tab.setFile("C:\\queries\\accounts.sql");
     assert.equal(tab.title, "accounts.sql");
     assert.equal(tab.filePath, "C:\\queries\\accounts.sql");
+});
+
+test("FetchXML preview tabs use XML models, are read-only, and do not register SQL documents", () => {
+    const { createTab, modelLanguages, listeners } = setup();
+    const { tab, events } = createTab({ language: "xml", readOnly: true, isFetchXmlPreview: true });
+
+    assert.equal(modelLanguages.at(-1), "xml");
+    assert.equal(tab.readOnly, true);
+    assert.equal(tab.isFetchXmlPreview, true);
+    assert.equal(events, undefined);
+    assert.equal(listeners.size, 0);
 });
 
 test("the Include Actual Plan preference defaults to off", async () => {

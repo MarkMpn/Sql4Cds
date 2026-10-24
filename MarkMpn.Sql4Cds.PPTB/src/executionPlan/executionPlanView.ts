@@ -7,6 +7,7 @@ const LABEL_FONT = '12px "Segoe UI", system-ui, sans-serif';
 const LABEL_LINE_HEIGHT = 16;
 
 export type GetNodeImageUrl = (node: ExecutionPlanNode) => string | undefined;
+export type OpenFetchXml = (fetchXml: string) => void;
 
 let measureContext: CanvasRenderingContext2D | null | undefined;
 
@@ -33,6 +34,13 @@ export function getNodeTooltip(node: ExecutionPlanNode): string {
     if (tooltipProperty && typeof tooltipProperty.value === "string") return tooltipProperty.value;
 
     return (node.name ?? "").replace(/\r\n/g, "\n");
+}
+
+export function getFetchXmlQuery(node: ExecutionPlanNode): string | null {
+    if (node.nodeType !== "FetchXmlScan") return null;
+
+    const property = findProperty(node.properties, (candidate) => candidate.name === "FetchXML");
+    return property && typeof property.value === "string" ? property.value : null;
 }
 
 export function hasWarning(node: ExecutionPlanNode): boolean {
@@ -74,6 +82,7 @@ export class ExecutionPlanView {
         private readonly getImageUrl: GetNodeImageUrl,
         private readonly onSelectionChanged: (node: ExecutionPlanNode | null) => void,
         private readonly measure: MeasureText = measureLabel,
+        private readonly onOpenFetchXml?: OpenFetchXml,
     ) {
         this.element = document.createElement("div");
         this.element.className = "execution-plans";
@@ -212,6 +221,10 @@ export class ExecutionPlanView {
             if (this.selectedLayout !== layout) this.select(layout);
         });
         element.addEventListener("keydown", (e) => this.onKeyDown(e, layout));
+        element.addEventListener("dblclick", () => {
+            const fetchXml = getFetchXmlQuery(node);
+            if (fetchXml !== null) this.onOpenFetchXml?.(fetchXml);
+        });
 
         this.layouts.set(layout, element);
         return element;

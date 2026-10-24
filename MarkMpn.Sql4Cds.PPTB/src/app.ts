@@ -55,6 +55,7 @@ class App implements QueryTabHost {
         cancel: byId<HTMLButtonElement>("btn-cancel"),
         estimatedPlan: byId<HTMLButtonElement>("btn-estimated-plan"),
         actualPlan: byId<HTMLButtonElement>("btn-actual-plan"),
+        editFetchXml: byId<HTMLButtonElement>("btn-edit-fetchxml"),
         settings: byId<HTMLButtonElement>("btn-settings"),
         connection: byId<HTMLSelectElement>("connection-select"),
         status: byId("status-text"),
@@ -216,6 +217,8 @@ class App implements QueryTabHost {
             scrollBeyondLastLine: false,
             fontSize: 13,
             tabSize: 4,
+            folding: true,
+            foldingStrategy: "auto",
             model: null,
         });
 
@@ -265,6 +268,18 @@ class App implements QueryTabHost {
         return tab;
     }
 
+    openFetchXml(fetchXml: string): void {
+        const tab = new QueryTab(this, fetchXml, {
+            language: "xml",
+            readOnly: true,
+            isFetchXmlPreview: true,
+        });
+        tab.title = "FetchXML";
+        this.tabs.push(tab);
+        this.el.results.appendChild(tab.resultsElement);
+        this.activateTab(tab);
+    }
+
     private activateTab(tab: QueryTab): void {
         if (this.activeTab === tab) return;
 
@@ -272,6 +287,7 @@ class App implements QueryTabHost {
 
         this.activeTab = tab;
         this.editor.setModel(tab.model);
+        this.editor.updateOptions({ readOnly: tab.readOnly });
         if (tab.viewState) this.editor.restoreViewState(tab.viewState);
         this.editor.focus();
 
@@ -500,6 +516,11 @@ class App implements QueryTabHost {
         this.el.cancel.addEventListener("click", () => void this.activeTab?.cancel());
         this.el.estimatedPlan.addEventListener("click", () => void this.runQuery(true));
         this.el.actualPlan.addEventListener("click", () => void this.toggleActualPlan());
+        this.el.editFetchXml.addEventListener("click", () => {
+            const tab = this.activeTab;
+            if (tab?.isFetchXmlPreview)
+                void this.launchFetchXmlStudio(tab.model.getValue());
+        });
         this.el.settings.addEventListener("click", () => void this.editSettings());
         this.el.connection.addEventListener("change", () => {
             const tab = this.activeTab;
@@ -547,10 +568,24 @@ class App implements QueryTabHost {
         this.el.cancel.disabled = !this.ready || !tab?.running;
         this.el.actualPlan.setAttribute("aria-pressed", String(this.settings.includeActualPlan));
         this.el.connection.disabled = !this.ready || !tab || tab.running || tab.connecting;
-        this.el.save.disabled = !tab || (!tab.isDirty && !!tab.filePath);
-        this.el.saveAs.disabled = !tab;
+        this.el.editFetchXml.hidden = !tab?.isFetchXmlPreview;
+        this.el.editFetchXml.disabled = !tab?.isFetchXmlPreview;
+        this.el.save.disabled = !tab || tab.readOnly || (!tab.isDirty && !!tab.filePath);
+        this.el.saveAs.disabled = !tab || tab.readOnly;
 
         this.updateStatusBar();
+    }
+
+    private async launchFetchXmlStudio(fetchXml: string): Promise<void> {
+        try {
+            await window.toolboxAPI.invocation.launchTool(
+                "@mohsinonxrm/pptb-fetchxml-studio",
+                { fetchXml },
+                { noReturn: true },
+            );
+        } catch (err) {
+            await notify("Unable to open FetchXML Studio", errorMessage(err), "error");
+        }
     }
 
     private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan", value: boolean): Promise<void> {

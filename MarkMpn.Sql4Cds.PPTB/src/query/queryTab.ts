@@ -17,6 +17,8 @@ export interface QueryTabHost {
     onStatusChanged(tab: QueryTab): void;
     /** Called when the execution plan node to show in the Properties panel changes */
     onSelectedPlanNodeChanged(tab: QueryTab): void;
+    /** Opens a read-only tab with the FetchXML from a plan node */
+    openFetchXml(fetchXml: string): void;
     copyToClipboard(text: string): void;
     openRecord(reference: EntityReferenceValue): void;
 }
@@ -36,6 +38,8 @@ export class QueryTab {
     readonly resultsElement: HTMLElement;
 
     title: string;
+    readonly readOnly: boolean;
+    readonly isFetchXmlPreview: boolean;
     filePath: string | null = null;
     viewState: monaco.editor.ICodeEditorViewState | null = null;
     connectionSlot: number | null = null;
@@ -84,12 +88,18 @@ export class QueryTab {
         return this.view === "plan";
     }
 
-    constructor(private readonly host: QueryTabHost, initialText = "") {
+    constructor(
+        private readonly host: QueryTabHost,
+        initialText = "",
+        options: { language?: string; readOnly?: boolean; isFetchXmlPreview?: boolean } = {},
+    ) {
         this.id = nextTabId++;
         this.uri = `pptb://query/${this.id}`;
         this.title = `Query ${this.id}`;
+        this.readOnly = options.readOnly ?? false;
+        this.isFetchXmlPreview = options.isFetchXmlPreview ?? false;
 
-        this.model = monaco.editor.createModel(initialText, "sql", monaco.Uri.parse(this.uri));
+        this.model = monaco.editor.createModel(initialText, options.language ?? "sql", monaco.Uri.parse(this.uri));
         // The language server splits documents on \n, so keep the model line endings consistent
         this.model.setEOL(monaco.editor.EndOfLineSequence.LF);
         this.savedText = this.model.getValue();
@@ -114,7 +124,12 @@ export class QueryTab {
         this.messagesPane = document.createElement("div");
         this.messagesPane.className = "messages-pane";
 
-        this.planView = new ExecutionPlanView(getNodeImageUrl, () => host.onSelectedPlanNodeChanged(this));
+        this.planView = new ExecutionPlanView(
+            getNodeImageUrl,
+            () => host.onSelectedPlanNodeChanged(this),
+            undefined,
+            (fetchXml) => host.openFetchXml(fetchXml),
+        );
         this.planPane = document.createElement("div");
         this.planPane.className = "plan-pane";
         this.planPane.appendChild(this.planView.element);
@@ -122,32 +137,36 @@ export class QueryTab {
         this.resultsElement.append(resultsTabs, this.resultsPane, this.messagesPane, this.planPane);
         this.showResultsView("results");
 
-        host.client.addListener(this.uri, {
-            connectionComplete: (p) => this.onConnectionComplete(p),
-            batchStart: () => {},
-            message: (p) => this.addMessage(p.message.message, p.message.isError),
-            resultSetAvailable: (p) => this.onResultSetAvailable(p),
-            resultSetUpdated: (p) => this.onResultSetUpdated(p),
-            resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
-            batchComplete: (p) => {
-                if (p.batchSummary.hasError) this.hasErrors = true;
-            },
-            queryComplete: (p) => {
-                for (const batch of p.batchSummaries) {
-                    if (batch.hasError) this.hasErrors = true;
-                    for (const summary of batch.resultSetSummaries ?? []) this.updateResultSet(summary);
-                }
-                this.onQueryComplete();
-            },
-            confirmation: (p) => host.confirm(p),
-            diagnostics: (p) => applyDiagnostics(this.model, p),
-        });
+        if (!this.isFetchXmlPreview) {
+            host.client.addListener(this.uri, {
+                connectionComplete: (p) => this.onConnectionComplete(p),
+                batchStart: () => {},
+                message: (p) => this.addMessage(p.message.message, p.message.isError),
+                resultSetAvailable: (p) => this.onResultSetAvailable(p),
+                resultSetUpdated: (p) => this.onResultSetUpdated(p),
+                resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
+                batchComplete: (p) => {
+                    if (p.batchSummary.hasError) this.hasErrors = true;
+                },
+                queryComplete: (p) => {
+                    for (const batch of p.batchSummaries) {
+                        if (batch.hasError) this.hasErrors = true;
+                        for (const summary of batch.resultSetSummaries ?? []) this.updateResultSet(summary);
+                    }
+                    this.onQueryComplete();
+                },
+                confirmation: (p) => host.confirm(p),
+                diagnostics: (p) => applyDiagnostics(this.model, p),
+            });
 
-        void host.client.openDocument(this.uri, this.model.getValue());
-        this.changeListener = this.model.onDidChangeContent(() => {
-            void host.client.changeDocument(this.uri, this.model.getValue()).catch(() => {});
-            host.onStateChanged(this);
-        });
+            void host.client.openDocument(this.uri, this.model.getValue());
+            this.changeListener = this.model.onDidChangeContent(() => {
+                void host.client.changeDocument(this.uri, this.model.getValue()).catch(() => {});
+                host.onStateChanged(this);
+            });
+        } else {
+            this.changeListener = { dispose() {} };
+        }
     }
 
     get isDirty(): boolean {
@@ -414,9 +433,10 @@ export class QueryTab {
         this.changeListener.dispose();
         for (const grid of this.grids.values()) grid.dispose();
         this.grids.clear();
-        this.host.client.removeListener(this.uri);
+        if (!this.isFetchXmlPreview)
+            this.host.client.removeListener(this.uri);
 
-        if (this.host.client.isRunning) {
+        if (!this.isFetchXmlPreview && this.host.client.isRunning) {
             try {
                 if (this.running) await this.host.client.cancelQuery(this.uri);
                 await this.host.client.disposeQuery(this.uri);
