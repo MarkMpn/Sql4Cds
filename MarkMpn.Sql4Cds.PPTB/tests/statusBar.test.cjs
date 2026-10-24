@@ -23,6 +23,7 @@ class Element {
     addEventListener(name, handler) { this.events[name] = handler; }
     focus() { this.focused = true; }
     querySelector() { return this.children[0]; }
+    querySelectorAll() { return this.children.filter(child => !child.disabled); }
     closest() { return null; }
     remove() {}
 }
@@ -50,6 +51,7 @@ function setup(pinned = true) {
         events: {},
         addEventListener(name, handler) { this.events[name] = handler; },
         createElement: () => new Element(),
+        createTextNode: (text) => ({ textContent: text }),
         getElementById: (id) => {
             if (!elements.has(id)) elements.set(id, new Element());
             return elements.get(id);
@@ -98,6 +100,8 @@ function setup(pinned = true) {
             constructor() { this.shown = []; propertiesPanels.push(this); }
             show(name, properties) { this.shown.push({ name, properties }); }
         } },
+        "./executionPlan/executionPlanView": { getFetchXmlQuery: (node) =>
+            node.nodeType === "FetchXmlScan" ? node.properties?.find(property => property.name === "FetchXML")?.value ?? null : null },
         "./settings": settingsApi,
     }, {
         document, window, Node: Element, Element,
@@ -118,12 +122,19 @@ function setup(pinned = true) {
                     createModel: (initialText, language) => {
                         modelLanguages.push(language);
                         let value = initialText;
+                        let version = 1;
                         let onChange;
                         return {
                             setEOL() {},
                             getValue: () => value,
                             onDidChangeContent: (callback) => { onChange = callback; return { dispose() {} }; },
-                            setValue: (text) => { value = text; onChange?.(); },
+                            setValue: (text) => { value = text; version++; onChange?.(); },
+                            getVersionId: () => version,
+                            isDisposed: () => false,
+                            getFullModelRange: () => ({ fullModel: true }),
+                            getValueInRange: () => value,
+                            pushStackElement() {},
+                            pushEditOperations: (_selection, edits) => { value = edits[0].text; version++; onChange?.(); },
                         };
                     },
                     EndOfLineSequence: { LF: 1 },
@@ -608,4 +619,203 @@ test("the Include Actual Plan preference defaults to off", async () => {
     assert.equal((await loadSettings()).includeActualPlan, true);
     stored = { includeActualPlan: 1 };
     assert.equal((await loadSettings()).includeActualPlan, false);
+});
+
+test("toolbar commands have the requested order, accessible icon buttons, split menus and credit link", () => {
+    const html = fs.readFileSync(path.resolve(__dirname, "..", "src", "index.html"), "utf8");
+    const toolbar = html.slice(html.indexOf('<div class="toolbar"'), html.indexOf('<div class="tool-content"'));
+    const commands = ["connection-select", "btn-new", "btn-open", "btn-save", "btn-run", "btn-cancel",
+        "btn-estimated-plan", "btn-edit-fetchxml", "btn-convert", "btn-actual-plan", "btn-results-text",
+        "btn-results-grid", "btn-format", "btn-settings"];
+    const actual = [...toolbar.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]).filter(id => commands.includes(id));
+    assert.deepEqual(actual, commands);
+    for (const id of ["btn-open", "btn-save", "btn-cancel", "btn-estimated-plan", "btn-edit-fetchxml",
+        "btn-actual-plan", "btn-results-text", "btn-results-grid"]) {
+        const button = new RegExp(`<button id="${id}"([^>]*)>([\\s\\S]*?)<\\/button>`).exec(toolbar);
+        assert.match(button[1], /aria-label="/);
+        assert.match(button[1], /icon-only/);
+        assert.equal(button[2].replace(/<svg[\s\S]*?<\/svg>/, "").trim(), "");
+    }
+    for (const id of ["save-menu", "convert-menu", "format-menu"])
+        assert.match(toolbar, new RegExp(`id="${id}"[^>]*role="menu"[^>]*hidden`));
+    assert.match(toolbar, /href="https:\/\/markcarrington.dev\/sql-4-cds\/"[^>]*>SQL 4 CDS by Mark Carrington<\/a>/);
+});
+
+test("toolbar enables transformations only for suitable tabs and keeps FetchXML Studio in place", () => {
+    const { app, createTab, elements } = setup();
+    const { tab } = createTab();
+    app.updateToolbar();
+    assert.equal(elements.get("btn-format").disabled, false);
+    assert.equal(elements.get("btn-convert").disabled, true);
+    assert.equal(elements.get("btn-display-names").disabled, true);
+    assert.equal(elements.get("btn-edit-fetchxml").disabled, true);
+    assert.notEqual(elements.get("btn-edit-fetchxml").hidden, true);
+    tab.connected = true;
+    app.updateToolbar();
+    assert.equal(elements.get("btn-convert").disabled, false);
+    assert.equal(elements.get("btn-display-names").disabled, false);
+    tab.running = true;
+    app.updateToolbar();
+    assert.equal(elements.get("btn-convert").disabled, true);
+    assert.equal(elements.get("btn-format").disabled, true);
+    createTab({ language: "xml", readOnly: true, isFetchXmlPreview: true });
+    app.updateToolbar();
+    assert.equal(elements.get("btn-edit-fetchxml").disabled, false);
+    assert.equal(elements.get("btn-results-text").disabled, true);
+    assert.equal(elements.get("btn-format").disabled, true);
+    assert.equal(elements.get("btn-save-menu").disabled, true);
+});
+
+test("FetchXML Studio can edit the selected FetchXML plan node", () => {
+    const { app, createTab, elements, planViews } = setup();
+    createTab();
+    const fetchXml = '<fetch><entity name="account" /></fetch>';
+    planViews[0].selectedNode = { name: "FetchXML Scan", nodeType: "FetchXmlScan", properties: [{ name: "FetchXML", value: fetchXml }] };
+    app.activeTab.view = "plan";
+    app.updateProperties();
+    assert.equal(app.fetchXmlForEditing, fetchXml);
+    assert.equal(elements.get("btn-edit-fetchxml").disabled, false);
+    planViews[0].selectedNode = { name: "Sort", nodeType: "Sort" };
+    app.updateProperties();
+    assert.equal(elements.get("btn-edit-fetchxml").disabled, true);
+});
+
+test("split menus support keyboard navigation, Escape and outside dismissal", () => {
+    const { app, elements, document } = setup();
+    const toggle = elements.get("btn-save-menu");
+    const menu = document.getElementById("save-menu");
+    const saveAs = elements.get("btn-save-as");
+    menu.appendChild(saveAs);
+    menu.hidden = true;
+    app.bindToolbarMenu(toggle, menu);
+    toggle.events.keydown({ key: "ArrowDown", preventDefault() {} });
+    assert.equal(menu.hidden, false);
+    assert.equal(toggle.attributes["aria-expanded"], "true");
+    assert.equal(saveAs.focused, true);
+    menu.events.keydown({ key: "Escape", preventDefault() {} });
+    assert.equal(menu.hidden, true);
+    assert.equal(toggle.focused, true);
+    toggle.events.click();
+    document.events.pointerdown({ target: new Element() });
+    assert.equal(menu.hidden, true);
+    assert.equal(toggle.attributes["aria-expanded"], "false");
+});
+
+test("Save and Save As retain their distinct handlers", () => {
+    const { app, createTab, elements } = setup();
+    const { tab } = createTab();
+    const calls = [];
+    app.saveTab = (target, saveAs = false) => calls.push({ target, saveAs });
+    app.bindToolbar();
+    elements.get("btn-save").events.click();
+    elements.get("btn-save-as").events.click();
+    assert.equal(calls[0].target, tab);
+    assert.equal(calls[0].saveAs, false);
+    assert.equal(calls[1].saveAs, true);
+});
+
+test("format uses the selected range, adds undo stops, and never overwrites concurrent edits", async () => {
+    const { app, client, createTab } = setup();
+    const { tab } = createTab();
+    tab.model.setValue("select 1");
+    const range = { isEmpty: () => false, selected: true };
+    app.editor = { getSelection: () => range };
+    let undoStops = 0;
+    const edits = [];
+    tab.model.pushStackElement = () => undoStops++;
+    tab.model.pushEditOperations = (_selection, operations) => edits.push(operations);
+    const calls = [];
+    client.transformQuery = async (...args) => { calls.push(args); return ["SELECT 1;"]; };
+    await app.transformQuery("format");
+    assert.deepEqual(calls[0], [tab.uri, "select 1", "format", "fetchxml", false]);
+    assert.equal(undoStops, 2);
+    assert.equal(edits[0][0].range, range);
+    assert.equal(edits[0][0].text, "SELECT 1;");
+
+    const notifications = [];
+    const state = setup();
+    const second = state.createTab().tab;
+    state.app.editor = { getSelection: () => null };
+    state.window.toolboxAPI = { utils: { showNotification: async (notification) => notifications.push(notification) } };
+    state.client.transformQuery = async () => { second.model.setValue("select 2"); return ["SELECT 1;"]; };
+    await state.app.transformQuery("format");
+    assert.equal(second.model.getValue(), "select 2");
+    assert.match(notifications[0].body, /query changed/);
+    assert.equal(state.app.transforming, false);
+});
+
+test("conversion remembers the selected target and opens read-only preview content", async () => {
+    const { app, client, createTab, elements } = setup();
+    const { tab } = createTab();
+    tab.connected = true;
+    app.editor = { getSelection: () => null };
+    const previews = [];
+    app.openPreview = (...args) => previews.push(args);
+    const calls = [];
+    client.transformQuery = async (...args) => { calls.push(args); return ["let Source = 1 in Source"]; };
+    app.convertTarget = "m";
+    app.updateToolbar();
+    await app.transformQuery("convert");
+    assert.equal(calls[0][3], "m");
+    assert.deepEqual(previews[0], ["let Source = 1 in Source", "powerquery", "Power BI (M)"]);
+    assert.equal(elements.get("btn-convert-m").attributes["aria-checked"], "true");
+    assert.equal(elements.get("btn-convert").title, "Convert to Power BI (M)");
+});
+
+test("Power BI previews do not register SQL documents", () => {
+    const { createTab, listeners } = setup();
+    const { tab } = createTab({ language: "powerquery", readOnly: true });
+    assert.equal(tab.readOnly, true);
+    assert.equal(tab.isFetchXmlPreview, false);
+    assert.equal(listeners.size, 0);
+});
+
+test("Results to Text is per-tab and snapshots the mode at execution with paged rows and NULLs", async () => {
+    const { app, client, createTab, grids, elements } = setup();
+    const { tab, events } = createTab();
+    app.setResultsMode("text");
+    assert.equal(elements.get("btn-results-text").attributes["aria-pressed"], "true");
+    await tab.connect(0);
+    await tab.execute(null);
+    app.setResultsMode("grid");
+    const result = { ...summary(0, 0, 201), complete: true, columnInfo: [{ columnName: "Name" }, { columnName: "Value" }] };
+    const pages = [];
+    client.subset = async (_uri, _batch, _result, start, count) => {
+        pages.push({ start, count });
+        return { resultSubset: { rows: Array.from({ length: count }, () => [
+            { displayValue: "Contoso", isNull: false }, { displayValue: "", isNull: true },
+        ]) } };
+    };
+    events.resultSetAvailable({ resultSetSummary: result });
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [result] }] });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(pages, [{ start: 0, count: 200 }, { start: 200, count: 1 }]);
+    assert.equal(grids.length, 0);
+    assert.equal(tab.textPane.hidden, false);
+    assert.equal(tab.resultsPane.hidden, true);
+    assert.equal(tab.textPane.children[0].textContent, "Name\tValue\n");
+    assert.match(tab.textPane.children[0].children[0].textContent, /^Contoso\tNULL\n/);
+    const second = createTab().tab;
+    assert.equal(second.resultsMode, "grid");
+});
+
+test("text result loading errors are visible and stale responses do not append to a new execution", async () => {
+    const { client, createTab } = setup();
+    const { tab, events } = createTab();
+    tab.resultsMode = "text";
+    await tab.connect(0);
+    await tab.execute(null);
+    const result = { ...summary(0, 0, 1), complete: true, columnInfo: [{ columnName: "Name" }] };
+    events.resultSetAvailable({ resultSetSummary: result });
+    client.subset = async () => ({ resultSubset: { rows: [] } });
+    await tab.renderTextResults(tab.resultsGeneration);
+    assert.equal(tab.messagesPane.hidden, false);
+    assert.match(tab.messagesPane.children.at(-1).textContent, /Unable to load text results/);
+    let respond;
+    client.subset = () => new Promise(resolve => { respond = resolve; });
+    const pending = tab.renderTextResults(tab.resultsGeneration);
+    await tab.clearResults();
+    respond({ resultSubset: { rows: [[{ displayValue: "stale", isNull: false }]] } });
+    await pending;
+    assert.equal(tab.textPane.children.length, 0);
 });

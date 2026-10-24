@@ -330,6 +330,10 @@ export class Sql4CdsClient {
         return this.notify("workspace/didChangeConfiguration", { settings: { SQL4CDS: settings } });
     }
 
+    transformQuery(ownerUri: string, query: string, operation: "format" | "convert", target: "fetchxml" | "m", addDisplayNames: boolean): Promise<string[]> {
+        return this.request("sql4cds/transform", { ownerUri, query, operation, target, addDisplayNames });
+    }
+
     // Text document synchronization. The server only supports full document sync.
 
     openDocument(uri: string, text: string): Promise<void> {

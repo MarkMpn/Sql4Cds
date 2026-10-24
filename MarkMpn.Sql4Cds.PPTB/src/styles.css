@@ -111,6 +111,95 @@ input[type="number"] {
     padding: 6px 8px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-alt);
+    flex-wrap: wrap;
+}
+
+.toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 28px;
+    white-space: nowrap;
+    background: transparent;
+    border-color: transparent;
+    padding: 4px 6px;
+}
+
+.toolbar .icon {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+}
+
+.toolbar .execute-icon {
+    fill: #16813d;
+    stroke: #16813d;
+}
+
+.toolbar .stop-icon {
+    fill: var(--error);
+    stroke: var(--error);
+}
+
+.toolbar .icon-only {
+    width: 28px;
+    padding: 4px;
+}
+
+.toolbar button[aria-pressed="true"] {
+    background: var(--selection);
+    border-color: var(--accent);
+}
+
+.toolbar-split {
+    position: relative;
+    display: inline-flex;
+}
+
+.toolbar-split > button:first-child {
+    border-radius: 3px 0 0 3px;
+}
+
+.toolbar-split > .split-toggle {
+    width: 18px;
+    padding: 0;
+    border-left-color: var(--border);
+    border-radius: 0 3px 3px 0;
+}
+
+.toolbar-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1000;
+    min-width: 160px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    box-shadow: 0 2px 8px #0004;
+}
+
+.toolbar-menu[hidden] {
+    display: none;
+}
+
+.toolbar-menu button {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+}
+
+.toolbar-menu button[aria-checked="true"] {
+    background: var(--selection);
+}
+
+.toolbar-credit {
+    margin-left: auto;
+    color: var(--accent);
+    white-space: nowrap;
 }
 
 .toolbar-separator {
@@ -125,8 +214,24 @@ input[type="number"] {
 }
 
 #connection-select {
-    min-width: 220px;
-    max-width: 400px;
+    width: 220px;
+    min-width: 160px;
+    max-width: 300px;
+}
+
+.results-text {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 8px;
+    overflow: auto;
+    user-select: text;
+    tab-size: 20;
+    font: 13px Consolas, "Courier New", monospace;
+}
+
+.results-text[hidden] {
+    display: none;
 }
 
 /* Side panes (Object Explorer & Properties) */

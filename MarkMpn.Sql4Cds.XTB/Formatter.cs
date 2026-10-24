@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.XTB
                             reader.NextResult();
                         }
                     }
-                    catch (Sql4CdsException)
+                    catch (Sql4CdsException) when (options.ThrowOnError != true)
                     {
                     }
                 }
@@ -264,6 +264,8 @@ namespace MarkMpn.Sql4Cds.XTB
 
     public class FormatterOptions
     {
+        public bool ThrowOnError { get; set; }
+
         public bool AddDisplayNames { get; set; }
 
         public Sql4CdsConnection Connection { get; set; }

@@ -13,7 +13,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>sql4cds-lsp</ToolCommandName>
     <PackageId>MarkMpn.Sql4Cds.LanguageServer</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>Mark Carrington</Authors>
     <Description>SQL 4 CDS language server, used by the SQL 4 CDS Power Platform ToolBox tool</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -30,6 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\MarkMpn.Sql4Cds.XTB\Formatter.cs" Link="Scripting\Formatter.cs" />
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Export\MarkMpn.Sql4Cds.Export.csproj" />
   </ItemGroup>
