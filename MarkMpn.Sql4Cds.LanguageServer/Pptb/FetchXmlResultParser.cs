@@ -50,6 +50,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public string RootEntity => _rootEntity;
 
+        public FetchXmlResultParser(EntityMetadata entity, IAttributeMetadataCache metadata)
+        {
+            _metadata = metadata;
+            _rootEntity = entity.LogicalName;
+        }
+
         private void Process(XElement element, string entityName, bool isLinkEntity, string linkAlias = null)
         {
             foreach (var child in element.Elements())
@@ -141,7 +147,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
         }
 
-        private Entity ParseEntity(JObject record)
+        public Entity ParseEntity(JObject record)
         {
             var entity = new Entity(_rootEntity);
             var rootInfo = _metadata[_rootEntity];

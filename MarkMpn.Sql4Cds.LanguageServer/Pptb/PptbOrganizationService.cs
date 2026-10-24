@@ -7,7 +7,6 @@ using System.Reflection;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
@@ -25,13 +24,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
     /// </summary>
     public class PptbOrganizationService : IOrganizationService, IServiceClient
     {
-        /// <summary>
-        /// The maximum number of operations PPTB accepts in a single batch
-        /// </summary>
-        public const int MaxBatchSize = 1000;
-
-        private const int ObjectDoesNotExist = unchecked((int)0x80040217);
-
         private static readonly Dictionary<string, string> _headerParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["BypassCustomPluginExecution"] = "MSCRM.BypassCustomPluginExecution",
@@ -176,12 +168,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
             IReadOnlyList<WebApiResponse> responses;
 
-            // PPTB reports an error for the whole batch if a non-transactional batch stops early without
-            // returning a result for every operation, so always ask it to continue past errors. Callers
-            // that need stop-on-first-error semantics either use a transaction or send requests one by one.
-            if (!transaction && requests.Count > 1)
-                continueOnError = true;
-
             try
             {
                 // Run the RPC call on the thread pool to avoid deadlocks if the caller has a synchronization context
@@ -271,16 +257,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             /// </summary>
             public Func<OrganizationResponse> Custom { get; set; }
 
-            public bool IsBatchable => Requests != null;
-
-            public bool IsAllWrites => Requests != null && Requests.All(r => r.IsWrite);
-
             public OrganizationResponse ExecuteStandalone(PptbOrganizationService svc)
             {
                 if (Custom != null)
                     return Custom();
 
-                var responses = svc.Send(Requests, transaction: Requests.Count > 1 && IsAllWrites);
+                var responses = svc.Send(Requests);
                 return MapResponses(responses);
             }
 
@@ -296,7 +278,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
         }
 
-        private static PreparedOperation Single(WebApiRequest request, Func<WebApiResponse, OrganizationResponse> map)
+        internal static PreparedOperation Single(WebApiRequest request, Func<WebApiResponse, OrganizationResponse> map)
         {
             return new PreparedOperation
             {
@@ -369,13 +351,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     return CustomOperation(() => ExecuteTransaction(As<ExecuteTransactionRequest>(request)));
 
                 case "RetrieveMetadataChanges":
-                    return CustomOperation(() => MetadataQuery.RetrieveMetadataChanges(As<Microsoft.Xrm.Sdk.Messages.RetrieveMetadataChangesRequest>(request)));
+                    return MetadataQuery.PrepareRetrieveMetadataChanges(As<Microsoft.Xrm.Sdk.Messages.RetrieveMetadataChangesRequest>(request));
 
                 case "RetrieveEntity":
-                    return CustomOperation(() => MetadataQuery.RetrieveEntity(As<RetrieveEntityRequest>(request)));
+                    return MetadataQuery.PrepareRetrieveEntity(As<RetrieveEntityRequest>(request));
 
                 case "RetrieveAllOptionSets":
-                    return CustomOperation(() => MetadataQuery.RetrieveAllOptionSets(As<RetrieveAllOptionSetsRequest>(request)));
+                    return MetadataQuery.PrepareRetrieveAllOptionSets(As<RetrieveAllOptionSetsRequest>(request));
 
                 case "WhoAmI":
                     return PrepareWhoAmI();
@@ -559,64 +541,159 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         private PreparedOperation PrepareRetrieve(RetrieveRequest request)
         {
-            if (request.RelatedEntitiesQuery != null && request.RelatedEntitiesQuery.Count > 0)
-                throw CreateFault("Retrieving related entities is not supported when connected through Power Platform ToolBox");
-
             var target = request.Target;
             var info = Metadata[target.LogicalName];
-            var entity = new XElement("entity", new XAttribute("name", info.LogicalName));
-            var columns = request.ColumnSet ?? new ColumnSet();
+            var expansions = new List<string>();
+            var options = GetRetrieveOptions(info, request.ColumnSet, expansions);
+            var related = new List<(Relationship relationship, string navigation, bool collection, FetchXmlResultParser parser)>();
 
-            if (columns.AllColumns)
+            if (request.RelatedEntitiesQuery != null)
             {
-                entity.Add(new XElement("all-attributes"));
-            }
-            else
-            {
-                foreach (var col in columns.Columns.Union(new[] { info.PrimaryIdAttribute }, StringComparer.OrdinalIgnoreCase))
-                    entity.Add(new XElement("attribute", new XAttribute("name", col)));
-            }
-
-            var filter = new XElement("filter");
-
-            if (target.Id != Guid.Empty)
-            {
-                filter.Add(new XElement("condition",
-                    new XAttribute("attribute", info.PrimaryIdAttribute),
-                    new XAttribute("operator", "eq"),
-                    new XAttribute("value", target.Id.ToString("D"))));
-            }
-            else if (target.KeyAttributes != null && target.KeyAttributes.Count > 0)
-            {
-                foreach (var key in target.KeyAttributes)
+                foreach (var entry in request.RelatedEntitiesQuery)
                 {
-                    filter.Add(new XElement("condition",
-                        new XAttribute("attribute", key.Key),
-                        new XAttribute("operator", key.Value == null ? "null" : "eq"),
-                        key.Value == null ? null : new XAttribute("value", QueryExpressionConverter.FormatValue(key.Value))));
+                    if (!(entry.Value is QueryExpression query))
+                        throw new NotSupportedException("Related entity retrieval requires a QueryExpression");
+
+                    if (query.LinkEntities.Count > 0 || query.Distinct || query.PageInfo?.Count > 0 ||
+                        query.PageInfo?.PageNumber > 1 || !String.IsNullOrEmpty(query.PageInfo?.PagingCookie))
+                        throw new NotSupportedException("Related entity retrieval does not support links, distinct queries or paging");
+
+                    var (navigation, collection, entityName) = GetAssociationNavigationProperty(target, entry.Key);
+                    if (!String.Equals(entityName, query.EntityName, StringComparison.OrdinalIgnoreCase))
+                        throw new NotSupportedException($"Relationship {entry.Key.SchemaName} targets {entityName}, not {query.EntityName}");
+                    var relatedInfo = Metadata[query.EntityName];
+                    var nestedExpansions = new List<string>();
+                    var nestedOptions = GetRetrieveOptions(relatedInfo, query.ColumnSet, nestedExpansions);
+                    var filter = GetRelatedFilter(query.Criteria, relatedInfo);
+                    if (filter != null)
+                    {
+                        if (!collection)
+                            throw new NotSupportedException("Filters require a collection-valued relationship");
+                        nestedOptions.Add("$filter=" + filter);
+                    }
+                    if (query.Orders.Count > 0)
+                    {
+                        if (!collection)
+                            throw new NotSupportedException("Ordering requires a collection-valued relationship");
+                        nestedOptions.Add("$orderby=" + String.Join(",", query.Orders.Select(order =>
+                        {
+                            if (!String.IsNullOrEmpty(order.EntityName) || !String.IsNullOrEmpty(order.Alias))
+                                throw new NotSupportedException("Related entity ordering does not support entity names or aliases");
+                            return GetRetrieveProperty(relatedInfo, order.AttributeName) + (order.OrderType == OrderType.Descending ? " desc" : " asc");
+                        })));
+                    }
+                    if (query.TopCount.HasValue)
+                    {
+                        if (!collection)
+                            throw new NotSupportedException("TopCount requires a collection-valued relationship");
+                        nestedOptions.Add("$top=" + query.TopCount.Value.ToString(CultureInfo.InvariantCulture));
+                    }
+                    if (nestedExpansions.Count > 0)
+                        nestedOptions.Add("$expand=" + String.Join(",", nestedExpansions));
+                    expansions.Add(navigation + (nestedOptions.Count == 0 ? "" : "(" + String.Join(";", nestedOptions) + ")"));
+                    related.Add((entry.Key, navigation, collection, new FetchXmlResultParser(relatedInfo, Metadata)));
                 }
             }
-            else
+
+            if (expansions.Count > 0)
+                options.Add("$expand=" + String.Join(",", expansions.Distinct()));
+            var url = Serializer.GetRecordUrl(target);
+            if (options.Count > 0)
+                url += "?" + String.Join("&", options.Select(option =>
+                {
+                    var equals = option.IndexOf('=');
+                    return option.Substring(0, equals + 1) + System.Uri.EscapeDataString(option.Substring(equals + 1));
+                }));
+            var parser = new FetchXmlResultParser(info, Metadata);
+
+            return Single(new WebApiRequest
             {
-                throw CreateFault($"No ID or alternate key specified for {target.LogicalName} record");
-            }
-
-            entity.Add(filter);
-
-            var fetchXml = new XElement("fetch", new XAttribute("top", "1"), entity).ToString(SaveOptions.DisableFormatting);
-            var parser = new FetchXmlResultParser(fetchXml, Metadata);
-
-            return Single(CreateFetchXmlRequest(info.EntitySetName, fetchXml), response =>
+                Method = "GET",
+                Url = url,
+                Headers = GetHeaders(request, new Dictionary<string, string> { ["Prefer"] = WebApiJson.IncludeAnnotationsPreference })
+            }, response =>
             {
-                var results = parser.Parse((JObject)response.Json);
-
-                if (results.Entities.Count == 0)
-                    throw CreateFault($"{target.LogicalName} With Id = {target.Id} Does Not Exist", ObjectDoesNotExist);
-
+                var json = (JObject)response.Json.DeepClone();
+                var relatedEntities = new RelatedEntityCollection();
+                foreach (var expansion in related)
+                {
+                    var token = json[expansion.navigation];
+                    var entities = new EntityCollection { EntityName = expansion.parser.RootEntity };
+                    if (expansion.collection && token is JArray records)
+                        entities.Entities.AddRange(records.Cast<JObject>().Select(expansion.parser.ParseEntity));
+                    else if (!expansion.collection && token is JObject record)
+                        entities.Entities.Add(expansion.parser.ParseEntity(record));
+                    else if (token == null || token.Type != JTokenType.Null || expansion.collection)
+                        throw new InvalidOperationException($"Dataverse returned an invalid expanded relationship {expansion.navigation}");
+                    var nextLink = json.Value<string>(expansion.navigation + "@odata.nextLink");
+                    entities.MoreRecords = nextLink != null;
+                    relatedEntities.Add(expansion.relationship, entities);
+                    json.Remove(expansion.navigation);
+                }
+                var parsed = parser.ParseEntity(json);
+                foreach (var expansion in relatedEntities)
+                    parsed.RelatedEntities.Add(expansion.Key, expansion.Value);
                 var result = new RetrieveResponse();
-                result.Results["Entity"] = results.Entities[0];
+                result.Results["Entity"] = parsed;
                 return result;
             });
+        }
+
+        private List<string> GetRetrieveOptions(EntityMetadata info, ColumnSet columns, List<string> expansions)
+        {
+            columns = columns ?? new ColumnSet();
+            if (columns.AttributeExpressions.Count > 0)
+                throw new NotSupportedException("Retrieve does not support column aliases or aggregates");
+            var attributes = columns.AllColumns ? info.Attributes ?? Array.Empty<AttributeMetadata>() : columns.Columns.Select(info.GetAttribute).ToArray();
+            if (attributes.Any(attribute => attribute?.AttributeType == AttributeTypeCode.PartyList))
+                expansions.Add(info.LogicalName + "_activity_parties");
+            var options = new List<string>();
+            if (!columns.AllColumns)
+            {
+                var properties = columns.Columns
+                    .Where(column => info.GetAttribute(column)?.AttributeType != AttributeTypeCode.PartyList)
+                    .Select(column => GetRetrieveProperty(info, column))
+                    .Union(new[] { info.PrimaryIdAttribute }, StringComparer.OrdinalIgnoreCase);
+                options.Add("$select=" + String.Join(",", properties));
+            }
+            return options;
+        }
+
+        private static string GetRetrieveProperty(EntityMetadata info, string name)
+        {
+            return info.GetAttribute(name).IsLookup() ? "_" + name + "_value" : name;
+        }
+
+        private static string GetRelatedFilter(FilterExpression filter, EntityMetadata info)
+        {
+            if (filter == null)
+                return null;
+            var expressions = filter.Filters.Select(child => GetRelatedFilter(child, info)).Where(value => value != null).ToList();
+            foreach (var condition in filter.Conditions)
+            {
+                if (condition.CompareColumns || !String.IsNullOrEmpty(condition.EntityName))
+                    throw new NotSupportedException("Related entity filters do not support column comparisons or entity names");
+                var property = GetRetrieveProperty(info, condition.AttributeName);
+                if (condition.Operator == ConditionOperator.Null || condition.Operator == ConditionOperator.NotNull)
+                {
+                    expressions.Add(property + (condition.Operator == ConditionOperator.Null ? " eq null" : " ne null"));
+                    continue;
+                }
+                var op = condition.Operator switch
+                {
+                    ConditionOperator.Equal => "eq",
+                    ConditionOperator.NotEqual => "ne",
+                    ConditionOperator.GreaterThan => "gt",
+                    ConditionOperator.GreaterEqual => "ge",
+                    ConditionOperator.LessThan => "lt",
+                    ConditionOperator.LessEqual => "le",
+                    _ => throw new NotSupportedException($"Related entity filter operator {condition.Operator} is not supported")
+                };
+                if (condition.Values.Count != 1)
+                    throw new NotSupportedException($"Related entity filter operator {condition.Operator} requires one value");
+                expressions.Add(property + " " + op + " " + WebApiJson.FormatLiteral(condition.Values[0]));
+            }
+            return expressions.Count == 0 ? null : "(" + String.Join(filter.FilterOperator == LogicalOperator.Or ? " or " : " and ", expressions) + ")";
         }
 
         private PreparedOperation PrepareRetrieveMultiple(RetrieveMultipleRequest request)
@@ -641,7 +718,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             });
         }
 
-        private (string navigationProperty, bool isCollection) GetAssociationNavigationProperty(EntityReference target, Relationship relationship)
+        private (string navigationProperty, bool isCollection, string relatedEntity) GetAssociationNavigationProperty(EntityReference target, Relationship relationship)
         {
             var entity = Metadata[target.LogicalName];
             var manyToMany = entity.ManyToManyRelationships?.FirstOrDefault(r =>
@@ -658,7 +735,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 else
                     nav = manyToMany.Entity2NavigationPropertyName;
 
-                return (nav, true);
+                return (nav, true, target.LogicalName.Equals(manyToMany.Entity1LogicalName, StringComparison.OrdinalIgnoreCase)
+                    ? manyToMany.Entity2LogicalName : manyToMany.Entity1LogicalName);
             }
 
             var rel = (entity.OneToManyRelationships ?? Array.Empty<OneToManyRelationshipMetadata>())
@@ -673,14 +751,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 targetIsReferenced = target.LogicalName.Equals(rel.ReferencedEntity, StringComparison.OrdinalIgnoreCase);
 
             if (targetIsReferenced)
-                return (rel.ReferencedEntityNavigationPropertyName, true);
+                return (rel.ReferencedEntityNavigationPropertyName, true, rel.ReferencingEntity);
 
-            return (rel.ReferencingEntityNavigationPropertyName, false);
+            return (rel.ReferencingEntityNavigationPropertyName, false, rel.ReferencedEntity);
         }
 
         private PreparedOperation PrepareAssociate(AssociateRequest request)
         {
-            var (nav, isCollection) = GetAssociationNavigationProperty(request.Target, request.Relationship);
+            var (nav, isCollection, _) = GetAssociationNavigationProperty(request.Target, request.Relationship);
             var targetUrl = Serializer.GetRecordUrl(request.Target);
             var headers = GetHeaders(request);
 
@@ -699,7 +777,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         private PreparedOperation PrepareDisassociate(DisassociateRequest request)
         {
-            var (nav, isCollection) = GetAssociationNavigationProperty(request.Target, request.Relationship);
+            var (nav, isCollection, _) = GetAssociationNavigationProperty(request.Target, request.Relationship);
             var targetUrl = Serializer.GetRecordUrl(request.Target);
             var headers = GetHeaders(request);
 
@@ -1159,22 +1237,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         #region ExecuteMultiple & ExecuteTransaction
 
-        private (PreparedOperation op, OrganizationServiceFault fault) TryPrepare(OrganizationRequest request)
-        {
-            try
-            {
-                return (Prepare(request), null);
-            }
-            catch (FaultException<OrganizationServiceFault> ex)
-            {
-                return (null, ex.Detail);
-            }
-            catch (Exception ex)
-            {
-                return (null, new OrganizationServiceFault { Message = ex.Message });
-            }
-        }
-
         private static OrganizationServiceFault GetFault(Exception ex)
         {
             if (ex is FaultException<OrganizationServiceFault> fault)
@@ -1187,158 +1249,30 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         {
             var settings = request.Settings ?? new ExecuteMultipleSettings();
             var requests = request.Requests ?? new OrganizationRequestCollection();
-            var prepared = requests.Select(TryPrepare).ToList();
+            var prepared = requests.Select(Prepare).ToList();
+            if (prepared.Any(op => op.Custom != null))
+                throw CreateFault("ExecuteMultiple cannot contain ExecuteMultiple or ExecuteTransaction requests");
+
+            var responses = Send(prepared.SelectMany(op => op.Requests).ToList(), continueOnError: settings.ContinueOnError);
             var items = new ExecuteMultipleResponseItemCollection();
+            var offset = 0;
 
-            void AddResponse(int index, OrganizationResponse response)
+            for (var index = 0; index < prepared.Count; index++)
             {
-                if (settings.ReturnResponses)
-                    items.Add(new ExecuteMultipleResponseItem { RequestIndex = index, Response = response });
-            }
-
-            void AddFault(int index, OrganizationServiceFault fault)
-            {
-                items.Add(new ExecuteMultipleResponseItem { RequestIndex = index, Fault = fault });
-            }
-
-            if (settings.ContinueOnError)
-            {
-                var i = 0;
-
-                while (i < prepared.Count)
+                var op = prepared[index];
+                var opResponses = responses.Skip(offset).Take(op.Requests.Count).ToList();
+                offset += op.Requests.Count;
+                try
                 {
-                    var (op, prepareFault) = prepared[i];
-
-                    if (prepareFault != null)
-                    {
-                        AddFault(i, prepareFault);
-                        i++;
-                        continue;
-                    }
-
-                    if (!op.IsBatchable || op.Custom != null)
-                    {
-                        try
-                        {
-                            AddResponse(i, op.ExecuteStandalone(this));
-                        }
-                        catch (Exception ex)
-                        {
-                            AddFault(i, GetFault(ex));
-                        }
-
-                        i++;
-                        continue;
-                    }
-
-                    // Collect as many consecutive batchable operations as we can into a single batch
-                    var chunk = new List<int>();
-                    var count = 0;
-
-                    while (i < prepared.Count && prepared[i].op != null && prepared[i].op.IsBatchable && prepared[i].op.Custom == null && (count == 0 || count + prepared[i].op.Requests.Count <= MaxBatchSize))
-                    {
-                        chunk.Add(i);
-                        count += prepared[i].op.Requests.Count;
-                        i++;
-                    }
-
-                    IReadOnlyList<WebApiResponse> responses;
-
-                    try
-                    {
-                        responses = Send(chunk.SelectMany(index => prepared[index].op.Requests).ToList(), continueOnError: true);
-                    }
-                    catch (Exception ex)
-                    {
-                        var fault = GetFault(ex);
-
-                        foreach (var index in chunk)
-                            AddFault(index, fault);
-
-                        continue;
-                    }
-
-                    var offset = 0;
-
-                    foreach (var index in chunk)
-                    {
-                        var op2 = prepared[index].op;
-                        var opResponses = responses.Skip(offset).Take(op2.Requests.Count).ToList();
-                        offset += op2.Requests.Count;
-
-                        try
-                        {
-                            AddResponse(index, op2.MapResponses(opResponses));
-                        }
-                        catch (Exception ex)
-                        {
-                            AddFault(index, GetFault(ex));
-                        }
-                    }
+                    var response = op.MapResponses(opResponses);
+                    if (settings.ReturnResponses)
+                        items.Add(new ExecuteMultipleResponseItem { RequestIndex = index, Response = response });
                 }
-            }
-            else
-            {
-                var executed = false;
-
-                // If all the requests are writes we can try them all in a single transaction. If they all succeed we've
-                // got the same result as executing them sequentially. If any fail nothing will have been committed, so
-                // we can fall back to executing them sequentially to get the correct result.
-                if (prepared.Count > 1 &&
-                    prepared.All(p => p.op != null && p.op.IsBatchable && p.op.IsAllWrites) &&
-                    prepared.Sum(p => p.op.Requests.Count) <= MaxBatchSize)
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        var allRequests = prepared.SelectMany(p => p.op.Requests).ToList();
-                        var responses = Send(allRequests, transaction: true);
-
-                        if (responses.Count == allRequests.Count && responses.All(r => r.IsSuccess))
-                        {
-                            var offset = 0;
-                            var mapped = new List<OrganizationResponse>();
-
-                            foreach (var (op, _) in prepared)
-                            {
-                                mapped.Add(op.MapResponses(responses.Skip(offset).Take(op.Requests.Count).ToList()));
-                                offset += op.Requests.Count;
-                            }
-
-                            for (var index = 0; index < mapped.Count; index++)
-                                AddResponse(index, mapped[index]);
-
-                            executed = true;
-                        }
-                    }
-                    catch
-                    {
-                        // Fall back to sequential execution
-                        items.Clear();
-                    }
-                }
-
-                if (!executed)
-                {
-                    for (var index = 0; index < prepared.Count; index++)
-                    {
-                        var (op, prepareFault) = prepared[index];
-
-                        if (prepareFault != null)
-                        {
-                            AddFault(index, prepareFault);
-                            break;
-                        }
-
-                        try
-                        {
-                            AddResponse(index, op.ExecuteStandalone(this));
-                        }
-                        catch (Exception ex)
-                        {
-                            AddFault(index, GetFault(ex));
-                            break;
-                        }
-                    }
+                    items.Add(new ExecuteMultipleResponseItem { RequestIndex = index, Fault = GetFault(ex) });
+                    if (!settings.ContinueOnError)
+                        break;
                 }
             }
 
@@ -1354,19 +1288,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             var prepared = requests.Select(Prepare).ToList();
             var responses = new OrganizationResponseCollection();
 
-            if (prepared.Count == 1)
+            if (prepared.Count > 0)
             {
-                responses.Add(prepared[0].ExecuteStandalone(this));
-            }
-            else if (prepared.Count > 1)
-            {
-                if (!prepared.All(op => op.IsBatchable && op.IsAllWrites))
-                    throw CreateFault("ExecuteTransaction can only contain create, update, delete and other data modification requests when connected through Power Platform ToolBox");
-
                 var allRequests = prepared.SelectMany(op => op.Requests).ToList();
-
-                if (allRequests.Count > MaxBatchSize)
-                    throw CreateFault($"ExecuteTransaction can contain a maximum of {MaxBatchSize} operations");
 
                 var webResponses = Send(allRequests, transaction: true);
                 var offset = 0;

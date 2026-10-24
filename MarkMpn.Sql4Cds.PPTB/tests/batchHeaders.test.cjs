@@ -90,10 +90,27 @@ for (const transaction of [false, true]) {
             assert.equal(params.headers.prefer, "return=representation");
             assert.equal(requests[0].headers["If-Match"], "*");
             assert.equal(requests[0].headers.MSCRMCallerID, undefined);
+            assert.equal(requests[0].headers.Prefer, undefined);
+            assert.equal(requests[0].headers.prefer, undefined);
             assert.equal(requests[1].headers, undefined);
         });
     }
 }
+
+test("stop-on-error batches preserve partial responses without replaying completed requests", async () => {
+    const { handlers, calls } = await createClient(() => [
+        { contentId: "1", status: 400, body: { error: { message: "Write failed" } } },
+    ]);
+    const params = batch(false, false);
+    const result = await handlers.requests["dataverse/executeBatch"](params, {});
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].args[0].length, 2);
+    assert.equal(calls[0].args[2].prefer, "return=representation");
+    assert.equal(result.length, 1);
+    assert.equal(result[0].status, 400);
+    assert.equal(result[0].contentId, "1");
+    assert.equal(JSON.parse(result[0].body).error.message, "Write failed");
+});
 
 test("batch headers survive chunked RPC reassembly", { timeout: 5000 }, async () => {
     const { handlers, calls, notifications, response } = await createClient({

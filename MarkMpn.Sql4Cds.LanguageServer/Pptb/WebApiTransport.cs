@@ -33,9 +33,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         public string Body { get; set; }
 
         public string ContentId { get; set; }
-
-        [Newtonsoft.Json.JsonIgnore]
-        public bool IsWrite => Method != "GET";
     }
 
     /// <summary>

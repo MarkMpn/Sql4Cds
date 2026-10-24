@@ -49,26 +49,39 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public RetrieveMetadataChangesResponse RetrieveMetadataChanges(RetrieveMetadataChangesRequest request)
         {
+            return (RetrieveMetadataChangesResponse)Execute(PrepareRetrieveMetadataChanges(request));
+        }
+
+        public PptbOrganizationService.PreparedOperation PrepareRetrieveMetadataChanges(RetrieveMetadataChangesRequest request)
+        {
             var query = request.Query ?? new EntityQueryExpression();
             var clientFilters = new ClientFilters();
             var serverQuery = PrepareQuery(query, clientFilters);
 
-            var response = Execute(serverQuery, request.ClientVersionStamp, request.DeletedMetadataFilters);
-            var serverVersionStamp = response.Value<string>("ServerVersionStamp");
-            var entities = DeserializeEntities(response).ToList();
+            return PptbOrganizationService.Single(CreateMetadataChangesRequest(serverQuery, request.ClientVersionStamp, request.DeletedMetadataFilters), response =>
+            {
+                var json = (JObject)response.Json;
+                var serverVersionStamp = json.Value<string>("ServerVersionStamp");
+                var entities = DeserializeEntities(json).ToList();
 
-            clientFilters.Apply(entities);
+                clientFilters.Apply(entities);
 
-            var result = new RetrieveMetadataChangesResponse();
-            var collection = new EntityMetadataCollection();
-            collection.AddRange(entities);
-            result.Results["EntityMetadata"] = collection;
-            result.Results["ServerVersionStamp"] = serverVersionStamp;
-            result.Results["DeletedMetadata"] = new DeletedMetadataCollection();
-            return result;
+                var result = new RetrieveMetadataChangesResponse();
+                var collection = new EntityMetadataCollection();
+                collection.AddRange(entities);
+                result.Results["EntityMetadata"] = collection;
+                result.Results["ServerVersionStamp"] = serverVersionStamp;
+                result.Results["DeletedMetadata"] = new DeletedMetadataCollection();
+                return result;
+            });
         }
 
         public RetrieveEntityResponse RetrieveEntity(RetrieveEntityRequest request)
+        {
+            return (RetrieveEntityResponse)Execute(PrepareRetrieveEntity(request));
+        }
+
+        public PptbOrganizationService.PreparedOperation PrepareRetrieveEntity(RetrieveEntityRequest request)
         {
             var query = new EntityQueryExpression
             {
@@ -115,41 +128,55 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             if (request.EntityFilters.HasFlag(EntityFilters.Relationships))
                 query.RelationshipQuery = new RelationshipQueryExpression { Properties = new MetadataPropertiesExpression { AllProperties = true } };
 
-            var response = RetrieveMetadataChanges(new RetrieveMetadataChangesRequest { Query = query });
-            var entity = response.EntityMetadata.FirstOrDefault();
-
-            if (entity == null)
+            var operation = PrepareRetrieveMetadataChanges(new RetrieveMetadataChangesRequest { Query = query });
+            return PptbOrganizationService.Single(operation.Requests.Single(), response =>
             {
-                var fault = new OrganizationServiceFault
+                var metadata = (RetrieveMetadataChangesResponse)operation.MapResponses(new[] { response });
+                var entity = metadata.EntityMetadata.FirstOrDefault();
+
+                if (entity == null)
                 {
-                    ErrorCode = unchecked((int)0x80040217),
-                    Message = $"Could not find entity {request.LogicalName ?? request.MetadataId.ToString()}"
-                };
+                    var fault = new OrganizationServiceFault
+                    {
+                        ErrorCode = unchecked((int)0x80040217),
+                        Message = $"Could not find entity {request.LogicalName ?? request.MetadataId.ToString()}"
+                    };
 
-                throw new FaultException<OrganizationServiceFault>(fault, new FaultReason(fault.Message));
-            }
+                    throw new FaultException<OrganizationServiceFault>(fault, new FaultReason(fault.Message));
+                }
 
-            var result = new RetrieveEntityResponse();
-            result.Results["EntityMetadata"] = entity;
-            return result;
+                var result = new RetrieveEntityResponse();
+                result.Results["EntityMetadata"] = entity;
+                return result;
+            });
         }
 
         public RetrieveAllOptionSetsResponse RetrieveAllOptionSets(RetrieveAllOptionSetsRequest request)
         {
-            var response = _send(new WebApiRequest { Method = "GET", Url = "GlobalOptionSetDefinitions" });
-            response.EnsureSuccess();
-
-            var optionSets = ((response.Json as JObject)?["value"] as JArray ?? new JArray())
-                .Select(token => token.ToObject<OptionSetMetadataBase>(Serializer))
-                .Where(os => os != null)
-                .ToArray();
-
-            var result = new RetrieveAllOptionSetsResponse();
-            result.Results["OptionSetMetadata"] = optionSets;
-            return result;
+            return (RetrieveAllOptionSetsResponse)Execute(PrepareRetrieveAllOptionSets(request));
         }
 
-        private JObject Execute(JObject query, string clientVersionStamp, DeletedMetadataFilters deletedMetadataFilters)
+        public PptbOrganizationService.PreparedOperation PrepareRetrieveAllOptionSets(RetrieveAllOptionSetsRequest request)
+        {
+            return PptbOrganizationService.Single(new WebApiRequest { Method = "GET", Url = "GlobalOptionSetDefinitions" }, response =>
+            {
+                var optionSets = ((response.Json as JObject)?["value"] as JArray ?? new JArray())
+                    .Select(token => token.ToObject<OptionSetMetadataBase>(Serializer))
+                    .Where(os => os != null)
+                    .ToArray();
+
+                var result = new RetrieveAllOptionSetsResponse();
+                result.Results["OptionSetMetadata"] = optionSets;
+                return result;
+            });
+        }
+
+        private OrganizationResponse Execute(PptbOrganizationService.PreparedOperation operation)
+        {
+            return operation.MapResponses(new[] { _send(operation.Requests.Single()) });
+        }
+
+        private static WebApiRequest CreateMetadataChangesRequest(JObject query, string clientVersionStamp, DeletedMetadataFilters deletedMetadataFilters)
         {
             var parameters = new List<string> { "Query=@p1" };
             var values = new List<string> { "@p1=" + Uri.EscapeDataString(WebApiJson.Serialize(query)) };
@@ -166,14 +193,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 }
             }
 
-            var response = _send(new WebApiRequest
+            return new WebApiRequest
             {
                 Method = "GET",
                 Url = "RetrieveMetadataChanges(" + String.Join(",", parameters) + ")?" + String.Join("&", values)
-            });
-
-            response.EnsureSuccess();
-            return (JObject)response.Json;
+            };
         }
 
         private static IEnumerable<EntityMetadata> DeserializeEntities(JObject response)

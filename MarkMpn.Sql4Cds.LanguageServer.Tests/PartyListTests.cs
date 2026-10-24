@@ -74,23 +74,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 {
                     if (request.Url.StartsWith("RetrieveMetadataChanges(", StringComparison.Ordinal))
                         return MetadataTestHelper.Response((JObject)ActivityMetadataResponse().Json);
-                    StringAssert.StartsWith(request.Url, "phonecalls?fetchXml=");
-                    return new WebApiResponse
+                    var record = new JObject
                     {
-                        Status = 200,
-                        Body = new JObject
+                        ["activityid"] = Id.ToString(),
+                        ["phonecall_activity_parties"] = new JArray(new JObject
                         {
-                            ["value"] = new JArray(new JObject
-                            {
-                                ["activityid"] = Id.ToString(),
-                                ["phonecall_activity_parties"] = new JArray(new JObject
-                                {
-                                    ["participationtypemask"] = 1,
-                                    ["addressused"] = "caller@example.invalid"
-                                })
-                            })
-                        }.ToString()
+                            ["participationtypemask"] = 1,
+                            ["addressused"] = "caller@example.invalid"
+                        })
                     };
+                    if (request.Url.StartsWith("phonecalls(", StringComparison.Ordinal))
+                    {
+                        var url = Uri.UnescapeDataString(request.Url);
+                        StringAssert.Contains(url, "$expand=phonecall_activity_parties");
+                        StringAssert.Contains(url, "$select=activityid");
+                        return new WebApiResponse { Status = 200, Body = record.ToString() };
+                    }
+                    StringAssert.StartsWith(request.Url, "phonecalls?fetchXml=");
+                    return new WebApiResponse { Status = 200, Body = new JObject { ["value"] = new JArray(record) }.ToString() };
                 }).ToArray());
             }
         }
