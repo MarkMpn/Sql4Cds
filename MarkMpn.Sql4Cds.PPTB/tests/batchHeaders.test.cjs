@@ -9,6 +9,7 @@ async function createClient(responseHeaders = {}, options = {}) {
     let handlers;
     const calls = [];
     const notifications = [];
+    const notificationMethods = [];
     const logs = [];
     let complete;
     const response = new Promise((resolve) => { complete = resolve; });
@@ -20,7 +21,8 @@ async function createClient(responseHeaders = {}, options = {}) {
     };
     const module = { exports: {} };
     const filename = path.resolve(__dirname, "..", "src", "lsp", "client.ts");
-    const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    const source = fs.readFileSync(filename, "utf8").replace("const MAX_RPC_MESSAGE_SIZE = 32 * 1024 * 1024;", `const MAX_RPC_MESSAGE_SIZE = ${options.maxMessageSize ?? 32 * 1024 * 1024};`);
+    const code = ts.transpileModule(source, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     }).outputText;
     vm.runInNewContext(code, {
@@ -37,9 +39,10 @@ async function createClient(responseHeaders = {}, options = {}) {
                     ready: Promise.resolve(),
                     request: async () => ({}),
                     notify: async (method, params) => {
-                        if (method !== "dataverse/executeBatch/chunk") return;
+                        if (method !== "dataverse/executeBatch/chunk" && method !== "dataverse/executeBatch/message") return;
                         notifications.push(params);
-                        if (params.complete) complete();
+                        notificationMethods.push(method);
+                        if (method === "dataverse/executeBatch/message" || params.complete) complete();
                     },
                 };
             } } },
@@ -51,7 +54,7 @@ async function createClient(responseHeaders = {}, options = {}) {
     }, { filename });
     const client = new module.exports.Sql4CdsClient(options.events ?? {});
     await client.start({});
-    return { client, handlers, calls, notifications, response, logs };
+    return { client, handlers, calls, notifications, notificationMethods, response, logs };
 }
 
 function batch(transaction = false, continueOnError = false) {
@@ -66,6 +69,33 @@ function batch(transaction = false, continueOnError = false) {
     };
 }
 
+for (const changesetId of [undefined, null, ""]) {
+    test(`absent changeset ID (${String(changesetId)}) is omitted from host requests`, async () => {
+        const { handlers, calls } = await createClient();
+        const params = batch();
+        for (const request of params.requests)
+            request.changesetId = changesetId;
+        await handlers.requests["dataverse/executeBatch"](params, {});
+        assert.equal(calls.length, 1);
+        for (const request of calls[0].args[0]) {
+            assert.equal(request.changesetId, undefined);
+            assert.equal(Object.hasOwn(request, "changesetId"), false);
+        }
+    });
+}
+
+test("mixed batch omits null changeset IDs and preserves transaction IDs", async () => {
+    const { handlers, calls } = await createClient();
+    const params = batch();
+    params.requests[0].changesetId = null;
+    params.requests[1].changesetId = "tx-1";
+    await handlers.requests["dataverse/executeBatch"](params, {});
+    const requests = calls[0].args[0];
+    assert.equal(Object.hasOwn(requests[0], "changesetId"), false);
+    assert.equal(requests[1].changesetId, "tx-1");
+    assert.equal(params.requests[0].changesetId, null);
+});
+
 test("RPC logs timestamp every request, response, notification, chunk and error at emission time", async () => {
     let clock = Date.parse("2026-10-25T17:01:06.088Z");
     const initialClock = clock;
@@ -76,8 +106,8 @@ test("RPC logs timestamp every request, response, notification, chunk and error 
     });
     await handlers.requests["dataverse/executeBatch"](batch(), {});
     assert.throws(() => handlers.notifications["sql4cds/progress"]("loading"), error => error === failure);
-    await client.notifyChunk({ id: "response", direction: "response", sequence: 0, complete: true, data: "{}" });
-    client.receiveDataverseChunk({ id: "request", direction: "request", sequence: 0, complete: false, data: "{}" });
+    await client.notifyChunk({ id: "response", sequence: 0, complete: true, data: "{}" });
+    client.receiveDataverseChunk({ id: "request", sequence: 0, complete: false, data: "{}" });
     client.session.request = async () => { throw failure; };
     await assert.rejects(client.request("test/failure", {}), error => error === failure);
     client.session.notify = async () => { throw failure; };
@@ -163,20 +193,95 @@ test("batch headers survive chunked RPC reassembly", { timeout: 5000 }, async ()
     const payload = JSON.stringify(params);
     const split = payload.indexOf("MSCRMCallerID") + 5;
     const handler = handlers.notifications["dataverse/executeBatch/chunk"];
-    handler({ id: "batch-test", direction: "request", sequence: 0, complete: false, data: payload.slice(0, split) });
+    handler({ id: "batch-test", sequence: 0, complete: false, data: payload.slice(0, split) });
     assert.equal(calls.length, 0);
-    handler({ id: "batch-test", direction: "request", sequence: 1, complete: true, data: payload.slice(split) });
+    handler({ id: "batch-test", sequence: 1, complete: true, data: payload.slice(split) });
     await response;
     assert.equal(calls[0].args[2].MSCRMCallerID, params.headers.MSCRMCallerID);
     assert.equal(calls[0].args[2].prefer, "return=representation,odata.continue-on-error");
     assert.equal(calls[0].transaction, false);
     assert.equal(calls[0].args[0][0].changesetId, "tx-1");
     assert.equal(calls[0].args[0][1].changesetId, "tx-1");
-    const result = JSON.parse(notifications.map((n) => n.data).join(""));
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].id, "batch-test");
+    assert.equal(typeof notifications[0].data, "object");
+    const result = notifications[0].data;
     assert.equal(result.result.length, 2);
     assert.equal(result.result[0].status, 204);
     assert.equal(result.result[0].batchHeaders["x-ms-dop-hint"], "8");
     assert.equal(result.result[0].batchHeaders["Retry-After"], "12");
+});
+
+test("small notifications preserve request objects and return an unescaped response object", async () => {
+    const { handlers, calls, notifications, notificationMethods, response } = await createClient({
+        body: { name: "Quotes \"\\\r\n and Unicode \u00e9 \ud83d\ude00" },
+    });
+    const params = batch();
+    handlers.notifications["dataverse/executeBatch/message"]({ id: "direct", data: params });
+    await response;
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].args[0][0].url, params.requests[0].url);
+    assert.deepEqual(notificationMethods, ["dataverse/executeBatch/message"]);
+    assert.equal(notifications[0].id, "direct");
+    assert.equal("direction" in notifications[0], false);
+    assert.equal(typeof notifications[0].data, "object");
+    assert.equal(JSON.parse(notifications[0].data.result[0].body).name, "Quotes \"\\\r\n and Unicode \u00e9 \ud83d\ude00");
+});
+
+for (const chunkedRequest of [false, true]) {
+    test(`large responses use bounded chunks independently of request framing (chunkedRequest=${chunkedRequest})`, async () => {
+        const text = "Quotes \"\\\r\n \u00e9 \ud83d\ude00".repeat(100);
+        const { handlers, notifications, notificationMethods, response } = await createClient({ body: { text } }, { maxMessageSize: 512 });
+        const data = batch();
+        if (chunkedRequest) {
+            const payload = JSON.stringify(data);
+            const handler = handlers.notifications["dataverse/executeBatch/chunk"];
+            let sequence = 0;
+            for (let offset = 0; offset < payload.length; offset += 64)
+                handler({ id: "large", sequence: sequence++, complete: offset + 64 >= payload.length, data: payload.slice(offset, offset + 64) });
+        } else {
+            data.requests = [{ method: "GET", url: "accounts", contentId: "1" }];
+            handlers.notifications["dataverse/executeBatch/message"]({ id: "large", data });
+        }
+        await response;
+        assert.ok(notifications.length > 1);
+        for (const [sequence, chunk] of notifications.entries()) {
+            assert.equal(notificationMethods[sequence], "dataverse/executeBatch/chunk");
+            assert.equal(chunk.id, "large");
+            assert.equal("direction" in chunk, false);
+            assert.equal(chunk.sequence, sequence);
+            assert.equal(chunk.complete, sequence === notifications.length - 1);
+            assert.ok(Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", method: notificationMethods[sequence], params: chunk })) <= 512);
+        }
+        const result = JSON.parse(notifications.map(chunk => chunk.data).join(""));
+        assert.equal(JSON.parse(result.result[0].body).text, text);
+    });
+}
+
+test("direct response size includes UTF-8 bytes and the complete notification envelope at the exact boundary", async () => {
+    const id = "boundary";
+    const data = { error: { message: "\u00e9\ud83d\ude00\"\\\r\n".repeat(20) } };
+    const size = Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", method: "dataverse/executeBatch/message", params: { id, data } }));
+    for (const limit of [size, size - 1]) {
+        const { client, notifications, notificationMethods } = await createClient({}, { maxMessageSize: limit });
+        await client.sendDataverseResponse(id, data);
+        assert.equal(notificationMethods[0], limit === size ? "dataverse/executeBatch/message" : "dataverse/executeBatch/chunk");
+        for (const [index, params] of notifications.entries())
+            assert.ok(Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", method: notificationMethods[index], params })) <= limit);
+    }
+});
+
+test("malformed direct requests and mixed partial transfers return correlated errors", async () => {
+    for (const mixed of [false, true]) {
+        const { handlers, calls, notifications, response } = await createClient();
+        if (mixed)
+            handlers.notifications["dataverse/executeBatch/chunk"]({ id: "invalid", sequence: 0, complete: false, data: "{" });
+        handlers.notifications["dataverse/executeBatch/message"]({ id: "invalid", data: mixed ? batch() : null });
+        await response;
+        assert.equal(calls.length, 0);
+        assert.equal(notifications[0].id, "invalid");
+        assert.equal(typeof notifications[0].data.error.message, "string");
+    }
 });
 
 test("missing batch response headers are serialized as an empty collection", async () => {

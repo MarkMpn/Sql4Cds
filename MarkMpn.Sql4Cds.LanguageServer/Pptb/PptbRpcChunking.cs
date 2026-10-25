@@ -17,6 +17,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
     class PptbRpcChunking : IJsonRpcMethodHandler
     {
         public const string MethodName = "dataverse/executeBatch/chunk";
+        public const string MessageMethodName = "dataverse/executeBatch/message";
 
         private static readonly JsonSerializerSettings SerializerSettings = new JsonSerializerSettings
         {
@@ -40,6 +41,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         {
             _rpc = rpc;
             rpc.AddLocalRpcMethod(MethodName, (JToken token) => ReceiveChunk(token.ToObject<PptbRpcChunk>()));
+            rpc.AddLocalRpcMethod(MessageMethodName, (JToken token) => ReceiveMessage(token.ToObject<PptbRpcMessage>()));
         }
 
         public void SetMaxMessageSize(int? maxMessageSize)
@@ -60,15 +62,27 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
             try
             {
-                var payload = JsonConvert.SerializeObject(request, SerializerSettings);
-                foreach (var chunk in Split(payload, id, "request", limit.Value))
+                var message = new PptbRpcMessage
+                {
+                    Id = id,
+                    Data = JToken.FromObject(request, JsonSerializer.Create(SerializerSettings))
+                };
+                if (GetMessageSize(MessageMethodName, message) <= limit.Value)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await _rpc.NotifyWithParameterObjectAsync(MethodName, chunk).ConfigureAwait(false);
+                    await _rpc.NotifyWithParameterObjectAsync(MessageMethodName, message).ConfigureAwait(false);
+                }
+                else
+                {
+                    var payload = message.Data.ToString(Formatting.None);
+                    foreach (var chunk in Split(payload, id, limit.Value))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await _rpc.NotifyWithParameterObjectAsync(MethodName, chunk).ConfigureAwait(false);
+                    }
                 }
 
-                var responseJson = await pending.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-                var response = JObject.Parse(responseJson);
+                var response = await pending.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
                 if (response["error"] is JObject error)
                     throw new InvalidOperationException(error.Value<string>("message") ?? "Dataverse RPC failed");
 
@@ -83,9 +97,32 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
         }
 
+        private void ReceiveMessage(PptbRpcMessage message)
+        {
+            if (message == null || String.IsNullOrEmpty(message.Id) || !_pending.TryGetValue(message.Id, out var pending))
+                return;
+
+            try
+            {
+                var limit = MaxMessageSize;
+                if (limit == null || GetMessageSize(MessageMethodName, message) > limit.Value)
+                    throw new InvalidOperationException("Received a Dataverse RPC message larger than the negotiated message size");
+                if (pending.NextSequence != 0)
+                    throw new InvalidOperationException("Received a non-chunked Dataverse RPC response during a chunked transfer");
+                if (!(message.Data is JObject response))
+                    throw new InvalidOperationException("Dataverse RPC response data is missing or invalid");
+
+                pending.Completion.TrySetResult(response);
+            }
+            catch (Exception ex)
+            {
+                pending.Completion.TrySetException(ex);
+            }
+        }
+
         private void ReceiveChunk(PptbRpcChunk chunk)
         {
-            if (chunk == null || String.IsNullOrEmpty(chunk.Id) || chunk.Direction != "response")
+            if (chunk == null || String.IsNullOrEmpty(chunk.Id))
                 return;
 
             if (!_pending.TryGetValue(chunk.Id, out var pending))
@@ -107,7 +144,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 pending.NextSequence++;
 
                 if (chunk.Complete)
-                    pending.Completion.TrySetResult(String.Concat(pending.Chunks));
+                    pending.Completion.TrySetResult(JObject.Parse(String.Concat(pending.Chunks)));
             }
             catch (Exception ex)
             {
@@ -115,7 +152,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
         }
 
-        private static IReadOnlyList<PptbRpcChunk> Split(string payload, string id, string direction, int maxMessageSize)
+        private static IReadOnlyList<PptbRpcChunk> Split(string payload, string id, int maxMessageSize)
         {
             var elements = new List<string>();
             foreach (var codePoint in payload.EnumerateRunes())
@@ -138,7 +175,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     var candidate = new PptbRpcChunk
                     {
                         Id = id,
-                        Direction = direction,
                         Sequence = sequence,
                         Complete = false,
                         Data = data
@@ -161,7 +197,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                 chunks.Add(new PptbRpcChunk
                 {
                     Id = id,
-                    Direction = direction,
                     Sequence = sequence,
                     Complete = false,
                     Data = String.Concat(elements.Skip(offset).Take(best))
@@ -170,7 +205,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
 
             if (chunks.Count == 0)
-                chunks.Add(new PptbRpcChunk { Id = id, Direction = direction, Sequence = 0, Complete = true, Data = "" });
+                chunks.Add(new PptbRpcChunk { Id = id, Sequence = 0, Complete = true, Data = "" });
             else
                 chunks[chunks.Count - 1].Complete = true;
 
@@ -182,26 +217,36 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         private static int GetMessageSize(PptbRpcChunk chunk)
         {
+            return GetMessageSize(MethodName, chunk);
+        }
+
+        private static int GetMessageSize(string method, object parameters)
+        {
             var message = new JObject
             {
                 ["jsonrpc"] = "2.0",
-                ["method"] = MethodName,
-                ["params"] = JObject.FromObject(chunk, JsonSerializer.Create(SerializerSettings))
+                ["method"] = method,
+                ["params"] = JObject.FromObject(parameters, JsonSerializer.Create(SerializerSettings))
             };
             return Encoding.UTF8.GetByteCount(message.ToString(Formatting.None));
         }
 
         class PendingTransfer
         {
-            public TaskCompletionSource<string> Completion { get; } = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource<JObject> Completion { get; } = new TaskCompletionSource<JObject>(TaskCreationOptions.RunContinuationsAsynchronously);
             public List<string> Chunks { get; } = new List<string>();
             public int NextSequence { get; set; }
+        }
+
+        class PptbRpcMessage
+        {
+            public string Id { get; set; }
+            public JToken Data { get; set; }
         }
 
         class PptbRpcChunk
         {
             public string Id { get; set; }
-            public string Direction { get; set; }
             public int Sequence { get; set; }
             public bool Complete { get; set; }
             public string Data { get; set; }

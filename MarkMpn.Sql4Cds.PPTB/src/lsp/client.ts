@@ -10,6 +10,8 @@ import type {
     ConfirmationResult,
     ConnectionCompleteParams,
     DataverseChunkParams,
+    DataverseMessageParams,
+    DataverseResponse,
     DocumentListener,
     ExecuteBatchParams,
     ExecutionPlanOptions,
@@ -33,6 +35,7 @@ import type {
 const WORKER_ID = "sql4cds";
 const MAX_RPC_MESSAGE_SIZE = 32 * 1024 * 1024;
 const DATAVERSE_CHUNK_METHOD = "dataverse/executeBatch/chunk";
+const DATAVERSE_MESSAGE_METHOD = "dataverse/executeBatch/message";
 
 export interface ClientEvents {
     objectExplorerSessionCreated?(params: ObjectExplorerSessionCreated): void;
@@ -86,11 +89,11 @@ interface ChunkAssembly {
 
 class ChunkProtocolError extends Error {}
 
-function rpcMessageSize(method: string, params: DataverseChunkParams): number {
+function rpcMessageSize(method: string, params: DataverseChunkParams | DataverseMessageParams): number {
     return new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", method, params })).byteLength;
 }
 
-function splitRpcPayload(payload: string, id: string, direction: DataverseChunkParams["direction"]): DataverseChunkParams[] {
+function splitRpcPayload(payload: string, id: string): DataverseChunkParams[] {
     const codePoints = Array.from(payload);
     const chunks: DataverseChunkParams[] = [];
     let offset = 0;
@@ -104,7 +107,7 @@ function splitRpcPayload(payload: string, id: string, direction: DataverseChunkP
         while (low <= high) {
             const count = Math.floor((low + high) / 2);
             const data = codePoints.slice(offset, offset + count).join("");
-            const candidate: DataverseChunkParams = { id, direction, sequence, complete: false, data };
+            const candidate: DataverseChunkParams = { id, sequence, complete: false, data };
 
             if (rpcMessageSize(DATAVERSE_CHUNK_METHOD, candidate) <= MAX_RPC_MESSAGE_SIZE) {
                 best = count;
@@ -117,7 +120,6 @@ function splitRpcPayload(payload: string, id: string, direction: DataverseChunkP
         if (best === 0) throw new Error("Unable to fit a Dataverse RPC chunk within the PPTB message size limit");
         chunks.push({
             id,
-            direction,
             sequence,
             complete: false,
             data: codePoints.slice(offset, offset + best).join(""),
@@ -125,7 +127,7 @@ function splitRpcPayload(payload: string, id: string, direction: DataverseChunkP
         offset += best;
     }
 
-    if (chunks.length === 0) chunks.push({ id, direction, sequence: 0, complete: true, data: "" });
+    if (chunks.length === 0) chunks.push({ id, sequence: 0, complete: true, data: "" });
     else chunks[chunks.length - 1].complete = true;
 
     if (chunks.some((chunk) => rpcMessageSize(DATAVERSE_CHUNK_METHOD, chunk) > MAX_RPC_MESSAGE_SIZE)) {
@@ -156,6 +158,7 @@ export class Sql4CdsClient {
             },
             notifications: {
                 [DATAVERSE_CHUNK_METHOD]: (p) => this.receiveDataverseChunk(p as DataverseChunkParams),
+                [DATAVERSE_MESSAGE_METHOD]: (p) => this.receiveDataverseMessage(p as DataverseMessageParams),
                 "connection/complete": logRpcNotification("connection/complete", (p) => this.route(p as ConnectionCompleteParams, "connectionComplete")),
                 "objectexplorer/sessioncreated": logRpcNotification("objectexplorer/sessioncreated", (p) => this.events.objectExplorerSessionCreated?.(p as ObjectExplorerSessionCreated)),
                 "objectexplorer/expandCompleted": logRpcNotification("objectexplorer/expandCompleted", (p) => this.events.objectExplorerExpandComplete?.(p as ObjectExplorerExpandComplete)),
@@ -247,7 +250,7 @@ export class Sql4CdsClient {
     }
 
     private async notifyChunk(chunk: DataverseChunkParams): Promise<void> {
-        logRpc("debug", `-> ${DATAVERSE_CHUNK_METHOD} ${chunk.direction} chunk`, {
+        logRpc("debug", `-> ${DATAVERSE_CHUNK_METHOD} response chunk`, {
             id: chunk.id,
             sequence: chunk.sequence,
             complete: chunk.complete,
@@ -256,33 +259,57 @@ export class Sql4CdsClient {
         await this.rpc.notify(DATAVERSE_CHUNK_METHOD, chunk);
     }
 
-    private async sendDataverseResponse(id: string, payload: string): Promise<void> {
-        for (const chunk of splitRpcPayload(payload, id, "response")) await this.notifyChunk(chunk);
+    private async sendDataverseResponse(id: string, data: DataverseResponse): Promise<void> {
+        const message: DataverseMessageParams = { id, data };
+        if (rpcMessageSize(DATAVERSE_MESSAGE_METHOD, message) <= MAX_RPC_MESSAGE_SIZE) {
+            await this.notify(DATAVERSE_MESSAGE_METHOD, message);
+        } else {
+            for (const chunk of splitRpcPayload(JSON.stringify(data), id)) await this.notifyChunk(chunk);
+        }
+    }
+
+    private receiveDataverseMessage(message: DataverseMessageParams): void {
+        logRpc("debug", `<- ${DATAVERSE_MESSAGE_METHOD} notification`, message);
+        void this.processDataverseMessage(message).catch((error) => this.handleDataverseError(error, message));
+    }
+
+    private async processDataverseMessage(message: DataverseMessageParams): Promise<void> {
+        if (!message.id || !message.data || typeof message.data !== "object" || !("requests" in message.data)) {
+            throw new ChunkProtocolError("Invalid Dataverse RPC message");
+        }
+        if (rpcMessageSize(DATAVERSE_MESSAGE_METHOD, message) > MAX_RPC_MESSAGE_SIZE) {
+            throw new ChunkProtocolError("Received a Dataverse RPC message larger than the PPTB message size limit");
+        }
+        if (this.chunkAssemblies.delete(message.id)) {
+            throw new ChunkProtocolError("Received a non-chunked Dataverse RPC request during a chunked transfer");
+        }
+        await this.executeDataverseRequest(message.id, message.data);
+    }
+
+    private async handleDataverseError(error: unknown, message: Pick<DataverseMessageParams, "id">): Promise<void> {
+        logRpc("error", "Dataverse message processing failed", error);
+        if (!(error instanceof ChunkProtocolError) || !message.id) return;
+
+        try {
+            await this.sendDataverseResponse(message.id, { error: { message: error.message } });
+        } catch (responseError) {
+            logRpc("error", "Failed to send Dataverse error response", responseError);
+        }
     }
 
     private receiveDataverseChunk(chunk: DataverseChunkParams): void {
-        logRpc("debug", `<- ${DATAVERSE_CHUNK_METHOD} ${chunk.direction} chunk`, {
+        logRpc("debug", `<- ${DATAVERSE_CHUNK_METHOD} request chunk`, {
             id: chunk.id,
             sequence: chunk.sequence,
             complete: chunk.complete,
             bytes: rpcMessageSize(DATAVERSE_CHUNK_METHOD, chunk),
         });
 
-        void this.processDataverseChunk(chunk).catch(async (error) => {
-            logRpc("error", "Dataverse chunk processing failed", error);
-            if (!(error instanceof ChunkProtocolError) || chunk.direction !== "request" || !chunk.id) return;
-
-            try {
-                const message = error instanceof Error ? error.message : String(error);
-                await this.sendDataverseResponse(chunk.id, JSON.stringify({ error: { message } }));
-            } catch (responseError) {
-                logRpc("error", "Failed to send Dataverse chunk error response", responseError);
-            }
-        });
+        void this.processDataverseChunk(chunk).catch((error) => this.handleDataverseError(error, chunk));
     }
 
     private async processDataverseChunk(chunk: DataverseChunkParams): Promise<void> {
-        if (chunk.direction !== "request" || !chunk.id || !Number.isInteger(chunk.sequence) || chunk.sequence < 0 || typeof chunk.complete !== "boolean" || typeof chunk.data !== "string") {
+        if (!chunk.id || !Number.isInteger(chunk.sequence) || chunk.sequence < 0 || typeof chunk.complete !== "boolean" || typeof chunk.data !== "string") {
             throw new ChunkProtocolError("Invalid Dataverse RPC chunk");
         }
 
@@ -308,17 +335,27 @@ export class Sql4CdsClient {
 
         this.chunkAssemblies.delete(chunk.id);
 
-        let response: string;
+        let request: ExecuteBatchParams;
         try {
-            const request = JSON.parse(assembly.chunks.join("")) as ExecuteBatchParams;
+            request = JSON.parse(assembly.chunks.join("")) as ExecuteBatchParams;
+        } catch (error) {
+            await this.sendDataverseResponse(chunk.id, { error: { message: error instanceof Error ? error.message : String(error) } });
+            return;
+        }
+        await this.executeDataverseRequest(chunk.id, request);
+    }
+
+    private async executeDataverseRequest(id: string, request: ExecuteBatchParams): Promise<void> {
+        let response: DataverseResponse;
+        try {
             const result = await executeBatch(request);
-            response = JSON.stringify({ result });
+            response = { result };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            response = JSON.stringify({ error: { message } });
+            response = { error: { message } };
         }
 
-        await this.sendDataverseResponse(chunk.id, response);
+        await this.sendDataverseResponse(id, response);
     }
 
     private route<K extends keyof DocumentListener, P extends { ownerUri: string }>(params: P, event: K): void {
@@ -468,7 +505,7 @@ async function executeBatch(params: ExecuteBatchParams): Promise<WebApiResponse[
         headers: r.headers ?? undefined,
         body: r.body,
         contentId: r.contentId,
-        changesetId: r.changesetId,
+        ...(r.changesetId ? { changesetId: r.changesetId } : {}),
     }));
 
     const headers = { ...params.headers };

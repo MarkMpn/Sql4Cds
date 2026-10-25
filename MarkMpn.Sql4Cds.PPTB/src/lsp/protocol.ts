@@ -332,11 +332,17 @@ export interface ExecuteBatchParams {
 
 export interface DataverseChunkParams {
     id: string;
-    direction: "request" | "response";
     sequence: number;
     complete: boolean;
     data: string;
 }
+
+export interface DataverseMessageParams {
+    id: string;
+    data: ExecuteBatchParams | DataverseResponse;
+}
+
+export type DataverseResponse = { result: WebApiResponse[] } | { error: { message: string } };
 
 export interface WebApiResponse {
     contentId?: string;
