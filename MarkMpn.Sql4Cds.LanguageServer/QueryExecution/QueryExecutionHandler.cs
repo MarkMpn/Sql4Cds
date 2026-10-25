@@ -183,24 +183,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             });
             var progressHandler = (EventHandler<ProgressEventArgs>)((object sender, ProgressEventArgs progress) =>
             {
-                var progressParam = new Dictionary<string, object>
-                {
-                    ["msg"] = progress.Message,
-                };
-
-                if (progress.Progress != null)
-                    progressParam["progress"] = progress.Progress.Value * 100;
-
                 _ = _lsp.NotifyAsync("sql4cds/progress", progress.Message);
-
-                if (resultSetInProgress != null)
-                {
-                    _ = _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
-                    {
-                        OwnerUri = request.OwnerUri,
-                        ResultSetSummary = resultSetInProgress,
-                    });
-                }
             });
             var confirm = (ConfirmDmlStatementEventArgs e, int threshold, string operation) =>
             {
@@ -365,6 +348,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     ResultSetSummary = resultSet,
                                 });
 
+                                var lastUpdateTime = DateTime.UtcNow;
+
                                 while (await reader.ReadAsync())
                                 {
                                     var row = new object[reader.FieldCount];
@@ -376,6 +361,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     resultSet.ProviderSpecificValues.Add(providerSpecificRow);
 
                                     resultSet.RowCount++;
+
+                                    if (lastUpdateTime < DateTime.UtcNow.AddSeconds(-10))
+                                    {
+                                        await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                                        {
+                                            OwnerUri = request.OwnerUri,
+                                            ResultSetSummary = resultSet,
+                                        });
+                                        lastUpdateTime = DateTime.UtcNow;
+                                    }
                                 }
 
                                 resultSet.Complete = true;
