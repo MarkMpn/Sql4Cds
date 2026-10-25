@@ -15,6 +15,17 @@ export interface Range {
     end: Position;
 }
 
+export interface TextEdit {
+    range: Range;
+    newText: string;
+}
+
+export interface FormattingOptions {
+    tabSize: number;
+    insertSpaces: boolean;
+    addDisplayNames?: boolean;
+}
+
 export interface MarkupContent {
     kind: "plaintext" | "markdown";
     value: string;

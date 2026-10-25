@@ -7,6 +7,7 @@ using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
+using Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Tests
 {
@@ -17,6 +18,69 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         {
             var handler = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Scripting.QueryTransformHandler", true);
             return handler.GetMethod(method, BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, args);
+        }
+
+        [TestMethod]
+        public void DocumentFormattingReadsSyncedDocumentAndReturnsStandardTextEdits()
+        {
+            const string query = "-- comment \ud83d\ude00\r\nselect 1";
+            var edits = FormatDocument(query, new FormattingOptions { TabSize = 4, InsertSpaces = true });
+            Assert.AreEqual(1, edits.Length);
+            Assert.AreEqual(0, edits[0].Range.Start.Line);
+            Assert.AreEqual(0, edits[0].Range.Start.Character);
+            Assert.AreEqual(1, edits[0].Range.End.Line);
+            Assert.AreEqual(8, edits[0].Range.End.Character);
+            StringAssert.Contains(edits[0].NewText, "-- comment \ud83d\ude00");
+            StringAssert.Contains(edits[0].NewText, "SELECT");
+            Assert.AreEqual(0, FormatDocument(edits[0].NewText, new FormattingOptions()).Length);
+            Assert.AreEqual(0, FormatDocument(" \n", new FormattingOptions()).Length);
+        }
+
+        [TestMethod]
+        public void DocumentFormattingReadsDisplayNamesFromOptionsAndRequiresAConnection()
+        {
+            var options = Newtonsoft.Json.JsonConvert.DeserializeObject<FormattingOptions>(
+                "{\"tabSize\":4,\"insertSpaces\":true,\"addDisplayNames\":true}");
+            Assert.IsTrue((bool)options.OtherOptions["addDisplayNames"]);
+            var error = Assert.ThrowsException<TargetInvocationException>(() => FormatDocument("SELECT name FROM account", options));
+            Assert.IsInstanceOfType<InvalidOperationException>(error.InnerException);
+            StringAssert.Contains(error.InnerException.Message, "connection");
+            options.OtherOptions["addDisplayNames"] = false;
+            Assert.AreEqual(1, FormatDocument("select 1", options).Length);
+            options.OtherOptions["addDisplayNames"] = "true";
+            error = Assert.ThrowsException<TargetInvocationException>(() => FormatDocument("select 1", options));
+            Assert.IsInstanceOfType<ArgumentException>(error.InnerException);
+        }
+
+        [TestMethod]
+        public void InitializeAdvertisesStandardDocumentFormattingCapability()
+        {
+            var assembly = typeof(WebApiMetadataQuery).Assembly;
+            var chunking = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Pptb.PptbRpcChunking", true));
+            var type = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Capabilities.CapabilitiesHandler", true);
+            var handler = Activator.CreateInstance(type, new object[] { null, chunking });
+            var result = type.GetMethod("HandleInitialize", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(handler, new object[] { new InitializeParams() });
+            var json = JObject.FromObject(result, Newtonsoft.Json.JsonSerializer.Create(new Newtonsoft.Json.JsonSerializerSettings
+            {
+                ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
+            }));
+            Assert.IsTrue(json["capabilities"]["documentFormattingProvider"].Value<bool>());
+        }
+
+        private static TextEdit[] FormatDocument(string query, FormattingOptions options)
+        {
+            var assembly = typeof(WebApiMetadataQuery).Assembly;
+            var documentsType = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Workspace.TextDocumentManager", true);
+            var documents = Activator.CreateInstance(documentsType);
+            const string uri = "pptb://query/1";
+            documentsType.GetMethod("SetContent").Invoke(documents, new object[] { uri, query });
+            var connectionsType = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.ConnectionManager", true);
+            var connections = Activator.CreateInstance(connectionsType, new object[] { null, null, null });
+            var handlerType = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Scripting.QueryTransformHandler", true);
+            var handler = Activator.CreateInstance(handlerType, new[] { connections, documents });
+            return (TextEdit[])handlerType.GetMethod("FormatDocument", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(handler,
+                new object[] { new DocumentFormattingParams { TextDocument = new TextDocumentIdentifier { Uri = new Uri(uri) }, Options = options } });
         }
 
         [TestMethod]

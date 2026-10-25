@@ -46,6 +46,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
                         WorkDoneProgress = false
                     },
                     HoverProvider = true,
+                    DocumentFormattingProvider = true,
                     SignatureHelpProvider = new SignatureHelpOptions
                     {
                         WorkDoneProgress = false

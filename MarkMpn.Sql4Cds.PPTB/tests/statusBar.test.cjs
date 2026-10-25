@@ -90,7 +90,11 @@ function setup(pinned = true) {
     const { App } = load("app.ts", {
         "./styles.css": {},
         "./connections": { ConnectionRegistry: class { constructor() { return registry; } } },
-        "./editor/monacoSetup": {},
+        "./editor/monacoSetup": { monaco: { Range: class {
+            constructor(startLineNumber, startColumn, endLineNumber, endColumn) {
+                Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
+            }
+        } } },
         "./lsp/client": { Sql4CdsClient: class { constructor() { return client; } } },
         "./lsp/protocol": {},
         "./query/queryTab": {},
@@ -130,6 +134,7 @@ function setup(pinned = true) {
                             onDidChangeContent: (callback) => { onChange = callback; return { dispose() {} }; },
                             setValue: (text) => { value = text; version++; onChange?.(); },
                             getVersionId: () => version,
+                            getOptions: () => ({ tabSize: 4, insertSpaces: true }),
                             isDisposed: () => false,
                             getFullModelRange: () => ({ fullModel: true }),
                             getValueInRange: () => value,
@@ -714,7 +719,7 @@ test("Save and Save As retain their distinct handlers", () => {
     assert.equal(calls[1].saveAs, true);
 });
 
-test("format uses the selected range, adds undo stops, and never overwrites concurrent edits", async () => {
+test("format requests document formatting options, applies LSP edits with undo stops, and preserves concurrent edits", async () => {
     const { app, client, createTab } = setup();
     const { tab } = createTab();
     tab.model.setValue("select 1");
@@ -725,19 +730,33 @@ test("format uses the selected range, adds undo stops, and never overwrites conc
     tab.model.pushStackElement = () => undoStops++;
     tab.model.pushEditOperations = (_selection, operations) => edits.push(operations);
     const calls = [];
-    client.transformQuery = async (...args) => { calls.push(args); return ["SELECT 1;"]; };
+    client.formatDocument = async (...args) => {
+        calls.push(args);
+        return [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 8 } }, newText: "SELECT 1;" }];
+    };
     await app.transformQuery("format");
-    assert.deepEqual(calls[0], [tab.uri, "select 1", "format", "fetchxml", false]);
+    assert.equal(calls[0][0], tab.uri);
+    assert.equal(calls[0][1].tabSize, 4);
+    assert.equal(calls[0][1].insertSpaces, true);
+    assert.equal(calls[0][1].addDisplayNames, false);
     assert.equal(undoStops, 2);
-    assert.equal(edits[0][0].range, range);
+    assert.equal(edits[0][0].range.startLineNumber, 1);
+    assert.equal(edits[0][0].range.startColumn, 1);
+    assert.equal(edits[0][0].range.endColumn, 9);
     assert.equal(edits[0][0].text, "SELECT 1;");
+    tab.connected = true;
+    await app.transformQuery("format", true);
+    assert.equal(calls[1][1].addDisplayNames, true);
 
     const notifications = [];
     const state = setup();
     const second = state.createTab().tab;
     state.app.editor = { getSelection: () => null };
     state.window.toolboxAPI = { utils: { showNotification: async (notification) => notifications.push(notification) } };
-    state.client.transformQuery = async () => { second.model.setValue("select 2"); return ["SELECT 1;"]; };
+    state.client.formatDocument = async () => {
+        second.model.setValue("select 2");
+        return [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: "SELECT 1;" }];
+    };
     await state.app.transformQuery("format");
     assert.equal(second.model.getValue(), "select 2");
     assert.match(notifications[0].body, /query changed/);
@@ -756,7 +775,7 @@ test("conversion remembers the selected target and opens read-only preview conte
     app.convertTarget = "m";
     app.updateToolbar();
     await app.transformQuery("convert");
-    assert.equal(calls[0][3], "m");
+    assert.equal(calls[0][2], "m");
     assert.deepEqual(previews[0], ["let Source = 1 in Source", "powerquery", "Power BI (M)"]);
     assert.equal(elements.get("btn-convert-m").attributes["aria-checked"], "true");
     assert.equal(elements.get("btn-convert").title, "Convert to Power BI (M)");

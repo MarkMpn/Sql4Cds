@@ -28,6 +28,23 @@ function loadModule(relativePath, globals = {}) {
 
 const reference = { dataSource: "contoso_2", id: "00000000-0000-0000-0000-000000000123", isNull: false, logicalName: "account" };
 
+test("formatting sends standard DocumentFormattingParams and returns TextEdits", async () => {
+    const { Sql4CdsClient } = loadModule("lsp/client.ts", { console });
+    const client = new Sql4CdsClient({});
+    const calls = [];
+    const edits = [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 8 } }, newText: "SELECT 1;" }];
+    client.session = { request: async (method, params) => { calls.push({ method, params }); return edits; } };
+    for (const addDisplayNames of [false, true]) {
+        const options = { tabSize: 4, insertSpaces: true, addDisplayNames };
+        assert.equal(await client.formatDocument("pptb://query/1", options), edits);
+        const call = calls.at(-1);
+        assert.equal(call.method, "textDocument/formatting");
+        assert.equal(call.params.textDocument.uri, "pptb://query/1");
+        assert.equal(call.params.options, options);
+        assert.deepEqual(Object.keys(call.params).sort(), ["options", "textDocument"]);
+    }
+});
+
 test("recognizes only non-null entity-reference objects", () => {
     const { isEntityReferenceValue } = loadModule("lsp/protocol.ts");
     assert.equal(isEntityReferenceValue(reference), true);

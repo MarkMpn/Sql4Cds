@@ -35,6 +35,17 @@ export function configureMonaco(client: Sql4CdsClient, isConnected: (uri: string
         },
     };
 
+    monaco.languages.registerDocumentFormattingEditProvider("sql", {
+        async provideDocumentFormattingEdits(model, options) {
+            const edits = await client.formatDocument(model.uri.toString(), {
+                tabSize: options.tabSize,
+                insertSpaces: options.insertSpaces,
+                addDisplayNames: false,
+            });
+            return edits?.map((edit) => ({ range: toMonacoRange(edit.range), text: edit.newText })) ?? [];
+        },
+    });
+
     monaco.languages.registerCompletionItemProvider("sql", {
         triggerCharacters: ["."],
         async provideCompletionItems(model, position, context) {

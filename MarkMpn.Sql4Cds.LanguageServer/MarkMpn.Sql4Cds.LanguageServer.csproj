@@ -13,7 +13,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>sql4cds-lsp</ToolCommandName>
     <PackageId>MarkMpn.Sql4Cds.LanguageServer</PackageId>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Authors>Mark Carrington</Authors>
     <Description>SQL 4 CDS language server, used by the SQL 4 CDS Power Platform ToolBox tool</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

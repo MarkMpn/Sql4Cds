@@ -3,6 +3,8 @@ import type {
     CompletionItem,
     CompletionList,
     Hover,
+    FormattingOptions,
+    TextEdit,
     SignatureHelp,
     ConfirmationParams,
     ConfirmationResult,
@@ -188,6 +190,7 @@ export class Sql4CdsClient {
                     hover: { contentFormat: ["markdown", "plaintext"] },
                     signatureHelp: { signatureInformation: { documentationFormat: ["plaintext"] } },
                     publishDiagnostics: {},
+                    formatting: { dynamicRegistration: false },
                 },
                 workspace: { configuration: false, didChangeConfiguration: { dynamicRegistration: false } },
                 experimental: { pptb: { maxMessageSizeBytes: MAX_RPC_MESSAGE_SIZE } },
@@ -330,8 +333,12 @@ export class Sql4CdsClient {
         return this.notify("workspace/didChangeConfiguration", { settings: { SQL4CDS: settings } });
     }
 
-    transformQuery(ownerUri: string, query: string, operation: "format" | "convert", target: "fetchxml" | "m", addDisplayNames: boolean): Promise<string[]> {
-        return this.request("sql4cds/transform", { ownerUri, query, operation, target, addDisplayNames });
+    transformQuery(ownerUri: string, query: string, target: "fetchxml" | "m"): Promise<string[]> {
+        return this.request("sql4cds/transform", { ownerUri, query, target });
+    }
+
+    formatDocument(uri: string, options: FormattingOptions): Promise<TextEdit[] | null> {
+        return this.request("textDocument/formatting", { textDocument: { uri }, options });
     }
 
     // Text document synchronization. The server only supports full document sync.

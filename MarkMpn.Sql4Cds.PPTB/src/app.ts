@@ -681,14 +681,24 @@ class App implements QueryTabHost {
         this.transforming = true;
         this.updateToolbar();
         try {
-            const result = await this.client.transformQuery(tab.uri, query, operation, target, addDisplayNames);
             if (operation === "format") {
+                const options = tab.model.getOptions();
+                const edits = await this.client.formatDocument(tab.uri, {
+                    tabSize: options.tabSize,
+                    insertSpaces: options.insertSpaces,
+                    addDisplayNames,
+                });
                 if (tab.model.isDisposed()) throw new Error("The query tab was closed while formatting");
                 if (tab.model.getVersionId() !== version) throw new Error("The query changed while formatting. Please try again.");
+                if (!edits?.length) return;
                 tab.model.pushStackElement();
-                tab.model.pushEditOperations([], [{ range, text: result[0] }], () => null);
+                tab.model.pushEditOperations([], edits.map((edit) => ({
+                    range: new monaco.Range(edit.range.start.line + 1, edit.range.start.character + 1, edit.range.end.line + 1, edit.range.end.character + 1),
+                    text: edit.newText,
+                })), () => null);
                 tab.model.pushStackElement();
             } else {
+                const result = await this.client.transformQuery(tab.uri, query, target);
                 for (const text of result)
                     this.openPreview(text, target === "fetchxml" ? "xml" : "powerquery", target === "fetchxml" ? "FetchXML" : "Power BI (M)");
             }

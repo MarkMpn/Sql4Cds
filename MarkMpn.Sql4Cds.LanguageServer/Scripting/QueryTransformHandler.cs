@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
+using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using MarkMpn.Sql4Cds.XTB;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
@@ -16,46 +17,78 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
     class QueryTransformHandler : IJsonRpcMethodHandler
     {
         private readonly ConnectionManager _connections;
+        private readonly TextDocumentManager _documents;
 
-        public QueryTransformHandler(ConnectionManager connections)
+        public QueryTransformHandler(ConnectionManager connections, TextDocumentManager documents)
         {
             _connections = connections;
+            _documents = documents;
         }
 
         public void Initialize(JsonRpc lsp)
         {
             lsp.AddAsyncHandler(new LspRequest<QueryTransformParams, string[]>("sql4cds/transform"),
                 request => Task.Run(() => Transform(request)));
+            lsp.AddAsyncHandler(Methods.TextDocumentFormatting,
+                request => Task.Run(() => FormatDocument(request)));
+        }
+
+        private TextEdit[] FormatDocument(DocumentFormattingParams request)
+        {
+            var query = _documents.GetContent(request.TextDocument.Uri.ToString());
+            var addDisplayNames = false;
+            if (request.Options.OtherOptions?.TryGetValue("addDisplayNames", out var option) == true)
+                addDisplayNames = option is bool value ? value : throw new ArgumentException("options.addDisplayNames must be a boolean");
+            if (String.IsNullOrWhiteSpace(query)) return Array.Empty<TextEdit>();
+
+            string formatted;
+            if (!addDisplayNames)
+            {
+                formatted = Format(query, null);
+            }
+            else
+            {
+                var session = _connections.GetConnection(request.TextDocument.Uri.ToString())
+                    ?? throw new InvalidOperationException("Select a connection first");
+                var dataSources = _connections.GetAllConnections();
+                using var connection = new Sql4CdsConnection(dataSources);
+                connection.ChangeDatabase(session.DataSource.Name);
+                connection.UseTDSEndpoint = false;
+                formatted = Format(query, new FormatterOptions
+                {
+                    AddDisplayNames = true,
+                    ThrowOnError = true,
+                    Connection = connection,
+                    DataSources = dataSources
+                });
+            }
+
+            if (formatted == query) return Array.Empty<TextEdit>();
+            var lines = query.Split('\n');
+            return new[]
+            {
+                new TextEdit
+                {
+                    Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                    {
+                        Start = new Position(0, 0),
+                        End = new Position(lines.Length - 1, lines[lines.Length - 1].Length)
+                    },
+                    NewText = formatted
+                }
+            };
         }
 
         private string[] Transform(QueryTransformParams request)
         {
             if (String.IsNullOrWhiteSpace(request.Query))
                 throw new ArgumentException("Select or enter a query first");
-
-            if (request.Operation == "format" && !request.AddDisplayNames)
-                return new[] { Format(request.Query, null) };
-
             var session = _connections.GetConnection(request.OwnerUri)
                 ?? throw new InvalidOperationException("Select a connection first");
             var dataSources = _connections.GetAllConnections();
             using var connection = new Sql4CdsConnection(dataSources);
             connection.ChangeDatabase(session.DataSource.Name);
             connection.UseTDSEndpoint = false;
-
-            if (request.Operation == "format")
-            {
-                return new[] { Format(request.Query, new FormatterOptions
-                {
-                    AddDisplayNames = true,
-                    ThrowOnError = true,
-                    Connection = connection,
-                    DataSources = dataSources
-                }) };
-            }
-
-            if (request.Operation != "convert")
-                throw new ArgumentException("Unknown query transformation");
 
             if (request.Target == "m")
                 return new[] { ConvertToM(request.Query, session.DataSource.ServerName) };
@@ -97,7 +130,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
                 throw new ArgumentException(String.Join("\n", errors.Select(error => $"Line {error.Line}: {error.Message}")));
             if (options?.AddDisplayNames == true &&
                 ((TSqlScript)fragment).Batches.SelectMany(batch => batch.Statements).Any(statement => !(statement is SelectStatement select) || select.Into != null))
-                throw new NotSupportedException("Add Display Names supports SELECT statements only. Select the SELECT statement and try again.");
+                throw new NotSupportedException("Add Display Names supports documents containing SELECT statements only.");
             return Formatter.Format(query, options);
         }
 
@@ -132,8 +165,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
     {
         public string OwnerUri { get; set; }
         public string Query { get; set; }
-        public string Operation { get; set; }
         public string Target { get; set; }
-        public bool AddDisplayNames { get; set; }
     }
 }

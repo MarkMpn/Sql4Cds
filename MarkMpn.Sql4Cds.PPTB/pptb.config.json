@@ -3,7 +3,7 @@
         "sql4cds": {
             "kind": "dotnet-tool",
             "packageId": "MarkMpn.Sql4Cds.LanguageServer",
-            "packageVersion": "0.1.1",
+            "packageVersion": "0.1.2",
             "command": "sql4cds-lsp",
             "dotnet": {
                 "targetFramework": "net10.0",
