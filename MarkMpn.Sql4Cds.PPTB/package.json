@@ -54,7 +54,7 @@
         "publish-package": "npm run build && npm run version-stable && npm publish --access public"
     },
     "devDependencies": {
-        "@pptb/types": "^1.2.7",
+        "@pptb/types": "1.2.8-beta.1",
         "monaco-editor": "^0.52.2",
         "typescript": "^5.0.0",
         "vite": "^6.4.1"

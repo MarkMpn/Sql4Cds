@@ -51,12 +51,11 @@ async function createClient(responseHeaders = {}, options = {}) {
 function batch(transaction = false, continueOnError = false) {
     return {
         target: 2,
-        transaction,
         continueOnError,
         headers: { MSCRMCallerID: "00000000-0000-0000-0000-000000000123", prefer: "return=representation" },
         requests: [
-            { method: "PATCH", url: "accounts(123)", contentId: "1", headers: { "If-Match": "*" }, body: "{}" },
-            { method: "DELETE", url: "accounts(456)", contentId: "2", headers: null },
+            { method: "PATCH", url: "accounts(123)", contentId: "1", changesetId: transaction ? "tx-1" : undefined, headers: { "If-Match": "*" }, body: "{}" },
+            { method: "DELETE", url: "accounts(456)", contentId: "2", changesetId: transaction ? "tx-1" : undefined, headers: null },
         ],
     };
 }
@@ -80,11 +79,11 @@ for (const transaction of [false, true]) {
             const params = batch(transaction, continueOnError);
             await handlers.requests["dataverse/executeBatch"](params, {});
             const call = calls[0];
-            assert.equal(call.transaction, transaction);
+            assert.equal(call.transaction, false);
             const [requests, target, headers] = call.args;
             assert.equal(target, 2);
             assert.equal(headers.MSCRMCallerID, params.headers.MSCRMCallerID);
-            assert.equal(headers.prefer, !transaction && continueOnError
+            assert.equal(headers.prefer, continueOnError
                 ? "return=representation,odata.continue-on-error" : "return=representation");
             assert.equal(headers.Prefer, undefined);
             assert.equal(params.headers.prefer, "return=representation");
@@ -93,6 +92,8 @@ for (const transaction of [false, true]) {
             assert.equal(requests[0].headers.Prefer, undefined);
             assert.equal(requests[0].headers.prefer, undefined);
             assert.equal(requests[1].headers, undefined);
+            assert.equal(requests[0].changesetId, transaction ? "tx-1" : undefined);
+            assert.equal(requests[1].changesetId, requests[0].changesetId);
         });
     }
 }
@@ -116,7 +117,7 @@ test("batch headers survive chunked RPC reassembly", { timeout: 5000 }, async ()
     const { handlers, calls, notifications, response } = await createClient({
         batchHeaders: { "x-ms-dop-hint": "8", "Retry-After": "12" },
     });
-    const params = batch(false, true);
+    const params = batch(true, true);
     const payload = JSON.stringify(params);
     const split = payload.indexOf("MSCRMCallerID") + 5;
     const handler = handlers.notifications["dataverse/executeBatch/chunk"];
@@ -126,6 +127,9 @@ test("batch headers survive chunked RPC reassembly", { timeout: 5000 }, async ()
     await response;
     assert.equal(calls[0].args[2].MSCRMCallerID, params.headers.MSCRMCallerID);
     assert.equal(calls[0].args[2].prefer, "return=representation,odata.continue-on-error");
+    assert.equal(calls[0].transaction, false);
+    assert.equal(calls[0].args[0][0].changesetId, "tx-1");
+    assert.equal(calls[0].args[0][1].changesetId, "tx-1");
     const result = JSON.parse(notifications.map((n) => n.data).join(""));
     assert.equal(result.result.length, 2);
     assert.equal(result.result[0].status, 204);
@@ -196,7 +200,7 @@ test("does not retry a 429 unless it is in the trailing result segment", async (
 test("retries transactional batches only as a whole", async () => {
     const delays = [];
     const { handlers, calls } = await createClient((requests, transaction, callNumber) => {
-        assert.equal(transaction, true);
+        assert.equal(transaction, false);
         if (callNumber === 1)
             return requests.map((request, index) => ({
                 contentId: request.contentId,
@@ -219,7 +223,7 @@ test("retries transactional batches only as a whole", async () => {
 
 test("retries a wholly throttled transaction as a whole", async () => {
     const { handlers, calls } = await createClient((requests, transaction, callNumber) => {
-        assert.equal(transaction, true);
+        assert.equal(transaction, false);
         return requests.map((request) => ({
             contentId: request.contentId,
             status: callNumber === 1 ? 429 : 204,
@@ -246,6 +250,32 @@ test("leaves the final throttling responses after the retry limit", async () => 
 
     assert.equal(calls.length, 11);
     assert.deepEqual(JSON.parse(JSON.stringify(results)).map((result) => result.status), [429, 429]);
+});
+
+test("mixed batch forwards changesets and retries only whole trailing changesets", async () => {
+    const { handlers, calls } = await createClient((requests, transaction, callNumber) => {
+        assert.equal(transaction, false);
+        return requests.map((request, index) => ({
+            contentId: request.contentId,
+            status: callNumber === 1 && index >= 3 ? 429 : 204,
+            batchHeaders: { "Retry-After": "0" },
+        }));
+    }, { setTimeout: (callback) => callback() });
+    const params = batch(false, true);
+    params.requests = [
+        { method: "GET", url: "WhoAmI", contentId: "1" },
+        { method: "PATCH", url: "accounts(1)", contentId: "2", changesetId: "tx-a" },
+        { method: "DELETE", url: "accounts(2)", contentId: "3", changesetId: "tx-a" },
+        { method: "PATCH", url: "accounts(3)", contentId: "4", changesetId: "tx-b" },
+        { method: "DELETE", url: "accounts(4)", contentId: "5", changesetId: "tx-b" },
+    ];
+    const results = await handlers.requests["dataverse/executeBatch"](params, {});
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[0].args[0].map((r) => r.changesetId), [undefined, "tx-a", "tx-a", "tx-b", "tx-b"]);
+    assert.deepEqual(calls[1].args[0].map((r) => r.contentId), ["4", "5"]);
+    assert.deepEqual(calls[1].args[0].map((r) => r.changesetId), ["tx-b", "tx-b"]);
+    assert.equal(calls[1].args[2].prefer, "return=representation,odata.continue-on-error");
+    assert.equal(results.length, 5);
 });
 
 test("does not retry throttling responses without a valid batch Retry-After", async () => {

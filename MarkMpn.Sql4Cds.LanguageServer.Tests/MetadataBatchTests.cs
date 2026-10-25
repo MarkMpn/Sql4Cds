@@ -192,10 +192,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             public List<bool> Transactions { get; } = new List<bool>();
             public bool FailOptionSets { get; set; }
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
                 Batches.Add(requests.ToArray());
-                Transactions.Add(transaction);
+                Transactions.Add(requests.All(r => r.ChangesetId != null));
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(requests.Select(Response).ToArray());
             }
 

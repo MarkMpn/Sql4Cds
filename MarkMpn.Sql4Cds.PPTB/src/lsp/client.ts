@@ -451,16 +451,17 @@ async function executeBatch(params: ExecuteBatchParams): Promise<WebApiResponse[
         headers: r.headers ?? undefined,
         body: r.body,
         contentId: r.contentId,
+        changesetId: r.changesetId,
     }));
 
     const headers = { ...params.headers };
-    if (!params.transaction && params.continueOnError && requests.length > 1) {
+    if (params.continueOnError && requests.length > 1) {
         const preferKey = Object.keys(headers).find((key) => key.toLowerCase() === "prefer") ?? "Prefer";
         headers[preferKey] = headers[preferKey] ? `${headers[preferKey]},odata.continue-on-error` : "odata.continue-on-error";
     }
 
     try {
-        const results = await executeBatchWithRetry(requests, params.transaction, params.target, headers);
+        const results = await executeBatchWithRetry(requests, params.target, headers);
 
         return results.map((r: DataverseAPI.BatchResult & { batchHeaders?: Record<string, string> }) => ({
             contentId: r.contentId,
@@ -490,7 +491,6 @@ const MAX_BATCH_RETRY_COUNT = 10;
 
 async function executeBatchWithRetry(
     requests: DataverseAPI.BatchRequest[],
-    transaction: boolean,
     target: DataverseAPI.ConnectionTarget,
     headers: Record<string, string>,
 ): Promise<(DataverseAPI.BatchResult & { batchHeaders?: Record<string, string> })[]> {
@@ -499,9 +499,7 @@ async function executeBatchWithRetry(
     let retryCount = 0;
 
     while (true) {
-        const results = (transaction
-            ? await window.dataverseAPI.executeTransaction(pendingRequests, target, headers)
-            : await window.dataverseAPI.executeBatch(pendingRequests, target, headers)) as (DataverseAPI.BatchResult & { batchHeaders?: Record<string, string> })[];
+        const results = await window.dataverseAPI.executeBatch(pendingRequests, target, headers);
 
         if (results.length !== pendingRequests.length || retryCount >= MAX_BATCH_RETRY_COUNT) {
             return completedResults.concat(results);
@@ -511,11 +509,12 @@ async function executeBatchWithRetry(
         while (retryStart > 0 && results[retryStart - 1].status === 429)
             retryStart--;
 
-        // A transaction must be retried as a whole; never retry only part of one.
-        if (transaction && retryStart !== 0)
+        if (retryStart === results.length)
             return completedResults.concat(results);
 
-        if (retryStart === results.length)
+        // Never replay only part of an atomic changeset.
+        const changesetId = pendingRequests[retryStart].changesetId;
+        if (changesetId && pendingRequests.slice(0, retryStart).some((request) => request.changesetId === changesetId))
             return completedResults.concat(results);
 
         const retryAfter = results

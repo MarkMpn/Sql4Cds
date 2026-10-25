@@ -20,7 +20,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var service = new PptbOrganizationService(new ResponseTransport(response), "https://example.invalid", "test");
             var clone = (PptbOrganizationService)service.Clone();
 
-            service.Send(new[] { new WebApiRequest { Method = "GET", Url = "accounts" } }, transaction);
+            service.Send(new[] { new WebApiRequest { Method = "GET", Url = "accounts", ChangesetId = transaction ? "transaction" : null } });
 
             Assert.AreEqual(8, service.RecommendedDegreesOfParallelism);
             Assert.AreEqual(8, clone.RecommendedDegreesOfParallelism);
@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 _response = response;
             }
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(new[] { _response });
             }

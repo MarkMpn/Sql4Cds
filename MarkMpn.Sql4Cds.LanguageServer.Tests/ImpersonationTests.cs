@@ -34,7 +34,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             client.CallerId = callerId;
             Assert.AreEqual(callerId, client.CallerId);
             Assert.IsNull(transport.Requests);
-            service.Send(requests, transaction);
+            foreach (var operation in requests)
+                operation.ChangesetId = transaction ? "transaction" : null;
+            service.Send(requests);
             Assert.AreEqual(transaction, transport.Transaction);
             Assert.AreEqual(callerId.ToString("D"), transport.Headers["MSCRMCallerID"]);
             Assert.IsFalse(transport.Requests.Any(r => r.Headers?.ContainsKey("MSCRMCallerID") == true));
@@ -48,7 +50,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
 
             var previousHeaders = transport.Headers;
             client.CallerId = Guid.Empty;
-            service.Send(requests, transaction);
+            service.Send(requests);
             Assert.AreEqual(0, transport.Headers.Count);
             Assert.AreEqual(callerId.ToString("D"), previousHeaders["MSCRMCallerID"]);
             Assert.IsFalse(transport.Requests.Any(r => r.Headers?.ContainsKey("MSCRMCallerID") == true));
@@ -80,10 +82,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             public bool Transaction;
             public IReadOnlyDictionary<string, string> Headers;
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
                 Requests = requests;
-                Transaction = transaction;
+                Transaction = requests.All(r => r.ChangesetId != null);
                 Headers = headers;
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(requests.Select(r => new WebApiResponse
                 {

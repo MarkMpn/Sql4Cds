@@ -156,7 +156,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// <summary>
         /// Sends a set of requests to the PPTB host to execute
         /// </summary>
-        public IReadOnlyList<WebApiResponse> Send(IReadOnlyList<WebApiRequest> requests, bool transaction = false, bool continueOnError = false)
+        public IReadOnlyList<WebApiResponse> Send(IReadOnlyList<WebApiRequest> requests, bool continueOnError = false)
         {
             if (requests.Count == 0)
                 return Array.Empty<WebApiResponse>();
@@ -171,7 +171,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             try
             {
                 // Run the RPC call on the thread pool to avoid deadlocks if the caller has a synchronization context
-                responses = Task.Run(() => _transport.ExecuteBatchAsync(requests, transaction, continueOnError, headers, CancellationToken.None)).GetAwaiter().GetResult();
+                responses = Task.Run(() => _transport.ExecuteBatchAsync(requests, continueOnError, headers, CancellationToken.None)).GetAwaiter().GetResult();
             }
             catch (RemoteInvocationException ex)
             {
@@ -188,13 +188,36 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     Volatile.Write(ref _parallelism.Value, recommendedDop);
             }
 
-            if (!transaction && !continueOnError && responses.Count < requests.Count && responses.Count > 0 && !responses[responses.Count - 1].IsSuccess)
+            // A failed changeset can return only its failing operation. Restore the other slots so
+            // later batch responses still line up with their SDK requests.
+            if (responses.Count < requests.Count && responses.All(r => r.ContentId != null) && requests.All(r => r.ContentId != null))
+            {
+                var byId = responses.ToDictionary(r => r.ContentId);
+                var changesetFaults = requests
+                    .Where(r => r.ChangesetId != null && byId.TryGetValue(r.ContentId, out var response) && !response.IsSuccess)
+                    .GroupBy(r => r.ChangesetId)
+                    .ToDictionary(g => g.Key, g => byId[g.First().ContentId]);
+                var aligned = new List<WebApiResponse>();
+                foreach (var operation in requests)
+                {
+                    if (byId.TryGetValue(operation.ContentId, out var response))
+                        aligned.Add(response);
+                    else if (operation.ChangesetId != null && changesetFaults.TryGetValue(operation.ChangesetId, out var fault))
+                        aligned.Add(fault);
+                    else
+                        break;
+                }
+                if (aligned.Count >= responses.Count)
+                    responses = aligned;
+            }
+
+            if (!continueOnError && responses.Count < requests.Count && responses.Count > 0 && !responses[responses.Count - 1].IsSuccess)
             {
                 // The batch stopped at the first error - that's all we need to report
                 return responses;
             }
 
-            if (responses.Count != requests.Count && !transaction)
+            if (responses.Count != requests.Count)
                 throw CreateFault($"Expected {requests.Count} responses but received {responses.Count}");
 
             // Match up responses with requests by content ID in case they come back in a different order
@@ -257,6 +280,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             /// </summary>
             public Func<OrganizationResponse> Custom { get; set; }
 
+            public bool IsTransaction { get; set; }
+
             public OrganizationResponse ExecuteStandalone(PptbOrganizationService svc)
             {
                 if (Custom != null)
@@ -268,11 +293,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
             public OrganizationResponse MapResponses(IReadOnlyList<WebApiResponse> responses)
             {
-                foreach (var response in responses)
-                    response.EnsureSuccess();
+                if (!IsTransaction)
+                {
+                    foreach (var response in responses)
+                        response.EnsureSuccess();
 
-                if (responses.Count != Requests.Count)
-                    throw CreateFault($"Expected {Requests.Count} responses but received {responses.Count}");
+                    if (responses.Count != Requests.Count)
+                        throw CreateFault($"Expected {Requests.Count} responses but received {responses.Count}");
+                }
 
                 return Map(responses);
             }
@@ -348,7 +376,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                     return CustomOperation(() => ExecuteMultiple(As<ExecuteMultipleRequest>(request)));
 
                 case "ExecuteTransaction":
-                    return CustomOperation(() => ExecuteTransaction(As<ExecuteTransactionRequest>(request)));
+                    return PrepareTransaction(As<ExecuteTransactionRequest>(request));
 
                 case "RetrieveMetadataChanges":
                     return MetadataQuery.PrepareRetrieveMetadataChanges(As<Microsoft.Xrm.Sdk.Messages.RetrieveMetadataChangesRequest>(request));
@@ -1251,7 +1279,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             var requests = request.Requests ?? new OrganizationRequestCollection();
             var prepared = requests.Select(Prepare).ToList();
             if (prepared.Any(op => op.Custom != null))
-                throw CreateFault("ExecuteMultiple cannot contain ExecuteMultiple or ExecuteTransaction requests");
+                throw CreateFault("ExecuteMultiple cannot contain ExecuteMultiple requests");
 
             var responses = Send(prepared.SelectMany(op => op.Requests).ToList(), continueOnError: settings.ContinueOnError);
             var items = new ExecuteMultipleResponseItemCollection();
@@ -1282,29 +1310,35 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             return result;
         }
 
-        private OrganizationResponse ExecuteTransaction(ExecuteTransactionRequest request)
+        private PreparedOperation PrepareTransaction(ExecuteTransactionRequest request)
         {
             var requests = request.Requests ?? new OrganizationRequestCollection();
             var prepared = requests.Select(Prepare).ToList();
-            var responses = new OrganizationResponseCollection();
+            if (prepared.Any(op => op.Custom != null || op.IsTransaction))
+                throw CreateFault("ExecuteTransaction cannot contain ExecuteMultiple or ExecuteTransaction requests");
+            var allRequests = prepared.SelectMany(op => op.Requests).ToList();
+            var changesetId = Guid.NewGuid().ToString("N");
+            foreach (var operation in allRequests)
+                operation.ChangesetId = changesetId;
 
-            if (prepared.Count > 0)
+            return new PreparedOperation
             {
-                var allRequests = prepared.SelectMany(op => op.Requests).ToList();
-
-                var webResponses = Send(allRequests, transaction: true);
-                var offset = 0;
-
-                for (var index = 0; index < prepared.Count; index++)
+                Requests = allRequests,
+                IsTransaction = true,
+                Map = webResponses =>
                 {
-                    var op = prepared[index];
-                    var opResponses = webResponses.Skip(offset).Take(op.Requests.Count).ToList();
-                    offset += op.Requests.Count;
-
-                    var failed = opResponses.FirstOrDefault(r => !r.IsSuccess);
-
+                    var failed = webResponses.FirstOrDefault(r => !r.IsSuccess);
                     if (failed != null)
                     {
+                        var failedOffset = failed.ContentId == null ? -1 : allRequests.FindIndex(r => r.ContentId == failed.ContentId);
+                        if (failedOffset < 0)
+                            failedOffset = webResponses.ToList().IndexOf(failed);
+                        var index = 0;
+                        while (index < prepared.Count - 1 && failedOffset >= prepared[index].Requests.Count)
+                        {
+                            failedOffset -= prepared[index].Requests.Count;
+                            index++;
+                        }
                         var fault = failed.ToFault();
                         var txFault = new ExecuteTransactionFault
                         {
@@ -1316,19 +1350,25 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
                         throw new FaultException<OrganizationServiceFault>(txFault, new FaultReason(fault.Message));
                     }
 
-                    if (opResponses.Count != op.Requests.Count)
+                    if (webResponses.Count != allRequests.Count)
                         throw CreateFault("The transaction failed");
 
-                    responses.Add(op.MapResponses(opResponses));
+                    var responses = new OrganizationResponseCollection();
+                    var offset = 0;
+                    foreach (var op in prepared)
+                    {
+                        responses.Add(op.MapResponses(webResponses.Skip(offset).Take(op.Requests.Count).ToList()));
+                        offset += op.Requests.Count;
+                    }
+
+                    var result = new ExecuteTransactionResponse();
+
+                    if (request.ReturnResponses == true)
+                        result.Results["Responses"] = responses;
+
+                    return result;
                 }
-            }
-
-            var result = new ExecuteTransactionResponse();
-
-            if (request.ReturnResponses == true)
-                result.Results["Responses"] = responses;
-
-            return result;
+            };
         }
 
         #endregion

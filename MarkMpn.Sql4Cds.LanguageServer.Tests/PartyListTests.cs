@@ -68,7 +68,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         {
             public Guid Id { get; } = Guid.NewGuid();
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
                 return Task.FromResult<IReadOnlyList<WebApiResponse>>(requests.Select(request =>
                 {

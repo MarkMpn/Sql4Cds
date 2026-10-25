@@ -33,6 +33,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         public string Body { get; set; }
 
         public string ContentId { get; set; }
+
+        public string ChangesetId { get; set; }
     }
 
     /// <summary>
@@ -166,12 +168,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
         /// Executes a set of requests in a single batch
         /// </summary>
         /// <param name="requests">The requests to execute</param>
-        /// <param name="transaction">Indicates if the requests should be executed in a single atomic change set</param>
         /// <param name="continueOnError">Indicates if later requests should still be executed after an earlier request fails</param>
         /// <param name="headers">Additional headers for the batch as a whole</param>
         /// <param name="cancellationToken">A token to cancel the request</param>
         /// <returns>The responses to each request, in the same order as the requests</returns>
-        Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken);
+        Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -193,7 +194,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             _target = target;
         }
 
-        public async Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
         {
             for (var i = 0; i < requests.Count; i++)
                 requests[i].ContentId = (i + 1).ToString();
@@ -202,7 +203,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             {
                 Target = _target,
                 Requests = requests.ToArray(),
-                Transaction = transaction,
                 ContinueOnError = continueOnError,
                 Headers = headers
             };
@@ -218,8 +218,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             public object Target { get; set; }
 
             public WebApiRequest[] Requests { get; set; }
-
-            public bool Transaction { get; set; }
 
             public bool ContinueOnError { get; set; }
 

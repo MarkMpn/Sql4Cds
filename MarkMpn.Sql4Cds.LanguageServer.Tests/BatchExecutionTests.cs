@@ -199,15 +199,101 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             Assert.AreEqual(continueOnError, transport.ContinueOnError.Single());
         }
 
+        [TestMethod]
+        public void MixedBatchKeepsTransactionsSeparateAndMapsTheirResponses()
+        {
+            var transport = new RecordingTransport();
+            var result = (ExecuteMultipleResponse)Service(transport).Execute(new ExecuteMultipleRequest
+            {
+                Requests = new OrganizationRequestCollection
+                {
+                    Delete(),
+                    new ExecuteTransactionRequest
+                    {
+                        Requests = new OrganizationRequestCollection { Delete(), Associate() },
+                        ReturnResponses = true
+                    },
+                    Delete(),
+                    new ExecuteTransactionRequest
+                    {
+                        Requests = new OrganizationRequestCollection { Delete() },
+                        ReturnResponses = false
+                    }
+                },
+                Settings = new ExecuteMultipleSettings { ContinueOnError = true, ReturnResponses = true }
+            });
+            var operations = transport.Calls.Single().Requests;
+            Assert.AreEqual(6, operations.Count);
+            Assert.IsNull(operations[0].ChangesetId);
+            Assert.IsNotNull(operations[1].ChangesetId);
+            Assert.AreEqual(operations[1].ChangesetId, operations[2].ChangesetId);
+            Assert.AreEqual(operations[1].ChangesetId, operations[3].ChangesetId);
+            Assert.IsNull(operations[4].ChangesetId);
+            Assert.IsNotNull(operations[5].ChangesetId);
+            Assert.AreNotEqual(operations[1].ChangesetId, operations[5].ChangesetId);
+            Assert.IsFalse(result.IsFaulted);
+            Assert.AreEqual(2, ((ExecuteTransactionResponse)result.Responses[1].Response).Responses.Count);
+            Assert.IsFalse(result.Responses[3].Response.Results.ContainsKey("Responses"));
+        }
+
         [DataTestMethod]
         [DataRow(false)]
         [DataRow(true)]
-        public void NestedContainersCannotBeTranslatedAndAreNotExecuted(bool transaction)
+        public void CollapsedChangesetFaultPreservesIndexesAndLaterBatchResults(bool continueOnError)
+        {
+            var transport = new RecordingTransport { CollapseChangesetFault = true };
+            var result = (ExecuteMultipleResponse)Service(transport).Execute(new ExecuteMultipleRequest
+            {
+                Requests = new OrganizationRequestCollection
+                {
+                    Delete(),
+                    new ExecuteTransactionRequest { Requests = new OrganizationRequestCollection { Delete(), Associate() } },
+                    Delete()
+                },
+                Settings = new ExecuteMultipleSettings { ContinueOnError = continueOnError, ReturnResponses = true }
+            });
+            Assert.AreEqual(continueOnError ? 3 : 2, result.Responses.Count);
+            Assert.IsInstanceOfType<DeleteResponse>(result.Responses[0].Response);
+            var fault = (ExecuteTransactionFault)result.Responses[1].Fault;
+            Assert.AreEqual(1, fault.FaultedRequestIndex);
+            Assert.AreEqual("Write failed", fault.Message);
+            if (continueOnError)
+                Assert.IsInstanceOfType<DeleteResponse>(result.Responses[2].Response);
+        }
+
+        [TestMethod]
+        public void NestedTransactionIsRejectedBeforeSendingAnyOperations()
         {
             var transport = new RecordingTransport();
-            OrganizationRequest nested = transaction
-                ? new ExecuteTransactionRequest { Requests = new OrganizationRequestCollection { Delete() } }
-                : new ExecuteMultipleRequest { Requests = new OrganizationRequestCollection { Delete() } };
+            Assert.ThrowsException<FaultException<OrganizationServiceFault>>(() => Service(transport).Execute(new ExecuteTransactionRequest
+            {
+                Requests = new OrganizationRequestCollection
+                {
+                    Delete(),
+                    new ExecuteTransactionRequest { Requests = new OrganizationRequestCollection { Delete() } }
+                }
+            }));
+            Assert.AreEqual(0, transport.Calls.Count);
+        }
+
+        [TestMethod]
+        public void EmptyTransactionReturnsEmptyResponseWithoutSendingBatch()
+        {
+            var transport = new RecordingTransport();
+            var response = (ExecuteTransactionResponse)Service(transport).Execute(new ExecuteTransactionRequest
+            {
+                Requests = new OrganizationRequestCollection(),
+                ReturnResponses = true
+            });
+            Assert.AreEqual(0, response.Responses.Count);
+            Assert.AreEqual(0, transport.Calls.Count);
+        }
+
+        [TestMethod]
+        public void NestedExecuteMultipleCannotBeTranslatedAndIsNotExecuted()
+        {
+            var transport = new RecordingTransport();
+            OrganizationRequest nested = new ExecuteMultipleRequest { Requests = new OrganizationRequestCollection { Delete() } };
             var exception = Assert.ThrowsException<FaultException<OrganizationServiceFault>>(() =>
                 Service(transport).Execute(new ExecuteMultipleRequest
                 {
@@ -224,16 +310,30 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 new List<(IReadOnlyList<WebApiRequest>, bool)>();
             public int FailAt { get; set; } = -1;
             public OrganizationServiceFault BatchFault { get; set; }
+            public bool CollapseChangesetFault { get; set; }
             public List<bool> ContinueOnError { get; } = new List<bool>();
             public int ExecutedCount => _index;
             private int _index;
 
-            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool transaction, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<WebApiResponse>> ExecuteBatchAsync(IReadOnlyList<WebApiRequest> requests, bool continueOnError, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
             {
+                var transaction = requests.All(r => r.ChangesetId != null);
                 Calls.Add((requests.ToArray(), transaction));
                 ContinueOnError.Add(continueOnError);
                 if (BatchFault != null)
                     throw new FaultException<OrganizationServiceFault>(BatchFault, new FaultReason(BatchFault.Message));
+                if (CollapseChangesetFault)
+                {
+                    for (var i = 0; i < requests.Count; i++)
+                        requests[i].ContentId = (i + 1).ToString();
+                    var results = new[]
+                    {
+                        new WebApiResponse { ContentId = requests[0].ContentId, Status = 204 },
+                        new WebApiResponse { ContentId = requests[3].ContentId, Status = 400, Body = "{\"error\":{\"message\":\"Write failed\"}}" },
+                        new WebApiResponse { ContentId = requests[4].ContentId, Status = 204 }
+                    };
+                    return Task.FromResult<IReadOnlyList<WebApiResponse>>(continueOnError ? results : results.Take(2).ToArray());
+                }
                 var responses = new List<WebApiResponse>();
                 foreach (var request in requests)
                 {

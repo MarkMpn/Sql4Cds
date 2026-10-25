@@ -310,12 +310,12 @@ export interface WebApiRequest {
     /** Pre-serialized JSON body */
     body?: string;
     contentId: string;
+    changesetId?: string;
 }
 
 export interface ExecuteBatchParams {
     target: DataverseAPI.ConnectionTarget;
     requests: WebApiRequest[];
-    transaction: boolean;
     continueOnError: boolean;
     headers: Record<string, string>;
 }
