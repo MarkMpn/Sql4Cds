@@ -44,19 +44,23 @@ export interface ClientEvents {
     exit?(snapshot: ToolBoxAPI.WorkerSnapshot): void;
 }
 
+function logRpc(level: "debug" | "error", message: string, payload: unknown): void {
+    console[level](`[SQL 4 CDS RPC] [${new Date().toISOString()}] ${message}`, payload);
+}
+
 function logRpcRequest(
     method: string,
     handler: (params: unknown, context: ToolBoxAPI.WorkerRequestContext) => unknown | Promise<unknown>,
 ) {
     return async (params: unknown, context: ToolBoxAPI.WorkerRequestContext): Promise<unknown> => {
-        console.debug(`[SQL 4 CDS RPC] <- ${method} request`, params);
+        logRpc("debug", `<- ${method} request`, params);
 
         try {
             const result = await handler(params, context);
-            console.debug(`[SQL 4 CDS RPC] -> ${method} response`, result);
+            logRpc("debug", `-> ${method} response`, result);
             return result;
         } catch (error) {
-            console.error(`[SQL 4 CDS RPC] -> ${method} error`, error);
+            logRpc("error", `-> ${method} error`, error);
             throw error;
         }
     };
@@ -64,12 +68,12 @@ function logRpcRequest(
 
 function logRpcNotification(method: string, handler: (params: unknown) => void) {
     return (params: unknown): void => {
-        console.debug(`[SQL 4 CDS RPC] <- ${method} notification`, params);
+        logRpc("debug", `<- ${method} notification`, params);
 
         try {
             handler(params);
         } catch (error) {
-            console.error(`[SQL 4 CDS RPC] <- ${method} notification error`, error);
+            logRpc("error", `<- ${method} notification error`, error);
             throw error;
         }
     };
@@ -219,31 +223,31 @@ export class Sql4CdsClient {
     }
 
     private async request<Result>(method: string, params?: unknown): Promise<Result> {
-        console.debug(`[SQL 4 CDS RPC] -> ${method} request`, params);
+        logRpc("debug", `-> ${method} request`, params);
 
         try {
             const result = await this.rpc.request<Result>(method, params);
-            console.debug(`[SQL 4 CDS RPC] <- ${method} response`, result);
+            logRpc("debug", `<- ${method} response`, result);
             return result;
         } catch (error) {
-            console.error(`[SQL 4 CDS RPC] <- ${method} error`, error);
+            logRpc("error", `<- ${method} error`, error);
             throw error;
         }
     }
 
     private async notify(method: string, params?: unknown): Promise<void> {
-        console.debug(`[SQL 4 CDS RPC] -> ${method} notification`, params);
+        logRpc("debug", `-> ${method} notification`, params);
 
         try {
             await this.rpc.notify(method, params);
         } catch (error) {
-            console.error(`[SQL 4 CDS RPC] -> ${method} notification error`, error);
+            logRpc("error", `-> ${method} notification error`, error);
             throw error;
         }
     }
 
     private async notifyChunk(chunk: DataverseChunkParams): Promise<void> {
-        console.debug(`[SQL 4 CDS RPC] -> ${DATAVERSE_CHUNK_METHOD} ${chunk.direction} chunk`, {
+        logRpc("debug", `-> ${DATAVERSE_CHUNK_METHOD} ${chunk.direction} chunk`, {
             id: chunk.id,
             sequence: chunk.sequence,
             complete: chunk.complete,
@@ -257,7 +261,7 @@ export class Sql4CdsClient {
     }
 
     private receiveDataverseChunk(chunk: DataverseChunkParams): void {
-        console.debug(`[SQL 4 CDS RPC] <- ${DATAVERSE_CHUNK_METHOD} ${chunk.direction} chunk`, {
+        logRpc("debug", `<- ${DATAVERSE_CHUNK_METHOD} ${chunk.direction} chunk`, {
             id: chunk.id,
             sequence: chunk.sequence,
             complete: chunk.complete,
@@ -265,14 +269,14 @@ export class Sql4CdsClient {
         });
 
         void this.processDataverseChunk(chunk).catch(async (error) => {
-            console.error("[SQL 4 CDS RPC] Dataverse chunk processing failed", error);
+            logRpc("error", "Dataverse chunk processing failed", error);
             if (!(error instanceof ChunkProtocolError) || chunk.direction !== "request" || !chunk.id) return;
 
             try {
                 const message = error instanceof Error ? error.message : String(error);
                 await this.sendDataverseResponse(chunk.id, JSON.stringify({ error: { message } }));
             } catch (responseError) {
-                console.error("[SQL 4 CDS RPC] Failed to send Dataverse chunk error response", responseError);
+                logRpc("error", "Failed to send Dataverse chunk error response", responseError);
             }
         });
     }

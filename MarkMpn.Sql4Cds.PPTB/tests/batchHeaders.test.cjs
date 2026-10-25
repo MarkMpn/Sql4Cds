@@ -9,6 +9,7 @@ async function createClient(responseHeaders = {}, options = {}) {
     let handlers;
     const calls = [];
     const notifications = [];
+    const logs = [];
     let complete;
     const response = new Promise((resolve) => { complete = resolve; });
     const execute = (transaction) => async (...args) => {
@@ -26,6 +27,7 @@ async function createClient(responseHeaders = {}, options = {}) {
         module,
         exports: module.exports,
         TextEncoder,
+        Date: options.Date ?? Date,
         setTimeout: options.setTimeout ?? setTimeout,
         window: {
             dataverseAPI: { executeBatch: execute(false), executeTransaction: execute(true) },
@@ -42,10 +44,14 @@ async function createClient(responseHeaders = {}, options = {}) {
                 };
             } } },
         },
-        console: { debug() {}, error() {} },
+        console: {
+            debug: (...args) => logs.push({ level: "debug", args }),
+            error: (...args) => logs.push({ level: "error", args }),
+        },
     }, { filename });
-    await new module.exports.Sql4CdsClient({}).start({});
-    return { handlers, calls, notifications, response };
+    const client = new module.exports.Sql4CdsClient(options.events ?? {});
+    await client.start({});
+    return { client, handlers, calls, notifications, response, logs };
 }
 
 function batch(transaction = false, continueOnError = false) {
@@ -59,6 +65,42 @@ function batch(transaction = false, continueOnError = false) {
         ],
     };
 }
+
+test("RPC logs timestamp every request, response, notification, chunk and error at emission time", async () => {
+    let clock = Date.parse("2026-10-25T17:01:06.088Z");
+    const initialClock = clock;
+    const failure = new Error("RPC failed");
+    const { client, handlers, logs } = await createClient({}, {
+        Date: class extends Date { constructor() { super(clock++); } },
+        events: { progress: () => { throw failure; } },
+    });
+    await handlers.requests["dataverse/executeBatch"](batch(), {});
+    assert.throws(() => handlers.notifications["sql4cds/progress"]("loading"), error => error === failure);
+    await client.notifyChunk({ id: "response", direction: "response", sequence: 0, complete: true, data: "{}" });
+    client.receiveDataverseChunk({ id: "request", direction: "request", sequence: 0, complete: false, data: "{}" });
+    client.session.request = async () => { throw failure; };
+    await assert.rejects(client.request("test/failure", {}), error => error === failure);
+    client.session.notify = async () => { throw failure; };
+    await assert.rejects(client.notify("test/notification", {}), error => error === failure);
+    await assert.rejects(handlers.requests["dataverse/executeBatch"](null, {}));
+
+    for (const [index, { args }] of logs.entries()) {
+        const prefix = `[SQL 4 CDS RPC] [${new Date(initialClock + index).toISOString()}] `;
+        assert.ok(args[0].startsWith(prefix), `Missing emission timestamp: ${args[0]}`);
+        assert.equal(args.length, 2, "Payloads remain separate console arguments");
+    }
+    const messages = logs.map(log => log.args[0]);
+    for (const message of [
+        "-> initialize request", "<- initialize response",
+        "<- dataverse/executeBatch request", "-> dataverse/executeBatch response",
+        "<- sql4cds/progress notification", "<- sql4cds/progress notification error",
+        "-> dataverse/executeBatch/chunk response chunk", "<- dataverse/executeBatch/chunk request chunk",
+        "<- test/failure error", "-> test/notification notification error", "-> dataverse/executeBatch error",
+    ]) {
+        assert.ok(messages.some(log => log.endsWith(message)), `Missing log: ${message}`);
+    }
+    assert.ok(logs.some(log => log.level === "error" && log.args[1] === failure));
+});
 
 for (const transaction of [false, true]) {
     test(`batch response headers reach the worker (transaction=${transaction})`, async () => {
