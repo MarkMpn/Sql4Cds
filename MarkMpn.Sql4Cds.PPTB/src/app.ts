@@ -508,6 +508,16 @@ class App implements QueryTabHost {
             notify("Unable to open record", errorMessage(err), "error"));
     }
 
+    copyRecordUrl(reference: EntityReferenceValue): void {
+        void (async () => {
+            await window.toolboxAPI.utils.copyToClipboard(this.connections.getRecordUrl(reference));
+        })().catch((err) => notify("Unable to copy record URL", errorMessage(err), "error"));
+    }
+
+    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string> {
+        return this.connections.getRecordSelectStatement(reference, currentDataSource);
+    }
+
     onStateChanged(tab: QueryTab): void {
         this.renderTabs();
         this.syncClosePrevention();

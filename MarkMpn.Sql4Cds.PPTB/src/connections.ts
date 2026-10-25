@@ -28,10 +28,14 @@ export class ConnectionRegistry {
         return this.slots[slot] ?? null;
     }
 
-    async openRecord(reference: EntityReferenceValue): Promise<void> {
+    private getRecordConnection(reference: EntityReferenceValue): ConnectionSlot {
         const entry = this.all.find((s) => s.options.connectionName.toLowerCase() === reference.dataSource.toLowerCase());
         if (!entry) throw new Error(`The connection "${reference.dataSource}" is no longer available`);
+        return entry;
+    }
 
+    getRecordUrl(reference: EntityReferenceValue): string {
+        const entry = this.getRecordConnection(reference);
         const baseUrl = entry.connection.url.includes("://") ? entry.connection.url : `https://${entry.connection.url}`;
         const url = new URL(baseUrl);
         if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("The connection URL must use HTTP or HTTPS");
@@ -41,7 +45,24 @@ export class ConnectionRegistry {
         url.searchParams.set("pagetype", "entityrecord");
         url.searchParams.set("etn", reference.logicalName);
         url.searchParams.set("id", reference.id);
-        await window.toolboxAPI.utils.openInConnectionBrowser(url.toString(), entry.slot);
+        return url.toString();
+    }
+
+    async openRecord(reference: EntityReferenceValue): Promise<void> {
+        const entry = this.getRecordConnection(reference);
+        await window.toolboxAPI.utils.openInConnectionBrowser(this.getRecordUrl(reference), entry.slot);
+    }
+
+    async getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string> {
+        const entry = this.getRecordConnection(reference);
+        const metadata = await window.dataverseAPI.getEntityMetadata(reference.logicalName, true, ["PrimaryIdAttribute"], entry.slot);
+        const primaryKey = metadata.PrimaryIdAttribute;
+        if (typeof primaryKey !== "string" || !primaryKey) throw new Error(`The primary key for "${reference.logicalName}" is unavailable`);
+        const quote = (name: string) => `[${name.replace(/]/g, "]]")}]`;
+        const table = currentDataSource?.toLowerCase() === reference.dataSource.toLowerCase()
+            ? quote(reference.logicalName)
+            : `${quote(reference.dataSource)}.dbo.${quote(reference.logicalName)}`;
+        return `SELECT * FROM ${table} WHERE ${quote(primaryKey)} = '${reference.id.replace(/'/g, "''")}';`;
     }
 
     static ownerUri(slot: number): string {

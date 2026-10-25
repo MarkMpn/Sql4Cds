@@ -1,5 +1,5 @@
 import type { DbCellValue, DbColumn } from "../lsp/protocol";
-import { isEntityReferenceValue, type EntityReferenceValue } from "../lsp/protocol";
+import { exportFormats, isEntityReferenceValue, type EntityReferenceValue, type ExportFormat } from "../lsp/protocol";
 
 export type RowFetcher = (start: number, count: number) => Promise<DbCellValue[][]>;
 
@@ -53,6 +53,11 @@ export class ResultsGrid {
     private copying = false;
     private copyError: string | null = null;
     private autoSized = false;
+    private exportMenu: HTMLElement | null = null;
+    private readonly exportButtons: HTMLButtonElement[] = [];
+    private closeContextMenu: (() => void) | null = null;
+    private exportEnabled = false;
+    private exporting = false;
 
     constructor(
         private readonly columns: DbColumn[],
@@ -60,12 +65,34 @@ export class ResultsGrid {
         private readonly onCopy: (text: string) => void,
         private readonly onOpenRecord: (reference: EntityReferenceValue) => void,
         private readonly onStatus: (text: string, isError: boolean) => void = () => {},
+        private readonly onExport?: (format: ExportFormat) => Promise<void>,
+        private readonly recordActions?: {
+            copyUrl(reference: EntityReferenceValue): void;
+            createSelect(reference: EntityReferenceValue): void;
+        },
     ) {
         this.columnWidths = columns.map((c) => Math.min(320, Math.max(90, c.columnName.length * 8 + 24)));
 
         this.element = document.createElement("div");
         this.element.className = "results-grid";
         this.element.tabIndex = 0;
+
+        this.element.setAttribute("aria-haspopup", "menu");
+        this.element.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            const cell = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-cell") : null;
+            const row = cell?.parentElement?.dataset.row;
+            const col = cell?.dataset.col;
+            const position = row !== undefined && col !== undefined ? { row: Number(row), col: Number(col) } : null;
+            if (position) {
+                const range = this.selectionRange;
+                if (!range || position.row < range.firstRow || position.row > range.lastRow ||
+                    position.col < range.firstCol || position.col > range.lastCol) {
+                    this.selectRectangle(position, position);
+                }
+            }
+            this.showContextMenu(event.clientX, event.clientY, position);
+        });
 
         this.header = document.createElement("div");
         this.header.className = "grid-header";
@@ -105,8 +132,110 @@ export class ResultsGrid {
         this.scheduleRender();
     }
 
+    setExportEnabled(enabled: boolean): void {
+        this.exportEnabled = enabled;
+        for (const button of this.exportButtons) button.disabled = !enabled || this.exporting;
+    }
+
+    private showContextMenu(x: number, y: number, position: CellPosition | null = this.selected): void {
+        this.closeContextMenu?.();
+        if (this.disposed) return;
+        const menu = document.createElement("div");
+        this.exportMenu = menu;
+        menu.className = "grid-context-menu";
+        menu.setAttribute("role", "menu");
+        menu.setAttribute("aria-label", "Result actions");
+        menu.tabIndex = -1;
+        const menuButtons: HTMLButtonElement[] = [];
+        const addItem = (label: string, enabled: boolean, action: () => void) => {
+            const button = document.createElement("button");
+            button.setAttribute("role", "menuitem");
+            button.textContent = label;
+            button.disabled = !enabled;
+            button.addEventListener("click", () => {
+                this.closeContextMenu?.();
+                this.element.focus();
+                action();
+            });
+            menuButtons.push(button);
+            menu.appendChild(button);
+            return button;
+        };
+        addItem("Copy", this.selected !== null, () => void this.copySelection(false));
+        addItem("Copy with Headers", this.selected !== null, () => void this.copySelection(true));
+        const value = position ? this.getRow(position.row)?.[position.col] : undefined;
+        const reference = value && !value.isNull && isEntityReferenceValue(value.rawObject) ? value.rawObject : null;
+        addItem("Open Record", reference !== null, () => { if (reference) this.onOpenRecord(reference); });
+        addItem("Copy Record Url", reference !== null && !!this.recordActions, () => {
+            if (reference) this.recordActions?.copyUrl(reference);
+        });
+        addItem("Create SELECT Statement", reference !== null && !!this.recordActions, () => {
+            if (reference) this.recordActions?.createSelect(reference);
+        });
+        if (this.onExport) {
+            for (const { format, label } of exportFormats) {
+                const button = addItem(`Export to ${label}...`, false, () => void this.exportResults(format));
+                button.title = `Export all rows to ${label}`;
+                this.exportButtons.push(button);
+            }
+        }
+        this.setExportEnabled(this.exportEnabled);
+        document.body.appendChild(menu);
+        const bounds = menu.getBoundingClientRect();
+        menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - bounds.width))}px`;
+        menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - bounds.height))}px`;
+        const dismiss = () => this.closeContextMenu?.();
+        const outside = (event: Event) => {
+            if (event.target instanceof Node && !menu.contains(event.target)) dismiss();
+        };
+        this.closeContextMenu = () => {
+            this.closeContextMenu = null;
+            this.exportMenu = null;
+            this.exportButtons.length = 0;
+            document.removeEventListener("pointerdown", outside, true);
+            document.removeEventListener("focusin", outside);
+            document.removeEventListener("scroll", dismiss, true);
+            window.removeEventListener("resize", dismiss);
+            window.removeEventListener("blur", dismiss);
+            menu.remove();
+        };
+        document.addEventListener("pointerdown", outside, true);
+        document.addEventListener("focusin", outside);
+        document.addEventListener("scroll", dismiss, true);
+        window.addEventListener("resize", dismiss);
+        window.addEventListener("blur", dismiss);
+        menu.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" || event.key === "Tab") {
+                dismiss();
+                this.element.focus();
+                if (event.key === "Escape") event.preventDefault();
+            } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                event.preventDefault();
+                const buttons = menuButtons.filter((button) => !button.disabled);
+                const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+                const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+                    : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+                buttons[next]?.focus();
+            }
+        });
+        (menuButtons.find((button) => !button.disabled) ?? menu).focus();
+    }
+
+    private async exportResults(format: ExportFormat): Promise<void> {
+        if (!this.onExport || !this.exportEnabled || this.exporting || this.disposed) return;
+        this.exporting = true;
+        this.setExportEnabled(this.exportEnabled);
+        try {
+            await this.onExport(format);
+        } finally {
+            this.exporting = false;
+            if (!this.disposed) this.setExportEnabled(this.exportEnabled);
+        }
+    }
+
     dispose(): void {
         this.disposed = true;
+        this.closeContextMenu?.();
         this.endDrag();
         document.removeEventListener("copy", this.onDocumentCopy);
         this.pages.clear();
@@ -467,6 +596,12 @@ export class ResultsGrid {
 
     private onKeyDown(e: KeyboardEvent): void {
         if (e.defaultPrevented || e.altKey) return;
+        if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+            e.preventDefault();
+            const bounds = this.element.getBoundingClientRect();
+            this.showContextMenu(bounds.left, bounds.top + ROW_HEIGHT);
+            return;
+        }
 
         const primary = isMac() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
         if (primary && !e.shiftKey && e.key.toLowerCase() === "a") {
@@ -505,6 +640,7 @@ export class ResultsGrid {
     /** Handles copy requests that don't come from a keyboard shortcut, e.g. from an application Edit menu */
     private readonly onDocumentCopy = (e: ClipboardEvent): void => {
         if (!this.selected || !this.element.contains(document.activeElement)) return;
+        if (this.exportMenu?.contains(document.activeElement)) return;
         // Leave any text the user has explicitly selected to be copied as normal
         if (!document.getSelection()?.isCollapsed) return;
 

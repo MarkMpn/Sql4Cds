@@ -13,6 +13,7 @@ import type {
     DocumentListener,
     ExecuteBatchParams,
     ExecutionPlanOptions,
+    ExportFormat,
     LogMessageParams,
     MessageParams,
     ObjectExplorerSessionCreated,
@@ -433,6 +434,18 @@ export class Sql4CdsClient {
 
     subset(ownerUri: string, batchIndex: number, resultSetIndex: number, rowsStartIndex: number, rowsCount: number): Promise<SubsetResult> {
         return this.request<SubsetResult>("query/subset", { ownerUri, batchIndex, resultSetIndex, rowsStartIndex, rowsCount });
+    }
+
+    async saveResults(ownerUri: string, batchIndex: number, resultSetIndex: number, filePath: string, format: ExportFormat): Promise<void> {
+        const result = await this.request<{ messages?: string }>(`query/save${format}`, {
+            ownerUri, batchIndex, resultSetIndex, filePath,
+            includeHeaders: true,
+            ...(format === "Csv" ? { delimiter: ",", lineSeperator: "\r\n", textIdentifier: "\"", encoding: "utf-8" } : {}),
+            ...(format === "Excel" ? { freezeHeaderRow: true, boldHeaderRow: true, autoFilterHeaderRow: true, autoSizeColumns: true } : {}),
+            ...(format === "Markdown" ? { encoding: "utf-8", lineSeparator: "\r\n" } : {}),
+            ...(format === "Xml" ? { formatted: true, encoding: "utf-8" } : {}),
+        });
+        if (result.messages) throw new Error(result.messages);
     }
 
     confirm(ownerUri: string, result: ConfirmationResult): Promise<void> {

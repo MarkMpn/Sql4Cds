@@ -120,8 +120,14 @@ function setup(pinned = true) {
     const grids = [];
     const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
+        "../lsp/protocol": load("lsp/protocol.ts", {}),
         "../editor/monacoSetup": {
             monaco: {
+                Range: class {
+                    constructor(startLineNumber, startColumn, endLineNumber, endColumn) {
+                        Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
+                    }
+                },
                 editor: {
                     createModel: (initialText, language) => {
                         modelLanguages.push(language);
@@ -131,6 +137,8 @@ function setup(pinned = true) {
                         return {
                             setEOL() {},
                             getValue: () => value,
+                            getLineCount: () => value.split("\n").length,
+                            getLineMaxColumn: (line) => value.split("\n")[line - 1].length + 1,
                             onDidChangeContent: (callback) => { onChange = callback; return { dispose() {} }; },
                             setValue: (text) => { value = text; version++; onChange?.(); },
                             getVersionId: () => version,
@@ -164,15 +172,18 @@ function setup(pinned = true) {
         } },
         "../executionPlan/nodeImages": { getNodeImageUrl: () => "" },
         "./resultsGrid": { ResultsGrid: class {
-            constructor(_columns, _fetch, _copy, _open, status) {
+            constructor(_columns, _fetch, _copy, _open, status, onExport, recordActions) {
                 this.element = new Element();
                 this.status = status;
+                this.onExport = onExport;
+                this.recordActions = recordActions;
                 grids.push(this);
             }
+            setExportEnabled(enabled) { this.exportEnabled = enabled; }
             setRowCount() {}
             dispose() {}
         } },
-    }, { document, Date: { now: () => now } });
+    }, { document, window, Date: { now: () => now } });
     function createTab(options) {
         const tab = new QueryTab(app, "", options);
         app.activeTab = tab;
@@ -184,6 +195,98 @@ function setup(pinned = true) {
 function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };
 }
+
+test("record menu wiring copies the shared URL and appends SELECT SQL at the latest document end as an undoable edit", async () => {
+    const { app, registry, createTab, grids, window } = setup();
+    const reference = { dataSource: "Other", logicalName: "email", id: "123", isNull: false };
+    const sql = "SELECT * FROM [Other].dbo.[email] WHERE [activityid] = '123';";
+    const copied = [];
+    const requests = [];
+    window.toolboxAPI = { utils: { copyToClipboard: async text => copied.push(text) } };
+    registry.getRecordUrl = ref => { assert.equal(ref, reference); return "https://org/main.aspx?id=123"; };
+    let resolveSql;
+    registry.getRecordSelectStatement = (ref, source) => {
+        requests.push([ref, source]);
+        return new Promise(resolve => { resolveSql = resolve; });
+    };
+    const { tab, events } = createTab();
+    tab.connectionSlot = 0;
+    events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
+    grids[0].recordActions.copyUrl(reference);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(copied, ["https://org/main.aspx?id=123"]);
+    tab.model.setValue("SELECT 1;");
+    let undoStops = 0;
+    const edits = [];
+    tab.model.pushStackElement = () => undoStops++;
+    tab.model.pushEditOperations = (_selection, operations) => {
+        edits.push(operations[0]);
+        tab.model.setValue(tab.model.getValue() + operations[0].text);
+    };
+    grids[0].recordActions.createSelect(reference);
+    tab.model.setValue("SELECT 1;\n-- added while metadata loads");
+    resolveSql(sql);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requests[0][0], reference);
+    assert.equal(requests[0][1], "contoso_2");
+    assert.equal(undoStops, 2);
+    assert.equal(edits.length, 1);
+    assert.equal(edits[0].range.startLineNumber, 2);
+    assert.equal(edits[0].range.startColumn, 30);
+    assert.equal(edits[0].range.endLineNumber, 2);
+    assert.equal(edits[0].range.endColumn, 30);
+    assert.equal(tab.model.getValue(), `SELECT 1;\n-- added while metadata loads\n\n${sql}`);
+});
+
+test("record SELECT failures notify the user without changing the editor", async () => {
+    const { registry, createTab, window } = setup();
+    const notifications = [];
+    window.toolboxAPI = { utils: { showNotification: async message => notifications.push(message) } };
+    registry.getRecordSelectStatement = async () => { throw new Error("Metadata denied"); };
+    const { tab } = createTab();
+    tab.model.setValue("SELECT 1;");
+    await tab.appendRecordSelectStatement({ dataSource: "Other", logicalName: "account", id: "123", isNull: false });
+    assert.equal(tab.model.getValue(), "SELECT 1;");
+    assert.equal(tab.gridStatusIsError, true);
+    assert.match(tab.gridStatus, /Metadata denied/);
+    assert.equal(notifications[0].type, "error");
+});
+
+test("record SELECT insertion handles empty, disposed, and read-only editors", async () => {
+    const { registry, createTab, window } = setup();
+    const notifications = [];
+    window.toolboxAPI = { utils: { showNotification: async message => notifications.push(message) } };
+    const sql = "SELECT * FROM [account] WHERE [accountid] = '123';";
+    registry.getRecordSelectStatement = async () => sql;
+    const reference = { dataSource: "contoso_2", logicalName: "account", id: "123", isNull: false };
+    const { tab } = createTab();
+    await tab.appendRecordSelectStatement(reference);
+    assert.equal(tab.model.getValue(), sql, "Empty editors do not receive leading blank lines");
+    tab.model.isDisposed = () => true;
+    await tab.appendRecordSelectStatement(reference);
+    assert.equal(tab.model.getValue(), sql);
+    const { tab: readOnly } = createTab({ readOnly: true });
+    await readOnly.appendRecordSelectStatement(reference);
+    assert.equal(readOnly.model.getValue(), "");
+    assert.match(notifications[0].body, /read-only/);
+});
+
+test("record URL copying reports missing connections and clipboard failures", async () => {
+    const { app, registry, window } = setup();
+    const notifications = [];
+    window.toolboxAPI = { utils: {
+        showNotification: async message => notifications.push(message),
+        copyToClipboard: async () => { throw new Error("Clipboard denied"); },
+    } };
+    registry.getRecordUrl = () => { throw new Error("Missing connection"); };
+    app.copyRecordUrl({});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(notifications[0].body, /Missing connection/);
+    registry.getRecordUrl = () => "https://org/main.aspx";
+    app.copyRecordUrl({});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(notifications[1].body, /Clipboard denied/);
+});
 
 test("connection dropdown shows only the registered Object Explorer name", () => {
     const { app, registry, elements } = setup();
@@ -837,4 +940,89 @@ test("text result loading errors are visible and stale responses do not append t
     respond({ resultSubset: { rows: [[{ displayValue: "stale", isNull: false }]] } });
     await pending;
     assert.equal(tab.textPane.children.length, 0);
+});
+
+test("each completed grid exports its own entire result set through the native Save As dialog", async () => {
+    const { app, client, createTab, grids, window } = setup();
+    const dialogs = [];
+    const saved = [];
+    window.toolboxAPI = {
+        fileSystem: { saveFile: async (...args) => { dialogs.push(args); return "C:\\exports\\chosen.file"; } },
+        utils: { showNotification: async () => { assert.fail("Unexpected export error"); } },
+    };
+    client.saveResults = async (...args) => saved.push(args);
+    const { tab, events } = createTab();
+    tab.title = "Accounts.sql";
+    await tab.connect(0);
+    await tab.execute(null);
+    for (const id of [0, 1]) events.resultSetAvailable({ resultSetSummary: summary(2, id, 10000) });
+    assert.equal(grids[0].exportEnabled, false);
+    assert.equal(grids[1].exportEnabled, false);
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [] }] });
+    assert.equal(grids[0].exportEnabled, true);
+    assert.equal(grids[1].exportEnabled, true);
+    const formats = [["Csv", "CSV", "csv"], ["Excel", "Excel", "xlsx"], ["Json", "JSON", "json"],
+        ["Markdown", "Markdown", "md"], ["Xml", "XML", "xml"]];
+    app.activeTab = null;
+    for (const [format, label, extension] of formats) {
+        await grids[1].onExport(format);
+        assert.equal(dialogs.at(-1)[0], `Accounts-results-3-2.${extension}`);
+        assert.equal(dialogs.at(-1)[1], "");
+        assert.equal(dialogs.at(-1)[2][0].name, label);
+        assert.equal(dialogs.at(-1)[2][0].extensions[0], extension);
+        assert.deepEqual(saved.at(-1), [tab.uri, 2, 1, "C:\\exports\\chosen.file", format]);
+    }
+    await grids[0].onExport("Csv");
+    assert.equal(saved.at(-1)[2], 0);
+    assert.equal(tab.gridStatus, "Results exported to C:\\exports\\chosen.file");
+    assert.equal(tab.gridStatusIsError, false);
+});
+
+test("export cancellation sends no LSP request and filename or worker errors are visible", async () => {
+    const { client, createTab, grids, window } = setup();
+    const notifications = [];
+    let mode = "cancel";
+    const saves = [];
+    window.toolboxAPI = {
+        fileSystem: { saveFile: async () => {
+            if (mode === "dialog-error") throw new Error("Dialog failed");
+            return mode === "cancel" ? null : "C:\\results.xlsx";
+        } },
+        utils: { showNotification: async (notification) => notifications.push(notification) },
+    };
+    client.saveResults = async (...args) => { saves.push(args); throw new Error("Disk full"); };
+    const { tab, events } = createTab();
+    events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
+    await grids[0].onExport("Excel");
+    assert.equal(saves.length, 0);
+    assert.equal(notifications.length, 0);
+    mode = "dialog-error";
+    await grids[0].onExport("Excel");
+    assert.match(tab.gridStatus, /Dialog failed/);
+    assert.equal(tab.gridStatusIsError, true);
+    assert.equal(notifications.at(-1).type, "error");
+    mode = "worker-error";
+    await grids[0].onExport("Excel");
+    assert.match(tab.gridStatus, /Disk full/);
+    assert.match(notifications.at(-1).body, /Disk full/);
+});
+
+test("exports never save replacement query results after the filename dialog or tab disposal", async () => {
+    const { client, createTab, grids, window } = setup();
+    const notifications = [];
+    let choose;
+    window.toolboxAPI = {
+        fileSystem: { saveFile: () => new Promise(resolve => { choose = resolve; }) },
+        utils: { showNotification: async (notification) => notifications.push(notification) },
+    };
+    client.saveResults = async () => assert.fail("Stale results must never be exported");
+    const { tab, events } = createTab();
+    events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
+    const pending = grids[0].onExport("Json");
+    await tab.clearResults();
+    choose("C:\\results.json");
+    await pending;
+    assert.match(notifications[0].body, /query results changed/);
+    await grids[0].onExport("Json");
+    assert.match(notifications[1].body, /no longer available/);
 });

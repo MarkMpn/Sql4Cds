@@ -335,7 +335,8 @@ input[type="number"] {
     border-bottom: 1px solid var(--border);
 }
 
-.explorer-context-menu {
+.explorer-context-menu,
+.grid-context-menu {
     position: fixed;
     z-index: 1000;
     min-width: 140px;
@@ -345,7 +346,8 @@ input[type="number"] {
     box-shadow: 0 2px 8px #0004;
 }
 
-.explorer-context-menu button {
+.explorer-context-menu button,
+.grid-context-menu button {
     display: block;
     width: 100%;
     text-align: left;
@@ -354,7 +356,9 @@ input[type="number"] {
 }
 
 .explorer-context-menu button:hover,
-.explorer-context-menu button:focus {
+.explorer-context-menu button:focus,
+.grid-context-menu button:hover:not(:disabled),
+.grid-context-menu button:focus {
     background: var(--selection);
     outline: 1px solid var(--accent);
 }

@@ -30,13 +30,18 @@ class Element {
     append(...children) { children.forEach((child) => this.appendChild(child)); }
     replaceChildren(...children) { this.children = []; this.append(...children); }
     addEventListener(name, handler) { this.events[name] = handler; }
+    setAttribute(name, value) { this[name] = value; }
     contains() { return true; }
-    focus() {}
+    focus() { this.focused = true; }
+    closest(selector) {
+        if (selector === ".grid-cell" && this.dataset.col !== undefined) return this;
+        return this.parentElement?.closest(selector) ?? null;
+    }
     remove() {}
-    getBoundingClientRect() { return { left: 0, top: 0 }; }
+    getBoundingClientRect() { return { left: 0, top: 0, width: 160, height: 150 }; }
 }
 
-function createGrid({ platform = "Win32", rowCount = 1000, columns = 5, fetchRows = async () => [] } = {}) {
+function createGrid({ platform = "Win32", rowCount = 1000, columns = 5, fetchRows = async () => [], onExport, recordActions, onOpenRecord = () => {} } = {}) {
     const filename = path.resolve(__dirname, "..", "src", "query", "resultsGrid.ts");
     const module = { exports: {} };
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -49,8 +54,15 @@ function createGrid({ platform = "Win32", rowCount = 1000, columns = 5, fetchRow
     vm.runInNewContext(code, {
         module,
         exports: module.exports,
-        require: () => ({ isEntityReferenceValue: () => false }),
+        require: () => ({
+            isEntityReferenceValue: value => value?.isNull === false && !!value.logicalName && !!value.id && !!value.dataSource,
+            exportFormats: [
+                { format: "Csv", label: "CSV" }, { format: "Excel", label: "Excel" },
+                { format: "Json", label: "JSON" }, { format: "Markdown", label: "Markdown" }, { format: "Xml", label: "XML" },
+            ],
+        }),
         document: {
+            body: new Element("body"),
             createElement: (tag) => new Element(tag),
             createDocumentFragment: () => new Element("fragment"),
             addEventListener: (name, handler) => { documentListeners[name] = handler; },
@@ -58,6 +70,9 @@ function createGrid({ platform = "Win32", rowCount = 1000, columns = 5, fetchRow
             getSelection: () => ({ isCollapsed: true }),
             activeElement: {},
         },
+        window: { innerWidth: 800, innerHeight: 600, addEventListener() {}, removeEventListener() {} },
+        Node: Element,
+        Element,
         navigator: { platform, userAgent: "" },
         ResizeObserver: class { observe() {} },
         requestAnimationFrame: (callback) => { frames.set(++nextFrame, callback); return nextFrame; },
@@ -71,8 +86,10 @@ function createGrid({ platform = "Win32", rowCount = 1000, columns = 5, fetchRow
         Array.from({ length: columns }, (_, i) => ({ columnName: `col${i}` })),
         fetchRows,
         (text) => copied.push(text),
-        () => {},
+        onOpenRecord,
         (text) => { status.text = text; },
+        onExport,
+        recordActions,
     );
     gridStatuses.set(grid, status);
     grid.render = () => {};
@@ -85,6 +102,122 @@ function key(grid, key, modifiers = {}) {
     grid.onKeyDown({ key, code: "", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...modifiers, preventDefault() { prevented = true; } });
     return prevented;
 }
+
+test("grid context menu offers all export formats and disables export until enabled", async () => {
+    const calls = [];
+    const { grid } = createGrid({ onExport: async (format) => calls.push(format) });
+    assert.equal(grid.element.children.length, 2, "No persistent export toolbar");
+    let prevented = false;
+    grid.element.events.contextmenu({ clientX: 790, clientY: 590, preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(grid.exportMenu.role, "menu");
+    assert.deepEqual(Array.from(grid.exportButtons, button => button.textContent), [
+        "Export to CSV...", "Export to Excel...", "Export to JSON...", "Export to Markdown...", "Export to XML...",
+    ]);
+    assert.equal(grid.exportMenu.style.left, "640px");
+    assert.equal(grid.exportMenu.style.top, "450px");
+    assert.ok(grid.exportButtons.every(button => button.disabled));
+    await grid.exportResults("Csv");
+    assert.equal(calls.length, 0);
+    grid.setExportEnabled(true);
+    for (const format of ["Csv", "Excel", "Json", "Markdown", "Xml"]) {
+        await grid.exportResults(format);
+    }
+    assert.deepEqual(calls, ["Csv", "Excel", "Json", "Markdown", "Xml"]);
+    assert.ok(grid.exportButtons.every(button => !button.disabled));
+    grid.exportButtons[1].events.click();
+    assert.equal(grid.exportMenu, null);
+    assert.equal(calls.at(-1), "Excel");
+});
+
+test("export prevents duplicate requests and restores controls when it finishes", async () => {
+    let finish;
+    const { grid } = createGrid({ onExport: () => new Promise(resolve => { finish = resolve; }) });
+    grid.setExportEnabled(true);
+    const pending = grid.exportResults("Excel");
+    grid.showContextMenu(10, 10);
+    assert.ok(grid.exportButtons.every(button => button.disabled));
+    await grid.exportResults("Excel");
+    finish();
+    await pending;
+    assert.ok(grid.exportButtons.every(button => !button.disabled));
+    grid.dispose();
+    assert.equal(grid.exportMenu, null);
+    await grid.exportResults("Excel");
+    assert.equal(grid.exporting, false);
+});
+
+test("grid context menu supports keyboard navigation, Escape, outside click and listener cleanup", () => {
+    const { grid, documentListeners } = createGrid({ onExport: async () => {} });
+    grid.setExportEnabled(true);
+    assert.equal(key(grid, "F10", { shiftKey: true }), true);
+    assert.equal(grid.exportButtons[0].focused, true);
+    grid.exportMenu.events.keydown({ key: "End", preventDefault() {} });
+    assert.equal(grid.exportButtons[4].focused, true);
+    grid.exportMenu.events.keydown({ key: "Escape", preventDefault() {} });
+    assert.equal(grid.exportMenu, null);
+    assert.equal(grid.element.focused, true);
+    assert.equal(documentListeners.pointerdown, undefined);
+    assert.equal(key(grid, "ContextMenu"), true);
+    grid.exportMenu.contains = () => false;
+    documentListeners.pointerdown({ target: new Element("outside") });
+    assert.equal(grid.exportMenu, null);
+    assert.equal(documentListeners.focusin, undefined);
+    grid.showContextMenu(0, 0);
+    documentListeners.scroll();
+    assert.equal(grid.exportMenu, null);
+});
+
+test("context menu copies selections with or without headers and selects a right-clicked cell outside the selection", async () => {
+    const { grid, copied } = createGrid({ rowCount: 1, columns: 2 });
+    grid.pages.set(0, { rows: [[{ displayValue: "A", isNull: false }, { displayValue: "B", isNull: false }]] });
+    const row = new Element("row");
+    row.dataset.row = "0";
+    const cell = new Element("cell");
+    cell.dataset.col = "1";
+    row.appendChild(cell);
+    grid.element.events.contextmenu({ target: cell, clientX: 0, clientY: 0, preventDefault() {} });
+    assert.deepEqual({ ...grid.selected }, { row: 0, col: 1 });
+    grid.exportMenu.children[0].events.click();
+    assert.equal(copied.at(-1), "B");
+    grid.selectRectangle({ row: 0, col: 0 }, { row: 0, col: 1 });
+    grid.element.events.contextmenu({ target: cell, clientX: 0, clientY: 0, preventDefault() {} });
+    assert.equal(grid.selectionRange.firstCol, 0, "Right-click inside a selection preserves it");
+    grid.exportMenu.children[1].events.click();
+    assert.equal(copied.at(-1), "col0\tcol1\r\nA\tB");
+    assert.ok(grid.exportButtons.length === 0, "Copy menu does not require export support");
+});
+
+test("record actions target only the right-clicked reference, including when another cell is selected", () => {
+    const reference = { dataSource: "Other", logicalName: "account", id: "123", isNull: false };
+    const calls = [];
+    const { grid } = createGrid({
+        rowCount: 1, columns: 4,
+        onOpenRecord: ref => calls.push(["open", ref]),
+        recordActions: { copyUrl: ref => calls.push(["url", ref]), createSelect: ref => calls.push(["select", ref]) },
+    });
+    grid.pages.set(0, { rows: [[
+        { displayValue: "record", isNull: false, rawObject: reference },
+        { displayValue: "plain", isNull: false },
+        { displayValue: "NULL", isNull: true, rawObject: reference },
+        { displayValue: "null reference", isNull: false, rawObject: { ...reference, isNull: true } },
+    ]] });
+    grid.selected = { row: 0, col: 0 };
+    for (const col of [1, 2, 3]) {
+        grid.showContextMenu(0, 0, { row: 0, col });
+        assert.ok(grid.exportMenu.children.slice(2, 5).every(button => button.disabled));
+    }
+    grid.showContextMenu(0, 0, null);
+    assert.ok(grid.exportMenu.children.slice(2, 5).every(button => button.disabled), "Empty space does not use the selected reference");
+    for (const item of [2, 3, 4]) {
+        grid.showContextMenu(0, 0, { row: 0, col: 0 });
+        assert.equal(grid.exportMenu.children[item].disabled, false);
+        grid.exportMenu.children[item].events.click();
+    }
+    assert.deepEqual(calls, [["open", reference], ["url", reference], ["select", reference]]);
+    key(grid, "ContextMenu");
+    assert.ok(grid.exportMenu.children.slice(2, 5).every(button => !button.disabled), "Keyboard menu uses the active cell");
+});
 
 test("clicking a data cell prevents default mouse focus handling before focusing and rendering", () => {
     const { grid, copied } = createGrid();

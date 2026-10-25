@@ -26,6 +26,16 @@ export interface FormattingOptions {
     addDisplayNames?: boolean;
 }
 
+export type ExportFormat = "Csv" | "Excel" | "Json" | "Markdown" | "Xml";
+
+export const exportFormats: ReadonlyArray<{ format: ExportFormat; label: string; extension: string }> = [
+    { format: "Csv", label: "CSV", extension: "csv" },
+    { format: "Excel", label: "Excel", extension: "xlsx" },
+    { format: "Json", label: "JSON", extension: "json" },
+    { format: "Markdown", label: "Markdown", extension: "md" },
+    { format: "Xml", label: "XML", extension: "xml" },
+];
+
 export interface MarkupContent {
     kind: "plaintext" | "markdown";
     value: string;

@@ -2,6 +2,7 @@ import { monaco, applyDiagnostics } from "../editor/monacoSetup";
 import { ConnectionRegistry } from "../connections";
 import type { Sql4CdsClient } from "../lsp/client";
 import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, ExecutionPlanNode, PptbConnectionOptions, ResultSetEventParams, ResultSetSummary, SelectionData } from "../lsp/protocol";
+import { exportFormats, type ExportFormat } from "../lsp/protocol";
 import { ExecutionPlanView } from "../executionPlan/executionPlanView";
 import { getNodeImageUrl } from "../executionPlan/nodeImages";
 import { ResultsGrid } from "./resultsGrid";
@@ -21,6 +22,8 @@ export interface QueryTabHost {
     openFetchXml(fetchXml: string): void;
     copyToClipboard(text: string): void;
     openRecord(reference: EntityReferenceValue): void;
+    copyRecordUrl(reference: EntityReferenceValue): void;
+    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string>;
 }
 
 type ResultsView = "results" | "messages" | "plan";
@@ -312,6 +315,7 @@ export class QueryTab {
     private onQueryComplete(): void {
         if (!this.running) return;
         this.running = false;
+        for (const grid of this.grids.values()) grid.setExportEnabled(true);
         this.endTime = Date.now();
 
         const elapsed = (this.elapsedMilliseconds / 1000).toFixed(1);
@@ -353,6 +357,7 @@ export class QueryTab {
             return;
         }
 
+        const generation = this.resultsGeneration;
         const grid = new ResultsGrid(
             summary.columnInfo,
             async (start, count) => {
@@ -366,12 +371,42 @@ export class QueryTab {
                 this.gridStatusIsError = isError;
                 this.host.onStatusChanged(this);
             },
+            (format) => this.exportResults(summary, generation, format),
+            {
+                copyUrl: (reference) => this.host.copyRecordUrl(reference),
+                createSelect: (reference) => void this.appendRecordSelectStatement(reference),
+            },
         );
+        grid.setExportEnabled(!this.running);
         this.grids.set(this.resultSetKey(summary), grid);
         this.updateResultSet(summary);
         this.resultsPane.appendChild(grid.element);
         this.resultsPane.dataset.count = String(this.grids.size);
         this.showResultsView("results");
+    }
+
+    private async appendRecordSelectStatement(reference: EntityReferenceValue): Promise<void> {
+        try {
+            const source = this.connectionSlot === null ? undefined : this.host.getConnectionOptions(this.connectionSlot)?.connectionName;
+            const sql = await this.host.getRecordSelectStatement(reference, source);
+            if (this.model.isDisposed()) return;
+            if (this.readOnly) throw new Error("The query editor is read-only");
+            const line = this.model.getLineCount();
+            const column = this.model.getLineMaxColumn(line);
+            const text = `${this.model.getValue() ? "\n\n" : ""}${sql}`;
+            this.model.pushStackElement();
+            this.model.pushEditOperations([], [{
+                range: new monaco.Range(line, column, line, column),
+                text,
+                forceMoveMarkers: true,
+            }], () => null);
+            this.model.pushStackElement();
+        } catch (err) {
+            this.gridStatus = `Unable to create SELECT statement: ${err instanceof Error ? err.message : String(err)}`;
+            this.gridStatusIsError = true;
+            this.host.onStatusChanged(this);
+            await window.toolboxAPI.utils.showNotification({ title: "Unable to create SELECT statement", body: this.gridStatus, type: "error" });
+        }
     }
 
     private addMessage(text: string, isError: boolean, isSummary = false): void {
@@ -381,11 +416,43 @@ export class QueryTab {
             this.statusKind = "error";
             this.host.onStatusChanged(this);
         }
+
         const line = document.createElement("div");
         line.className = isError ? "message error" : isSummary ? "message summary" : "message";
         line.textContent = text;
         this.messagesPane.appendChild(line);
         this.messagesPane.scrollTop = this.messagesPane.scrollHeight;
+    }
+
+    private async exportResults(summary: ResultSetSummary, generation: number, format: ExportFormat): Promise<void> {
+        const exportFormat = exportFormats.find((entry) => entry.format === format);
+        if (!exportFormat) throw new Error("Unsupported export format");
+        try {
+            if (generation !== this.resultsGeneration || this.running) throw new Error("These results are no longer available for export");
+            // saveFile supplies the native Save As dialog; the worker replaces the empty file with the export.
+            const path = await window.toolboxAPI.fileSystem.saveFile(
+                `${this.title.replace(/\.sql$/i, "")}-results-${summary.batchId + 1}-${summary.id + 1}.${exportFormat.extension}`,
+                "",
+                [{ name: exportFormat.label, extensions: [exportFormat.extension] }],
+            );
+            if (!path) return;
+            if (generation !== this.resultsGeneration || this.running) throw new Error("The query results changed while choosing the export filename. Please export again.");
+            this.gridStatus = `Exporting ${exportFormat.label} results...`;
+            this.gridStatusIsError = false;
+            this.host.onStatusChanged(this);
+            await this.host.client.saveResults(this.uri, summary.batchId, summary.id, path, format);
+            if (generation !== this.resultsGeneration) return;
+            this.gridStatus = `Results exported to ${path}`;
+            this.host.onStatusChanged(this);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            if (generation === this.resultsGeneration) {
+                this.gridStatus = `Unable to export results: ${message}`;
+                this.gridStatusIsError = true;
+                this.host.onStatusChanged(this);
+            }
+            await window.toolboxAPI.utils.showNotification({ title: "Unable to export results", body: message, type: "error" });
+        }
     }
 
     private resultSetKey(summary: ResultSetSummary): string {
