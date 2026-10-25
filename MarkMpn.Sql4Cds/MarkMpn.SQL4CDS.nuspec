@@ -49,7 +49,6 @@ Fixes:
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\MarkMpn.Sql4Cds.Export.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.Export.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.ApplicationInsights.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.ApplicationInsights.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Microsoft.SqlServer.TransactSql.ScriptDom.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Microsoft.SqlServer.TransactSql.ScriptDom.dll" />
-    <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\SkiaSharp.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\SkiaSharp.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\System.Text.Encoding.CodePages.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\System.Text.Encoding.CodePages.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\Anthropic.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\Anthropic.dll" />
     <file src="..\MarkMpn.Sql4Cds.XTB\bin\Release\XPath2.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds\XPath2.dll" />
