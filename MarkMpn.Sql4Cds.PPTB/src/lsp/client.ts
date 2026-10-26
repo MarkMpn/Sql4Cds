@@ -50,6 +50,7 @@ export interface ClientEvents {
     progress?(message: string): void;
     log?(params: LogMessageParams): void;
     exit?(snapshot: ToolBoxAPI.WorkerSnapshot): void;
+    failed?(message: string): void;
 }
 
 function logRpc(level: "debug" | "error", message: string, payload: unknown): void {
@@ -150,6 +151,8 @@ function splitRpcPayload(payload: string, id: string): DataverseChunkParams[] {
  */
 export class Sql4CdsClient {
     private session: ToolBoxAPI.WorkerSession | null = null;
+    private failure: string | null = null;
+    private stopping = false;
     private readonly listeners = new Map<string, DocumentListener>();
     private readonly versions = new Map<string, number>();
     private readonly chunkAssemblies = new Map<string, ChunkAssembly>();
@@ -166,6 +169,8 @@ export class Sql4CdsClient {
     constructor(private readonly events: ClientEvents) {}
 
     async start(settings: Record<string, unknown>): Promise<void> {
+        if (this.failure) throw new Error(this.failure);
+        this.stopping = false;
         const session = await window.toolboxAPI.workers.connect(WORKER_ID, {
             requests: {
                 "dataverse/executeBatch": logRpcRequest("dataverse/executeBatch", (params) => executeBatch(params as ExecuteBatchParams)),
@@ -199,11 +204,14 @@ export class Sql4CdsClient {
                 this.compactQueryEvents = false;
                 this.initialRowCount = 0;
                 this.session = null;
+                if (!this.stopping)
+                    this.failWorker(`SQL 4 CDS engine stopped${snapshot.failure ? `: ${snapshot.failure}` : ""}`);
                 this.events.exit?.(snapshot);
             },
         });
 
         await session.ready;
+        if (this.failure) throw new Error(this.failure);
         this.session = session;
 
         const initialized = await this.request<{ capabilities?: { experimental?: { sql4cds?: { queryEvents?: { version?: number; initialRowCount?: number } } } } }>("initialize", {
@@ -239,21 +247,46 @@ export class Sql4CdsClient {
         const session = this.session;
         if (!session) return;
 
-        await session.stop();
-        this.executions.clear();
-        this.initialRows.clear();
-        this.compactQueryEvents = false;
-        this.initialRowCount = 0;
-        this.session = null;
+        this.stopping = true;
+        try {
+            await session.stop();
+        } finally {
+            this.executions.clear();
+            this.initialRows.clear();
+            this.chunkAssemblies.clear();
+            this.compactQueryEvents = false;
+            this.initialRowCount = 0;
+            this.session = null;
+        }
     }
 
     get isRunning(): boolean {
-        return this.session !== null;
+        return this.session !== null && this.failure === null;
     }
 
     private get rpc(): ToolBoxAPI.WorkerSession {
+        if (this.failure) throw new Error(this.failure);
         if (!this.session) throw new Error("The SQL 4 CDS worker is not running");
         return this.session;
+    }
+
+    private failWorker(message: string): void {
+        if (this.failure || this.stopping) return;
+        this.failure = `${message}. Close and reopen the SQL 4 CDS tool to restart the engine.`;
+        this.executions.clear();
+        this.initialRows.clear();
+        this.chunkAssemblies.clear();
+        this.compactQueryEvents = false;
+        this.initialRowCount = 0;
+        this.events.failed?.(this.failure);
+    }
+
+    private checkWorkerFailure(error: unknown): void {
+        const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+        const message = typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error);
+        if ((typeof code === "string" && /^WORKER_(FAILED|EXITED|STOPPED|EXITED_BEFORE_READY)$/.test(code)) ||
+            /\bWorker API: WORKER_(FAILED|EXITED|STOPPED|EXITED_BEFORE_READY)\b/.test(message))
+            this.failWorker(`SQL 4 CDS engine failed: ${message}`);
     }
 
     private async request<Result>(method: string, params?: unknown): Promise<Result> {
@@ -265,6 +298,7 @@ export class Sql4CdsClient {
             return result;
         } catch (error) {
             logRpc("error", `<- ${method} error`, error);
+            this.checkWorkerFailure(error);
             throw error;
         }
     }
@@ -276,6 +310,7 @@ export class Sql4CdsClient {
             await this.rpc.notify(method, params);
         } catch (error) {
             logRpc("error", `-> ${method} notification error`, error);
+            this.checkWorkerFailure(error);
             throw error;
         }
     }
@@ -287,7 +322,12 @@ export class Sql4CdsClient {
             complete: chunk.complete,
             bytes: rpcMessageSize(DATAVERSE_CHUNK_METHOD, chunk),
         });
-        await this.rpc.notify(DATAVERSE_CHUNK_METHOD, chunk);
+        try {
+            await this.rpc.notify(DATAVERSE_CHUNK_METHOD, chunk);
+        } catch (error) {
+            this.checkWorkerFailure(error);
+            throw error;
+        }
     }
 
     private async sendDataverseResponse(id: string, data: DataverseResponse): Promise<void> {
@@ -319,6 +359,7 @@ export class Sql4CdsClient {
 
     private async handleDataverseError(error: unknown, message: Pick<DataverseMessageParams, "id">): Promise<void> {
         logRpc("error", "Dataverse message processing failed", error);
+        this.checkWorkerFailure(error);
         if (!(error instanceof ChunkProtocolError) || !message.id) return;
 
         try {
@@ -390,6 +431,7 @@ export class Sql4CdsClient {
     }
 
     private route<K extends keyof DocumentListener, P extends { ownerUri: string }>(params: P, event: K): void {
+        if (this.failure) return;
         const handler = this.listeners.get(params.ownerUri)?.[event] as ((p: P) => void) | undefined;
         handler?.(params);
     }
@@ -580,6 +622,7 @@ export class Sql4CdsClient {
     }
 
     async subset(ownerUri: string, batchIndex: number, resultSetIndex: number, rowsStartIndex: number, rowsCount: number): Promise<SubsetResult> {
+        if (this.failure) throw new Error(this.failure);
         const cached = this.initialRows.get(ownerUri)?.get(`${batchIndex}:${resultSetIndex}`);
         if (cached && Number.isInteger(rowsStartIndex) && Number.isInteger(rowsCount) && rowsStartIndex >= 0 && rowsCount > 0 &&
             rowsStartIndex < cached.rows.length) {

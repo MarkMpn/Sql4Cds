@@ -104,6 +104,13 @@ is released on query disposal, editor closure, re-execution or worker shutdown.
 
 ## Development
 
+If the language-server worker fails or exits unexpectedly, all open query tabs
+stop executing and display an error in Messages. A tool notification and the
+status bar explain that SQL 4 CDS must be closed and reopened to restart the
+engine. SQL text and unsaved edits are preserved; execution, connection changes
+and result export are disabled. Ordinary SQL or Dataverse query errors do not
+trigger this restart-required state.
+
 The Web API bridge preserves individual response headers and outer batch headers separately. The worker uses the batch-level `x-ms-dop-hint` header to update its recommended degree of parallelism. The bridge retries trailing 429 responses up to 10 times after the batch-level `Retry-After` delay, retrying only the uncompleted suffix and never splitting a changeset: a transaction is retried only when every operation in it is throttled. Incomplete response lists are not retried. Any final HTTP 429 response becomes an organization service fault with error code 429 and the batch-level `Retry-After` delay (in seconds) exposed as a `TimeSpan` for the engine's throttling retries.
 
 `RetrieveMetadataChanges`, `RetrieveEntity`, and `RetrieveAllOptionSets` use the same prepared Web API request and response-mapping path as standard requests. With `ExecuteMultiple`, they can share a batch with other operations while preserving client-side metadata filters and per-request faults. Explicit transaction contents are sent to Dataverse for validation.

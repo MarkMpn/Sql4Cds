@@ -59,6 +59,7 @@ function setup(pinned = true) {
     };
     const listeners = new Map();
     const executions = [];
+    let clientEvents;
     const client = {
         addListener: (uri, listener) => listeners.set(uri, listener),
         openDocument: async () => {},
@@ -95,10 +96,10 @@ function setup(pinned = true) {
                 Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
             }
         } } },
-        "./lsp/client": { Sql4CdsClient: class { constructor() { return client; } } },
+        "./lsp/client": { Sql4CdsClient: class { constructor(events) { clientEvents = events; return client; } } },
         "./lsp/protocol": {},
         "./query/queryTab": {},
-        "./objectExplorer": { ObjectExplorer: class {} },
+        "./objectExplorer": { ObjectExplorer: class { engineStopped() { this.stopped = true; } } },
         "./pinnablePane": pinnablePane,
         "./propertiesPanel": { PropertiesPanel: class {
             constructor() { this.shown = []; propertiesPanels.push(this); }
@@ -189,12 +190,75 @@ function setup(pinned = true) {
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, setNow: (value) => { now = value; } };
+    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, setNow: (value) => { now = value; } };
 }
 
 function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };
 }
+
+test("fatal worker failure stops all tabs, preserves editors and shows a restart notification", async () => {
+    const { app, clientEvents, createTab, grids, elements, timers, window, setNow } = setup();
+    const notifications = [];
+    window.toolboxAPI = {
+        preventClose: async () => {},
+        releasePreventClose: async () => {},
+        utils: { showNotification: async notification => notifications.push(notification) },
+    };
+    const first = createTab();
+    const second = createTab();
+    const idle = createTab();
+    app.tabs.push(first.tab, second.tab, idle.tab);
+    for (const { tab, events } of [first, second]) {
+        tab.connected = true;
+        tab.model.setValue("SELECT 1; -- unsaved");
+        await tab.execute(null);
+        events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
+    }
+    app.activeTab = first.tab;
+    app.updateStatusBar();
+    assert.equal(timers.size, 1);
+    app.progressMessage = "Retrieving...";
+    setNow(2500);
+    const message = "SQL 4 CDS engine failed: WORKER_FAILED. Close and reopen the SQL 4 CDS tool to restart the engine.";
+    clientEvents.failed(message);
+    assert.equal(app.ready, false);
+    assert.equal(timers.size, 0);
+    assert.equal(elements.get("btn-run").disabled, true);
+    assert.equal(elements.get("btn-cancel").disabled, true);
+    assert.equal(elements.get("status-text").textContent, message);
+    assert.equal(elements.get("status-progress").textContent, "");
+    for (const { tab } of [first, second, idle]) {
+        assert.equal(tab.running, false);
+        assert.equal(tab.connected, false);
+        assert.equal(tab.statusKind, "error");
+        assert.equal(tab.statusMessage, message);
+        assert.equal(tab.view, "messages");
+    }
+    assert.equal(first.tab.model.getValue(), "SELECT 1; -- unsaved");
+    assert.equal(first.tab.elapsedMilliseconds, 1500);
+    assert.ok(grids.every(grid => grid.exportEnabled === false));
+    first.events.queryComplete({ batchSummaries: [] });
+    assert.equal(first.tab.statusMessage, message);
+    await assert.rejects(first.tab.execute(null), /restart the engine/);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].type, "error");
+    assert.match(notifications[0].body, /restart the engine/);
+});
+
+test("worker failure releases a tab waiting for connection completion", async () => {
+    const { client, createTab } = setup();
+    client.associateConnection = async () => true;
+    const { tab } = createTab();
+    const connecting = tab.connect(0);
+    await Promise.resolve();
+    tab.engineStopped("Engine failed. Restart required.");
+    await assert.rejects(connecting, /Restart required/);
+    assert.equal(tab.connecting, false);
+    assert.equal(tab.connected, false);
+    assert.equal(tab.statusKind, "error");
+    assert.equal(tab.statusMessage, "Engine failed. Restart required.");
+});
 
 test("record menu wiring copies the shared URL and appends SELECT SQL at the latest document end as an undoable edit", async () => {
     const { app, registry, createTab, grids, window } = setup();

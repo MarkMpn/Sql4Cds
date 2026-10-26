@@ -47,6 +47,7 @@ async function createClient(responseHeaders = {}, options = {}) {
                             : {};
                     },
                     notify: async (method, params) => {
+                        if (options.notify) await options.notify(method, params);
                         if (method !== "dataverse/executeBatch/chunk" && method !== "dataverse/executeBatch/message") return;
                         notifications.push(params);
                         notificationMethods.push(method);
@@ -76,6 +77,68 @@ function batch(transaction = false, continueOnError = false) {
         ],
     };
 }
+
+test("terminal worker errors from requests and both Dataverse response transports fail the client once", async () => {
+    for (const source of ["request", "direct", "chunk"]) {
+        const failures = [];
+        let resolveFailure;
+        const failed = new Promise(resolve => { resolveFailure = resolve; });
+        const fatal = Object.assign(new Error("Worker API: WORKER_FAILED"), { code: "WORKER_FAILED" });
+        const { client, handlers, rpcRequests, logs } = await createClient(source === "chunk" ? { body: { text: "x".repeat(2000) } } : {}, {
+            maxMessageSize: source === "chunk" ? 512 : undefined,
+            queryEventsVersion: 1,
+            initialRowCount: 200,
+            events: { failed: message => { failures.push(message); resolveFailure(); } },
+            request: method => { if (method === "query/subset") throw fatal; return {}; },
+            notify: method => {
+                if (method === "dataverse/executeBatch/message" || method === "dataverse/executeBatch/chunk") throw fatal;
+            },
+        });
+        await client.executeDocumentSelection("query");
+        const executionId = rpcRequests.at(-1).params.executionId;
+        handlers.notifications["sql4cds/queryEvents"]({ ownerUri: "query", executionId, events: [{
+            type: "resultSet", data: { id: 0, batchId: 0, rowCount: 1, complete: false, columnInfo: [],
+                rowsStartIndex: 0, rows: [[{ displayValue: "cached" }]] },
+        }] });
+        const messages = [];
+        client.addListener("query", { message: params => messages.push(params.message.message) });
+        if (source === "request") {
+            await assert.rejects(client.subset("query", 0, 1, 0, 1), /WORKER_FAILED/);
+        } else {
+            handlers.notifications["dataverse/executeBatch/message"]({ id: "fatal", data: batch() });
+        }
+        await failed;
+        if (source !== "request")
+            assert.ok(logs.some(log => String(log.args[0]).includes(source === "chunk" ? "response chunk" : "notification error")));
+        assert.equal(client.isRunning, false);
+        assert.match(failures[0], /Close and reopen.*restart/);
+        await assert.rejects(client.subset("query", 0, 0, 0, 1), /restart the engine/);
+        handlers.onExit({ state: "failed", failure: "WORKER_FAILED" });
+        handlers.notifications["query/message"]({ ownerUri: "query", message: { message: "late message" } });
+        assert.equal(failures.length, 1);
+        assert.deepEqual(messages, []);
+        await assert.rejects(client.start({}), /restart the engine/);
+    }
+});
+
+test("unexpected worker exits fail the client but intentional stops and normal SQL errors do not", async () => {
+    const failures = [];
+    const { client, handlers } = await createClient({}, {
+        events: { failed: message => failures.push(message) },
+        request: () => { throw new Error("Invalid column name"); },
+    });
+    await assert.rejects(client.executeDocumentSelection("query"), /Invalid column name/);
+    assert.equal(client.isRunning, true);
+    assert.deepEqual(failures, []);
+    handlers.onExit({ state: "exited" });
+    assert.equal(client.isRunning, false);
+    assert.equal(failures.length, 1);
+    const stoppedFailures = [];
+    const stopped = await createClient({}, { events: { failed: message => stoppedFailures.push(message) } });
+    await stopped.client.stop();
+    stopped.handlers.onExit({ state: "exited" });
+    assert.deepEqual(stoppedFailures, []);
+});
 
 test("compact query events negotiate version 1 and reconstruct metadata, plans, errors and completion", async () => {
     const progress = [];
@@ -232,7 +295,7 @@ test("initial row caches are cleared by document closure, worker exit and stop",
         } else {
             if (cleanup === "exit") handlers.onExit({});
             else await client.stop();
-            await assert.rejects(client.subset("query", 0, 0, 0, 1), /worker is not running/);
+            await assert.rejects(client.subset("query", 0, 0, 0, 1), cleanup === "exit" ? /restart the engine/ : /worker is not running/);
         }
     }
 });

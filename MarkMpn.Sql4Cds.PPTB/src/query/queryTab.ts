@@ -76,6 +76,7 @@ export class QueryTab {
     private cancelled = false;
     private estimatedPlan = false;
     private endTime = 0;
+    private engineError: string | null = null;
     private view: ResultsView = "results";
 
     get elapsedMilliseconds(): number {
@@ -199,6 +200,7 @@ export class QueryTab {
 
     /** Connects this tab to one of the PPTB connection slots */
     async connect(slot: number): Promise<void> {
+        if (this.engineError) throw new Error(this.engineError);
         const options = this.host.getConnectionOptions(slot);
         if (!options) throw new Error("The selected connection is not available");
 
@@ -217,6 +219,7 @@ export class QueryTab {
             if (!accepted) throw new Error("The connection request was rejected");
 
             const result = await complete;
+            if (this.engineError) throw new Error(this.engineError);
             if (result.errorMessage) throw new Error(result.errorMessage);
 
             this.connected = true;
@@ -224,7 +227,7 @@ export class QueryTab {
             this.statusMessage = "Connected";
             this.statusKind = "success";
         } catch (err) {
-            this.statusMessage = `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
+            this.statusMessage = this.engineError ?? `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
             this.statusKind = "error";
             throw err;
         } finally {
@@ -257,10 +260,12 @@ export class QueryTab {
      * is not run and the estimated execution plan is shown instead.
      */
     async execute(selection: monaco.Selection | null, estimatedPlan = false): Promise<void> {
+        if (this.engineError) throw new Error(this.engineError);
         if (this.running) return;
         if (!this.connected) throw new Error("Select a connection before running a query");
 
         await this.clearResults();
+        if (this.engineError) throw new Error(this.engineError);
 
         this.executionResultsMode = this.resultsMode;
         this.showResultsView("results");
@@ -290,6 +295,7 @@ export class QueryTab {
                 includeActualExecutionPlanXml: !estimatedPlan && this.host.includeActualPlan,
             });
         } catch (err) {
+            if (this.engineError) return;
             this.addMessage(err instanceof Error ? err.message : String(err), true);
             this.onQueryComplete();
         }
@@ -307,6 +313,7 @@ export class QueryTab {
                 this.addMessage(result.messages, true);
             }
         } catch (err) {
+            if (this.engineError) return;
             this.cancelled = false;
             this.addMessage(`Unable to cancel query: ${err instanceof Error ? err.message : String(err)}`, true);
         }
@@ -330,6 +337,26 @@ export class QueryTab {
         if (this.hasErrors || (this.grids.size === 0 && this.textResultSets.size === 0 && this.planView.count === 0)) this.showResultsView("messages");
         else if (this.planView.count > 0 && (this.estimatedPlan || (this.grids.size === 0 && this.textResultSets.size === 0))) this.showResultsView("plan");
         if (this.executionResultsMode === "text") void this.renderTextResults(this.resultsGeneration);
+        this.host.onStateChanged(this);
+    }
+
+    engineStopped(message: string): void {
+        if (this.engineError) return;
+        this.engineError = message;
+        if (this.running) this.endTime = Date.now();
+        this.running = false;
+        this.connected = false;
+        this.connecting = false;
+        this.connectionSummary = undefined;
+        this.cancelled = false;
+        this.resultsGeneration++;
+        this.gridStatus = "";
+        this.gridStatusIsError = false;
+        for (const grid of this.grids.values()) grid.setExportEnabled(false);
+        this.pendingConnect?.({ ownerUri: this.uri, errorMessage: message });
+        this.pendingConnect = null;
+        this.addMessage(message, true);
+        this.showResultsView("messages");
         this.host.onStateChanged(this);
     }
 

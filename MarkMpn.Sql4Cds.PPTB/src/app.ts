@@ -97,11 +97,15 @@ class App implements QueryTabHost {
                 if (params.type === 1) console.error(params.message);
                 else console.log(params.message);
             },
-            exit: (snapshot) => {
+            failed: (message) => {
                 this.ready = false;
+                this.progressMessage = "";
                 this.objectExplorer.engineStopped();
+                for (const tab of this.tabs) tab.engineStopped(message);
                 this.updateToolbar();
-                this.setStatus(`SQL 4 CDS engine stopped${snapshot.failure ? `: ${snapshot.failure}` : ""}`, "error");
+                this.updateStatusBar();
+                this.setStatus(message, "error");
+                void notify("SQL 4 CDS engine failed", message, "error");
             },
         });
         this.connections = new ConnectionRegistry(this.client);
@@ -423,6 +427,7 @@ class App implements QueryTabHost {
             await this.connections.register(slot);
             await tab.connect(slot);
         } catch (err) {
+            if (!this.ready) return;
             tab.statusMessage = `Connection failed: ${errorMessage(err)}`;
             tab.statusKind = "error";
             this.onStateChanged(tab);
