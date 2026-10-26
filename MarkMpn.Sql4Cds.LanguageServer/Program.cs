@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
     {
         static async Task Main(string[] args)
         {
-            //if (Array.IndexOf(args, "--enable-remote-debugging-wait") != -1)
+            if (Array.IndexOf(args, "--enable-remote-debugging-wait") != -1)
                 System.Diagnostics.Debugger.Launch();
 
             var logDirArg = "--log-dir=";
