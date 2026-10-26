@@ -170,7 +170,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 #if !NETCOREAPP
         [Editor(typeof(MiniChartEditor), typeof(System.Drawing.Design.UITypeEditor))]
 #endif
-        public float[] ActualDOP => _threadCountHistory.Select(i => (float)i).ToArray();
+        public float[] ActualDOP => _threadCountHistory?.Select(i => (float)i).ToArray();
 
         [Category("Statistics")]
         [DisplayName("Records Per Minute")]
@@ -180,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 #if !NETCOREAPP
         [Editor(typeof(MiniChartEditor), typeof(System.Drawing.Design.UITypeEditor))]
 #endif
-        public float[] RPM => _rpmHistory.Select(i => (float)i).ToArray();
+        public float[] RPM => _rpmHistory?.Select(i => (float)i).ToArray();
 
         [Category("Statistics")]
         [DisplayName("Actual Batch Size")]
