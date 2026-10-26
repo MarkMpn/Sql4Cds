@@ -29,7 +29,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         public void NoResultsOrMessagesReportsCommandsCompleted()
         {
             CollectionAssert.AreEqual(
-                new[] { "Commands completed successfully.", "Completion time: 2026-10-26T19:48:24.6811234+01:00" },
+                new[] { "Commands completed successfully.", "\r\nCompletion time: 2026-10-26T19:48:24.6811234+01:00" },
                 Messages(0));
         }
 
@@ -42,8 +42,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [TestMethod]
         public void ResultSetsOrMessagesOnlyReportCompletionTime()
         {
-            CollectionAssert.AreEqual(new[] { "Completion time: 2026-10-26T19:48:24.6811234+01:00" }, Messages(0, Plan(), new ResultSetSummary()));
-            CollectionAssert.AreEqual(new[] { "Completion time: 2026-10-26T19:48:24.6811234+01:00" }, Messages(1));
+            CollectionAssert.AreEqual(new[] { "\r\nCompletion time: 2026-10-26T19:48:24.6811234+01:00" }, Messages(0, Plan(), new ResultSetSummary()));
+            CollectionAssert.AreEqual(new[] { "\r\nCompletion time: 2026-10-26T19:48:24.6811234+01:00" }, Messages(1));
         }
     }
 }
