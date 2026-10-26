@@ -126,11 +126,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
         internal static string Format(string query, FormatterOptions options)
         {
             var fragment = new TSql160Parser(true).Parse(new StringReader(query), out var errors);
+            
             if (errors.Count != 0)
                 throw new ArgumentException(String.Join("\n", errors.Select(error => $"Line {error.Line}: {error.Message}")));
-            if (options?.AddDisplayNames == true &&
-                ((TSqlScript)fragment).Batches.SelectMany(batch => batch.Statements).Any(statement => !(statement is SelectStatement select) || select.Into != null))
-                throw new NotSupportedException("Add Display Names supports documents containing SELECT statements only.");
+            
             return Formatter.Format(query, options);
         }
 
