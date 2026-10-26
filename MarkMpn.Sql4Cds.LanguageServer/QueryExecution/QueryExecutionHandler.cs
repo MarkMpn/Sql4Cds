@@ -166,6 +166,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 BatchSummary = batchSummary
             });
 
+            var messageCount = 0;
+            Task SendMessageAsync(string message, bool isError = false)
+            {
+                Interlocked.Increment(ref messageCount);
+                return events.NotifyAsync(MessageEvent.Type, new MessageParams
+                {
+                    OwnerUri = request.OwnerUri,
+                    Message = new ResultMessage
+                    {
+                        BatchId = batchSummary.Id,
+                        Time = DateTime.UtcNow.ToString("o"),
+                        Message = message,
+                        IsError = isError
+                    }
+                });
+            }
+
             var infoMessageHandler = (EventHandler<InfoMessageEventArgs>)((object sender, InfoMessageEventArgs msg) =>
             {
                 var message = msg.Message.Message;
@@ -173,16 +190,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 if (msg.Message.Class != 0 && msg.Message.Class != 10)
                     message += $"\r\nMsg {msg.Message.Number}, Level {msg.Message.Class}, State {msg.Message.State}";
 
-                _ = events.NotifyAsync(MessageEvent.Type, new MessageParams
-                {
-                    OwnerUri = request.OwnerUri,
-                    Message = new ResultMessage
-                    {
-                        BatchId = batchSummary.Id,
-                        Time = DateTime.UtcNow.ToString("o"),
-                        Message = message
-                    }
-                });
+                _ = SendMessageAsync(message);
             });
             var progressHandler = (EventHandler<ProgressEventArgs>)((object sender, ProgressEventArgs progress) =>
             {
@@ -269,18 +277,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     cmd.StatementCompleted += (_, stmt) =>
                     {
                         if (stmt.Message != null)
-                        {
-                            _ = events.NotifyAsync(MessageEvent.Type, new MessageParams
-                            {
-                                OwnerUri = request.OwnerUri,
-                                Message = new ResultMessage
-                                {
-                                    BatchId = batchSummary.Id,
-                                    Time = DateTime.UtcNow.ToString("o"),
-                                    Message = stmt.Message
-                                }
-                            });
-                        }
+                            _ = SendMessageAsync(stmt.Message);
                     };
 
                     if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
@@ -453,29 +450,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                             parts.Add($"Line {Math.Max(sql4CdsError.LineNumber, 1)}");
                         }
 
-                        await events.NotifyAsync(MessageEvent.Type, new MessageParams
-                        {
-                            OwnerUri = request.OwnerUri,
-                            Message = new ResultMessage
-                            {
-                                BatchId = batchSummary.Id,
-                                Time = DateTime.UtcNow.ToString("o"),
-                                Message = String.Join(", ", parts),
-                                IsError = true
-                            }
-                        });
-
-                        await events.NotifyAsync(MessageEvent.Type, new MessageParams
-                        {
-                            OwnerUri = request.OwnerUri,
-                            Message = new ResultMessage
-                            {
-                                BatchId = batchSummary.Id,
-                                Time = DateTime.UtcNow.ToString("o"),
-                                Message = sql4CdsError.Message,
-                                IsError = true
-                            }
-                        });
+                        await SendMessageAsync(String.Join(", ", parts), true);
+                        await SendMessageAsync(sql4CdsError.Message, true);
 
                         if (sql4CdsError.Fragment != null && sql4CdsError.Fragment.FragmentLength > 0)
                         {
@@ -528,17 +504,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     });
                 }
 
-                await events.NotifyAsync(MessageEvent.Type, new MessageParams
-                {
-                    OwnerUri = request.OwnerUri,
-                    Message = new ResultMessage
-                    {
-                        BatchId = batchSummary.Id,
-                        Time = DateTime.UtcNow.ToString("o"),
-                        Message = GetErrorMessage(ex, sql4CdsException),
-                        IsError = true
-                    }
-                });
+                await SendMessageAsync(GetErrorMessage(ex, sql4CdsException), true);
 
                 var error = ex;
 
@@ -589,6 +555,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
             var endTime = DateTime.UtcNow;
 
+            foreach (var message in GetCompletionMessages(Volatile.Read(ref messageCount), resultSets, DateTimeOffset.Now))
+                await SendMessageAsync(message);
+
             batchSummary.ExecutionEnd = endTime.ToLocalTime().ToString("o");
             batchSummary.ExecutionElapsed = (endTime - startTime).ToString();
             batchSummary.ResultSetSummaries = resultSets.ToArray();
@@ -611,6 +580,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     batchSummary
                 }
             });
+        }
+
+        internal static IEnumerable<string> GetCompletionMessages(int messageCount, IEnumerable<ResultSetSummary> resultSets, DateTimeOffset completionTime)
+        {
+            // Execution plans are returned as result sets but aren't shown as results
+            if (messageCount == 0 && !resultSets.Any(rs => rs.SpecialAction?.ExpectYukonXMLShowPlan != true))
+                yield return "Commands completed successfully.";
+
+            yield return $"\r\nCompletion time: {completionTime:O}";
         }
 
         private string GetErrorMessage(Exception error, Sql4CdsException rootException)

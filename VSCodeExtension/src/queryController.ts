@@ -28,7 +28,6 @@ interface QueryState {
   estimatedPlan: boolean;
   started: number;
   ended?: number;
-  batchElapsed?: string;
 }
 
 interface WebviewMessage {
@@ -216,7 +215,6 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     const state = this.states.get(params.ownerUri);
     if (!state) { return; }
     state.ended = Date.now();
-    state.batchElapsed = params.batchSummaries?.map(batch => batch.executionElapsed).filter(Boolean).join(" + ");
     const hasErrors = state.messages.some(message => message.isError) || Boolean(params.batchSummaries?.some(batch => batch.hasError));
     state.status = state.cancelRequested ? "cancelled" : hasErrors ? "failed" : "completed";
     this.publishState(params.ownerUri);
@@ -244,6 +242,10 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     if (message.type === "ready") {
       if (this.selectedUri && this.states.has(this.selectedUri)) { this.publishState(this.selectedUri); }
       else { void webview.postMessage({ type: "empty" }); }
+      return;
+    }
+    if (message.type === "hidePanel") {
+      await vscode.commands.executeCommand("workbench.action.closePanel");
       return;
     }
     if (message.type === "error" && typeof message.text === "string") {
@@ -364,7 +366,6 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     this.updateQueryStatus(state, returnedRows, affectedRows.length ? affectedRows.reduce((total, value) => total + value, 0) : undefined);
     void this.resultsView?.webview.postMessage({
       type: "state", ownerUri: uri, runId: state.runId, status: state.status, estimatedPlan: state.estimatedPlan,
-      returnedRows, batchElapsed: state.batchElapsed,
       planVersion: state.planVersion,
       autoSizeColumns: vscode.workspace.getConfiguration("SQL4CDS").get<boolean>("autoSizeColumns", true),
       plans: [...state.plans].map(([key, graphs]) => ({ key, graphs })),

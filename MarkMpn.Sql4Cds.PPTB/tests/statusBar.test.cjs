@@ -197,6 +197,32 @@ function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };
 }
 
+test("results area stays hidden for new tabs until the active tab runs a query", async () => {
+    const { app, createTab, elements } = setup();
+    const first = createTab();
+    const second = new (first.tab.constructor)(app, "");
+    app.tabs.push(first.tab, second);
+    app.editor = {
+        saveViewState: () => null,
+        restoreViewState: () => {},
+        setModel: () => {},
+        updateOptions: () => {},
+        focus: () => {},
+    };
+    app.activeTab = undefined;
+    app.activateTab(first.tab);
+    assert.equal(elements.get("results-host").hidden, true);
+    assert.equal(elements.get("splitter").hidden, true);
+    first.tab.connected = true;
+    await first.tab.execute(null);
+    assert.equal(elements.get("results-host").hidden, false);
+    assert.equal(elements.get("splitter").hidden, false);
+    app.activateTab(second);
+    assert.equal(elements.get("results-host").hidden, true);
+    app.activateTab(first.tab);
+    assert.equal(elements.get("results-host").hidden, false);
+});
+
 test("fatal worker failure stops all tabs, preserves editors and shows a restart notification", async () => {
     const { app, clientEvents, createTab, grids, elements, timers, window, setNow } = setup();
     const notifications = [];
@@ -234,7 +260,8 @@ test("fatal worker failure stops all tabs, preserves editors and shows a restart
         assert.equal(tab.statusKind, "error");
         assert.equal(tab.statusMessage, message);
         assert.equal(tab.view, "messages");
-    }
+        assert.equal(tab.hasResults, true);
+        }
     assert.equal(first.tab.model.getValue(), "SELECT 1; -- unsaved");
     assert.equal(first.tab.elapsedMilliseconds, 1500);
     assert.ok(grids.every(grid => grid.exportEnabled === false));
@@ -516,6 +543,7 @@ test("one global status bar shows connection details and accurately ticks elapse
     events.queryComplete({ batchSummaries: [{ resultSetSummaries: [summary(1, 0, 7)] }] });
     assert.equal(elements.get("status-rows").textContent, "17 rows", "Completion summaries reconcile final totals");
     assert.equal(elements.get("status-text").textContent, "Query completed successfully");
+    assert.equal(tab.messagesPane.children.length, 0, "Completion status is shown in the status bar rather than as a message");
     assert.equal(timers.size, 0);
     setNow(90000);
     app.updateStatusBar();
@@ -687,6 +715,8 @@ for (const mode of ["grid", "text"]) {
             await tab.connect(0);
             tab.resultsMode = mode;
             await tab.execute(null, estimated);
+            assert.equal(tab.resultsTabButtons.get("results").hidden, true, "Results tab is hidden until a result set arrives");
+            assert.equal(tab.view, "messages");
             if (hasResult) events.resultSetAvailable({ resultSetSummary: summary(0, 0, 0) });
             const plan = planSummary(hasResult ? 1 : 0);
             events.resultSetAvailable({ resultSetSummary: plan });
@@ -695,6 +725,7 @@ for (const mode of ["grid", "text"]) {
             if (!estimated && hasResult) tab.showResultsView("plan");
             events.queryComplete({ batchSummaries: [] });
             assert.equal(tab.view, expected);
+            assert.equal(tab.resultsTabButtons.get("results").hidden, !hasResult);
             assert.equal(tab.resultsTabButtons.get("plan").hidden, false, "Actual plans remain available for manual selection");
         });
     }

@@ -44,7 +44,7 @@ function fixture() {
   const emit = (message: unknown) => window.dispatchEvent(new window.MessageEvent("message", { data: message }));
   const state = (overrides: Partial<ResultsState> = {}) => emit({
     type: "state", ownerUri: "untitled:query", runId: 1, status: "completed", estimatedPlan: false,
-    results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, returnedRows: 3, ...overrides
+    results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, ...overrides
   });
   const respond = (request: Record<string, any>, value?: unknown, error?: string) => emit({
     type: "response", requestId: request.requestId, value, error
@@ -71,6 +71,7 @@ for (const estimatedPlan of [false, true]) {
           assert.equal(ui.window.document.querySelector('[role="tab"][aria-selected="true"]')?.id, `${expected}-tab`);
           assert.equal(ui.window.document.querySelectorAll(".plan-node").length, 1);
           assert.equal(ui.window.document.getElementById("plan-tab")!.hidden, false);
+          assert.equal(ui.window.document.getElementById("results-tab")!.hidden, !hasRows);
           assert.equal(ui.window.document.querySelectorAll(".results-grid").length, hasRows ? 1 : 0);
         } finally { ui.close(); }
       });
@@ -188,9 +189,56 @@ test("empty and editor switching discard stale rows, grids and execution plans",
     ui.respond(request, [[{ displayValue: "stale", isNull: false }]]);
     await ui.tick();
     assert.equal(ui.window.document.querySelectorAll(".results-grid,.plan-node").length, 0);
-    assert.match(ui.window.document.getElementById("messages")!.textContent!, /Waiting for query results/);
+    const empty = ui.window.document.getElementById("empty-state")!;
+    assert.equal(empty.hidden, false);
+    assert.equal(ui.window.document.querySelector<HTMLElement>(".query-results")!.hidden, true);
+    assert.equal(empty.querySelector("h1")!.textContent, "No results for the active editor");
     ui.state({ ownerUri: "untitled:second", results: [] });
+    assert.equal(empty.hidden, true);
     assert.equal(ui.window.document.getElementById("messages")!.hidden, false);
+  } finally { ui.close(); }
+});
+
+test("new editors show the shared no-results state and can hide the panel", () => {
+  const ui = fixture();
+  try {
+    const document = ui.window.document;
+    const empty = document.getElementById("empty-state")!;
+    assert.equal(empty.hidden, false);
+    assert.equal(document.querySelector<HTMLElement>(".query-results")!.hidden, true);
+    assert.equal(empty.querySelector("h1")!.textContent, "No results for the active editor");
+    assert.equal(empty.querySelector("p")!.textContent,
+      "Run a query in the current editor, or switch to an editor that has results");
+    document.getElementById("hide-panel")!.click();
+    assert.deepEqual(ui.sent.at(-1), { type: "hidePanel" });
+    ui.state();
+    assert.equal(empty.hidden, true);
+    assert.equal(document.querySelector<HTMLElement>(".query-results")!.hidden, false);
+  } finally { ui.close(); }
+});
+
+test("Messages pane shows only server messages without a client-generated summary", () => {
+  const ui = fixture();
+  try {
+    ui.state({
+      results: [], plans: [],
+      messages: [{ isError: false, message: "Commands completed successfully." }, { isError: false, message: "Completion time: 2026-10-26T19:48:24.6811234+00:00" }]
+    });
+    assert.deepEqual([...ui.window.document.querySelectorAll("#messages .message")].map(node => node.textContent),
+      ["Commands completed successfully.", "Completion time: 2026-10-26T19:48:24.6811234+00:00"]);
+  } finally { ui.close(); }
+});
+
+test("Results tab appears only once a running query returns a result set", () => {
+  const ui = fixture();
+  try {
+    const document = ui.window.document;
+    ui.state({ status: "running", results: [], plans: [] });
+    assert.equal(document.getElementById("results-tab")!.hidden, true);
+    assert.equal(document.querySelector('[role="tab"][aria-selected="true"]')?.id, "messages-tab");
+    ui.state({ status: "running", plans: [] });
+    assert.equal(document.getElementById("results-tab")!.hidden, false);
+    assert.equal(document.querySelector('[role="tab"][aria-selected="true"]')?.id, "results-tab");
   } finally { ui.close(); }
 });
 

@@ -29,7 +29,7 @@ SQL 4 CDS uses the `.sql4cds` extension and the `sql4cds` language identifier. T
 
 ## Working with results
 
-The results panel uses the same virtualized grid, execution-plan renderer, and node-properties panel as the Power Platform ToolBox tool, with VS Code theme colors and native clipboard, file dialogs, and editors. Multiple result sets are stacked in a single Results tab. Each grid fetches 200-row pages on demand and caches at most ten pages.
+The results panel uses the same virtualized grid, execution-plan renderer, and node-properties panel as the Power Platform ToolBox tool, with VS Code theme colors and native clipboard, file dialogs, and editors. Multiple result sets are stacked in a single Results tab. Each grid fetches 200-row pages on demand and caches at most ten pages. If the active editor has no results yet, the panel prompts you to run a query or switch editors, and offers a button to hide the panel.
 
 Click or drag to select cells, use the row-number gutter or column header to select a complete row or column, and use `Shift` to extend a range. `Ctrl+A` (`Cmd+A` on macOS) selects all displayed rows. Use `Ctrl+C` (`Cmd+C`) to copy tab-separated values, or `Ctrl+Shift+C` (`Cmd+Shift+C`) to include headers. Columns can be resized and initially widen to fit loaded values when `SQL4CDS.autoSizeColumns` is enabled. Dataverse record values link to their records in the browser.
 

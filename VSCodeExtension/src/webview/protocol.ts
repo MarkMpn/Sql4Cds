@@ -8,8 +8,6 @@ export interface ResultsState {
   estimatedPlan: boolean;
   planVersion: number;
   autoSizeColumns: boolean;
-  returnedRows: number;
-  batchElapsed?: string;
   results: {
     key: string;
     rowCount: number;

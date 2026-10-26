@@ -610,6 +610,11 @@ body.resizing-pane {
     flex-direction: column;
 }
 
+.splitter[hidden],
+.results-host[hidden] {
+    display: none;
+}
+
 .query-results {
     flex: 1;
     display: flex;

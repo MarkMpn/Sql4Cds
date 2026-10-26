@@ -49,6 +49,8 @@ export class QueryTab {
     connected = false;
     connecting = false;
     running = false;
+    /** Results stay hidden until a query has been started or the engine reports a failure */
+    hasResults = false;
     startTime = 0;
     connectionSummary: ConnectionCompleteParams["connectionSummary"];
     statusMessage = "Not connected";
@@ -149,7 +151,7 @@ export class QueryTab {
         this.planPane.appendChild(this.planView.element);
 
         this.resultsElement.append(resultsTabs, this.resultsPane, this.textPane, this.messagesPane, this.planPane);
-        this.showResultsView("results");
+        this.showResultsView("messages");
 
         if (!this.readOnly) {
             host.client.addListener(this.uri, {
@@ -268,7 +270,8 @@ export class QueryTab {
         if (this.engineError) throw new Error(this.engineError);
 
         this.executionResultsMode = this.resultsMode;
-        this.showResultsView("results");
+        this.showResultsView("messages");
+        this.hasResults = true;
         this.running = true;
         this.hasErrors = false;
         this.cancelled = false;
@@ -325,13 +328,11 @@ export class QueryTab {
         for (const grid of this.grids.values()) grid.setExportEnabled(true);
         this.endTime = Date.now();
 
-        const elapsed = (this.elapsedMilliseconds / 1000).toFixed(1);
         this.statusMessage = this.cancelled ? "Query cancelled"
             : this.hasErrors ? "Query completed with errors"
             : this.estimatedPlan ? "Estimated execution plan generated"
             : "Query completed successfully";
         this.statusKind = this.cancelled ? "warning" : this.hasErrors ? "error" : "success";
-        this.addMessage(`${this.statusMessage} in ${elapsed}s`, false, true);
 
         if (this.hasErrors) this.showResultsView("messages");
         else if (this.estimatedPlan && this.planView.count > 0) this.showResultsView("plan");
@@ -344,6 +345,7 @@ export class QueryTab {
     engineStopped(message: string): void {
         if (this.engineError) return;
         this.engineError = message;
+        this.hasResults = true;
         if (this.running) this.endTime = Date.now();
         this.running = false;
         this.connected = false;
@@ -437,7 +439,7 @@ export class QueryTab {
         }
     }
 
-    private addMessage(text: string, isError: boolean, isSummary = false): void {
+    private addMessage(text: string, isError: boolean): void {
         if (isError) {
             this.hasErrors = true;
             this.statusMessage = text;
@@ -446,7 +448,7 @@ export class QueryTab {
         }
 
         const line = document.createElement("div");
-        line.className = isError ? "message error" : isSummary ? "message summary" : "message";
+        line.className = isError ? "message error" : "message";
         line.textContent = text;
         this.messagesPane.appendChild(line);
         this.messagesPane.scrollTop = this.messagesPane.scrollHeight;
@@ -541,6 +543,7 @@ export class QueryTab {
         this.textPane.hidden = view !== "results" || this.executionResultsMode !== "text";
         this.messagesPane.hidden = view !== "messages";
         this.planPane.hidden = view !== "plan";
+        this.resultsTabButtons.get("results")!.hidden = this.grids.size === 0 && this.textResultSets.size === 0;
         for (const [key, button] of this.resultsTabButtons) {
             button.classList.toggle("active", key === view);
             button.setAttribute("aria-pressed", String(key === view));
@@ -558,7 +561,7 @@ export class QueryTab {
         this.planResultSets.clear();
         this.planView.clear();
         this.resultsTabButtons.get("plan")!.hidden = true;
-        if (this.view === "plan") this.showResultsView("results");
+        this.showResultsView("messages");
         this.gridStatus = "";
         this.gridStatusIsError = false;
         this.resultsPane.dataset.count = "0";

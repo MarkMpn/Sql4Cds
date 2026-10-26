@@ -15,9 +15,14 @@ export function resultsHtml(webview: vscode.Webview, assets: ResultsAssets): str
   <title>SQL 4 CDS Results</title>
 </head>
 <body data-images="${assets.images}">
-  <div class="query-results">
+  <section id="empty-state" class="empty-state" aria-labelledby="empty-title">
+    <h1 id="empty-title">No results for the active editor</h1>
+    <p>Run a query in the current editor, or switch to an editor that has results</p>
+    <button id="hide-panel" type="button">Hide this panel</button>
+  </section>
+  <div class="query-results" hidden>
     <nav class="results-tabs" role="tablist" aria-label="Query results">
-      <button id="results-tab" role="tab" aria-controls="results">Results</button>
+      <button id="results-tab" role="tab" aria-controls="results" hidden>Results</button>
       <button id="messages-tab" role="tab" aria-controls="messages">Messages</button>
       <button id="plan-tab" role="tab" aria-controls="plan" hidden>Execution Plan</button>
     </nav>

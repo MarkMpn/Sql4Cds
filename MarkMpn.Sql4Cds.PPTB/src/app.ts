@@ -325,6 +325,7 @@ class App implements QueryTabHost {
         this.editor.focus();
 
         for (const t of this.tabs) t.resultsElement.hidden = t !== tab;
+        this.updateResultsVisibility();
         this.renderTabs();
         this.renderConnectionList();
         this.updateToolbar();
@@ -527,9 +528,16 @@ class App implements QueryTabHost {
         this.renderTabs();
         this.syncClosePrevention();
         if (tab === this.activeTab) {
+            this.updateResultsVisibility();
             this.renderConnectionList();
             this.updateToolbar();
         }
+    }
+
+    private updateResultsVisibility(): void {
+        const visible = this.activeTab?.hasResults === true;
+        this.el.splitter.hidden = !visible;
+        this.el.results.hidden = !visible;
     }
 
     onStatusChanged(tab: QueryTab): void {

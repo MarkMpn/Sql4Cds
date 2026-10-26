@@ -13,6 +13,8 @@ const results = element("results");
 const messages = element("messages");
 const plan = element("plan");
 const status = element("status");
+const emptyState = element("empty-state");
+const queryResults = document.querySelector<HTMLElement>(".query-results")!;
 const panes = { results, messages, plan };
 type Pane = keyof typeof panes;
 let active: Pane = "messages";
@@ -83,6 +85,7 @@ function reset(): void {
   results.replaceChildren();
   messages.replaceChildren();
   planView.clear();
+  element("results-tab").hidden = true;
   element("plan-tab").hidden = true;
   status.textContent = "";
   selectedByUser = false;
@@ -115,6 +118,7 @@ function update(next: ResultsState): void {
     grid.setExportEnabled(!running && result.complete);
   }
   results.dataset.count = String(grids.size);
+  element("results-tab").hidden = grids.size === 0;
   if (planVersion !== next.planVersion) {
     planVersion = next.planVersion;
     planView.clear();
@@ -129,11 +133,6 @@ function update(next: ResultsState): void {
     node.textContent = message.message;
     return node;
   });
-  const summary = document.createElement("div");
-  summary.className = "message summary";
-  summary.textContent = running ? (next.status === "cancelling" ? "Cancelling query..." : "Executing query...")
-    : `${next.status === "failed" ? "Query failed" : next.status === "cancelled" ? "Query cancelled" : "Query completed"}. ${next.returnedRows.toLocaleString()} rows returned.${next.batchElapsed ? ` Total execution time: ${next.batchElapsed}` : ""}`;
-  nodes.push(summary);
   for (const result of next.results.filter(result => result.truncated)) {
     const limit = document.createElement("div");
     limit.className = "message summary";
@@ -149,6 +148,13 @@ function update(next: ResultsState): void {
   else select(active);
 }
 
+function showEmpty(): void {
+  reset();
+  state = undefined;
+  emptyState.hidden = false;
+  queryResults.hidden = true;
+}
+
 window.addEventListener("message", event => {
   const message = event.data as ResultsState | ResultResponse | { type: "empty" };
   if (message.type === "response") {
@@ -157,13 +163,12 @@ window.addEventListener("message", event => {
     pending.delete(message.requestId);
     if (message.error) request.reject(new Error(message.error));
     else request.resolve(message.value);
-  } else if (message.type === "state") update(message);
-  else if (message.type === "empty") {
-    reset();
-    state = undefined;
-    messages.textContent = "Waiting for query results...";
-  }
+  } else if (message.type === "state") {
+    emptyState.hidden = true;
+    queryResults.hidden = false;
+    update(message);
+  } else if (message.type === "empty") showEmpty();
 });
-select("messages");
-messages.textContent = "Waiting for query results...";
+element("hide-panel").addEventListener("click", () => vscode.postMessage({ type: "hidePanel" }));
+showEmpty();
 vscode.postMessage({ type: "ready" });
