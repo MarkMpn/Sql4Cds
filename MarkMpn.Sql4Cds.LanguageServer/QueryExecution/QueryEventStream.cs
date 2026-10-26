@@ -95,7 +95,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         ["id"] = summary.Id,
                         ["batchId"] = summary.BatchId,
                         ["rowCount"] = summary.RowCount,
-                        ["complete"] = summary.Complet
+                        ["complete"] = summary.Complete,
                     };
 
                     if (!introduced)
