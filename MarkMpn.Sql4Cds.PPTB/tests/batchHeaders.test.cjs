@@ -479,6 +479,53 @@ test("batch headers survive chunked RPC reassembly", { timeout: 5000 }, async ()
     assert.equal(result.result[0].batchHeaders["Retry-After"], "12");
 });
 
+test("204 responses omit undefined properties before PPTB validates direct notifications", async () => {
+    const hostResult = {
+        contentId: "1", status: 204, statusText: undefined, body: undefined,
+        headers: { ETag: "version", absent: undefined },
+        batchHeaders: { absent: undefined },
+    };
+    const assertJsonValues = value => {
+        assert.notEqual(value, undefined);
+        if (value !== null && typeof value === "object")
+            for (const child of Object.values(value)) assertJsonValues(child);
+    };
+    const { handlers, notifications, response } = await createClient(() => [hostResult], {
+        notify: (method, params) => {
+            if (method === "dataverse/executeBatch/message") assertJsonValues(params);
+        },
+    });
+    handlers.notifications["dataverse/executeBatch/message"]({ id: "update", data: batch() });
+    await response;
+    const result = notifications[0].data.result[0];
+    assert.equal(result.status, 204);
+    assert.equal(Object.hasOwn(result, "body"), false);
+    assert.equal(Object.hasOwn(result, "statusText"), false);
+    assert.deepEqual({ ...result.headers }, { ETag: "version" });
+    assert.deepEqual({ ...result.batchHeaders }, {});
+    assert.equal(Object.hasOwn(hostResult.headers, "absent"), true, "Do not mutate the host response");
+});
+
+test("outgoing RPC objects and legacy responses recursively omit undefined while preserving JSON values", async () => {
+    const { client, handlers, rpcRequests } = await createClient({
+        statusText: undefined, body: undefined, headers: { missing: undefined, present: "value" },
+    });
+    await client.request("test", {
+        omitted: undefined, nested: { omitted: undefined, nullable: null },
+        array: [undefined, { omitted: undefined, zero: 0, flag: false, text: "" }],
+    });
+    assert.equal(JSON.stringify(rpcRequests.at(-1).params), '{"nested":{"nullable":null},"array":[null,{"zero":0,"flag":false,"text":""}]}');
+    assert.equal(Object.hasOwn(rpcRequests.at(-1).params, "omitted"), false);
+    assert.equal(Object.hasOwn(rpcRequests.at(-1).params.nested, "omitted"), false);
+    assert.equal(rpcRequests.at(-1).params.array[0], null);
+    const result = await handlers.requests["dataverse/executeBatch"](batch(), {});
+    for (const item of result) {
+        assert.equal(Object.hasOwn(item, "body"), false);
+        assert.equal(Object.hasOwn(item, "statusText"), false);
+        assert.equal(Object.hasOwn(item.headers, "missing"), false);
+    }
+});
+
 test("small notifications preserve request objects and return an unescaped response object", async () => {
     const { handlers, calls, notifications, notificationMethods, response } = await createClient({
         body: { name: "Quotes \"\\\r\n and Unicode \u00e9 \ud83d\ude00" },

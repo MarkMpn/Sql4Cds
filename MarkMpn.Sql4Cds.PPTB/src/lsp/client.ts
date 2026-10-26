@@ -57,6 +57,16 @@ function logRpc(level: "debug" | "error", message: string, payload: unknown): vo
     console[level](`[SQL 4 CDS RPC] [${new Date().toISOString()}] ${message}`, payload);
 }
 
+function omitUndefinedProperties(value: unknown): unknown {
+    if (Array.isArray(value))
+        return value.map(item => item === undefined ? null : omitUndefinedProperties(item));
+    if (value !== null && typeof value === "object")
+        return Object.fromEntries(Object.entries(value)
+            .filter(([, item]) => item !== undefined)
+            .map(([key, item]) => [key, omitUndefinedProperties(item)]));
+    return value;
+}
+
 function logRpcRequest(
     method: string,
     handler: (params: unknown, context: ToolBoxAPI.WorkerRequestContext) => unknown | Promise<unknown>,
@@ -65,7 +75,7 @@ function logRpcRequest(
         logRpc("debug", `<- ${method} request`, params);
 
         try {
-            const result = await handler(params, context);
+            const result = omitUndefinedProperties(await handler(params, context));
             logRpc("debug", `-> ${method} response`, result);
             return result;
         } catch (error) {
@@ -293,7 +303,7 @@ export class Sql4CdsClient {
         logRpc("debug", `-> ${method} request`, params);
 
         try {
-            const result = await this.rpc.request<Result>(method, params);
+            const result = await this.rpc.request<Result>(method, omitUndefinedProperties(params));
             logRpc("debug", `<- ${method} response`, result);
             return result;
         } catch (error) {
@@ -307,7 +317,7 @@ export class Sql4CdsClient {
         logRpc("debug", `-> ${method} notification`, params);
 
         try {
-            await this.rpc.notify(method, params);
+            await this.rpc.notify(method, omitUndefinedProperties(params));
         } catch (error) {
             logRpc("error", `-> ${method} notification error`, error);
             this.checkWorkerFailure(error);

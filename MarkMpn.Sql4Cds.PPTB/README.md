@@ -104,6 +104,11 @@ is released on query disposal, editor closure, re-execution or worker shutdown.
 
 ## Development
 
+Outgoing RPC objects omit undefined properties recursively before being passed
+to PPTB's strict JSON validator, including absent bodies on HTTP 204 responses.
+Undefined array elements become null to preserve their positions, matching JSON
+serialization semantics. Host response objects are not modified.
+
 If the language-server worker fails or exits unexpectedly, all open query tabs
 stop executing and display an error in Messages. A tool notification and the
 status bar explain that SQL 4 CDS must be closed and reopened to restart the
