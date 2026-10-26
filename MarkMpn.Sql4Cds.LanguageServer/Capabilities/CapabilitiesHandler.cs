@@ -8,6 +8,7 @@ using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
 using MarkMpn.Sql4Cds.LanguageServer.QueryExecution;
+using MarkMpn.Sql4Cds.LanguageServer.Connection;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
 {
@@ -17,24 +18,30 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
         private readonly VersionChecker _versionChecker;
         private readonly PptbRpcChunking _pptbRpcChunking;
         private readonly QueryEventStream _queryEvents;
+        private readonly ConnectionManager _connectionManager;
 
-        public CapabilitiesHandler(VersionChecker versionChecker, PptbRpcChunking pptbRpcChunking, QueryEventStream queryEvents)
+        public CapabilitiesHandler(VersionChecker versionChecker, PptbRpcChunking pptbRpcChunking, QueryEventStream queryEvents,
+            ConnectionManager connectionManager)
         {
             _versionChecker = versionChecker;
             _pptbRpcChunking = pptbRpcChunking;
             _queryEvents = queryEvents;
+            _connectionManager = connectionManager;
         }
 
         public void Initialize(JsonRpc lsp)
         {
             _lsp = lsp;
 
-            lsp.AddHandler(Methods.Initialize, HandleInitialize);
+            lsp.AddHandler(new LspRequest<ClientInitializeParams, InitializeResult>(Methods.Initialize.Name), HandleInitialize);
             lsp.AddHandler(CapabilitiesRequest.Type, HandleCapabilities);
         }
 
-        private InitializeResult HandleInitialize(InitializeParams arg)
+        private InitializeResult HandleInitialize(ClientInitializeParams arg)
         {
+            _connectionManager.ApplicationName = String.IsNullOrWhiteSpace(arg.ClientInfo?.Name)
+                ? "SQL 4 CDS LSP"
+                : arg.ClientInfo.Name;
             var experimental = arg.Capabilities?.Experimental;
             var experimentalToken = experimental as JToken ?? (experimental == null ? null : JToken.FromObject(experimental));
             var maxMessageSize = experimentalToken?["pptb"]?["maxMessageSizeBytes"]?.Value<int?>();

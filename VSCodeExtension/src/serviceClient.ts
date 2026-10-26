@@ -2,7 +2,7 @@ import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import * as vscode from "vscode";
-import { LanguageClient, LanguageClientOptions, ServerOptions, State, TransportKind } from "vscode-languageclient/node";
+import { InitializeParams, LanguageClient, LanguageClientOptions, ServerOptions, State, TransportKind } from "vscode-languageclient/node";
 import {
   ConnectionCompleteParams,
   ConnectionDetails,
@@ -12,6 +12,17 @@ import {
 } from "./protocol";
 import { PendingRequests } from "./pendingRequests";
 import { assertServicePrerequisites } from "./serviceRuntime";
+
+export class Sql4CdsLanguageClient extends LanguageClient {
+  constructor(private readonly clientVersion: string, serverOptions: ServerOptions, clientOptions: LanguageClientOptions) {
+    super("sql4cds", "SQL 4 CDS Language Service", serverOptions, clientOptions);
+  }
+
+  protected override fillInitializeParams(params: InitializeParams): void {
+    super.fillInitializeParams(params);
+    params.clientInfo = { name: "VS Code", version: this.clientVersion };
+  }
+}
 
 export class Sql4CdsService implements vscode.Disposable {
   private client: LanguageClient | undefined;
@@ -66,7 +77,7 @@ export class Sql4CdsService implements vscode.Disposable {
       synchronize: { configurationSection: "SQL4CDS" },
       outputChannel: this.output
     };
-    const client = new LanguageClient("sql4cds", "SQL 4 CDS Language Service", serverOptions, clientOptions);
+    const client = new Sql4CdsLanguageClient(this.context.extension.packageJSON.version, serverOptions, clientOptions);
     this.client = client;
     this.registerNotifications(client);
     this.registerLifecycle(client);

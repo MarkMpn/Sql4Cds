@@ -33,6 +33,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         private readonly ConcurrentDictionary<string, string> _connectedDataSource;
         private readonly ConcurrentDictionary<string, Sql4CdsConnection> _connections;
 
+        public string ApplicationName { get; set; } = "SQL 4 CDS";
+
         public ConnectionManager(PersistentMetadataCache persistentMetadataCache, PptbRpcChunking pptbRpcChunking, JsonRpc rpc)
         {
             _persistentMetadataCache = persistentMetadataCache;
@@ -103,7 +105,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (!_dataSources.TryGetValue(dsName, out var ds))
                 return null;
 
-            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = "VS Code" });
+            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = ApplicationName });
             con.ChangeDatabase(ds.Name);
 
             return new Session

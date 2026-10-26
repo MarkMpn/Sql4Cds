@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Configuration;
+using MarkMpn.Sql4Cds.LanguageServer.Capabilities.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -58,8 +59,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var stream = Activator.CreateInstance(StreamType);
             var chunks = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Pptb.PptbRpcChunking", true));
             var type = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Capabilities.CapabilitiesHandler", true);
-            var handler = Activator.CreateInstance(type, new object[] { null, chunks, stream });
-            var request = JsonConvert.DeserializeObject<Microsoft.VisualStudio.LanguageServer.Protocol.InitializeParams>(
+            var connections = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.ConnectionManager", true),
+                new object[] { null, null, null });
+            var handler = Activator.CreateInstance(type, new object[] { null, chunks, stream, connections });
+            var request = JsonConvert.DeserializeObject<ClientInitializeParams>(
                 "{\"capabilities\":{\"experimental\":{\"pptb\":{\"maxMessageSizeBytes\":33554432},\"sql4cds\":{\"queryEvents\":{\"version\":1,\"initialRowCount\":" +
                 (initialRowCount?.ToString() ?? "null") + "}}}}}");
             var result = type.GetMethod("HandleInitialize", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(handler, new object[] { request });

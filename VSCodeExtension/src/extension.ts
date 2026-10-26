@@ -32,7 +32,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const documentConnections = new DocumentConnectionManager(service, profiles);
   const objectExplorer = new ObjectExplorerProvider(service, profiles);
-  const queries = new QueryController(service, documentConnections);
+  const queries = new QueryController(service, documentConnections, context.extensionUri);
   context.subscriptions.push(documentConnections, objectExplorer, queries);
   context.subscriptions.push(vscode.window.registerTreeDataProvider("sql4cds.objectExplorer", objectExplorer));
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("sql4cdsQueryResults", queries, {
@@ -58,6 +58,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("sql4cds.testConnection", async (item?: Sql4CdsTreeItem) => { await documentConnections.testConnection(item?.profile); }),
     vscode.commands.registerCommand("sql4cds.runQuery", async () => { await queries.execute(); }),
+    vscode.commands.registerCommand("sql4cds.estimatedPlan", async () => { await queries.execute(true); }),
+    vscode.commands.registerCommand("sql4cds.actualPlan", () => queries.toggleActualPlan()),
     vscode.commands.registerCommand("sql4cds.cancelQuery", async () => { await queries.cancel(); }),
     vscode.commands.registerCommand("sql4cds.refreshObjectExplorer", (item?: Sql4CdsTreeItem) => objectExplorer.refresh(item)),
     vscode.commands.registerCommand("sql4cds.searchTables", async (item?: Sql4CdsTreeItem) => {

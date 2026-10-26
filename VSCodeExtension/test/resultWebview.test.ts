@@ -1,197 +1,208 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildSync } from "esbuild";
 import { JSDOM, VirtualConsole } from "jsdom";
 import type * as vscode from "vscode";
 import { resultsHtml } from "../src/resultWebview";
+import type { ResultsState } from "../src/webview/protocol";
 
-function grid(rowCount = 3, options: { autoSizeColumns?: boolean; initialRows?: unknown[][] } = {}) {
-  const sent: any[] = [];
+const script = buildSync({
+  entryPoints: ["src/webview/results.ts"], bundle: true, write: false, platform: "browser",
+  format: "iife", define: { PLAN_IMAGE_NAMES: '["FetchXmlScan","FallbackNode"]' }
+}).outputFiles[0].text;
+const graph = {
+  query: "SELECT name FROM account",
+  root: {
+    id: 1, type: "FetchXmlScan", nodeType: "FetchXmlScan", name: "FetchXML Scan", cost: 1,
+    properties: [{ name: "FetchXML", value: "<fetch><entity name='account'/></fetch>" }]
+  }
+};
+const result = {
+  key: "0:0", rowCount: 3, displayRowCount: 3, complete: true,
+  columns: ["name", "value"], truncated: false
+};
+
+function fixture() {
+  const sent: Record<string, any>[] = [];
   const errors: Error[] = [];
   const console = new VirtualConsole();
   console.on("jsdomError", error => errors.push(error));
-  const dom = new JSDOM(resultsHtml({ cspSource: "https://webview.invalid" } as vscode.Webview), {
-    runScripts: "dangerously", virtualConsole: console,
+  const html = resultsHtml({ cspSource: "https://webview.invalid" } as vscode.Webview,
+    { script: "https://webview.invalid/results.js", styles: "https://webview.invalid/results.css", images: "https://webview.invalid/plan-images" });
+  const dom = new JSDOM(html.replace(/<script([^>]*) src="[^"]*"><\/script>/, (_, attrs) => `<script${attrs}>${script}</script>`), {
+    runScripts: "dangerously", pretendToBeVisual: true, virtualConsole: console,
     beforeParse(window) {
-      (window as any).acquireVsCodeApi = () => ({ postMessage: (message: any) => sent.push(JSON.parse(JSON.stringify(message))) });
+      (window as any).acquireVsCodeApi = () => ({ postMessage: (message: unknown) => sent.push(JSON.parse(JSON.stringify(message))) });
+      (window as any).ResizeObserver = class { observe() {} disconnect() {} };
+      window.HTMLCanvasElement.prototype.getContext = () => null;
       window.HTMLElement.prototype.scrollIntoView = () => {};
+      Object.defineProperty(window.HTMLElement.prototype, "clientHeight", { get: () => 240 });
+      Object.defineProperty(window.HTMLElement.prototype, "clientWidth", { get: () => 800 });
     }
   });
   const { window } = dom;
   const emit = (message: unknown) => window.dispatchEvent(new window.MessageEvent("message", { data: message }));
-  const result = { key: "0:0", ordinal: 1, rowCount, displayRowCount: rowCount, complete: true, columns: ["name", "value"], pageSize: 200 };
-  emit({
-    type: "state",
-    ownerUri: "untitled:query",
-    runId: 1,
-    status: "completed",
-    autoSizeColumns: options.autoSizeColumns,
-    results: [result],
-    messages: []
+  const state = (overrides: Partial<ResultsState> = {}) => emit({
+    type: "state", ownerUri: "untitled:query", runId: 1, status: "completed", estimatedPlan: false,
+    results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, returnedRows: 3, ...overrides
   });
-  const page = (index: number, version = 0, rows?: unknown[][]) => emit({ type: "page", runId: 1, key: "0:0", page: index, start: index * 200, rows: rows ?? Array.from({ length: Math.min(200, rowCount - index * 200) }, (_, i) => [`row ${index * 200 + i}`, "value"]), displayRows: rowCount, totalRows: rowCount, viewVersion: version });
-  page(0, 0, options.initialRows);
-  const key = (value: string, options = {}) => window.document.activeElement!.dispatchEvent(new window.KeyboardEvent("keydown", { key: value, bubbles: true, ...options }));
-  return { window, sent, errors, page, key, close: () => { dom.window.close(); assert.deepEqual(errors, []); } };
+  const respond = (request: Record<string, any>, value?: unknown, error?: string) => emit({
+    type: "response", requestId: request.requestId, value, error
+  });
+  const tick = () => new Promise(resolve => setTimeout(resolve, 40));
+  return {
+    window, sent, emit, state, respond, tick,
+    close() { dom.window.close(); assert.deepEqual(errors, []); }
+  };
 }
 
-test("select all keeps focus and immediate keyboard copy includes the entire result", () => {
-  const ui = grid();
+for (const estimatedPlan of [false, true]) {
+  for (const hasRows of [false, true]) {
+    for (const error of [false, true]) {
+      test(`default pane: estimated=${estimatedPlan}, results=${hasRows}, error=${error}`, () => {
+        const ui = fixture();
+        try {
+          ui.state({
+            estimatedPlan, results: hasRows ? [result] : [], plans: [{ key: "0:1", graphs: [graph] }],
+            status: error ? "failed" : "completed",
+            messages: error ? [{ isError: true, message: "Query failed" }] : []
+          });
+          const expected = error ? "messages" : estimatedPlan ? "plan" : hasRows ? "results" : "messages";
+          assert.equal(ui.window.document.querySelector('[role="tab"][aria-selected="true"]')?.id, `${expected}-tab`);
+          assert.equal(ui.window.document.querySelectorAll(".plan-node").length, 1);
+          assert.equal(ui.window.document.getElementById("plan-tab")!.hidden, false);
+          assert.equal(ui.window.document.querySelectorAll(".results-grid").length, hasRows ? 1 : 0);
+        } finally { ui.close(); }
+      });
+    }
+  }
+}
+
+test("multiple result sets are stacked in one Results pane with bounded row requests", async () => {
+  const ui = fixture();
   try {
-    (ui.window.document.querySelector(".grid") as HTMLElement).focus();
-    ui.key("a", { ctrlKey: true });
-    assert.equal(ui.window.document.activeElement?.className, "grid");
-    ui.key("c", { ctrlKey: true });
-    assert.deepEqual(ui.sent.at(-1).selection.ranges, [{ rowStart: 0, rowEnd: 2, columnStart: 0, columnEnd: 1 }]);
+    ui.state({ results: [result, { ...result, key: "0:1" }] });
+    await ui.tick();
+    assert.equal(ui.window.document.querySelectorAll(".results-grid").length, 2);
+    assert.equal(ui.window.document.querySelectorAll('[role="tab"]').length, 3);
+    const requests = ui.sent.filter(message => message.type === "rows");
+    assert.equal(requests.length, 2);
+    assert.ok(requests.every(request => request.start === 0 && request.count <= 200 && request.runId === 1));
+    for (const request of requests) ui.respond(request, [
+      [{ displayValue: "<script>unsafe</script>", isNull: false }, { displayValue: "NULL", isNull: true }]
+    ]);
+    await ui.tick();
+    assert.equal(ui.window.document.querySelector(".grid-cell.null")?.textContent, "NULL");
+    assert.ok(ui.window.document.querySelector(".grid-body")?.textContent?.includes("<script>unsafe</script>"));
+    assert.equal(ui.window.document.querySelectorAll(".grid-body script").length, 0);
   } finally { ui.close(); }
 });
 
-test("arrow navigation keeps keyboard focus across an uncached page boundary", () => {
-  const ui = grid(201);
+test("grid context menu exports the chosen format directly and keyboard copy uses the host", async () => {
+  const ui = fixture();
   try {
-    ui.window.document.querySelector('td[data-row="199"][data-column="0"]')!.dispatchEvent(new ui.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
-    ui.key("ArrowDown");
-    assert.equal(ui.sent.at(-1).page, 1);
-    ui.page(1);
-    assert.equal(ui.window.document.activeElement?.className, "grid");
-    ui.key("c", { metaKey: true });
-    assert.equal(ui.sent.at(-1).selection.ranges[0].rowStart, 200);
+    ui.state();
+    await ui.tick();
+    const request = ui.sent.find(message => message.type === "rows")!;
+    ui.respond(request, Array.from({ length: 3 }, (_, index) => [
+      { displayValue: `row ${index}`, isNull: false }, { displayValue: "NULL", isNull: true }
+    ]));
+    await ui.tick();
+    const grid = ui.window.document.querySelector(".results-grid") as HTMLElement;
+    grid.focus();
+    grid.dispatchEvent(new ui.window.KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+    grid.dispatchEvent(new ui.window.KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    await ui.tick();
+    const copy = ui.sent.find(message => message.type === "copy")!;
+    assert.equal(copy.text, "row 0\tNULL\r\nrow 1\tNULL\r\nrow 2\tNULL");
+    ui.respond(copy);
+    grid.dispatchEvent(new ui.window.MouseEvent("contextmenu", { bubbles: true }));
+    const csv = [...ui.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find(button => button.textContent === "Export to CSV...")!;
+    assert.equal(csv.disabled, false);
+    csv.click();
+    const exported = ui.sent.find(message => message.type === "export")!;
+    assert.equal(exported.format, "Csv");
+    assert.equal(exported.key, "0:0");
+    ui.respond(exported);
   } finally { ui.close(); }
 });
 
-test("quick search retains its input while loading and after a response", async () => {
-  const ui = grid();
+test("plan properties, fallback icons and FetchXML inspection use the shared renderer", () => {
+  const ui = fixture();
   try {
-    const input = ui.window.document.querySelector("input")!;
-    input.focus(); input.value = "first";
-    input.dispatchEvent(new ui.window.Event("input"));
-    await new Promise(resolve => setTimeout(resolve, 280));
-    assert.equal(ui.sent.at(-1).searchText, "first");
-    assert.equal(ui.window.document.activeElement, input);
-    input.value = "first second";
-    input.dispatchEvent(new ui.window.Event("input"));
-    ui.page(0, 1);
-    assert.equal((ui.window.document.activeElement as HTMLInputElement).value, "first second");
-    await new Promise(resolve => setTimeout(resolve, 280));
-    assert.equal(ui.sent.at(-1).searchText, "first second");
-  } finally { ui.close(); }
-});
-
-test("quick search preserves grid scroll position after refresh", async () => {
-  const ui = grid(1000);
-  try {
-    const gridElement = ui.window.document.querySelector(".grid") as HTMLElement;
-    gridElement.scrollLeft = 137;
-    gridElement.scrollTop = 88;
-
-    const input = ui.window.document.querySelector("input")!;
-    input.value = "refresh";
-    input.dispatchEvent(new ui.window.Event("input"));
-    await new Promise(resolve => setTimeout(resolve, 280));
-
-    ui.page(0, 1);
-
-    const refreshedGrid = ui.window.document.querySelector(".grid") as HTMLElement;
-    assert.equal(refreshedGrid.scrollLeft, 137);
-    assert.equal(refreshedGrid.scrollTop, 88);
-  } finally { ui.close(); }
-});
-
-test("quick search reuses existing table cell nodes after refresh", async () => {
-  const ui = grid(1000);
-  try {
-    const originalCell = ui.window.document.querySelector('td[data-row="0"][data-column="0"]')!;
-
-    const input = ui.window.document.querySelector("input")!;
-    input.value = "reuse";
-    input.dispatchEvent(new ui.window.Event("input"));
-    await new Promise(resolve => setTimeout(resolve, 280));
-    ui.page(0, 1);
-
-    const refreshedCell = ui.window.document.querySelector('td[data-row="0"][data-column="0"]')!;
-    assert.equal(refreshedCell, originalCell);
-  } finally { ui.close(); }
-});
-
-test("sort button toggles from ascending to descending on second click", () => {
-  const ui = grid();
-  try {
-    const sortButton = ui.window.document.querySelector('th[data-column="0"] .sort') as HTMLElement;
-    sortButton.click();
-    assert.equal(ui.sent.at(-1).sort.direction, "asc");
-
-    ui.page(0, 1);
-
-    const updatedSortButton = ui.window.document.querySelector('th[data-column="0"] .sort') as HTMLElement;
-    updatedSortButton.click();
-    assert.equal(ui.sent.at(-1).sort.direction, "desc");
-  } finally { ui.close(); }
-});
-
-test("auto-sized columns use visible content for their initial width", () => {
-  const ui = grid(1, { autoSizeColumns: true, initialRows: [["x".repeat(40), "value"]] });
-  try {
-    const header = ui.window.document.querySelector('th[data-column="0"]') as HTMLElement;
-    const cell = ui.window.document.querySelector('td[data-column="0"]') as HTMLElement;
-
-    assert.equal(header.style.width, "344px");
-    assert.equal(cell.style.width, "344px");
-  } finally { ui.close(); }
-});
-
-test("disabling auto-size uses fixed-width columns but keeps resize handles active", () => {
-  const ui = grid(3, { autoSizeColumns: false });
-  try {
-    const header = ui.window.document.querySelector('th[data-column="0"]') as HTMLElement;
-    const cell = ui.window.document.querySelector('td[data-column="0"]') as HTMLElement;
-    const handle = ui.window.document.querySelector('th[data-column="0"] .resize-handle') as HTMLElement;
-
-    assert.equal(header.style.width, "180px");
-    assert.equal(cell.style.width, "180px");
-    assert.equal(handle.style.display, "");
-  } finally { ui.close(); }
-});
-
-test("dragging a resize handle updates the visible column width even when auto-size is disabled", () => {
-  const ui = grid(3, { autoSizeColumns: false });
-  try {
-    const header = ui.window.document.querySelector('th[data-column="0"]') as HTMLElement;
-    const cell = ui.window.document.querySelector('td[data-column="0"]') as HTMLElement;
-    const table = ui.window.document.querySelector("table") as HTMLElement;
-    const handle = ui.window.document.querySelector('th[data-column="0"] .resize-handle') as HTMLElement;
-
-    Object.defineProperty(header, "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({ width: 180, height: 26, top: 0, left: 0, right: 180, bottom: 26, x: 0, y: 0, toJSON: () => ({}) })
+    ui.state({ estimatedPlan: true, results: [], plans: [{ key: "0:0", graphs: [graph] }] });
+    const node = ui.window.document.querySelector(".plan-node") as HTMLElement;
+    node.dispatchEvent(new ui.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    assert.ok(ui.window.document.querySelector(".properties-grid")?.textContent?.includes("FetchXML"));
+    node.dispatchEvent(new ui.window.MouseEvent("dblclick", { bubbles: true }));
+    const request = ui.sent.find(message => message.type === "openFetchXml")!;
+    assert.equal(request.text, "<fetch><entity name='account'/></fetch>");
+    ui.respond(request);
+    assert.ok((ui.window.document.querySelector(".plan-node-icon") as HTMLImageElement).src.endsWith("/FetchXmlScan.ico"));
+    ui.state({
+      planVersion: 2, estimatedPlan: true, results: [],
+      plans: [{ key: "0:0", graphs: [{ ...graph, root: { ...graph.root, nodeType: "UnknownNode" } }] }]
     });
-
-    handle.dispatchEvent(new ui.window.MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 100 }));
-    ui.window.dispatchEvent(new ui.window.MouseEvent("pointermove", { bubbles: true, clientX: 140 }));
-    ui.window.dispatchEvent(new ui.window.MouseEvent("pointerup", { bubbles: true, clientX: 140 }));
-
-    assert.equal(header.style.width, "220px");
-    assert.equal(cell.style.width, "220px");
-    assert.equal(table.style.width, "452px");
+    assert.ok((ui.window.document.querySelector(".plan-node-icon") as HTMLImageElement).src.endsWith("/FallbackNode.ico"));
   } finally { ui.close(); }
 });
 
-test("result values render as text and export messages identify their query run", () => {
-  const ui = grid();
+test("row retrieval failures are visible and do not start a render/request retry loop", async () => {
+  const ui = fixture();
   try {
-    const value = '<img src=x onerror="alert(1)">';
-    ui.page(0, 0, [[value, "value"]]);
-    assert.equal(ui.window.document.querySelector("td")!.textContent, value);
-    assert.equal(ui.window.document.querySelector("img"), null);
-    (ui.window.document.querySelector('[title="Export full result set…"]') as HTMLElement).click();
-    assert.equal(ui.sent.at(-1).runId, 1);
+    ui.state();
+    await ui.tick();
+    ui.respond(ui.sent.find(message => message.type === "rows")!, undefined, "Subset request failed");
+    await ui.tick();
+    assert.match(ui.window.document.getElementById("status")!.textContent!, /Subset request failed/);
+    assert.equal(ui.window.document.querySelector(".grid-body .grid-cell[data-col]")?.textContent, "Error");
+    await ui.tick();
+    assert.equal(ui.sent.filter(message => message.type === "rows").length, 1);
   } finally { ui.close(); }
 });
 
-test("dataverse record cells are clickable even when display text is not JSON", () => {
-  const ui = grid(1, { initialRows: [[{ text: "Account", isDataverseRecord: true }, "value"]] });
+test("completion selects results after actual plans; subsequent updates preserve manual tab choice", () => {
+  const ui = fixture();
   try {
-    ui.window.document.querySelector('td[data-column="0"]')!.dispatchEvent(new ui.window.MouseEvent("dblclick", { bubbles: true }));
-    assert.equal(ui.sent.at(-1).type, "viewCell");
-    assert.equal(ui.sent.at(-1).row, 0);
-    assert.equal(ui.sent.at(-1).columnIndex, 0);
+    ui.state({ status: "running", plans: [{ key: "0:1", graphs: [graph] }] });
+    ui.state({ status: "completed", plans: [{ key: "0:1", graphs: [graph] }] });
+    assert.equal(ui.window.document.getElementById("results")!.hidden, false);
+    ui.window.document.getElementById("plan-tab")!.click();
+    ui.state({ plans: [{ key: "0:1", graphs: [graph] }] });
+    assert.equal(ui.window.document.getElementById("plan")!.hidden, false);
+    ui.state({ runId: 2, results: [], plans: [], status: "running" });
+    assert.equal(ui.window.document.getElementById("plan-tab")!.hidden, true);
+    assert.equal(ui.window.document.querySelectorAll(".results-grid").length, 0);
+    assert.equal(ui.window.document.getElementById("messages")!.hidden, false);
+  } finally { ui.close(); }
+});
+
+test("empty and editor switching discard stale rows, grids and execution plans", async () => {
+  const ui = fixture();
+  try {
+    ui.state({ plans: [{ key: "0:1", graphs: [graph] }] });
+    await ui.tick();
+    const request = ui.sent.find(message => message.type === "rows")!;
+    ui.emit({ type: "empty" });
+    ui.respond(request, [[{ displayValue: "stale", isNull: false }]]);
+    await ui.tick();
+    assert.equal(ui.window.document.querySelectorAll(".results-grid,.plan-node").length, 0);
+    assert.match(ui.window.document.getElementById("messages")!.textContent!, /Waiting for query results/);
+    ui.state({ ownerUri: "untitled:second", results: [] });
+    assert.equal(ui.window.document.getElementById("messages")!.hidden, false);
+  } finally { ui.close(); }
+});
+
+test("switching editors cancels pending actions without reporting an error in the new view", async () => {
+  const ui = fixture();
+  try {
+    ui.state({ estimatedPlan: true, results: [], plans: [{ key: "0:0", graphs: [graph] }] });
+    ui.window.document.querySelector(".plan-node")!.dispatchEvent(new ui.window.MouseEvent("dblclick", { bubbles: true }));
+    assert.ok(ui.sent.some(message => message.type === "openFetchXml"));
+    ui.emit({ type: "empty" });
+    await ui.tick();
+    assert.equal(ui.sent.some(message => message.type === "error"), false);
+    assert.equal(ui.window.document.getElementById("status")!.textContent, "");
   } finally { ui.close(); }
 });

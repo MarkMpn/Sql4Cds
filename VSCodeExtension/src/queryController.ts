@@ -3,39 +3,29 @@ import * as vscode from "vscode";
 import { State } from "vscode-languageclient/node";
 import { DocumentConnectionManager, errorMessage } from "./documentConnections";
 import {
-  CellValue,
-  MessageParams,
-  Methods,
-  QueryCancelResult,
-  QueryCompleteParams,
-  QueryDisposeResult,
-  ResultSetEventParams,
-  ResultSetFilter,
-  ResultSetSort,
-  ResultSetSummary,
-  SaveResultRequestResult,
-  SubsetResult
+  CellValue, MessageParams, Methods, QueryCancelResult, QueryCompleteParams, QueryDisposeResult,
+  ResultSetEventParams, ResultSetSummary, SaveResultRequestResult, SubsetResult
 } from "./protocol";
-import { findInvalidFilter } from "./filterRecovery";
 import { createExportParams, exportMethod, opensInTextEditor, resultExportChoices } from "./resultExport";
-import { ClipboardFormat, ClipboardValue, projectClipboardRows, serializeClipboard } from "./resultClipboard";
 import { buildDataverseRecordUrl, extractDataverseRecordReference } from "./dataverseRecordLink";
 import { resultsHtml } from "./resultWebview";
 import { Sql4CdsService } from "./serviceClient";
-import { detectStructuredValue } from "./structuredValue";
-import { StructuredValueViewer } from "./structuredValueViewer";
+import type { ExecutionPlanGraph, ExportFormat } from "../../MarkMpn.Sql4Cds.PPTB/src/resultsProtocol";
+import type { ResultsState } from "./webview/protocol";
 
 const pageSize = 200;
+const exportFormatNames = { Csv: "csv", Excel: "xlsx", Json: "json", Markdown: "md", Xml: "xml" } as const;
+type QueryStatus = ResultsState["status"];
 
-type QueryStatus = "running" | "cancelling" | "completed" | "cancelled" | "failed";
-
-interface DisplayResult { summary: ResultSetSummary; }
 interface QueryState {
   runId: number;
   messages: MessageParams["message"][];
-  results: Map<string, DisplayResult>;
+  results: Map<string, ResultSetSummary>;
+  plans: Map<string, ExecutionPlanGraph[]>;
+  planVersion: number;
   status: QueryStatus;
   cancelRequested: boolean;
+  estimatedPlan: boolean;
   started: number;
   ended?: number;
   batchElapsed?: string;
@@ -43,23 +33,15 @@ interface QueryState {
 
 interface WebviewMessage {
   type?: string;
+  requestId?: number;
   ownerUri?: string;
-  key?: string;
-  page?: number;
   runId?: number;
+  key?: string;
+  start?: number;
+  count?: number;
+  reference?: unknown;
   text?: string;
-  format?: ClipboardFormat;
-  headers?: boolean;
-  searchText?: string;
-  filters?: ResultSetFilter[];
-  sort?: ResultSetSort;
-  viewVersion?: number;
-  row?: number;
-  columnIndex?: number;
-  selection?: {
-    ranges?: Array<{ rowStart: number; rowEnd: number; columnStart: number; columnEnd: number }>;
-    columnOrder?: number[];
-  };
+  format?: ExportFormat;
 }
 
 export class QueryController implements vscode.Disposable, vscode.WebviewViewProvider {
@@ -67,19 +49,18 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   private readonly cleanupPending = new Map<string, Promise<void>>();
   private readonly disposables: vscode.Disposable[] = [];
   private readonly queryStatus: vscode.StatusBarItem;
-  private readonly structuredValueViewer: StructuredValueViewer;
   private resultsView?: vscode.WebviewView;
   private selectedUri?: string;
   private nextRunId = 1;
   private readonly preparing = new Set<string>();
+  private actualPlan = false;
 
-  constructor(private readonly service: Sql4CdsService, private readonly connections: DocumentConnectionManager) {
+  constructor(private readonly service: Sql4CdsService, private readonly connections: DocumentConnectionManager,
+    private readonly extensionUri?: vscode.Uri) {
     const client = service.languageClient;
     this.queryStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
-    this.structuredValueViewer = new StructuredValueViewer();
     this.disposables.push(
       this.queryStatus,
-      this.structuredValueViewer,
       client.onNotification(Methods.queryMessage, (params: MessageParams) => this.onMessage(params)),
       client.onNotification(Methods.resultSetAvailable, (params: ResultSetEventParams) => this.onResultSummary(params)),
       client.onNotification(Methods.resultSetUpdated, (params: ResultSetEventParams) => this.onResultSummary(params)),
@@ -88,7 +69,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       client.onDidChangeState(event => { if (event.newState === State.Stopped) { this.onServiceStopped(); } }),
       vscode.window.onDidChangeActiveTextEditor(editor => this.onActiveEditorChanged(editor)),
       vscode.workspace.onDidChangeConfiguration(event => {
-        if (event.affectsConfiguration("SQL4CDS.autoSizeColumns") && this.selectedUri && this.states.has(this.selectedUri)) {
+        if (event.affectsConfiguration("SQL4CDS.maxResultRows") && this.selectedUri && this.states.has(this.selectedUri)) {
           this.publishState(this.selectedUri);
         }
       }),
@@ -100,66 +81,65 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   }
 
   public resolveWebviewView(view: vscode.WebviewView): void {
+    const extensionUri = this.extensionUri ?? vscode.extensions.getExtension("markcarrington.vscode-sql4cds")?.extensionUri;
+    if (!extensionUri) { throw new Error("The SQL 4 CDS extension location could not be found."); }
     this.resultsView = view;
-    view.webview.options = { enableScripts: true, localResourceRoots: [] };
+    view.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, "dist")] };
     view.webview.onDidReceiveMessage((message: WebviewMessage) => {
-      void this.onWebviewMessage(message).catch(error => vscode.window.showErrorMessage(`SQL 4 CDS: ${errorMessage(error)}`));
+      void this.onWebviewMessage(message, view.webview).catch(error => vscode.window.showErrorMessage(`SQL 4 CDS: ${errorMessage(error)}`));
     }, undefined, this.disposables);
     view.onDidDispose(() => {
       if (this.resultsView === view) { this.resultsView = undefined; }
     }, undefined, this.disposables);
-    view.webview.html = resultsHtml(view.webview);
+    const asset = (name: string) => view.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "dist", name)).toString();
+    view.webview.html = resultsHtml(view.webview, {
+      script: asset("results.js"), styles: asset("results.css"), images: asset("plan-images")
+    });
   }
 
-  public async execute(): Promise<void> {
+  public toggleActualPlan(): void {
+    this.actualPlan = !this.actualPlan;
+    void vscode.commands.executeCommand("setContext", "sql4cds.actualPlan", this.actualPlan);
+  }
+
+  public async execute(estimatedPlan = false): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.languageId !== "sql4cds") {
       void vscode.window.showInformationMessage("Open a SQL 4 CDS query editor first.");
       return;
     }
-
     const uri = editor.document.uri.toString();
     if (this.preparing.has(uri)) { return; }
     this.preparing.add(uri);
-    try { await this.executeEditor(editor, uri); }
+    try { await this.executeEditor(editor, uri, estimatedPlan); }
     finally { this.preparing.delete(uri); }
   }
 
-  private async executeEditor(editor: vscode.TextEditor, uri: string): Promise<void> {
+  private async executeEditor(editor: vscode.TextEditor, uri: string, estimatedPlan: boolean): Promise<void> {
     const cleanup = this.cleanupPending.get(uri);
     if (cleanup) { await cleanup; }
     if (!this.connections.get(uri) && !await this.connections.connectEditor(undefined, editor)) { return; }
     const selection = editor.selection;
     const query = selection.isEmpty ? editor.document.getText() : editor.document.getText(selection);
     const querySelection = selection.isEmpty ? undefined : {
-      startLine: selection.start.line,
-      startColumn: selection.start.character,
-      endLine: selection.end.line,
-      endColumn: selection.end.character
+      startLine: selection.start.line, startColumn: selection.start.character,
+      endLine: selection.end.line, endColumn: selection.end.character
     };
     if (!query.trim()) {
       void vscode.window.showInformationMessage("There is no SQL to execute.");
       return;
     }
-
     const previous = this.states.get(uri);
     if (previous && isRunning(previous.status)) {
       void vscode.window.showWarningMessage(previous.status === "cancelling"
-        ? "Wait for the current query cancellation to finish."
-        : "A query is already running for this editor.");
+        ? "Wait for the current query cancellation to finish." : "A query is already running for this editor.");
       return;
     }
-
     if (previous) { await this.disposeStoredResults(uri, false); }
     if (editor.document.isClosed) { return; }
-
     const state: QueryState = {
-      runId: this.nextRunId++,
-      messages: [],
-      results: new Map(),
-      status: "running",
-      cancelRequested: false,
-      started: Date.now()
+      runId: this.nextRunId++, messages: [], results: new Map(), plans: new Map(), planVersion: 0,
+      status: "running", cancelRequested: false, estimatedPlan, started: Date.now()
     };
     this.states.set(uri, state);
     this.selectedUri = uri;
@@ -169,17 +149,16 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       this.publishState(uri);
       this.updateRunningContext();
       await this.service.languageClient.sendRequest(Methods.executeDocumentSelection, {
-        ownerUri: uri,
-        querySelection,
-        getFullColumnSchema: false,
-        executionPlanOptions: undefined
+        ownerUri: uri, querySelection, getFullColumnSchema: false,
+        executionPlanOptions: estimatedPlan || this.actualPlan ? {
+          includeEstimatedExecutionPlanXml: estimatedPlan, includeActualExecutionPlanXml: !estimatedPlan && this.actualPlan
+        } : undefined
       });
     } catch (error) {
       if (this.states.get(uri) !== state) { return; }
       state.status = "failed";
       state.ended = Date.now();
-      const message = errorMessage(error);
-      state.messages.push({ isError: true, message });
+      state.messages.push({ isError: true, message: errorMessage(error) });
       this.publishState(uri);
       this.updateRunningContext();
     }
@@ -189,24 +168,13 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     const uri = vscode.window.activeTextEditor?.document.uri.toString();
     const state = uri ? this.states.get(uri) : undefined;
     if (!uri || !state || state.status !== "running") { return; }
-
     state.status = "cancelling";
     state.cancelRequested = true;
     this.publishState(uri);
     this.updateRunningContext();
-
     try {
       const response = await this.service.languageClient.sendRequest<QueryCancelResult>(Methods.cancelQuery, { ownerUri: uri });
-      if (this.states.get(uri) !== state || state.status !== "cancelling") { return; }
-      if (response.messages) {
-        state.status = "running";
-        state.cancelRequested = false;
-        const message = `Could not cancel the query: ${response.messages}`;
-        state.messages.push({ isError: true, message });
-        void vscode.window.showErrorMessage(message);
-        this.publishState(uri);
-        this.updateRunningContext();
-      }
+      if (response.messages) { throw new Error(response.messages); }
     } catch (error) {
       if (this.states.get(uri) !== state || state.status !== "cancelling") { return; }
       state.status = "running";
@@ -229,7 +197,18 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   private onResultSummary(params: ResultSetEventParams): void {
     const state = this.states.get(params.ownerUri);
     if (!state) { return; }
-    state.results.set(resultKey(params.resultSetSummary), { summary: params.resultSetSummary });
+    const summary = params.resultSetSummary;
+    const key = `${summary.batchId}:${summary.id}`;
+    if (summary.specialAction?.expectYukonXMLShowPlan || state.plans.has(key) || params.executionPlans?.length) {
+      if (params.executionPlans?.length) {
+        state.plans.set(key, params.executionPlans);
+        state.planVersion++;
+      }
+      else if (!state.plans.has(key)) { state.plans.set(key, []); }
+      state.results.delete(key);
+    } else {
+      state.results.set(key, summary);
+    }
     this.publishState(params.ownerUri);
   }
 
@@ -256,381 +235,154 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   }
 
   private async showResultsView(): Promise<void> {
-    if (!this.resultsView) {
-      await vscode.commands.executeCommand("sql4cdsQueryResults.focus", { preserveFocus: true });
-    }
+    if (!this.resultsView) { await vscode.commands.executeCommand("sql4cdsQueryResults.focus", { preserveFocus: true }); }
     this.resultsView?.show(true);
   }
 
-  private async onWebviewMessage(message: WebviewMessage): Promise<void> {
+  private async onWebviewMessage(message: WebviewMessage, webview: vscode.Webview): Promise<void> {
     if (!message || typeof message !== "object") { return; }
     if (message.type === "ready") {
-      if (this.selectedUri && this.states.has(this.selectedUri)) {
-        this.publishState(this.selectedUri);
-      } else {
-        void this.resultsView?.webview.postMessage({ type: "empty" });
-      }
+      if (this.selectedUri && this.states.has(this.selectedUri)) { this.publishState(this.selectedUri); }
+      else { void webview.postMessage({ type: "empty" }); }
       return;
     }
-    const uri = message.ownerUri ?? this.selectedUri;
-    if (!uri) { return; }
+    if (message.type === "error" && typeof message.text === "string") {
+      void vscode.window.showErrorMessage(`SQL 4 CDS: ${message.text}`);
+      return;
+    }
+    if (!Number.isSafeInteger(message.requestId)) { throw new Error("Invalid results request."); }
+    try {
+      const value = await this.handleResultRequest(message);
+      void webview.postMessage({ type: "response", requestId: message.requestId, value });
+    } catch (error) {
+      void webview.postMessage({ type: "response", requestId: message.requestId, error: errorMessage(error) });
+    }
+  }
+
+  private async handleResultRequest(message: WebviewMessage): Promise<unknown> {
+    const uri = message.ownerUri;
+    const state = uri ? this.states.get(uri) : undefined;
+    if (!uri || !state || message.runId !== state.runId) { throw new Error("The query results are no longer available."); }
     switch (message.type) {
-      case "page":
-        await this.sendPage(uri, message);
-        break;
-      case "copy":
-        if (typeof message.text === "string") {
-          await vscode.env.clipboard.writeText(message.text);
-          void vscode.window.setStatusBarMessage("SQL 4 CDS: Results copied", 2000);
-        }
-        break;
-      case "copySelection":
-        await this.copySelection(uri, message);
-        break;
-      case "viewCell":
-        await this.viewCell(uri, message);
-        break;
-      case "export":
-        if (message.key && message.runId === this.states.get(uri)?.runId) { await this.exportResult(uri, message.key); }
-        break;
-    }
-  }
-
-  private async sendPage(uri: string, message: WebviewMessage): Promise<void> {
-    const state = this.states.get(uri);
-    const result = message.key ? state?.results.get(message.key) : undefined;
-    if (!state || !result || message.runId !== state.runId || !message.key || !isViewSpec(message, result.summary.columnInfo.length)) { return; }
-
-    const maxRows = vscode.workspace.getConfiguration("SQL4CDS").get<number>("maxResultRows", 10000);
-    const displayRows = Math.min(result.summary.rowCount, maxRows);
-    const lastPage = Math.max(0, Math.ceil(displayRows / pageSize) - 1);
-    const requestedPage = Number.isInteger(message.page) ? message.page! : 0;
-    const page = Math.max(0, Math.min(requestedPage, lastPage));
-    const start = page * pageSize;
-    const count = Math.min(pageSize, Math.max(0, displayRows - start));
-    const request = {
-      ownerUri: uri,
-      batchIndex: result.summary.batchId,
-      resultSetIndex: result.summary.id,
-      rowsStartIndex: start,
-      rowsCount: count,
-      searchText: message.searchText,
-      filters: message.filters,
-      sort: message.sort,
-      viewVersion: message.viewVersion
-    };
-
-    try {
-      const response = count === 0
-        ? { resultSubset: { rowCount: 0, rows: [] } }
-        : await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, request);
-      if (this.states.get(uri) !== state) { return; }
-      const subset = response.resultSubset;
-      const rows = (subset?.rows ?? []).map(row => row.map(toWebCell));
-      const filteredRows = subset?.totalRowCount ?? displayRows;
-      const transformedRows = Math.min(filteredRows, maxRows);
-      void this.resultsView?.webview.postMessage({
-        type: "page",
-        runId: state.runId,
-        key: message.key,
-        page,
-        rows,
-        start,
-        displayRows: transformedRows,
-        filteredRows,
-        totalRows: result.summary.rowCount,
-        truncated: filteredRows > transformedRows,
-        viewVersion: subset?.viewVersion ?? message.viewVersion
-      });
-    } catch (error) {
-      if (this.states.get(uri) !== state) { return; }
-
-      const invalidFilter = await findInvalidFilter(message.filters, async filters => {
-        try {
-          await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, {
-            ...request,
-            filters
-          });
-          return true;
-        } catch {
-          return false;
-        }
-      });
-
-      if (invalidFilter && this.states.get(uri) === state) {
-        const column = result.summary.columnInfo[invalidFilter.columnIndex];
-        const columnName = column?.columnName ?? column?.name ?? `column ${invalidFilter.columnIndex + 1}`;
-        const value = invalidFilter.value?.trim();
-        const valuePart = value ? ` '${value}'` : "";
-        void vscode.window.showErrorMessage(`Could not apply the filter${valuePart} on ${columnName}. The filter has been cleared.`);
-        void this.resultsView?.webview.postMessage({
-          type: "resetFilter",
-          runId: state.runId,
-          key: message.key,
-          columnIndex: invalidFilter.columnIndex
+      case "rows": {
+        const result = message.key ? state.results.get(message.key) : undefined;
+        const maxRows = vscode.workspace.getConfiguration("SQL4CDS").get<number>("maxResultRows", 10000);
+        if (!result || !Number.isSafeInteger(message.start) || message.start! < 0 ||
+          !Number.isSafeInteger(message.count) || message.count! < 1 || message.count! > pageSize ||
+          message.start! >= Math.min(result.rowCount, maxRows)) { throw new Error("Invalid result row range."); }
+        const response = await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, {
+          ownerUri: uri, batchIndex: result.batchId, resultSetIndex: result.id, rowsStartIndex: message.start,
+          rowsCount: Math.min(message.count!, Math.min(result.rowCount, maxRows) - message.start!)
         });
+        if (this.states.get(uri) !== state) { throw new Error("The query results changed while loading rows."); }
+        if (!response.resultSubset) { throw new Error("The language service returned no result subset."); }
+        return response.resultSubset.rows.map(row => row.map(cell => ({ ...cell, displayValue: formatCell(cell) })));
+      }
+      case "copy":
+        if (typeof message.text !== "string") { throw new Error("No clipboard text was supplied."); }
+        await vscode.env.clipboard.writeText(message.text);
+        return;
+      case "export": {
+        const format = message.format;
+        const choice = resultExportChoices.find(choice =>
+          format && Object.hasOwn(exportFormatNames, format) && choice.format === exportFormatNames[format]);
+        if (!message.key || !choice) { throw new Error("Invalid export format."); }
+        await this.exportResult(uri, message.key, choice);
         return;
       }
-
-      void this.resultsView?.webview.postMessage({
-        type: "pageError",
-        runId: state.runId,
-        key: message.key,
-        page,
-        message: `Could not retrieve this result page: ${errorMessage(error)}`,
-        viewVersion: message.viewVersion
-      });
-    }
-  }
-
-  private async copySelection(uri: string, message: WebviewMessage): Promise<void> {
-    const state = this.states.get(uri);
-    const result = message.key ? state?.results.get(message.key) : undefined;
-    const ranges = message.selection?.ranges;
-    const columnOrder = message.selection?.columnOrder;
-    const format = message.format;
-    const maxRows = vscode.workspace.getConfiguration("SQL4CDS").get<number>("maxResultRows", 10000);
-    if (!state || !result || message.runId !== state.runId || !message.key || !ranges?.length || !columnOrder?.length || !isClipboardFormat(format)) { return; }
-    if (!isViewSpec(message, result.summary.columnInfo.length) || !validateSelection(ranges, columnOrder, result.summary.columnInfo.length, Math.min(result.summary.rowCount, maxRows))) {
-      void vscode.window.showErrorMessage("The result selection is no longer valid. Select the cells again and retry.");
-      return;
-    }
-
-    const rowStart = Math.min(...ranges.map(range => range.rowStart));
-    const rowEnd = Math.max(...ranges.map(range => range.rowEnd));
-    const selectedVisualColumns = columnOrder.filter((_, visualIndex) => ranges.some(range => visualIndex >= range.columnStart && visualIndex <= range.columnEnd));
-    if (format === "sqlIn" && selectedVisualColumns.length !== 1) {
-      void vscode.window.showInformationMessage("Copy as SQL IN requires a single selected column.");
-      return;
-    }
-    const rowCount = rowEnd - rowStart + 1;
-    if (rowCount > 50_000) {
-      const choice = await vscode.window.showWarningMessage(
-        `Copying ${rowCount.toLocaleString()} result rows may use significant memory.`,
-        { modal: true },
-        "Copy"
-      );
-      if (choice !== "Copy" || this.states.get(uri) !== state) { return; }
-    }
-
-    try {
-      const text = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "Copying SQL 4 CDS results…", cancellable: true },
-        async (progress, token) => {
-          const rows: ClipboardValue[][] = [];
-          for (let chunkStart = rowStart; chunkStart <= rowEnd; chunkStart += pageSize) {
-            if (token.isCancellationRequested) { throw new CopyCancelledError(); }
-            const chunkCount = Math.min(pageSize, rowEnd - chunkStart + 1);
-            const response = await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, {
-              ownerUri: uri,
-              batchIndex: result.summary.batchId,
-              resultSetIndex: result.summary.id,
-              rowsStartIndex: chunkStart,
-              rowsCount: chunkCount,
-              searchText: message.searchText,
-              filters: message.filters,
-              sort: message.sort,
-              viewVersion: message.viewVersion
-            });
-            if (this.states.get(uri) !== state || response.resultSubset?.viewVersion !== message.viewVersion) { throw new Error("The result view changed while it was being copied."); }
-            const sourceRows = response.resultSubset?.rows ?? [];
-            rows.push(...projectClipboardRows(sourceRows.map(row => row.map(clipboardCell)), chunkStart, ranges, columnOrder));
-            progress.report({ increment: chunkCount / rowCount * 100 });
-          }
-          if (token.isCancellationRequested) { throw new CopyCancelledError(); }
-          const headers = selectedVisualColumns.map(index => result.summary.columnInfo[index]?.columnName ?? result.summary.columnInfo[index]?.name ?? "");
-          return serializeClipboard(format, { headers, rows }, { includeHeaders: message.headers });
+      case "openRecord": {
+        const reference = extractDataverseRecordReference(message.reference);
+        if (!reference) { throw new Error("Invalid Dataverse record reference."); }
+        const profile = this.connections.findByName(reference.dataSource);
+        if (!profile?.url) { throw new Error(`No connection URL is available for '${reference.dataSource}'.`); }
+        if (!await vscode.env.openExternal(vscode.Uri.parse(buildDataverseRecordUrl(profile.url, reference)))) {
+          throw new Error("The Dataverse record could not be opened.");
         }
-      );
-      if (this.states.get(uri) !== state) { throw new Error("The query changed while the selection was being copied."); }
-      await vscode.env.clipboard.writeText(text);
-      void vscode.window.setStatusBarMessage("SQL 4 CDS: Selection copied", 2000);
-    } catch (error) {
-      if (!(error instanceof CopyCancelledError)) { void vscode.window.showErrorMessage(`Could not copy results: ${errorMessage(error)}`); }
-    }
-  }
-
-  private async viewCell(uri: string, message: WebviewMessage): Promise<void> {
-    const state = this.states.get(uri);
-    const result = message.key ? state?.results.get(message.key) : undefined;
-    if (!state || !result || message.runId !== state.runId || !Number.isSafeInteger(message.row) || message.row! < 0 ||
-      !Number.isSafeInteger(message.columnIndex) || message.columnIndex! < 0 || message.columnIndex! >= result.summary.columnInfo.length || !isViewSpec(message, result.summary.columnInfo.length)) { return; }
-    let response: SubsetResult;
-    try {
-      response = await this.service.languageClient.sendRequest<SubsetResult>(Methods.subset, {
-        ownerUri: uri,
-        batchIndex: result.summary.batchId,
-        resultSetIndex: result.summary.id,
-        rowsStartIndex: message.row!,
-        rowsCount: 1,
-        searchText: message.searchText,
-        filters: message.filters,
-        sort: message.sort,
-        viewVersion: message.viewVersion
-      });
-    } catch (error) {
-      void vscode.window.showErrorMessage(`Could not retrieve the cell value: ${errorMessage(error)}`);
-      return;
-    }
-    if (this.states.get(uri) !== state || response.resultSubset?.viewVersion !== message.viewVersion) { return; }
-    const cell = response.resultSubset?.rows[0]?.[message.columnIndex!];
-    if (!cell || cell.isNull) { return; }
-
-    const record = extractDataverseRecordReference(cell.rawObject);
-    if (record) {
-      const profile = this.connections.findByName(record.dataSource);
-      if (!profile?.url) {
-        void vscode.window.showInformationMessage(`No SQL 4 CDS connection named '${record.dataSource}' with a Dataverse URL was found.`);
         return;
       }
-      try {
-        const recordUrl = buildDataverseRecordUrl(profile.url, record);
-        const opened = await vscode.env.openExternal(vscode.Uri.parse(recordUrl));
-        if (!opened) {
-          void vscode.window.showWarningMessage(`Could not open Dataverse record URL: ${recordUrl}`);
-        }
-      } catch (error) {
-        void vscode.window.showErrorMessage(`Could not open Dataverse record: ${errorMessage(error)}`);
-      }
-      return;
+      case "openFetchXml":
+        if (typeof message.text !== "string") { throw new Error("No FetchXML was supplied."); }
+        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ language: "xml", content: message.text }),
+          { viewColumn: vscode.ViewColumn.Beside, preview: false });
+        return;
+      default: throw new Error("Unknown results action.");
     }
-
-    const structured = detectStructuredValue(formatCell(cell) ?? "");
-    if (!structured) {
-      void vscode.window.showInformationMessage("This cell does not contain a valid JSON object, JSON array, or XML document.");
-      return;
-    }
-    const title = Number.isInteger(message.columnIndex) ? `Result column ${message.columnIndex! + 1}` : "Result value";
-    await this.structuredValueViewer.open(structured, title);
   }
 
-  private async exportResult(uri: string, key: string): Promise<void> {
+  private async exportResult(uri: string, key: string, choice: typeof resultExportChoices[number]): Promise<void> {
     const state = this.states.get(uri);
     const result = state?.results.get(key);
-    if (!state || !result || !result.summary.complete) {
-      void vscode.window.showInformationMessage("Wait for this result set to finish before exporting it.");
-      return;
+    if (!state || !result || !result.complete || isRunning(state.status)) {
+      throw new Error("Wait for the query to finish before exporting its results.");
     }
-
-    const choice = await vscode.window.showQuickPick(resultExportChoices, {
-      title: "Export full result set",
-      placeHolder: "Select a file format"
-    });
-    if (!choice || this.states.get(uri) !== state) { return; }
-
     const resultOrdinal = [...state.results.keys()].indexOf(key) + 1;
     const document = vscode.workspace.textDocuments.find(item => item.uri.toString() === uri);
     const name = `${path.parse(document?.fileName || "query").name || "query"}-result-${resultOrdinal}.${choice.extension}`;
     let defaultUri: vscode.Uri | undefined;
-    if (document?.uri.scheme === "file") {
-      defaultUri = vscode.Uri.file(path.join(path.dirname(document.uri.fsPath), name));
-    } else if (vscode.workspace.workspaceFolders?.[0]) {
-      defaultUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, name);
-    }
+    if (document?.uri.scheme === "file") { defaultUri = vscode.Uri.file(path.join(path.dirname(document.uri.fsPath), name)); }
+    else if (vscode.workspace.workspaceFolders?.[0]) { defaultUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, name); }
     const target = await vscode.window.showSaveDialog({
-      defaultUri,
-      filters: { [choice.filterName]: [choice.extension], "All files": ["*"] },
-      saveLabel: "Export full result set"
+      defaultUri, filters: { [choice.filterName]: [choice.extension], "All files": ["*"] }, saveLabel: "Export full result set"
     });
-    if (!target || this.states.get(uri) !== state) { return; }
-
+    if (!target) { return; }
+    if (this.states.get(uri) !== state) { throw new Error("The query results changed before export."); }
     const request = createExportParams(choice.format, {
-      ownerUri: uri,
-      filePath: target.fsPath,
-      batchIndex: result.summary.batchId,
-      resultSetIndex: result.summary.id
+      ownerUri: uri, filePath: target.fsPath, batchIndex: result.batchId, resultSetIndex: result.id
     });
-    try {
-      const response = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "Exporting SQL 4 CDS results…" },
-        () => this.service.languageClient.sendRequest<SaveResultRequestResult>(exportMethod(choice.format), request)
-      );
-      if (response.messages) { throw new Error(response.messages); }
-    } catch (error) {
-      void vscode.window.showErrorMessage(`Could not export results: ${errorMessage(error)}`);
-      return;
-    }
-
-    const exported = `Exported ${result.summary.rowCount.toLocaleString()} rows to ${target.fsPath}.`;
+    const response = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "Exporting SQL 4 CDS results..." },
+      () => this.service.languageClient.sendRequest<SaveResultRequestResult>(exportMethod(choice.format), request)
+    );
+    if (response.messages) { throw new Error(response.messages); }
+    const exported = `Exported ${result.rowCount.toLocaleString()} rows to ${target.fsPath}.`;
     if (opensInTextEditor(choice.format)) {
       try {
-        const exportedDocument = await vscode.workspace.openTextDocument(target);
-        await vscode.window.showTextDocument(exportedDocument, { preview: false });
+        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(target), { preview: false });
       } catch (error) {
         const action = await vscode.window.showWarningMessage(
-          `${exported} VS Code could not open the exported file: ${errorMessage(error)}`,
-          "Open in Default App",
-          "Reveal in Finder/Explorer"
-        );
+          `${exported} VS Code could not open the exported file: ${errorMessage(error)}`, "Open in Default App", "Reveal in Finder/Explorer");
         await this.handleExportAction(action, target);
       }
-      return;
+    } else {
+      const action = await vscode.window.showInformationMessage(exported, "Open in Default App", "Reveal in Finder/Explorer");
+      await this.handleExportAction(action, target);
     }
-
-    const action = await vscode.window.showInformationMessage(
-      exported,
-      "Open in Default App",
-      "Reveal in Finder/Explorer"
-    );
-    await this.handleExportAction(action, target);
   }
 
   private async handleExportAction(action: string | undefined, target: vscode.Uri): Promise<void> {
     if (action === "Open in Default App") {
-      const opened = await vscode.env.openExternal(target);
-      if (!opened) { void vscode.window.showWarningMessage(`No application could open ${target.fsPath}.`); }
-    } else if (action === "Reveal in Finder/Explorer") {
-      await vscode.commands.executeCommand("revealFileInOS", target);
-    }
+      if (!await vscode.env.openExternal(target)) { void vscode.window.showWarningMessage(`No application could open ${target.fsPath}.`); }
+    } else if (action === "Reveal in Finder/Explorer") { await vscode.commands.executeCommand("revealFileInOS", target); }
   }
 
   private publishState(uri: string): void {
     const state = this.states.get(uri);
     if (!state || uri !== this.selectedUri) { return; }
     const maxRows = vscode.workspace.getConfiguration("SQL4CDS").get<number>("maxResultRows", 10000);
-    const autoSizeColumns = vscode.workspace.getConfiguration("SQL4CDS").get<boolean>("autoSizeColumns", true);
-    const returnedRows = [...state.results.values()].reduce((total, result) => total + result.summary.rowCount, 0);
+    const returnedRows = [...state.results.values()].reduce((total, result) => total + result.rowCount, 0);
     const affectedRows = state.messages.map(message => affectedRowCount(message.message)).filter((value): value is number => value !== undefined);
     this.updateQueryStatus(state, returnedRows, affectedRows.length ? affectedRows.reduce((total, value) => total + value, 0) : undefined);
-    if (!this.resultsView) { return; }
-    void this.resultsView.webview.postMessage({
-      type: "state",
-      ownerUri: uri,
-      runId: state.runId,
-      status: state.status,
-      started: state.started,
-      ended: state.ended,
-      batchElapsed: state.batchElapsed,
-      autoSizeColumns,
-      returnedRows,
-      affectedRows: affectedRows.length ? affectedRows.reduce((total, value) => total + value, 0) : undefined,
-      results: [...state.results.entries()].map(([key, result], index) => ({
-        key,
-        ordinal: index + 1,
-        rowCount: result.summary.rowCount,
-        complete: result.summary.complete,
-        columns: (result.summary.columnInfo ?? []).map(column => column.columnName ?? column.name ?? ""),
-        displayRowCount: Math.min(result.summary.rowCount, maxRows),
-        truncated: result.summary.rowCount > maxRows,
-        pageSize
+    void this.resultsView?.webview.postMessage({
+      type: "state", ownerUri: uri, runId: state.runId, status: state.status, estimatedPlan: state.estimatedPlan,
+      returnedRows, batchElapsed: state.batchElapsed,
+      planVersion: state.planVersion,
+      autoSizeColumns: vscode.workspace.getConfiguration("SQL4CDS").get<boolean>("autoSizeColumns", true),
+      plans: [...state.plans].map(([key, graphs]) => ({ key, graphs })),
+      results: [...state.results].map(([key, result]) => ({
+        key, rowCount: result.rowCount, complete: result.complete,
+        columns: result.columnInfo.map(column => column.columnName ?? column.name ?? ""),
+        displayRowCount: Math.min(result.rowCount, maxRows), truncated: result.rowCount > maxRows
       })),
-      messages: state.messages.map(message => ({
-        isError: message.isError,
-        message: message.message,
-        time: message.time
-      }))
-    });
+      messages: state.messages.map(message => ({ isError: message.isError, message: message.message }))
+    } satisfies ResultsState);
   }
 
   private updateQueryStatus(state: QueryState, returnedRows: number, affectedRows: number | undefined): void {
     const parts: string[] = [];
     if (state.results.size) { parts.push(`${returnedRows.toLocaleString()} ${returnedRows === 1 ? "row" : "rows"} returned`); }
     if (affectedRows !== undefined) { parts.push(`${affectedRows.toLocaleString()} ${affectedRows === 1 ? "row" : "rows"} affected`); }
-    if (isRunning(state.status)) {
-      parts.push(state.status === "cancelling" ? "$(sync~spin) Cancelling" : "$(sync~spin) Running");
-    } else if (state.ended) {
-      parts.push(`$(clock) ${formatDuration(state.ended - state.started)}`);
-    }
+    if (isRunning(state.status)) { parts.push(state.status === "cancelling" ? "$(sync~spin) Cancelling" : "$(sync~spin) Running"); }
+    else if (state.ended) { parts.push(`$(clock) ${formatDuration(state.ended - state.started)}`); }
     this.queryStatus.text = parts.join("  ");
     this.queryStatus.tooltip = "Query result summary";
     this.queryStatus.show();
@@ -643,7 +395,9 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
 
   private onActiveEditorChanged(editor: vscode.TextEditor | undefined): void {
     this.updateRunningContext();
-    if (!editor || editor.document.languageId !== "sql4cds") {
+    // Focusing the results panel must not detach it from its SQL editor.
+    if (!editor) { return; }
+    if (editor.document.languageId !== "sql4cds") {
       this.selectedUri = undefined;
       this.queryStatus.hide();
       void this.resultsView?.webview.postMessage({ type: "empty" });
@@ -651,9 +405,8 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     }
     const uri = editor.document.uri.toString();
     this.selectedUri = uri;
-    if (this.states.has(uri)) {
-      this.publishState(uri);
-    } else {
+    if (this.states.has(uri)) { this.publishState(uri); }
+    else {
       this.queryStatus.hide();
       void this.resultsView?.webview.postMessage({ type: "empty" });
     }
@@ -662,9 +415,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   private async disposeStoredResults(uri: string, reportErrors: boolean): Promise<void> {
     try {
       const response = await this.service.languageClient.sendRequest<QueryDisposeResult>(Methods.disposeQuery, { ownerUri: uri });
-      if (response.messages && reportErrors) {
-        void vscode.window.showWarningMessage(`SQL 4 CDS could not release query results: ${response.messages}`);
-      }
+      if (response.messages && reportErrors) { void vscode.window.showWarningMessage(`SQL 4 CDS could not release query results: ${response.messages}`); }
     } catch (error) {
       if (reportErrors) { void vscode.window.showWarningMessage(`SQL 4 CDS could not release query results: ${errorMessage(error)}`); }
     }
@@ -702,50 +453,9 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   }
 }
 
-function formatCell(cell: CellValue): string | null {
-  if (cell.isNull) { return null; }
-  return cell.displayValue ?? cell.invariantCultureDisplayValue ?? String(cell.rawObject ?? "");
+function formatCell(cell: CellValue): string {
+  return cell.isNull ? "NULL" : cell.displayValue ?? cell.invariantCultureDisplayValue ?? String(cell.rawObject ?? "");
 }
-
-function toWebCell(cell: CellValue): string | null | { text: string | null; isDataverseRecord: boolean } {
-  const text = formatCell(cell);
-  const isDataverseRecord = Boolean(extractDataverseRecordReference(cell.rawObject));
-  if (!isDataverseRecord) { return text; }
-  return { text, isDataverseRecord: true };
-}
-
-function clipboardCell(cell: CellValue | undefined): ClipboardValue {
-  if (!cell || cell.isNull) { return null; }
-  const raw = cell.rawObject;
-  if (raw === null) { return null; }
-  if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean" || typeof raw === "bigint") { return raw; }
-  return cell.invariantCultureDisplayValue ?? cell.displayValue ?? String(raw ?? "");
-}
-
-function isViewSpec(message: WebviewMessage, columnCount: number): boolean {
-  const operators = new Set(["contains", "notContains", "equals", "notEquals", "startsWith", "endsWith", "isEmpty", "isNotEmpty", "greaterThan", "greaterThanOrEqual", "lessThan", "lessThanOrEqual"]);
-  return Number.isSafeInteger(message.viewVersion) && message.viewVersion! >= 0 &&
-    (message.searchText === undefined || typeof message.searchText === "string") &&
-    (message.filters === undefined || (Array.isArray(message.filters) && message.filters.every(filter => Number.isSafeInteger(filter.columnIndex) && filter.columnIndex >= 0 && filter.columnIndex < columnCount && operators.has(filter.operator) && (filter.value === undefined || typeof filter.value === "string")))) &&
-    (message.sort === undefined || (Number.isSafeInteger(message.sort.columnIndex) && message.sort.columnIndex >= 0 && message.sort.columnIndex < columnCount && (message.sort.direction === "asc" || message.sort.direction === "desc")));
-}
-
-function isClipboardFormat(value: unknown): value is ClipboardFormat {
-  return value === "tsv" || value === "csv" || value === "json" || value === "xml" || value === "markdown" || value === "sqlIn";
-}
-
-function validateSelection(
-  ranges: Array<{ rowStart: number; rowEnd: number; columnStart: number; columnEnd: number }>,
-  columnOrder: number[],
-  columnCount: number,
-  rowCount: number
-): boolean {
-  if (new Set(columnOrder).size !== columnOrder.length || columnOrder.some(column => !Number.isSafeInteger(column) || column < 0 || column >= columnCount)) { return false; }
-  return rowCount > 0 && ranges.every(range => Number.isSafeInteger(range.rowStart) && Number.isSafeInteger(range.rowEnd) && range.rowStart >= 0 && range.rowEnd >= range.rowStart && range.rowEnd < rowCount &&
-    Number.isSafeInteger(range.columnStart) && Number.isSafeInteger(range.columnEnd) && range.columnStart >= 0 && range.columnEnd >= range.columnStart && range.columnEnd < columnOrder.length);
-}
-
-class CopyCancelledError extends Error {}
 
 function affectedRowCount(message: string): number | undefined {
   const match = message.match(/^\(?\s*([\d,]+)\s+.+?\s+(?:created|inserted|updated|deleted|affected)\)?\s*$/i);
@@ -763,4 +473,3 @@ function formatDuration(milliseconds: number): string {
 }
 
 function isRunning(status: QueryStatus | undefined): boolean { return status === "running" || status === "cancelling"; }
-function resultKey(summary: ResultSetSummary): string { return `${summary.batchId}:${summary.id}`; }

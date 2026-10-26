@@ -1,4 +1,4 @@
-import type { ExecutionPlanGraphProperty } from "./lsp/protocol";
+import type { ExecutionPlanGraphProperty } from "./resultsProtocol";
 
 /**
  * A read-only property grid for the selected execution plan node. Nested properties can be expanded to show their

@@ -121,7 +121,7 @@ function setup(pinned = true) {
     const grids = [];
     const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
-        "../lsp/protocol": load("lsp/protocol.ts", {}),
+        "../lsp/protocol": load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) }),
         "../editor/monacoSetup": {
             monaco: {
                 Range: class {

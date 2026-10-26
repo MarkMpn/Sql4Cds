@@ -146,6 +146,20 @@ To load the tool locally:
 
 > **Note:** The `readmeUrl` check in `pptb-validate` will fail until this README is available on the `master` branch.
 
+### Client identity and release versions
+
+The client sends `Power Platform ToolBox` and its npm package version in the
+standard LSP `initialize.clientInfo` property. Vite embeds the package version at
+build time. The language server uses the client name as each connection's
+`ApplicationName` (with `SQL 4 CDS` as the fallback for clients without a name).
+
+The root Azure release pipeline stamps the client version from
+`GitVersion.SemVer` before building, and stamps the worker manifest and .NET
+tool package with `GitVersion.NuGetVersion`. It produces a `PPTBPackages`
+artifact containing the npm tarball and worker NuGet package; it does not publish
+them to a registry. For manual npm releases, `npm run publish-package` increments
+the version before building so the embedded identity matches the published package.
+
 ## Limitations
 
 The following are not available when running inside PPTB:

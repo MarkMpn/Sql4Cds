@@ -51,7 +51,7 @@
         "finalize-package": "npm shrinkwrap",
         "validate": "pptb-validate",
         "version-stable": "npm version patch --no-git-tag-version",
-        "publish-package": "npm run build && npm run version-stable && npm publish --access public"
+        "publish-package": "npm run version-stable && npm run build && npm publish --access public"
     },
     "devDependencies": {
         "@pptb/types": "1.2.8-beta.1",

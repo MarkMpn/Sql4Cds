@@ -1,4 +1,7 @@
 import { defineConfig, searchForWorkspaceRoot, type Plugin } from "vite";
+import { readFileSync } from "node:fs";
+
+const { version } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 
 /**
  * PPTB loads dist/index.html directly, so the entry script must be a classic (non-module) script at the end of
@@ -24,6 +27,7 @@ function classicScriptPlugin(): Plugin {
 
 export default defineConfig((configEnv) => {
     return {
+        define: { __SQL4CDS_VERSION__: JSON.stringify(version) },
         base: "./",
         root: "./src",
         publicDir: "../public",

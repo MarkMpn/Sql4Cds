@@ -1,0 +1,42 @@
+:root {
+  color-scheme: light dark;
+  --bg: var(--vscode-editor-background);
+  --bg-alt: var(--vscode-editorGroupHeader-tabsBackground);
+  --bg-hover: var(--vscode-toolbar-hoverBackground);
+  --fg: var(--vscode-foreground);
+  --fg-muted: var(--vscode-descriptionForeground);
+  --border: var(--vscode-panel-border);
+  --accent: var(--vscode-focusBorder);
+  --accent-fg: var(--vscode-list-activeSelectionForeground);
+  --selection: var(--vscode-list-inactiveSelectionBackground);
+  --error: var(--vscode-errorForeground);
+  --null: var(--vscode-descriptionForeground);
+}
+body {
+  display: flex;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+body.vscode-dark, body.vscode-high-contrast { color-scheme: dark; }
+body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
+.plan-view { display: flex; flex: 1; min-height: 0; }
+.plan-view[hidden] { display: none; }
+.plan-properties {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 280px;
+  min-width: 180px;
+  max-width: 60%;
+  border-left: 1px solid var(--border);
+}
+.plan-pane { min-width: 0; }
+#status { padding: 2px 8px; min-height: 20px; color: var(--fg-muted); }
+#status.error { color: var(--error); }
+.grid-cell, .messages-pane, .execution-plan-header {
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+}
+button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }

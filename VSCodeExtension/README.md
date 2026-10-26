@@ -23,17 +23,23 @@ For a release VSIX, run **Extensions: Install from VSIX…** from the Command Pa
 2. Select **Add Connection** and choose an authentication method.
 3. Expand the saved connection to browse Dataverse metadata, or use **New Query** from its context menu.
 4. Enter a query and run it with `Ctrl+Shift+E` (`Cmd+Shift+E` on macOS). If text is selected, only the selection is executed.
-5. Review each result set and the Messages output. Select cells, rows, or columns to copy them in several formats, or export the full result set as CSV, Excel, JSON, Markdown, or XML.
+5. Review the Results, Messages, and Execution Plan tabs. Select cells, rows, or columns to copy them, or right-click a grid to export the full result set as CSV, Excel, JSON, Markdown, or XML.
 
 SQL 4 CDS uses the `.sql4cds` extension and the `sql4cds` language identifier. To use an existing `.sql` document, select the language indicator in the VS Code status bar and choose **SQL 4 CDS**. This does not change the document's filename and avoids taking over `.sql` files used by other database extensions.
 
 ## Working with results
 
-The results grid renders the current page and caches up to three pages in the browser while maintaining selection across pages. Click or drag to select cells, use the row-number gutter or column name to select a complete row or column, and use `Shift` to extend a range. `Ctrl+A` (`Cmd+A` on macOS) selects the complete filtered result view. Paging and column reordering preserve selection; changing search, filters, or sort clears it because those operations change the logical row positions.
+The results panel uses the same virtualized grid, execution-plan renderer, and node-properties panel as the Power Platform ToolBox tool, with VS Code theme colors and native clipboard, file dialogs, and editors. Multiple result sets are stacked in a single Results tab. Each grid fetches 200-row pages on demand and caches at most ten pages.
 
-Each column header has separate controls for dragging, selecting the column by name, cycling its sort through original/ascending/descending, opening its filter, and resizing. Quick search and column filters apply to the complete retained result view, not only the visible 200-row page.
+Click or drag to select cells, use the row-number gutter or column header to select a complete row or column, and use `Shift` to extend a range. `Ctrl+A` (`Cmd+A` on macOS) selects all displayed rows. Use `Ctrl+C` (`Cmd+C`) to copy tab-separated values, or `Ctrl+Shift+C` (`Cmd+Shift+C`) to include headers. Columns can be resized and initially widen to fit loaded values when `SQL4CDS.autoSizeColumns` is enabled. Dataverse record values link to their records in the browser.
 
-Right-click a selection to copy it as TSV, CSV, JSON, XML, Markdown, or a SQL `IN (...)` clause. Large selections are retrieved in chunks and can be cancelled. Cells that look like JSON objects, JSON arrays, or XML have a viewer indicator; double-click one to open a prettified, read-only document beside the query.
+Right-click a grid to copy with or without headers, open a record, or export all retained rows. Exports are available after execution finishes and are not restricted by `SQL4CDS.maxResultRows`.
+
+Use **SQL 4 CDS: Display Estimated Execution Plan** (`Ctrl+L` / `Cmd+L`) to inspect a plan without executing the query. Toggle **SQL 4 CDS: Include Actual Execution Plan** in the Command Palette or editor overflow menu before executing to collect runtime plans. Select a plan node to inspect its properties; double-click a FetchXML scan to open its FetchXML in an XML editor beside the query.
+
+On completion, errors select Messages; otherwise queries with result sets select Results and queries without result sets select Messages. Only a successful estimated-plan request selects Execution Plan automatically. Actual plans remain available for manual selection.
+
+The previous VS Code-specific search, filters, sorting, column reordering, multi-format selection copying, and JSON/XML cell viewer have been replaced by the PPTB-style results experience. SQL queries can perform filtering, ordering, and projection; full-result exports remain available in all five formats. The Connections explorer and per-editor connection management remain VS Code-native.
 
 ## Connections and credentials
 

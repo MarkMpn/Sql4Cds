@@ -1,5 +1,5 @@
-import type { ExecutionPlanGraph, ExecutionPlanGraphProperty, ExecutionPlanNode } from "../lsp/protocol";
-import { BadgeType } from "../lsp/protocol";
+import type { ExecutionPlanGraph, ExecutionPlanGraphProperty, ExecutionPlanNode } from "../resultsProtocol";
+import { BadgeType } from "../resultsProtocol";
 import { getArrowheadPoints, getEdgePath, layoutPlan, type MeasureText, type PlanLayout, type PlanNodeLayout } from "./layout";
 
 const SVG_NS = "http://www.w3.org/2000/svg";

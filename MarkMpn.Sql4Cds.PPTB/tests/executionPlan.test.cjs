@@ -156,7 +156,7 @@ test("double-clicking a FetchXML Scan node opens its full query", () => {
         createElementNS: () => new Element(),
     };
     const { ExecutionPlanView } = load("executionPlan/executionPlanView.ts", {
-        "../lsp/protocol": { BadgeType: { Warning: 0, CriticalWarning: 1 } },
+        "../resultsProtocol": { BadgeType: { Warning: 0, CriticalWarning: 1 } },
         "./layout": layout,
     }, { document });
     const fetchXml = "<fetch>\n  <entity name=\"account\" />\n</fetch>";

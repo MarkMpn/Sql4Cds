@@ -1,4 +1,4 @@
-import type { ExecutionPlanNode } from "../lsp/protocol";
+import type { ExecutionPlanNode } from "../resultsProtocol";
 
 /**
  * Gets the name of the image to show for a node, following the same logic as the ExecutionPlanView control

@@ -1,4 +1,4 @@
-import type { ExecutionPlanNode } from "../lsp/protocol";
+import type { ExecutionPlanNode } from "../resultsProtocol";
 
 // Layout constants matching MarkMpn.Sql4Cds.Controls.ExecutionPlanView
 export const PLAN_OFFSET = 32;

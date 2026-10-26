@@ -226,7 +226,7 @@ export class Sql4CdsClient {
 
         const initialized = await this.request<{ capabilities?: { experimental?: { sql4cds?: { queryEvents?: { version?: number; initialRowCount?: number } } } } }>("initialize", {
             processId: null,
-            clientInfo: { name: "Power Platform ToolBox" },
+            clientInfo: { name: "Power Platform ToolBox", version: __SQL4CDS_VERSION__ },
             rootUri: null,
             capabilities: {
                 textDocument: {
@@ -638,7 +638,7 @@ export class Sql4CdsClient {
             rowsStartIndex < cached.rows.length) {
             const rows = cached.rows.slice(rowsStartIndex, rowsStartIndex + rowsCount);
             if (rows.length === rowsCount || rowsStartIndex + rows.length >= cached.rowCount)
-                return { resultSubset: { rows, rowCount: rows.length, totalRowCount: cached.rowCount } };
+                return { resultSubset: { rows, rowCount: rows.length } };
             const remaining = await this.request<SubsetResult>("query/subset", {
                 ownerUri, batchIndex, resultSetIndex, rowsStartIndex: rowsStartIndex + rows.length, rowsCount: rowsCount - rows.length,
             });

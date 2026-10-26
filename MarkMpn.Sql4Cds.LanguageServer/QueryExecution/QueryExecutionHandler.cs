@@ -359,10 +359,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     reader.GetValues(row);
                                     resultSet.Values.Add(row);
 
-                                    var providerSpecificRow = new object[reader.FieldCount];
-                                    reader.GetProviderSpecificValues(providerSpecificRow);
-                                    resultSet.ProviderSpecificValues.Add(providerSpecificRow);
-
                                     resultSet.RowCount++;
 
                                     if (resultSet.RowCount < events.InitialRowCount && lastUpdateTime < DateTime.UtcNow.AddSeconds(-1) ||
@@ -1016,8 +1012,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     ResultSubset = new ResultSetSubset
                     {
                         RowCount = 1,
-                        TotalRowCount = 1,
-                        ViewVersion = request.ViewVersion,
                         Rows = new[]
                         {
                             new[]
@@ -1035,29 +1029,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 };
             }
 
-            var hasTransform = !String.IsNullOrWhiteSpace(request.SearchText) ||
-                request.Filters?.Length > 0 ||
-                request.Sort != null;
-
-            var session = _connectionManager.GetConnection(request.OwnerUri);
-
-            // Preserve the inexpensive Skip/Take path for ordinary paging. Transformations need
-            // a snapshot so filtering, sorting and pagination all observe the same row set.
-            IReadOnlyList<object[]> transformedRows = hasTransform
-                ? ResultSetViewTransformer.Transform(
-                    resultSet.Values.ToArray(),
-                    resultSet.ProviderSpecificValues.ToArray(),
-                    resultSet.ColumnInfo,
-                    request,
-                    session.Connection.Session,
-                    session.Connection.Options,
-                    (value, col) => ValueFormatter.Format(
-                        value,
-                        col.DataTypeName,
-                        col.NumericScale.GetValueOrDefault(),
-                        Sql4CdsSettings.Instance.LocalFormatDates).DisplayValue)
-                : resultSet.Values;
-            var rows = transformedRows
+            var rows = resultSet.Values
                 .Skip((int)Math.Min(Math.Max(0, request.RowsStartIndex), Int32.MaxValue))
                 .Take(Math.Max(0, request.RowsCount))
                 .Select(row => ValueFormatter.FormatRow(row, resultSet.ColumnInfo, Sql4CdsSettings.Instance.LocalFormatDates))
@@ -1068,8 +1040,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 ResultSubset = new ResultSetSubset
                 {
                     RowCount = rows.Length,
-                    TotalRowCount = transformedRows.Count,
-                    ViewVersion = request.ViewVersion,
                     Rows = rows
                 }
             };

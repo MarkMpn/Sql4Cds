@@ -4,6 +4,8 @@
  * The server uses the standard LSP messages for editor features, plus the SQL Tools Service style
  * `connection/*` and `query/*` messages for connection management and query execution.
  */
+import type { DbColumn, DbCellValue, ExecutionPlanGraph } from "../resultsProtocol";
+export * from "../resultsProtocol";
 
 export interface Position {
     line: number;
@@ -25,16 +27,6 @@ export interface FormattingOptions {
     insertSpaces: boolean;
     addDisplayNames?: boolean;
 }
-
-export type ExportFormat = "Csv" | "Excel" | "Json" | "Markdown" | "Xml";
-
-export const exportFormats: ReadonlyArray<{ format: ExportFormat; label: string; extension: string }> = [
-    { format: "Csv", label: "CSV", extension: "csv" },
-    { format: "Excel", label: "Excel", extension: "xlsx" },
-    { format: "Json", label: "JSON", extension: "json" },
-    { format: "Markdown", label: "Markdown", extension: "md" },
-    { format: "Xml", label: "XML", extension: "xml" },
-];
 
 export interface MarkupContent {
     kind: "plaintext" | "markdown";
@@ -170,11 +162,6 @@ export interface MessageParams {
     message: ResultMessage;
 }
 
-export interface DbColumn {
-    columnName: string;
-    dataTypeName?: string;
-}
-
 export interface ResultSetSummary {
     id: number;
     batchId: number;
@@ -197,59 +184,6 @@ export interface ResultSetEventParams {
 export interface ExecutionPlanOptions {
     includeActualExecutionPlanXml: boolean;
     includeEstimatedExecutionPlanXml: boolean;
-}
-
-export const PropertyValueDataType = {
-    Number: 0,
-    String: 1,
-    Boolean: 2,
-    Nested: 3,
-} as const;
-
-export const BadgeType = {
-    Warning: 0,
-    CriticalWarning: 1,
-    Parallelism: 2,
-} as const;
-
-export interface ExecutionPlanGraphProperty {
-    name: string;
-    displayValue?: string | null;
-    displayOrder?: number;
-    showInTooltip?: boolean;
-    dataType?: (typeof PropertyValueDataType)[keyof typeof PropertyValueDataType];
-    /** A formatted string, or a list of child properties for nested properties */
-    value?: string | ExecutionPlanGraphProperty[] | null;
-}
-
-export interface ExecutionPlanEdge {
-    rowCount: number;
-    rowSize: number;
-}
-
-export interface ExecutionPlanNode {
-    id: number;
-    /** Azure Data Studio icon name for the node */
-    type: string;
-    /** SQL 4 CDS execution plan node class name, e.g. FetchXmlScan */
-    nodeType?: string;
-    /** The node's display name, which may span multiple lines */
-    name: string;
-    cost: number;
-    costDisplayString?: string;
-    elapsedTimeInMs?: number | null;
-    rowCountDisplayString?: string;
-    description?: string | null;
-    subtext?: string[];
-    properties?: ExecutionPlanGraphProperty[];
-    children?: ExecutionPlanNode[];
-    edges?: ExecutionPlanEdge[];
-    badges?: { type: number; tooltip?: string | null }[];
-}
-
-export interface ExecutionPlanGraph {
-    root: ExecutionPlanNode;
-    query?: string;
 }
 
 export interface BatchSummary {
@@ -283,31 +217,9 @@ export type QueryEvent =
     | { type: "sql4cds/progress"; data: string }
     | { type: "query/complete" };
 
-export interface DbCellValue {
-    displayValue: string;
-    isNull: boolean;
-    rawObject?: unknown;
-}
-
-export interface EntityReferenceValue {
-    dataSource: string;
-    id: string;
-    isNull: false;
-    logicalName: string;
-}
-
-export function isEntityReferenceValue(value: unknown): value is EntityReferenceValue {
-    return typeof value === "object" && value !== null &&
-        "dataSource" in value && typeof value.dataSource === "string" && value.dataSource.length > 0 &&
-        "id" in value && typeof value.id === "string" && value.id.length > 0 &&
-        "isNull" in value && value.isNull === false &&
-        "logicalName" in value && typeof value.logicalName === "string" && value.logicalName.length > 0;
-}
-
 export interface SubsetResult {
     resultSubset: {
         rowCount: number;
-        totalRowCount?: number;
         rows: DbCellValue[][];
     };
 }

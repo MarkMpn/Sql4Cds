@@ -74,7 +74,7 @@ function createGrid({ platform = "Win32", rowCount = 1000, columns = 5, fetchRow
         Node: Element,
         Element,
         navigator: { platform, userAgent: "" },
-        ResizeObserver: class { observe() {} },
+        ResizeObserver: class { observe() {} disconnect() {} },
         requestAnimationFrame: (callback) => { frames.set(++nextFrame, callback); return nextFrame; },
         cancelAnimationFrame: (id) => frames.delete(id),
         console: { error: (...args) => errors.push(args) },

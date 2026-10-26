@@ -7,18 +7,20 @@ All notable changes to the SQL 4 CDS extension for Visual Studio Code are docume
 ### Changed
 
 - The VS Code language service now requires .NET 10 LTS; development and CI use Node.js 24 LTS.
+- Replace the separate VS Code grid with the PPTB virtualized grid, stacked results, Messages tab, and execution-plan viewer with node properties and FetchXML inspection, adapted to VS Code themes.
+- Replace results-only search/filter/sort/reordering, multi-format selection copying, and JSON/XML cell inspection with PPTB-style selection, clipboard, record links, and context-menu exports.
+- Remove the unused language-server result-view filtering/sorting API and its duplicate SQL-typed row storage; ordinary subset paging and full-result exports retain original result order.
+- Match PPTB default tab selection: errors and no-results queries show Messages, result sets show Results, and only estimated plans automatically show Execution Plan.
 
 ### Added
 
 - A dedicated Query Results view in the VS Code bottom panel, consistent with the MSSQL extension experience.
-- Per-editor result state with compact result-set tabs, paged grids, and copy actions.
+- Per-editor result state with virtualized grids and copy actions.
 - Full-result export to CSV, Excel, JSON, Markdown, and XML.
 - Text exports open automatically in VS Code; Excel exports offer actions to open the workbook in its default application or reveal it in Finder/Explorer.
 - Query metadata in the VS Code status bar, including rows returned, rows affected, execution state, and elapsed time.
-- Spreadsheet-style cell, row, column, range, and cross-page result selection with keyboard support and column reordering.
-- Result-wide quick search, per-column filters, and type-aware ascending/descending sorting.
-- Selection copying as TSV, CSV, JSON, XML, Markdown, or a SQL `IN (...)` clause, including chunked retrieval for large selections.
-- Read-only, syntax-highlighted side editors for JSON and XML values detected in result cells.
+- Spreadsheet-style cell, row, column, range, and cross-page selection, with keyboard support and copying with or without headers.
+- Estimated and actual execution-plan commands, graphical plans using the shared SQL 4 CDS node icons, node properties, and FetchXML inspection in side editors.
 
 ### Fixed
 
@@ -28,8 +30,7 @@ All notable changes to the SQL 4 CDS extension for Visual Studio Code are docume
 - Isolate authentication retries so late or cancelled attempts cannot attach the wrong environment.
 - Make Test Connection authenticate independently of existing editor sessions.
 - Clean up authentication and Object Explorer sessions after disconnects, refreshes, and shutdown.
-- Preserve keyboard focus during result selection, paging, and search.
-- Copy sparse result selections without inserting unselected rows or values.
+- Preserve keyboard focus during result selection and scrolling.
 - Correlate exports with the current query run and bound the webview page cache.
 
 ### Changed
@@ -40,8 +41,7 @@ All notable changes to the SQL 4 CDS extension for Visual Studio Code are docume
 - Update build dependencies to resolve reported npm vulnerabilities.
 
 - Query execution starts on Messages, switches to Results when a result set becomes available, and remains on Messages for errors or queries that return no result sets.
-- Result paging and export controls use a compact grid-focused layout to maximize the available space for data.
-- Column headers use separate controls for selection, reordering, sorting, filtering, and resizing so the actions do not overlap.
+- Results share PPTB's grid-focused layout and context-menu export controls.
 
 ### Initial extension features
 

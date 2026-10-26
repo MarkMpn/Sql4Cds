@@ -110,7 +110,9 @@ steps:
 
 - script: |
     call npm ci --ignore-scripts
+    if errorlevel 1 exit /b %errorlevel%
     call npm --no-git-tag-version --allow-same-version version $(GitVersion.SemVer)
+    if errorlevel 1 exit /b %errorlevel%
     call npm run package
   displayName: Build VS Code extension
   workingDirectory: '$(Build.SourcesDirectory)\VSCodeExtension'
@@ -120,6 +122,44 @@ steps:
   inputs:
     targetPath: 'VSCodeExtension\sql4cds.vsix'
     artifact: 'VSCodeInstaller'
+    publishLocation: 'pipeline'
+
+- task: PowerShell@2
+  displayName: Stamp PPTB client and worker release versions
+  inputs:
+    targetType: inline
+    pwsh: true
+    workingDirectory: '$(Build.SourcesDirectory)\MarkMpn.Sql4Cds.PPTB'
+    script: |
+      npm ci --ignore-scripts
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      npm --no-git-tag-version --allow-same-version version $(GitVersion.SemVer)
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      $config = Get-Content pptb.config.json -Raw | ConvertFrom-Json
+      $config.workers.sql4cds.packageVersion = '$(GitVersion.NuGetVersion)'
+      $config | ConvertTo-Json -Depth 10 | Set-Content pptb.config.json
+
+- task: DotNetCoreCLI@2
+  displayName: Package PPTB language server worker
+  inputs:
+    command: custom
+    custom: pack
+    arguments: 'MarkMpn.Sql4Cds.LanguageServer/MarkMpn.Sql4Cds.LanguageServer.csproj --configuration Release --no-restore -p:Version=$(GitVersion.NuGetVersion) --output $(Build.ArtifactStagingDirectory)/PPTB/worker'
+
+- script: |
+    call npm run build
+    if errorlevel 1 exit /b %errorlevel%
+    call npm run finalize-package
+    if errorlevel 1 exit /b %errorlevel%
+    call npm pack --pack-destination "$(Build.ArtifactStagingDirectory)\PPTB"
+  displayName: Build and package PPTB client
+  workingDirectory: '$(Build.SourcesDirectory)\MarkMpn.Sql4Cds.PPTB'
+
+- task: PublishPipelineArtifact@1
+  displayName: Publish PPTB client and worker packages to pipeline
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/PPTB'
+    artifact: 'PPTBPackages'
     publishLocation: 'pipeline'
 
 - task: GitTag@5

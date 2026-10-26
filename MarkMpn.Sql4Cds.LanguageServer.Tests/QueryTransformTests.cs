@@ -8,6 +8,7 @@ using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
+using MarkMpn.Sql4Cds.LanguageServer.Capabilities.Contracts;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Tests
 {
@@ -59,9 +60,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var chunking = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Pptb.PptbRpcChunking", true));
             var type = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Capabilities.CapabilitiesHandler", true);
             var queryEvents = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.QueryExecution.QueryEventStream", true));
-            var handler = Activator.CreateInstance(type, new object[] { null, chunking, queryEvents });
+            var connections = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.ConnectionManager", true),
+                new object[] { null, null, null });
+            var handler = Activator.CreateInstance(type, new object[] { null, chunking, queryEvents, connections });
             var result = type.GetMethod("HandleInitialize", BindingFlags.Instance | BindingFlags.NonPublic)
-                .Invoke(handler, new object[] { new InitializeParams() });
+                .Invoke(handler, new object[] { new ClientInitializeParams() });
             var json = JObject.FromObject(result, Newtonsoft.Json.JsonSerializer.Create(new Newtonsoft.Json.JsonSerializerSettings
             {
                 ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()

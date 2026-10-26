@@ -1,5 +1,5 @@
-import type { DbCellValue, DbColumn } from "../lsp/protocol";
-import { exportFormats, isEntityReferenceValue, type EntityReferenceValue, type ExportFormat } from "../lsp/protocol";
+import type { DbCellValue, DbColumn } from "../resultsProtocol";
+import { exportFormats, isEntityReferenceValue, type EntityReferenceValue, type ExportFormat } from "../resultsProtocol";
 
 export type RowFetcher = (start: number, count: number) => Promise<DbCellValue[][]>;
 
@@ -19,6 +19,7 @@ interface CachedPage {
     /** The number of rows that were available when the page was requested */
     requestedCount: number;
     pending: Promise<void> | null;
+    error?: string;
 }
 
 interface CellPosition {
@@ -38,6 +39,7 @@ export class ResultsGrid {
     private readonly viewport: HTMLElement;
     private readonly spacer: HTMLElement;
     private readonly body: HTMLElement;
+    private readonly resizeObserver: ResizeObserver;
 
     private readonly columnWidths: number[];
     private readonly pages = new Map<number, CachedPage>();
@@ -70,7 +72,9 @@ export class ResultsGrid {
             copyUrl(reference: EntityReferenceValue): void;
             createSelect(reference: EntityReferenceValue): void;
         },
+        autoSizeColumns = true,
     ) {
+        this.autoSized = !autoSizeColumns;
         this.columnWidths = columns.map((c) => Math.min(320, Math.max(90, c.columnName.length * 8 + 24)));
 
         this.element = document.createElement("div");
@@ -120,7 +124,8 @@ export class ResultsGrid {
         this.element.addEventListener("keydown", (e) => this.onKeyDown(e));
         this.element.addEventListener("focusin", () => this.updateStatus());
         document.addEventListener("copy", this.onDocumentCopy);
-        new ResizeObserver(() => this.scheduleRender()).observe(this.viewport);
+        this.resizeObserver = new ResizeObserver(() => this.scheduleRender());
+        this.resizeObserver.observe(this.viewport);
     }
 
     /** Updates the number of rows available, e.g. in response to `query/resultSetUpdated` */
@@ -235,6 +240,7 @@ export class ResultsGrid {
 
     dispose(): void {
         this.disposed = true;
+        this.resizeObserver.disconnect();
         this.closeContextMenu?.();
         this.endDrag();
         document.removeEventListener("copy", this.onDocumentCopy);
@@ -389,7 +395,13 @@ export class ResultsGrid {
             cell.dataset.col = String(colIndex);
 
             if (!values) {
-                cell.classList.add("loading");
+                const error = this.pages.get(Math.floor(rowIndex / PAGE_SIZE))?.error;
+                if (error) {
+                    cell.textContent = "Error";
+                    cell.title = error;
+                } else {
+                    cell.classList.add("loading");
+                }
             } else {
                 const value = values[colIndex];
                 if (!value || value.isNull) {
@@ -458,8 +470,8 @@ export class ResultsGrid {
                 })
                 .catch((err) => {
                     console.error("Failed to load rows", err);
-                    // Allow the page to be retried later
-                    this.pages.delete(pageIndex);
+                    page.error = `Failed to load rows: ${err instanceof Error ? err.message : String(err)}`;
+                    if (!this.disposed) this.onStatus(page.error, true);
                 })
                 .finally(() => {
                     page.pending = null;

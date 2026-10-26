@@ -30,6 +30,7 @@ async function createClient(responseHeaders = {}, options = {}) {
         module,
         exports: module.exports,
         TextEncoder,
+        __SQL4CDS_VERSION__: JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8")).version,
         Date: options.Date ?? Date,
         setTimeout: options.setTimeout ?? setTimeout,
         window: {
@@ -65,6 +66,22 @@ async function createClient(responseHeaders = {}, options = {}) {
     await client.start({});
     return { client, handlers, calls, notifications, notificationMethods, response, logs, rpcRequests };
 }
+
+test("production build embeds the release package version", async () => {
+    const { loadConfigFromFile } = await import("vite");
+    const result = await loadConfigFromFile(
+        { command: "build", mode: "production" }, path.resolve(__dirname, "..", "vite.config.ts"));
+    assert.equal(result.config.define.__SQL4CDS_VERSION__,
+        JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8")).version));
+});
+
+test("initialize advertises the PPTB client name and release package version", async () => {
+    const { rpcRequests } = await createClient();
+    const initialize = rpcRequests.find(request => request.method === "initialize");
+    assert.equal(initialize.params.clientInfo.name, "Power Platform ToolBox");
+    assert.equal(initialize.params.clientInfo.version,
+        JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8")).version);
+});
 
 function batch(transaction = false, continueOnError = false) {
     return {
@@ -183,7 +200,7 @@ test("initial result rows avoid subset RPCs during execution and after completio
     const { client, handlers, rpcRequests } = await createClient({}, {
         queryEventsVersion: 1, initialRowCount: 200,
         request: (_method, params) => ({
-            resultSubset: { rowCount: params.rowsCount, totalRowCount: 205, rows: Array.from({ length: params.rowsCount }, (_, i) => [cell(String(params.rowsStartIndex + i))]) },
+            resultSubset: { rowCount: params.rowsCount, rows: Array.from({ length: params.rowsCount }, (_, i) => [cell(String(params.rowsStartIndex + i))]) },
         }),
     });
     assert.equal(rpcRequests[0].params.capabilities.experimental.sql4cds.queryEvents.initialRowCount, 200);
@@ -218,7 +235,8 @@ test("initial result rows avoid subset RPCs during execution and after completio
     ] });
     const cached = await client.subset(uri, 0, 0, 0, 200);
     assert.equal(cached.resultSubset.rows.length, 200);
-    assert.equal(cached.resultSubset.totalRowCount, 205);
+    assert.equal(cached.resultSubset.rowCount, 200);
+    assert.equal("totalRowCount" in cached.resultSubset, false);
     assert.equal(rpcRequests.filter(request => request.method === "query/subset").length, 0);
     const mixed = await client.subset(uri, 0, 0, 198, 7);
     assert.deepEqual(Array.from(mixed.resultSubset.rows, row => row[0].displayValue), ["198", "199", "200", "201", "202", "203", "204"]);
