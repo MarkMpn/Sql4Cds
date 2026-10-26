@@ -214,7 +214,10 @@ export class Sql4CdsClient {
                 this.compactQueryEvents = false;
                 this.initialRowCount = 0;
                 this.session = null;
-                if (!this.stopping)
+                // PPTB stops the worker cleanly when the tool is closing, so only report exits that weren't requested
+                if (snapshot.state === "exited" && !snapshot.failure)
+                    this.markHostStopped();
+                else if (!this.stopping)
                     this.failWorker(`SQL 4 CDS engine stopped${snapshot.failure ? `: ${snapshot.failure}` : ""}`);
                 this.events.exit?.(snapshot);
             },
@@ -291,11 +294,18 @@ export class Sql4CdsClient {
         this.events.failed?.(this.failure);
     }
 
+    private markHostStopped(): void {
+        if (this.failure || this.stopping) return;
+        this.failure = "The SQL 4 CDS engine was stopped by Power Platform ToolBox. Close and reopen the SQL 4 CDS tool to restart the engine.";
+        this.chunkAssemblies.clear();
+    }
+
     private checkWorkerFailure(error: unknown): void {
         const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
         const message = typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error);
-        if ((typeof code === "string" && /^WORKER_(FAILED|EXITED|STOPPED|EXITED_BEFORE_READY)$/.test(code)) ||
-            /\bWorker API: WORKER_(FAILED|EXITED|STOPPED|EXITED_BEFORE_READY)\b/.test(message))
+        // WORKER_STOPPED and WORKER_EXITED are also reported for deliberate stops, so the exit snapshot decides those
+        if ((typeof code === "string" && /^WORKER_(FAILED|EXITED_BEFORE_READY)$/.test(code)) ||
+            /\bWorker API: WORKER_(FAILED|EXITED_BEFORE_READY)\b/.test(message))
             this.failWorker(`SQL 4 CDS engine failed: ${message}`);
     }
 

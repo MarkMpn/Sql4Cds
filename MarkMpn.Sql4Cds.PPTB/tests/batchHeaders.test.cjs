@@ -138,7 +138,7 @@ test("terminal worker errors from requests and both Dataverse response transport
     }
 });
 
-test("unexpected worker exits fail the client but intentional stops and normal SQL errors do not", async () => {
+test("unexpected worker exits fail the client but intentional and host-initiated stops and normal SQL errors do not", async () => {
     const failures = [];
     const { client, handlers } = await createClient({}, {
         events: { failed: message => failures.push(message) },
@@ -147,9 +147,24 @@ test("unexpected worker exits fail the client but intentional stops and normal S
     await assert.rejects(client.executeDocumentSelection("query"), /Invalid column name/);
     assert.equal(client.isRunning, true);
     assert.deepEqual(failures, []);
-    handlers.onExit({ state: "exited" });
+    handlers.onExit({ state: "failed", failure: "PROCESS_EXIT" });
     assert.equal(client.isRunning, false);
     assert.equal(failures.length, 1);
+    assert.match(failures[0], /PROCESS_EXIT/);
+
+    const hostFailures = [];
+    const stoppingError = Object.assign(new Error("Worker API: WORKER_STOPPED"), { code: "WORKER_STOPPED" });
+    const host = await createClient({}, {
+        events: { failed: message => hostFailures.push(message) },
+        request: () => { throw stoppingError; },
+    });
+    await assert.rejects(host.client.executeDocumentSelection("query"), /WORKER_STOPPED/);
+    assert.deepEqual(hostFailures, [], "Writes rejected while PPTB stops the worker wait for the exit snapshot");
+    host.handlers.onExit({ state: "exited" });
+    assert.deepEqual(hostFailures, [], "PPTB stops the worker cleanly when the tool closes");
+    assert.equal(host.client.isRunning, false);
+    await assert.rejects(host.client.subset("query", 0, 0, 0, 1), /stopped by Power Platform ToolBox/);
+
     const stoppedFailures = [];
     const stopped = await createClient({}, { events: { failed: message => stoppedFailures.push(message) } });
     await stopped.client.stop();
