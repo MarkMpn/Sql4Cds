@@ -2,10 +2,12 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -20,6 +22,47 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
     [TestClass]
     public class LazyMetadataCacheTests
     {
+        [DataTestMethod]
+        [DataRow("9.2")]
+        [DataRow("8.2")]
+        public void NativeDataSourcesShareLazyMetadataAcrossConsumersAndConnections(string version)
+        {
+            var path = Path.Combine(Path.GetTempPath(), nameof(LazyMetadataCacheTests), Guid.NewGuid().ToString("N"));
+            var orgId = Guid.NewGuid();
+            using var rpc = new JsonRpc(new HeaderDelimitedMessageHandler(Stream.Null, Stream.Null));
+            try
+            {
+                var service = new MetadataService { OrgId = orgId, OrgVersion = version };
+                var source = MetadataTestHelper.DataSource(path, rpc, service);
+                Assert.AreEqual(0, service.StampRequests, "Connecting must not preload metadata");
+                Assert.AreEqual(0, service.EntityLoads);
+                Assert.IsFalse(Directory.Exists(path));
+                foreach (var consumer in new object[] { source.TableSizeCache, source.MessageCache })
+                {
+                    var metadata = consumer.GetType().GetField("_metadata", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(consumer);
+                    Assert.AreSame(source.Metadata, metadata);
+                }
+
+                var entity = source.Metadata["account"];
+                Assert.AreSame(entity, source.Metadata[1]);
+                Assert.AreEqual(1, service.StampRequests);
+                Assert.AreEqual(1, service.EntityLoads);
+                Assert.IsFalse(File.Exists(Path.Combine(path, orgId + ".json.gz")), "The legacy full cache must not be written");
+
+                var nextService = new MetadataService { OrgId = orgId, OrgVersion = version, AllowEntityLoads = false };
+                var nextSource = MetadataTestHelper.DataSource(path, rpc, nextService);
+                Assert.AreEqual(0, nextService.StampRequests);
+                Assert.AreEqual("name", nextSource.Metadata["account"].Attributes.Single().LogicalName);
+                Assert.AreEqual(1, nextService.StampRequests);
+                Assert.AreEqual(0, nextService.EntityLoads, "A new native connection must reuse the persisted entity");
+            }
+            finally
+            {
+                if (Directory.Exists(path))
+                    Directory.Delete(path, true);
+            }
+        }
+
         [DataTestMethod]
         [DataRow("9.2.26094.142:2506169!10/16/2026 18:09:38", "9.2.26094.142:2506169!10/16/2026 19:09:38", false)]
         [DataRow("9.2.26094.142:2506169", "9.2.26094.142:2506169!10/16/2026 19:09:38", false)]
@@ -164,14 +207,44 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         private sealed class MetadataService : IOrganizationService
         {
             public int EntityLoads { get; private set; }
+            public int StampRequests { get; private set; }
+            public Guid OrgId { get; set; }
+            public string OrgVersion { get; set; } = "9.2";
             public bool AllowEntityLoads { get; set; } = true;
             public string VersionStamp { get; set; } = "stamp";
 
             public OrganizationResponse Execute(OrganizationRequest request)
             {
+                if (request is RetrieveVersionRequest)
+                {
+                    var response = new RetrieveVersionResponse();
+                    response.Results["Version"] = OrgVersion;
+                    return response;
+                }
+                if (request is WhoAmIRequest)
+                {
+                    var response = new WhoAmIResponse();
+                    response.Results["OrganizationId"] = OrgId;
+                    return response;
+                }
+                if (request is RetrieveMultipleRequest retrieveMultiple)
+                {
+                    Assert.IsInstanceOfType<FetchExpression>(retrieveMultiple.Query);
+                    var response = new RetrieveMultipleResponse();
+                    response.Results["EntityCollection"] = new EntityCollection(new[]
+                    {
+                        new Entity("systemuser")
+                        {
+                            ["domainname"] = "test",
+                            ["organization.localeid"] = new AliasedValue("organization", "localeid", 1033)
+                        }
+                    });
+                    return response;
+                }
                 if (request is RetrieveMetadataChangesRequest changes &&
                     changes.Query.Properties.PropertyNames.SequenceEqual(new[] { nameof(EntityMetadata.MetadataId) }))
                 {
+                    StampRequests++;
                     var stamp = new RetrieveMetadataChangesResponse();
                     stamp.Results["ServerVersionStamp"] = VersionStamp;
                     return stamp;
@@ -213,7 +286,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             public void Update(Entity entity) => throw new NotSupportedException();
             public void Delete(string entityName, Guid id) => throw new NotSupportedException();
             public Entity Retrieve(string entityName, Guid id, ColumnSet columnSet) => throw new NotSupportedException();
-            public EntityCollection RetrieveMultiple(QueryBase query) => throw new NotSupportedException();
+            public EntityCollection RetrieveMultiple(QueryBase query)
+            {
+                Assert.IsInstanceOfType<QueryExpression>(query);
+                Assert.AreEqual("organization", ((QueryExpression)query).EntityName);
+                return new EntityCollection(new[] { new Entity("organization") { ["name"] = "test" } });
+            }
             public void Associate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities) => throw new NotSupportedException();
             public void Disassociate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities) => throw new NotSupportedException();
         }

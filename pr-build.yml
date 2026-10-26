@@ -68,3 +68,12 @@ steps:
     call npm run package
   displayName: Build VS Code extension
   workingDirectory: '$(Build.SourcesDirectory)\VSCodeExtension'
+  
+- script: |
+    call npm run build
+    if errorlevel 1 exit /b %errorlevel%
+    call npm run finalize-package
+    if errorlevel 1 exit /b %errorlevel%
+    call npm pack --pack-destination "$(Build.ArtifactStagingDirectory)\PPTB"
+  displayName: Build and package PPTB client
+  workingDirectory: '$(Build.SourcesDirectory)\MarkMpn.Sql4Cds.PPTB'

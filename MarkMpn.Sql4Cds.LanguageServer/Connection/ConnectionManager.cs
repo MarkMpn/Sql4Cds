@@ -338,7 +338,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public string ConnectionIdentity { get; set; }
         private readonly string _url;
 
-        public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org)
+        public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org, null, null, null)
         {
             UniqueName = Name;
             ServerName = new Uri(url).Host;
@@ -354,12 +354,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 OrgId = whoAmI.OrganizationId;
             }
 
-            Metadata = new CachedMetadata(org, persistentMetadataCache, OrgId, Version.ToString(), org is PptbOrganizationService);
+            Metadata = new CachedMetadata(org, persistentMetadataCache, OrgId, Version.ToString());
+            TableSizeCache = new TableSizeCache(org, Metadata, Version);
+            MessageCache = new MessageCache(org, Metadata);
             if (org is PptbOrganizationService pptb)
             {
                 pptb.SetMetadataCache(Metadata);
-                TableSizeCache = new TableSizeCache(org, Metadata, Version);
-                MessageCache = new MessageCache(org, Metadata);
                 pptb.MessageCache = MessageCache;
             }
 
