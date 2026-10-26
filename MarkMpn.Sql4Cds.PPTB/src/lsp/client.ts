@@ -1,5 +1,6 @@
 import type {
     BatchEventParams,
+    BatchSummary,
     CompletionItem,
     CompletionList,
     Hover,
@@ -12,6 +13,7 @@ import type {
     DataverseChunkParams,
     DataverseMessageParams,
     DataverseResponse,
+    DbCellValue,
     DocumentListener,
     ExecuteBatchParams,
     ExecutionPlanOptions,
@@ -24,7 +26,9 @@ import type {
     PptbConnectionOptions,
     PublishDiagnosticsParams,
     QueryCompleteParams,
+    QueryEventsParams,
     ResultSetEventParams,
+    ResultSetSummary,
     SelectionData,
     SubsetResult,
     WebApiRequest,
@@ -34,6 +38,7 @@ import type {
 /** The worker ID declared in pptb.config.json */
 const WORKER_ID = "sql4cds";
 const MAX_RPC_MESSAGE_SIZE = 32 * 1024 * 1024;
+const INITIAL_ROW_COUNT = 200;
 const DATAVERSE_CHUNK_METHOD = "dataverse/executeBatch/chunk";
 const DATAVERSE_MESSAGE_METHOD = "dataverse/executeBatch/message";
 
@@ -148,6 +153,15 @@ export class Sql4CdsClient {
     private readonly listeners = new Map<string, DocumentListener>();
     private readonly versions = new Map<string, number>();
     private readonly chunkAssemblies = new Map<string, ChunkAssembly>();
+    private compactQueryEvents = false;
+    private initialRowCount = 0;
+    private readonly initialRows = new Map<string, Map<string, { rows: DbCellValue[][]; rowCount: number }>>();
+    private executionSequence = 0;
+    private readonly executions = new Map<string, {
+        id: string;
+        batches: Map<number, BatchSummary>;
+        results: Map<string, ResultSetSummary>;
+    }>();
 
     constructor(private readonly events: ClientEvents) {}
 
@@ -157,6 +171,7 @@ export class Sql4CdsClient {
                 "dataverse/executeBatch": logRpcRequest("dataverse/executeBatch", (params) => executeBatch(params as ExecuteBatchParams)),
             },
             notifications: {
+                "sql4cds/queryEvents": logRpcNotification("sql4cds/queryEvents", (p) => this.receiveQueryEvents(p as QueryEventsParams)),
                 [DATAVERSE_CHUNK_METHOD]: (p) => this.receiveDataverseChunk(p as DataverseChunkParams),
                 [DATAVERSE_MESSAGE_METHOD]: (p) => this.receiveDataverseMessage(p as DataverseMessageParams),
                 "connection/complete": logRpcNotification("connection/complete", (p) => this.route(p as ConnectionCompleteParams, "connectionComplete")),
@@ -179,6 +194,10 @@ export class Sql4CdsClient {
                 "window/logMessage": logRpcNotification("window/logMessage", (p) => this.events.log?.(p as LogMessageParams)),
             },
             onExit: (snapshot) => {
+                this.executions.clear();
+                this.initialRows.clear();
+                this.compactQueryEvents = false;
+                this.initialRowCount = 0;
                 this.session = null;
                 this.events.exit?.(snapshot);
             },
@@ -187,7 +206,7 @@ export class Sql4CdsClient {
         await session.ready;
         this.session = session;
 
-        await this.request("initialize", {
+        const initialized = await this.request<{ capabilities?: { experimental?: { sql4cds?: { queryEvents?: { version?: number; initialRowCount?: number } } } } }>("initialize", {
             processId: null,
             clientInfo: { name: "Power Platform ToolBox" },
             rootUri: null,
@@ -201,9 +220,17 @@ export class Sql4CdsClient {
                     formatting: { dynamicRegistration: false },
                 },
                 workspace: { configuration: false, didChangeConfiguration: { dynamicRegistration: false } },
-                experimental: { pptb: { maxMessageSizeBytes: MAX_RPC_MESSAGE_SIZE } },
+                experimental: {
+                    pptb: { maxMessageSizeBytes: MAX_RPC_MESSAGE_SIZE },
+                    sql4cds: { queryEvents: { version: 1, initialRowCount: INITIAL_ROW_COUNT } },
+                },
             },
         });
+        this.compactQueryEvents = initialized.capabilities?.experimental?.sql4cds?.queryEvents?.version === 1;
+        const initialRowCount = initialized.capabilities?.experimental?.sql4cds?.queryEvents?.initialRowCount ?? 0;
+        if (!Number.isInteger(initialRowCount) || initialRowCount < 0 || initialRowCount > INITIAL_ROW_COUNT)
+            throw new Error("The server acknowledged an invalid initial row count");
+        this.initialRowCount = this.compactQueryEvents ? initialRowCount : 0;
         await this.notify("initialized", {});
         await this.changeConfiguration(settings);
     }
@@ -213,6 +240,10 @@ export class Sql4CdsClient {
         if (!session) return;
 
         await session.stop();
+        this.executions.clear();
+        this.initialRows.clear();
+        this.compactQueryEvents = false;
+        this.initialRowCount = 0;
         this.session = null;
     }
 
@@ -363,12 +394,78 @@ export class Sql4CdsClient {
         handler?.(params);
     }
 
+    private receiveQueryEvents(params: QueryEventsParams): void {
+        const execution = this.executions.get(params.ownerUri);
+        if (!this.compactQueryEvents || !execution || execution.id !== params.executionId) return;
+        const ownerUri = params.ownerUri;
+        for (const event of params.events) {
+            if (this.executions.get(ownerUri) !== execution) return;
+            switch (event.type) {
+                case "resultSet": {
+                    const key = `${event.data.batchId}:${event.data.id}`;
+                    const previous = execution.results.get(key);
+                    const { executionPlans, rows, rowsStartIndex, ...delta } = event.data;
+                    const summary = { ...previous, ...delta };
+                    if (!summary.columnInfo) throw new Error("Query result metadata was not introduced before its update");
+                    const result: ResultSetSummary = { ...summary, columnInfo: summary.columnInfo };
+                    const cache = this.initialRows.get(ownerUri);
+                    if (cache) {
+                        const cached = cache.get(key) ?? { rows: [], rowCount: 0 };
+                        if (rows !== undefined) {
+                            if (rowsStartIndex !== cached.rows.length || rowsStartIndex + rows.length > this.initialRowCount ||
+                                rowsStartIndex + rows.length > result.rowCount)
+                                throw new Error("Initial query rows are not a contiguous prefix of the result");
+                            cached.rows.push(...rows);
+                        }
+                        cached.rowCount = result.rowCount;
+                        cache.set(key, cached);
+                    }
+                    execution.results.set(key, result);
+                    if (!previous) this.route({ ownerUri, resultSetSummary: result }, "resultSetAvailable");
+                    this.route({ ownerUri, resultSetSummary: result, executionPlans }, "resultSetUpdated");
+                    if (result.complete && !previous?.complete)
+                        this.route({ ownerUri, resultSetSummary: result }, "resultSetComplete");
+                    break;
+                }
+                case "query/batchStart":
+                case "query/batchComplete": {
+                    const batchSummary = {
+                        ...event.data,
+                        resultSetSummaries: [...execution.results.values()].filter(result => result.batchId === event.data.id),
+                    };
+                    execution.batches.set(batchSummary.id, batchSummary);
+                    this.route({ ownerUri, batchSummary }, event.type === "query/batchStart" ? "batchStart" : "batchComplete");
+                    break;
+                }
+                case "query/message":
+                    this.route({ ownerUri, message: event.data }, "message");
+                    break;
+                case "sql4cds/progress":
+                    this.events.progress?.(event.data);
+                    break;
+                case "query/complete": {
+                    const batchSummaries = [...execution.batches.values()].map(batch => ({
+                        ...batch,
+                        resultSetSummaries: [...execution.results.values()].filter(result => result.batchId === batch.id),
+                    }));
+                    this.executions.delete(ownerUri);
+                    this.route({ ownerUri, batchSummaries }, "queryComplete");
+                    break;
+                }
+                default:
+                    throw new Error("Unsupported compact query event");
+            }
+        }
+    }
+
     addListener(uri: string, listener: DocumentListener): void {
         this.listeners.set(uri, listener);
     }
 
     removeListener(uri: string): void {
         this.listeners.delete(uri);
+        this.executions.delete(uri);
+        this.initialRows.delete(uri);
     }
 
     changeConfiguration(settings: Record<string, unknown>): Promise<void> {
@@ -398,6 +495,8 @@ export class Sql4CdsClient {
 
     closeDocument(uri: string): Promise<void> {
         this.versions.delete(uri);
+        this.executions.delete(uri);
+        this.initialRows.delete(uri);
         return this.notify("textDocument/didClose", { textDocument: { uri } });
     }
 
@@ -458,8 +557,13 @@ export class Sql4CdsClient {
         querySelection?: SelectionData,
         executionPlanOptions: ExecutionPlanOptions = { includeActualExecutionPlanXml: false, includeEstimatedExecutionPlanXml: false },
     ): Promise<unknown> {
+        const executionId = this.compactQueryEvents ? String(++this.executionSequence) : undefined;
+        this.initialRows.delete(ownerUri);
+        if (this.initialRowCount > 0) this.initialRows.set(ownerUri, new Map());
+        if (executionId) this.executions.set(ownerUri, { id: executionId, batches: new Map(), results: new Map() });
         return this.request("query/executeDocumentSelection", {
             ownerUri,
+            ...(executionId ? { executionId } : {}),
             ...(querySelection === undefined ? {} : { querySelection }),
             executionPlanOptions,
         });
@@ -470,10 +574,23 @@ export class Sql4CdsClient {
     }
 
     disposeQuery(ownerUri: string): Promise<unknown> {
+        this.executions.delete(ownerUri);
+        this.initialRows.delete(ownerUri);
         return this.request("query/dispose", { ownerUri });
     }
 
-    subset(ownerUri: string, batchIndex: number, resultSetIndex: number, rowsStartIndex: number, rowsCount: number): Promise<SubsetResult> {
+    async subset(ownerUri: string, batchIndex: number, resultSetIndex: number, rowsStartIndex: number, rowsCount: number): Promise<SubsetResult> {
+        const cached = this.initialRows.get(ownerUri)?.get(`${batchIndex}:${resultSetIndex}`);
+        if (cached && Number.isInteger(rowsStartIndex) && Number.isInteger(rowsCount) && rowsStartIndex >= 0 && rowsCount > 0 &&
+            rowsStartIndex < cached.rows.length) {
+            const rows = cached.rows.slice(rowsStartIndex, rowsStartIndex + rowsCount);
+            if (rows.length === rowsCount || rowsStartIndex + rows.length >= cached.rowCount)
+                return { resultSubset: { rows, rowCount: rows.length, totalRowCount: cached.rowCount } };
+            const remaining = await this.request<SubsetResult>("query/subset", {
+                ownerUri, batchIndex, resultSetIndex, rowsStartIndex: rowsStartIndex + rows.length, rowsCount: rowsCount - rows.length,
+            });
+            return { resultSubset: { ...remaining.resultSubset, rows: [...rows, ...remaining.resultSubset.rows], rowCount: rows.length + remaining.resultSubset.rowCount } };
+        }
         return this.request<SubsetResult>("query/subset", { ownerUri, batchIndex, resultSetIndex, rowsStartIndex, rowsCount });
     }
 

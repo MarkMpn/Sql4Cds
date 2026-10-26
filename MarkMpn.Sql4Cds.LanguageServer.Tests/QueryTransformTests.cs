@@ -58,7 +58,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var assembly = typeof(WebApiMetadataQuery).Assembly;
             var chunking = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Pptb.PptbRpcChunking", true));
             var type = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Capabilities.CapabilitiesHandler", true);
-            var handler = Activator.CreateInstance(type, new object[] { null, chunking });
+            var queryEvents = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.QueryExecution.QueryEventStream", true));
+            var handler = Activator.CreateInstance(type, new object[] { null, chunking, queryEvents });
             var result = type.GetMethod("HandleInitialize", BindingFlags.Instance | BindingFlags.NonPublic)
                 .Invoke(handler, new object[] { new InitializeParams() });
             var json = JObject.FromObject(result, Newtonsoft.Json.JsonSerializer.Create(new Newtonsoft.Json.JsonSerializerSettings

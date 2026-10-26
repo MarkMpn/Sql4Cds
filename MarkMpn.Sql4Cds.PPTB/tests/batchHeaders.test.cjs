@@ -11,6 +11,7 @@ async function createClient(responseHeaders = {}, options = {}) {
     const notifications = [];
     const notificationMethods = [];
     const logs = [];
+    const rpcRequests = [];
     let complete;
     const response = new Promise((resolve) => { complete = resolve; });
     const execute = (transaction) => async (...args) => {
@@ -33,11 +34,18 @@ async function createClient(responseHeaders = {}, options = {}) {
         setTimeout: options.setTimeout ?? setTimeout,
         window: {
             dataverseAPI: { executeBatch: execute(false), executeTransaction: execute(true) },
-            toolboxAPI: { workers: { connect: async (_id, options) => {
-                handlers = options;
+            toolboxAPI: { workers: { connect: async (_id, connectOptions) => {
+                handlers = connectOptions;
                 return {
                     ready: Promise.resolve(),
-                    request: async () => ({}),
+                    stop: async () => {},
+                    request: async (method, params) => {
+                        rpcRequests.push({ method, params });
+                        if (options.request && method !== "initialize") return options.request(method, params);
+                        return method === "initialize" && options.queryEventsVersion
+                            ? { capabilities: { experimental: { sql4cds: { queryEvents: { version: options.queryEventsVersion, initialRowCount: options.initialRowCount } } } } }
+                            : {};
+                    },
                     notify: async (method, params) => {
                         if (method !== "dataverse/executeBatch/chunk" && method !== "dataverse/executeBatch/message") return;
                         notifications.push(params);
@@ -54,7 +62,7 @@ async function createClient(responseHeaders = {}, options = {}) {
     }, { filename });
     const client = new module.exports.Sql4CdsClient(options.events ?? {});
     await client.start({});
-    return { client, handlers, calls, notifications, notificationMethods, response, logs };
+    return { client, handlers, calls, notifications, notificationMethods, response, logs, rpcRequests };
 }
 
 function batch(transaction = false, continueOnError = false) {
@@ -68,6 +76,202 @@ function batch(transaction = false, continueOnError = false) {
         ],
     };
 }
+
+test("compact query events negotiate version 1 and reconstruct metadata, plans, errors and completion", async () => {
+    const progress = [];
+    const { client, handlers, rpcRequests } = await createClient({}, { queryEventsVersion: 1, events: { progress: message => progress.push(message) } });
+    const received = [];
+    const uri = "pptb://query/compact";
+    const listener = {};
+    for (const name of ["batchStart", "resultSetAvailable", "resultSetUpdated", "resultSetComplete", "batchComplete", "message", "queryComplete"])
+        listener[name] = params => received.push({ name, params });
+    client.addListener(uri, listener);
+    await client.executeDocumentSelection(uri);
+    const executionId = rpcRequests.at(-1).params.executionId;
+    assert.equal(rpcRequests[0].params.capabilities.experimental.sql4cds.queryEvents.version, 1);
+    const notify = events => handlers.notifications["sql4cds/queryEvents"]({ ownerUri: uri, executionId, events });
+    const columns = [{ columnName: "name", dataTypeName: "nvarchar" }];
+    notify([
+        { type: "query/batchStart", data: { id: 0, hasError: false } },
+        { type: "resultSet", data: { batchId: 0, id: 0, rowCount: 0, complete: false, columnInfo: columns } },
+        { type: "sql4cds/progress", data: "Reading..." },
+    ]);
+    notify([
+        { type: "resultSet", data: { batchId: 0, id: 0, rowCount: 5, complete: true } },
+        { type: "resultSet", data: { batchId: 0, id: 1, rowCount: 0, complete: true, columnInfo: columns, specialAction: { expectYukonXMLShowPlan: true }, executionPlans: [{ graphFile: "plan" }] } },
+        { type: "query/message", data: { batchId: 0, message: "Failed", isError: true } },
+        { type: "query/batchComplete", data: { id: 0, hasError: true } },
+        { type: "query/complete" },
+    ]);
+    assert.equal(received.filter(event => event.name === "resultSetAvailable").length, 2);
+    assert.equal(received.filter(event => event.name === "resultSetComplete").length, 2);
+    const result = received.at(-1);
+    assert.equal(result.name, "queryComplete");
+    assert.equal(result.params.batchSummaries[0].hasError, true);
+    assert.equal(result.params.batchSummaries[0].resultSetSummaries[0].rowCount, 5);
+    assert.deepEqual(result.params.batchSummaries[0].resultSetSummaries[0].columnInfo, columns);
+    assert.equal(received.find(event => event.params.executionPlans)?.params.executionPlans[0].graphFile, "plan");
+    assert.equal(received.find(event => event.name === "message").params.message.isError, true);
+    assert.deepEqual(progress, ["Reading..."]);
+});
+
+test("initial result rows avoid subset RPCs during execution and after completion, paging only the missing suffix", async () => {
+    const cell = value => ({ displayValue: value, isNull: false, rawObject: value });
+    const { client, handlers, rpcRequests } = await createClient({}, {
+        queryEventsVersion: 1, initialRowCount: 200,
+        request: (_method, params) => ({
+            resultSubset: { rowCount: params.rowsCount, totalRowCount: 205, rows: Array.from({ length: params.rowsCount }, (_, i) => [cell(String(params.rowsStartIndex + i))]) },
+        }),
+    });
+    assert.equal(rpcRequests[0].params.capabilities.experimental.sql4cds.queryEvents.initialRowCount, 200);
+    const uri = "rows";
+    await client.executeDocumentSelection(uri);
+    const executionId = rpcRequests.at(-1).params.executionId;
+    const send = events => handlers.notifications["sql4cds/queryEvents"]({ ownerUri: uri, executionId, events });
+    const callbackRows = [];
+    client.addListener(uri, { resultSetUpdated: params => {
+        if (params.resultSetSummary.rowCount > 0)
+            callbackRows.push(client.subset(uri, 0, 0, 0, params.resultSetSummary.rowCount));
+    } });
+    send([{ type: "resultSet", data: {
+        id: 0, batchId: 0, rowCount: 1, complete: false, columnInfo: [{ columnName: "name" }],
+        rowsStartIndex: 0, rows: [[cell("0")]],
+    } }]);
+    send([{ type: "resultSet", data: {
+        id: 0, batchId: 0, rowCount: 2, complete: false, rowsStartIndex: 1, rows: [[cell("1")]],
+    } }]);
+    assert.equal((await callbackRows[0]).resultSubset.rows[0][0].displayValue, "0");
+    assert.equal((await callbackRows[1]).resultSubset.rows[1][0].displayValue, "1");
+    assert.equal((await client.subset(uri, 0, 0, 0, 200)).resultSubset.rowCount, 2);
+    assert.equal(rpcRequests.filter(request => request.method === "query/subset").length, 0);
+    client.removeListener(uri);
+    // Removing a listener invalidates a stream; start a fresh execution to fill the whole first page.
+    await client.executeDocumentSelection(uri);
+    const current = rpcRequests.at(-1).params.executionId;
+    handlers.notifications["sql4cds/queryEvents"]({ ownerUri: uri, executionId: current, events: [
+        { type: "resultSet", data: { id: 0, batchId: 0, rowCount: 205, complete: true, columnInfo: [],
+            rowsStartIndex: 0, rows: Array.from({ length: 200 }, (_, i) => [cell(String(i))]) } },
+        { type: "query/complete" },
+    ] });
+    const cached = await client.subset(uri, 0, 0, 0, 200);
+    assert.equal(cached.resultSubset.rows.length, 200);
+    assert.equal(cached.resultSubset.totalRowCount, 205);
+    assert.equal(rpcRequests.filter(request => request.method === "query/subset").length, 0);
+    const mixed = await client.subset(uri, 0, 0, 198, 7);
+    assert.deepEqual(Array.from(mixed.resultSubset.rows, row => row[0].displayValue), ["198", "199", "200", "201", "202", "203", "204"]);
+    assert.equal(mixed.resultSubset.rowCount, 7);
+    assert.deepEqual({ ...rpcRequests.at(-1).params }, { ownerUri: uri, batchIndex: 0, resultSetIndex: 0, rowsStartIndex: 200, rowsCount: 5 });
+});
+
+test("initial row caches are isolated and removed on disposal, listener removal and reexecution", async () => {
+    const { client, handlers, rpcRequests } = await createClient({}, { queryEventsVersion: 1, initialRowCount: 200 });
+    const push = async (uri, id = 0) => {
+        await client.executeDocumentSelection(uri);
+        const executionId = rpcRequests.at(-1).params.executionId;
+        handlers.notifications["sql4cds/queryEvents"]({ ownerUri: uri, executionId, events: [{
+            type: "resultSet", data: { id, batchId: 0, rowCount: 1, complete: false, columnInfo: [],
+                rowsStartIndex: 0, rows: [[{ displayValue: uri, isNull: false }]] },
+        }] });
+        return executionId;
+    };
+    const stale = await push("first");
+    await push("second", 1);
+    assert.equal((await client.subset("first", 0, 0, 0, 1)).resultSubset.rows[0][0].displayValue, "first");
+    assert.equal((await client.subset("second", 0, 1, 0, 1)).resultSubset.rows[0][0].displayValue, "second");
+    assert.equal(rpcRequests.filter(request => request.method === "query/subset").length, 0);
+    await client.executeDocumentSelection("first");
+    handlers.notifications["sql4cds/queryEvents"]({ ownerUri: "first", executionId: stale, events: [{
+        type: "resultSet", data: { id: 0, batchId: 0, rowCount: 1, complete: false, rowsStartIndex: 0, rows: [[{ displayValue: "stale" }]] },
+    }] });
+    await client.subset("first", 0, 0, 0, 1);
+    assert.equal(rpcRequests.at(-1).method, "query/subset");
+    await client.disposeQuery("second");
+    await client.subset("second", 0, 1, 0, 1);
+    assert.equal(rpcRequests.at(-1).method, "query/subset");
+    await push("third");
+    client.removeListener("third");
+    await client.subset("third", 0, 0, 0, 1);
+    assert.equal(rpcRequests.at(-1).method, "query/subset");
+});
+
+test("initial rows require acknowledgement and invalid row offsets are rejected", async () => {
+    for (const initialRowCount of [undefined, 0, 200]) {
+        const { client, handlers, rpcRequests } = await createClient({}, { queryEventsVersion: 1, initialRowCount });
+        await client.executeDocumentSelection("query");
+        const executionId = rpcRequests.at(-1).params.executionId;
+        const send = data => handlers.notifications["sql4cds/queryEvents"]({ ownerUri: "query", executionId, events: [{
+            type: "resultSet", data: { id: 0, batchId: 0, rowCount: 1, complete: false, columnInfo: [], ...data },
+        }] });
+        if (initialRowCount) {
+            assert.throws(() => send({ rowsStartIndex: 1, rows: [[{ displayValue: "gap" }]] }), /contiguous prefix/);
+            send({ rowsStartIndex: 0, rows: [[{ displayValue: "first" }]] });
+            assert.throws(() => send({ rowsStartIndex: 0, rows: [[{ displayValue: "duplicate" }]] }), /contiguous prefix/);
+        } else {
+            send({});
+            await client.subset("query", 0, 0, 0, 1);
+            assert.equal(rpcRequests.at(-1).method, "query/subset");
+        }
+    }
+});
+
+test("initial row caches are cleared by document closure, worker exit and stop", async () => {
+    for (const cleanup of ["close", "exit", "stop"]) {
+        const { client, handlers, rpcRequests } = await createClient({}, { queryEventsVersion: 1, initialRowCount: 200 });
+        await client.executeDocumentSelection("query");
+        const executionId = rpcRequests.at(-1).params.executionId;
+        const send = () => handlers.notifications["sql4cds/queryEvents"]({ ownerUri: "query", executionId, events: [{
+            type: "resultSet", data: { id: 0, batchId: 0, rowCount: 1, complete: false, columnInfo: [],
+                rowsStartIndex: 0, rows: [[{ displayValue: "cached" }]] },
+        }] });
+        send();
+        if (cleanup === "close") {
+            await client.closeDocument("query");
+            send();
+            await client.subset("query", 0, 0, 0, 1);
+            assert.equal(rpcRequests.at(-1).method, "query/subset");
+        } else {
+            if (cleanup === "exit") handlers.onExit({});
+            else await client.stop();
+            await assert.rejects(client.subset("query", 0, 0, 0, 1), /worker is not running/);
+        }
+    }
+});
+
+test("compact query streams reject stale executions and remain isolated by editor", async () => {
+    const { client, handlers, rpcRequests } = await createClient({}, { queryEventsVersion: 1 });
+    const received = [];
+    for (const uri of ["first", "second"])
+        client.addListener(uri, { message: params => received.push(params.message.message) });
+    await client.executeDocumentSelection("first");
+    const stale = rpcRequests.at(-1).params.executionId;
+    await client.executeDocumentSelection("first");
+    const current = rpcRequests.at(-1).params.executionId;
+    await client.executeDocumentSelection("second");
+    const second = rpcRequests.at(-1).params.executionId;
+    const send = (ownerUri, executionId, message) => handlers.notifications["sql4cds/queryEvents"]({
+        ownerUri, executionId, events: [{ type: "query/message", data: { message } }],
+    });
+    send("first", stale, "stale");
+    send("first", current, "current");
+    send("second", second, "second");
+    await client.disposeQuery("first");
+    send("first", current, "disposed");
+    client.removeListener("second");
+    send("second", second, "closed");
+    assert.deepEqual(received, ["current", "second"]);
+});
+
+test("compact streams require acknowledgement and preserve legacy notifications without it", async () => {
+    for (const queryEventsVersion of [undefined, 2]) {
+        const { client, handlers, rpcRequests } = await createClient({}, { queryEventsVersion });
+        const received = [];
+        client.addListener("query", { message: params => received.push(params.message.message) });
+        await client.executeDocumentSelection("query");
+        assert.equal("executionId" in rpcRequests.at(-1).params, false);
+        handlers.notifications["query/message"]({ ownerUri: "query", message: { message: "legacy" } });
+        assert.deepEqual(received, ["legacy"]);
+    }
+});
 
 for (const changesetId of [undefined, null, ""]) {
     test(`absent changeset ID (${String(changesetId)}) is omitted from host requests`, async () => {

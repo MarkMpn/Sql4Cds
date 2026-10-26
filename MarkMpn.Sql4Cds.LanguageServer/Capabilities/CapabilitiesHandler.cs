@@ -7,6 +7,7 @@ using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
+using MarkMpn.Sql4Cds.LanguageServer.QueryExecution;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
 {
@@ -15,11 +16,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
         private JsonRpc _lsp;
         private readonly VersionChecker _versionChecker;
         private readonly PptbRpcChunking _pptbRpcChunking;
+        private readonly QueryEventStream _queryEvents;
 
-        public CapabilitiesHandler(VersionChecker versionChecker, PptbRpcChunking pptbRpcChunking)
+        public CapabilitiesHandler(VersionChecker versionChecker, PptbRpcChunking pptbRpcChunking, QueryEventStream queryEvents)
         {
             _versionChecker = versionChecker;
             _pptbRpcChunking = pptbRpcChunking;
+            _queryEvents = queryEvents;
         }
 
         public void Initialize(JsonRpc lsp)
@@ -36,11 +39,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
             var experimentalToken = experimental as JToken ?? (experimental == null ? null : JToken.FromObject(experimental));
             var maxMessageSize = experimentalToken?["pptb"]?["maxMessageSizeBytes"]?.Value<int?>();
             _pptbRpcChunking.SetMaxMessageSize(maxMessageSize);
+            _queryEvents.Configure(experimentalToken?["sql4cds"]?["queryEvents"]?["version"]?.Value<int?>(), maxMessageSize,
+                experimentalToken?["sql4cds"]?["queryEvents"]?["initialRowCount"]?.Value<int?>());
 
             return new InitializeResult
             {
                 Capabilities = new ServerCapabilities
                 {
+                    Experimental = new
+                    {
+                        sql4cds = new
+                        {
+                            queryEvents = new
+                            {
+                                version = _queryEvents.Enabled ? 1 : 0,
+                                initialRowCount = _queryEvents.InitialRowCount
+                            }
+                        }
+                    },
                     CompletionProvider = new CompletionOptions
                     {
                         WorkDoneProgress = false

@@ -54,6 +54,54 @@ Query and modify Dataverse data using standard SQL syntax inside [Power Platform
 - PPTB never exposes access tokens, so the worker can't talk to Dataverse directly. Instead the connection uses the `PPTB` authentication type, which creates a `PptbOrganizationService`. This `IOrganizationService` converts SDK requests (FetchXML queries, CRUD, metadata, `ExecuteMultiple`, etc.) into Dataverse Web API requests. The tool passes the flat request list straight to `dataverseAPI.executeBatch` for the connection slot, with transaction members grouped by `changesetId`, and returns the responses. The client advertises PPTB's 32 MiB message limit during LSP initialization. Each request and response independently uses a `dataverse/executeBatch/message` notification containing `{ id, data }`, with the payload kept as a JSON object, if the complete serialized notification fits the UTF-8 byte limit. Only oversized payloads use `dataverse/executeBatch/chunk` notifications containing `{ id, sequence, complete, data }`, reassembled by correlation ID and sequence number. Direction is implicit: JavaScript receives requests and the worker receives responses. This avoids escaping and splitting ordinary payloads and allows a small request to receive a chunked response, or vice versa. Clients without a negotiated message limit retain the legacy `dataverse/executeBatch` request/response path.
 - JavaScript RPC console logs include a UTC ISO 8601 timestamp with milliseconds for each request, response, notification, chunk, and error, for example `[SQL 4 CDS RPC] [2026-10-25T17:01:06.088Z] -> query/subset request`, to help correlate activity and identify delays.
 
+### Compact query notifications
+
+The PPTB client opts into version 1 with
+`initialize.capabilities.experimental.sql4cds.queryEvents.version = 1`, alongside
+the PPTB message-size limit. The server acknowledges the version in
+`capabilities.experimental.sql4cds.queryEvents.version`. Without a supported
+opt-in, other clients keep the existing query notifications unchanged.
+
+Clients can also request `queryEvents.initialRowCount` during initialization;
+the server echoes the accepted count alongside the version. Omitted or zero
+means no proactive rows. PPTB requests 200 rows per ordinary result set, matching
+its first grid page. While those rows are being read, result updates are queued
+without waiting for the usual row-count reporting interval.
+
+In compact mode, query execution requests include an `executionId`, echoed in
+`sql4cds/queryEvents` notifications shaped as `{ ownerUri, executionId, events }`.
+Each event has a `type` and, where applicable, `data`. Result-set events use
+`type: "resultSet"` with IDs, row count and completion state; column metadata,
+special actions and visualization metadata are introduced once. Execution plans
+are attached to the corresponding result event. Other event types are
+`query/batchStart`, `query/batchComplete`, `query/message`, `sql4cds/progress` and
+`query/complete`. Batch/query completion does not repeat result metadata.
+
+With initial rows enabled, result events optionally include `rowsStartIndex` and
+`rows` (the same formatted cell arrays returned by `query/subset`). These are
+contiguous deltas, never a repeated prefix: for example, an update containing rows
+0-9 may be followed by rows 10-19. Deltas share the normal batching window and byte
+limits, so a slowly executing query can display partial results before completing.
+Execution-plan result sets do not push rows. If one row cannot fit the negotiated
+message limit, proactive delivery stops at that row; ordinary paging remains
+available for it and the remaining rows.
+
+The worker batches events over a 10 ms window, merges adjacent result-state
+updates, keeps the latest pending progress, and preserves messages and plan order.
+It flushes at 64 events, before exceeding a 256 KiB target or the negotiated
+message limit, and immediately on query completion. A single larger event may
+exceed the target but never the negotiated limit. Queued data is snapshotted.
+Final row-count changes, including partially read results after errors or
+cancellation, are included before batch completion.
+
+The client reconstructs the existing UI callbacks and completion summaries,
+discarding events for superseded, disposed or closed executions. Confirmations
+and diagnostics remain immediate. The client caches the pushed prefix before
+invoking result callbacks and serves `query/subset` calls from it where possible,
+requesting only a missing suffix or later pages from the worker. The prefix
+remains cached after completion for grid scrolling, copying and text output, and
+is released on query disposal, editor closure, re-execution or worker shutdown.
+
 ## Development
 
 The Web API bridge preserves individual response headers and outer batch headers separately. The worker uses the batch-level `x-ms-dop-hint` header to update its recommended degree of parallelism. The bridge retries trailing 429 responses up to 10 times after the batch-level `Retry-After` delay, retrying only the uncompleted suffix and never splitting a changeset: a transaction is retried only when every operation in it is throttled. Incomplete response lists are not retried. Any final HTTP 429 response becomes an organization service fault with error code 429 and the batch-level `Retry-After` delay (in seconds) exposed as a `TimeSpan` for the engine's throttling retries.

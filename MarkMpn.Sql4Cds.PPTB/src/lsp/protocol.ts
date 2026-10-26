@@ -270,6 +270,19 @@ export interface QueryCompleteParams {
     batchSummaries: BatchSummary[];
 }
 
+export interface QueryEventsParams {
+    ownerUri: string;
+    executionId: string;
+    events: QueryEvent[];
+}
+
+export type QueryEvent =
+    | { type: "resultSet"; data: Pick<ResultSetSummary, "id" | "batchId" | "rowCount" | "complete"> & Partial<ResultSetSummary> & Pick<ResultSetEventParams, "executionPlans"> & { rowsStartIndex?: number; rows?: DbCellValue[][] } }
+    | { type: "query/batchStart" | "query/batchComplete"; data: BatchSummary }
+    | { type: "query/message"; data: MessageParams["message"] }
+    | { type: "sql4cds/progress"; data: string }
+    | { type: "query/complete" };
+
 export interface DbCellValue {
     displayValue: string;
     isNull: boolean;
@@ -294,6 +307,7 @@ export function isEntityReferenceValue(value: unknown): value is EntityReference
 export interface SubsetResult {
     resultSubset: {
         rowCount: number;
+        totalRowCount?: number;
         rows: DbCellValue[][];
     };
 }
