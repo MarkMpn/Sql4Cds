@@ -671,6 +671,35 @@ test("actual plans are only requested when enabled and are shown alongside the r
     events.queryComplete({ batchSummaries: [] });
 });
 
+for (const mode of ["grid", "text"]) {
+    for (const [name, estimated, hasResult, error, expected] of [
+        ["actual plan without results", false, false, false, "messages"],
+        ["actual plan with results", false, true, false, "results"],
+        ["actual plan with results and error", false, true, true, "messages"],
+        ["actual plan without results and error", false, false, true, "messages"],
+        ["estimated plan", true, false, false, "plan"],
+        ["estimated plan with error", true, false, true, "messages"],
+    ]) {
+        test(`${name} defaults to ${expected} in ${mode} mode`, async () => {
+            const { app, createTab } = setup();
+            app.settings.includeActualPlan = true;
+            const { tab, events } = createTab();
+            await tab.connect(0);
+            tab.resultsMode = mode;
+            await tab.execute(null, estimated);
+            if (hasResult) events.resultSetAvailable({ resultSetSummary: summary(0, 0, 0) });
+            const plan = planSummary(hasResult ? 1 : 0);
+            events.resultSetAvailable({ resultSetSummary: plan });
+            events.resultSetUpdated({ resultSetSummary: plan, executionPlans: [samplePlan] });
+            if (error) events.message({ message: { message: "Query failed", isError: true } });
+            if (!estimated && hasResult) tab.showResultsView("plan");
+            events.queryComplete({ batchSummaries: [] });
+            assert.equal(tab.view, expected);
+            assert.equal(tab.resultsTabButtons.get("plan").hidden, false, "Actual plans remain available for manual selection");
+        });
+    }
+}
+
 test("the selected plan node is shown in the Properties panel only while the active tab shows its plan", async () => {
     const { app, createTab, planViews, propertiesPanels } = setup();
     app.bindProperties();

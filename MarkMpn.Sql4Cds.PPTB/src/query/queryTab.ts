@@ -333,9 +333,10 @@ export class QueryTab {
         this.statusKind = this.cancelled ? "warning" : this.hasErrors ? "error" : "success";
         this.addMessage(`${this.statusMessage} in ${elapsed}s`, false, true);
 
-        // Show the estimated plan once it's available, or switch to the messages if there's nothing else to show
-        if (this.hasErrors || (this.grids.size === 0 && this.textResultSets.size === 0 && this.planView.count === 0)) this.showResultsView("messages");
-        else if (this.planView.count > 0 && (this.estimatedPlan || (this.grids.size === 0 && this.textResultSets.size === 0))) this.showResultsView("plan");
+        if (this.hasErrors) this.showResultsView("messages");
+        else if (this.estimatedPlan && this.planView.count > 0) this.showResultsView("plan");
+        else if (this.grids.size > 0 || this.textResultSets.size > 0) this.showResultsView("results");
+        else this.showResultsView("messages");
         if (this.executionResultsMode === "text") void this.renderTextResults(this.resultsGeneration);
         this.host.onStateChanged(this);
     }
