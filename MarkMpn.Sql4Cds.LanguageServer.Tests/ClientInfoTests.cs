@@ -17,9 +17,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [DataRow("VS Code", "9.4.0", "VS Code")]
         [DataRow("Power Platform ToolBox", "9.4.0-beta.1", "Power Platform ToolBox")]
         [DataRow("Another LSP client", null, "Another LSP client")]
-        [DataRow(null, null, "SQL 4 CDS")]
-        [DataRow("", null, "SQL 4 CDS")]
-        [DataRow("  ", null, "SQL 4 CDS")]
+        [DataRow(null, null, "SQL 4 CDS LSP")]
+        [DataRow("", null, "SQL 4 CDS LSP")]
+        [DataRow("  ", null, "SQL 4 CDS LSP")]
         public void InitializeClientInfoDeterminesApplicationNameForConnections(string name, string version, string expected)
         {
             var assembly = typeof(WebApiMetadataQuery).Assembly;

@@ -8843,14 +8843,7 @@ WHERE a.accountid = '9B8AAC69-EECA-497A-99AB-C65B9E702D89'";
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/593
             var metadataLog = new HashSet<string>();
-            var dataSource = new FakeXrmDataSource
-            {
-                Name = "local",
-                Connection = _localDataSource.Connection,
-                Metadata = new LoggingMetadataCache(_localDataSource.Metadata, msg => metadataLog.Add(msg)),
-                TableSizeCache = _localDataSource.TableSizeCache,
-                MessageCache = _localDataSource.MessageCache
-            };
+            var dataSource = new FakeXrmDataSource(_localDataSource.Connection, new LoggingMetadataCache(_localDataSource.Metadata, msg => metadataLog.Add(msg)), _localDataSource.TableSizeCache, _localDataSource.MessageCache);
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(new Dictionary<string, DataSource> { [dataSource.Name] = dataSource }, this), this);
 
             var query = "SELECT fullname FROM contact";

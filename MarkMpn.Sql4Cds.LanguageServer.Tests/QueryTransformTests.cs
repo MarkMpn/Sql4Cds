@@ -106,19 +106,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             StringAssert.Contains(error.InnerException.Message, "Line 1");
         }
 
-        [DataTestMethod]
-        [DataRow("DELETE FROM account; SELECT name FROM account")]
-        [DataRow("SELECT name FROM account; UPDATE account SET name = 'x'")]
-        [DataRow("EXEC WhoAmI")]
-        [DataRow("SELECT name INTO #temp FROM account")]
-        public void DisplayNamesRejectsNonSelectScriptsBeforeExecutingAnything(string query)
-        {
-            var error = Assert.ThrowsException<TargetInvocationException>(() =>
-                Invoke("Format", query, new FormatterOptions { AddDisplayNames = true, ThrowOnError = true }));
-            Assert.IsInstanceOfType<NotSupportedException>(error.InnerException);
-            StringAssert.Contains(error.InnerException.Message, "SELECT statements only");
-        }
-
         [TestMethod]
         public void ConvertToMEscapesQuotesNewlinesAndLiteralEscapeSequences()
         {

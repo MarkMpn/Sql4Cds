@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
@@ -32,7 +34,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         private bool _useRawOrderByReliable = false;
         private List<JoinOperator> _joinOperators;
 
-        public FakeXrmDataSource()
+        public FakeXrmDataSource(IOrganizationService org, IAttributeMetadataCache metadata, ITableSizeCache tableSize, IMessageCache messages)
+            : base(org, metadata, tableSize, messages)
         {
             _joinOperators = new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
         }
