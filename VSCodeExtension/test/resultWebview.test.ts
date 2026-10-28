@@ -30,6 +30,7 @@ function fixture() {
   const html = resultsHtml({ cspSource: "https://webview.invalid" } as vscode.Webview,
     { script: "https://webview.invalid/results.js", styles: "https://webview.invalid/results.css", images: "https://webview.invalid/plan-images" });
   const dom = new JSDOM(html.replace(/<script([^>]*) src="[^"]*"><\/script>/, (_, attrs) => `<script${attrs}>${script}</script>`), {
+    url: "https://webview.invalid",
     runScripts: "dangerously", pretendToBeVisual: true, virtualConsole: console,
     beforeParse(window) {
       (window as any).acquireVsCodeApi = () => ({ postMessage: (message: unknown) => sent.push(JSON.parse(JSON.stringify(message))) });
@@ -41,11 +42,12 @@ function fixture() {
     }
   });
   const { window } = dom;
-  const emit = (message: unknown) => window.dispatchEvent(new window.MessageEvent("message", { data: message }));
-  const state = (overrides: Partial<ResultsState> = {}) => emit({
+  const emit = (message: unknown, origin = window.location.origin) =>
+    window.dispatchEvent(new window.MessageEvent("message", { data: message, origin }));
+  const state = (overrides: Partial<ResultsState> = {}, origin = window.location.origin) => emit({
     type: "state", ownerUri: "untitled:query", runId: 1, status: "completed", estimatedPlan: false,
     results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, ...overrides
-  });
+  }, origin);
   const respond = (request: Record<string, any>, value?: unknown, error?: string) => emit({
     type: "response", requestId: request.requestId, value, error
   });
@@ -54,6 +56,44 @@ function fixture() {
     window, sent, emit, state, respond, tick,
     close() { dom.window.close(); assert.deepEqual(errors, []); }
   };
+}
+
+for (const origin of ["https://untrusted.invalid", "", "null"]) {
+  test(`messages from untrusted origin ${JSON.stringify(origin)} cannot update, clear or respond`, async () => {
+    const ui = fixture();
+    try {
+      const document = ui.window.document;
+      ui.state({}, origin);
+      assert.equal(document.getElementById("empty-state")!.hidden, false);
+      assert.equal(document.querySelectorAll(".results-grid").length, 0);
+      assert.equal(ui.sent.filter(message => message.type === "rows").length, 0);
+
+      ui.state();
+      await ui.tick();
+      const request = ui.sent.find(message => message.type === "rows")!;
+      assert.ok(request);
+      assert.equal(document.getElementById("empty-state")!.hidden, true);
+      assert.equal(document.querySelectorAll(".results-grid").length, 1);
+
+      ui.emit({ type: "empty" }, origin);
+      assert.equal(document.getElementById("empty-state")!.hidden, true);
+      assert.equal(document.querySelectorAll(".results-grid").length, 1);
+
+      ui.emit({
+        type: "response", requestId: request.requestId,
+        value: [[{ displayValue: "untrusted row", isNull: false }]]
+      }, origin);
+      await ui.tick();
+      assert.ok(!document.querySelector(".grid-body")?.textContent?.includes("untrusted row"));
+      ui.respond(request, [[{ displayValue: "trusted row", isNull: false }]]);
+      await ui.tick();
+      assert.ok(document.querySelector(".grid-body")?.textContent?.includes("trusted row"));
+
+      ui.emit({ type: "empty" });
+      assert.equal(document.getElementById("empty-state")!.hidden, false);
+      assert.equal(document.querySelectorAll(".results-grid").length, 0);
+    } finally { ui.close(); }
+  });
 }
 
 for (const estimatedPlan of [false, true]) {
