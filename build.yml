@@ -58,7 +58,7 @@ steps:
     configuration: '$(buildConfiguration)'
     msbuildArgs: '/p:DeployExtension=false /p:Version=$(GitVersion.NuGetVersion)'
 
-- task: VSTest@2
+- task: VSTest@3
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
