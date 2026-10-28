@@ -4,6 +4,10 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
+using Microsoft.Crm.Sdk.Messages;
+using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Query;
 using StreamJsonRpc;
 
 await CheckAsync("a late authentication cannot replace the retry's environment", async (handler, manager) =>
@@ -53,20 +57,21 @@ Console.WriteLine("PASS: profile cache identity separates credentials and preser
 
 static ConnectParams Request(string id) => new() { OwnerUri = "editor", RequestId = id, Connection = new() { Options = new() { ["name"] = id } } };
 static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
-static async Task CheckAsync(string name, Func<ConnectionHandler, ConnectionManager, Task> test)
+static async Task CheckAsync(string name, Func<ConnectionHandler, TestConnectionManager, Task> test)
 {
     using var rpc = new JsonRpc(Stream.Null, Stream.Null);
-    var manager = new ConnectionManager();
+    var manager = new TestConnectionManager();
     await test(new ConnectionHandler(rpc, manager), manager).WaitAsync(TimeSpan.FromSeconds(10));
     Console.WriteLine("PASS: " + name);
 }
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 {
-    // Only authentication and connection storage are replaced. ConnectionHandler is
-    // linked directly from production so these tests control real scheduling races.
-    class ConnectionManager
+    // Replace authentication and connection storage, but exercise the compiled handler.
+    class TestConnectionManager : ConnectionManager
     {
+        public TestConnectionManager() : base(null, null, null) { }
+
         private sealed class Attempt
         {
             public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -80,31 +85,74 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public Task StartedAsync(string id) => Get(id).Started.Task;
         public Task FinishedAsync(string id) => Get(id).Finished.Task;
         public void Release(string id) => Get(id).Release.Set();
-        public TestSession Connect(ConnectionDetails details, string owner)
+        public override Session Connect(ConnectionDetails details, string owner)
         {
             var id = (string)details.Options["name"];
             _owners[owner] = id;
             Get(id).Started.SetResult();
             if (!Get(id).Release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Authentication was never released");
-            return new() { SessionId = owner, DataSource = new() { Name = id } };
+            return CreateSession(owner, id);
         }
-        public TestSession AssociateConnection(string pending, string owner)
+        public override Session AssociateConnection(string pending, string owner)
         {
             Attached = _owners[pending];
-            return new() { SessionId = owner, DataSource = new() { Name = Attached } };
+            return CreateSession(owner, Attached);
         }
-        public void Disconnect(string owner)
+        public override void Disconnect(string owner)
         {
             if (owner == "editor") Attached = null;
             if (_owners.TryRemove(owner, out var id)) Get(id).Finished.TrySetResult();
         }
+
+        private static Session CreateSession(string owner, string name) => new()
+        {
+            SessionId = owner,
+            DataSource = new DataSourceWithInfo(new TestOrganizationService(), "https://example.crm.dynamics.com", null) { Name = name }
+        };
     }
-    class TestSession { public string SessionId { get; set; } public TestDataSource DataSource { get; set; } }
-    class TestDataSource
+
+    class TestOrganizationService : IOrganizationService
     {
-        public string Name { get; set; }
-        public string ServerName => "example.crm.dynamics.com";
-        public string Version => "9.2";
-        public string Username => "Test user";
+        public EntityCollection RetrieveMultiple(QueryBase query)
+        {
+            if (query is not QueryExpression { EntityName: "organization" })
+                throw new NotSupportedException("Unexpected query: " + query);
+            return new EntityCollection(new[] { new Entity("organization") { ["name"] = "Test organization" } });
+        }
+
+        public OrganizationResponse Execute(OrganizationRequest request)
+        {
+            switch (request)
+            {
+                case RetrieveVersionRequest:
+                    return new RetrieveVersionResponse { Results = { ["Version"] = "9.2" } };
+                case WhoAmIRequest:
+                    return new WhoAmIResponse { Results = { ["OrganizationId"] = Guid.Empty } };
+                case RetrieveMultipleRequest { Query: FetchExpression }:
+                    return new RetrieveMultipleResponse
+                    {
+                        Results =
+                        {
+                            ["EntityCollection"] = new EntityCollection(new[]
+                            {
+                                new Entity("systemuser")
+                                {
+                                    ["domainname"] = "Test user",
+                                    ["organization.localeid"] = new AliasedValue("organization", "localeid", 1033)
+                                }
+                            })
+                        }
+                    };
+                default:
+                    throw new NotSupportedException("Unexpected request: " + request.RequestName);
+            }
+        }
+
+        public Guid Create(Entity entity) => throw new NotSupportedException();
+        public void Update(Entity entity) => throw new NotSupportedException();
+        public void Delete(string entityName, Guid id) => throw new NotSupportedException();
+        public Entity Retrieve(string entityName, Guid id, ColumnSet columnSet) => throw new NotSupportedException();
+        public void Associate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities) => throw new NotSupportedException();
+        public void Disassociate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities) => throw new NotSupportedException();
     }
 }

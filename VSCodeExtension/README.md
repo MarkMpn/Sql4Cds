@@ -137,6 +137,6 @@ npm run test:host
 
 Packaging type-checks source and tests, runs unit and DOM tests, publishes a fresh framework-dependent Release service, bundles the extension, and verifies the VSIX contents. It never falls back to Debug output.
 
-The host tests download VS Code 1.96.0 and use an isolated temporary profile. Set `VSCODE_TEST_VERSION=stable` to test the current stable editor. On Linux, run `xvfb-run -a npm run test:host`. The connection coordinator tests use controlled authentication completions and do not require Dataverse credentials. See [RELEASING.md](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/RELEASING.md) for the release process and live-environment checks.
+The host tests download VS Code 1.96.0 and use an isolated temporary profile. Set `VSCODE_TEST_VERSION=stable` to test the current stable editor. On Linux, run `xvfb-run -a npm run test:host`. The connection coordinator tests reference the compiled language server through signed friend-assembly access, use controlled authentication completions, and do not require Dataverse credentials. See [RELEASING.md](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/RELEASING.md) for the release process and live-environment checks.
 
 SQL 4 CDS is licensed under the [MIT License](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/LICENSE). See the [changelog](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/CHANGELOG.md) for release details.

@@ -45,7 +45,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             _connections = new ConcurrentDictionary<string, Sql4CdsConnection>();
         }
 
-        public Session Connect(ConnectionDetails connection, string ownerUri)
+        public virtual Session Connect(ConnectionDetails connection, string ownerUri)
         {
             var dataSourceName = GetDataSourceName(connection);
 
@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             return GetConnection(ownerUri);
         }
 
-        public void Disconnect(string ownerUri)
+        public virtual void Disconnect(string ownerUri)
         {
             if (_connectedDataSource.TryRemove(ownerUri, out var dataSourceName) &&
                 !_connectedDataSource.Any(kvp => kvp.Value == dataSourceName))
@@ -71,7 +71,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             _connections.TryRemove(ownerUri, out _);
         }
 
-        public Session AssociateConnection(string pendingOwnerUri, string ownerUri)
+        public virtual Session AssociateConnection(string pendingOwnerUri, string ownerUri)
         {
             var dataSourceName = _connectedDataSource[pendingOwnerUri];
             Disconnect(ownerUri);
