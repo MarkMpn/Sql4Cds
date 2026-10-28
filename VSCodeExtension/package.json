@@ -1,7 +1,7 @@
 {
   "name": "vscode-sql4cds",
   "displayName": "SQL 4 CDS for Visual Studio Code",
-  "description": "Query Microsoft Dataverse with SQL 4 CDS",
+  "description": "Query and modify Dataverse data using standard SQL syntax",
   "version": "0.3.0",
   "publisher": "markcarrington",
   "license": "MIT",

@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Check again that the insert is allowed. Don't count any UI interaction in the execution time
                 var confirmArgs = dataTable != null
                     ? new ConfirmDmlStatementEventArgs(entities.Count, dataTable, BypassCustomPluginExecution)
-                    : new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
+                    : new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution, dataSource);
                 if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmInsert(confirmArgs);

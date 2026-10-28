@@ -43,6 +43,10 @@ In the results grid, right-click to get options to export the results in a varie
 type columns) will be shown as links - click these to open the record they refer to in your web browser, or right-click them for options to copy the URL for the record or
 create a `SELECT` statement to get more details.
 
+### What this tool changes
+
+SQL 4 CDS can be used to change data in any writeable table in your environment, please use it with care!
+
 ### Connections
 
 SQL 4 CDS supports multiple connections. Each query tab is attached to one primary connection which can be changed using the drop-down list in the toolbar, but each query
@@ -85,3 +89,7 @@ The following are not available when running SQL 4 CDS inside PPTB compared to o
 - Party-list updates (such as `to` and `from` on activities) retrieve the existing party-list values and include unchanged
   roles in the activity's combined Web API payload. This may cause plugins to be triggered differently to when the same
   `UPDATE` query is executed via the XrmToolBox version.
+
+## AI Assistance
+
+Parts of this tool were generated with GitHub Copilot and reviewed, tested, and maintained by the contributors listed in package.json.
