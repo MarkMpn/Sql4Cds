@@ -104,7 +104,10 @@ and error details; review and redact them before attaching them to an issue. Pas
 reports.
 
 Basic usage telemetry is reported to Microsoft Application Insights. This includes the type of statement being executed (e.g. SELECT, INSERT, UPDATE or DELETE) or, if an error
-occurred, the SQL error number. No SQL query text, result data or connection details are included.
+occurred, the SQL error number. By default, no SQL query text, result data or connection details are included.
+
+Enable `SQL4CDS.includeDetailedErrorTelemetry` to include SQL query text and full exception details, including stack traces, in error telemetry.
+These details may contain sensitive data. This option is off by default, and changes apply to existing connections without restarting.
 
 ## Support and known limitations
 

@@ -81,6 +81,12 @@ further editing.
 You can also convert a query directly to FetchXML using the "Convert" toolbar button. Click the dropdown arrow next to this to convert the query to an M query ready to be added
 directly into Power BI instead.
 
+## Error telemetry
+
+The **Include detailed error telemetry** option in SQL 4 CDS Settings sends SQL query text and full exception details, including stack traces,
+to Microsoft Application Insights when an error occurs. These details may contain sensitive data. The option is off by default; changes apply
+to existing connections without restarting the tool. When disabled, error telemetry excludes SQL text and full exception details.
+
 ## Limitations
 
 The following are not available when running SQL 4 CDS inside PPTB compared to other implementations such as XrmToolBox:

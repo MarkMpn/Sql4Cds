@@ -32,6 +32,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         private readonly ConcurrentDictionary<string, DataSource> _dataSources;
         private readonly ConcurrentDictionary<string, string> _connectedDataSource;
         private readonly ConcurrentDictionary<string, Sql4CdsConnection> _connections;
+        private readonly object _settingsLock = new object();
+        private bool _includeDetailedErrorTelemetry;
 
         public string ApplicationName { get; set; } = "SQL 4 CDS";
 
@@ -105,7 +107,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (!_dataSources.TryGetValue(dsName, out var ds))
                 return null;
 
-            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = ApplicationName });
+            Sql4CdsConnection con;
+            lock (_settingsLock)
+            {
+                con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = ApplicationName });
+                con.IncludeDetailedErrorTelemetry = _includeDetailedErrorTelemetry;
+            }
             con.ChangeDatabase(ds.Name);
 
             return new Session
@@ -122,6 +129,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 .Values
                 .Cast<DataSource>()
                 .ToDictionary(ds => ds.Name);
+        }
+
+        public void SetIncludeDetailedErrorTelemetry(bool includeDetailedErrorTelemetry)
+        {
+            lock (_settingsLock)
+            {
+                _includeDetailedErrorTelemetry = includeDetailedErrorTelemetry;
+                foreach (var connection in _connections.Values)
+                    connection.IncludeDetailedErrorTelemetry = includeDetailedErrorTelemetry;
+            }
         }
 
         private Uri GetUri(ConnectionDetails connection)

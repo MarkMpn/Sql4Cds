@@ -444,6 +444,12 @@
           "description": "Optional development override containing the language-service DLL. Reload VS Code after changing this setting.",
           "scope": "machine"
         },
+        "SQL4CDS.includeDetailedErrorTelemetry": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Include SQL query text and full exception details, including stack traces, in error telemetry sent to Microsoft Application Insights. These details may contain sensitive data. Applies to existing connections without restarting."
+        },
         "SQL4CDS.useSchemaColumnOrdering": {
           "type": "boolean",
           "default": false,

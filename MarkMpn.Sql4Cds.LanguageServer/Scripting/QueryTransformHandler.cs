@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
+using MarkMpn.Sql4Cds.LanguageServer.Configuration;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using MarkMpn.Sql4Cds.XTB;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -51,7 +52,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
                 var session = _connections.GetConnection(request.TextDocument.Uri.ToString())
                     ?? throw new InvalidOperationException("Select a connection first");
                 var dataSources = _connections.GetAllConnections();
-                using var connection = new Sql4CdsConnection(dataSources);
+                using var connection = new Sql4CdsConnection(dataSources)
+                {
+                    IncludeDetailedErrorTelemetry = Sql4CdsSettings.Instance?.IncludeDetailedErrorTelemetry ?? false
+                };
                 connection.ChangeDatabase(session.DataSource.Name);
                 connection.UseTDSEndpoint = false;
                 formatted = Format(query, new FormatterOptions
@@ -86,7 +90,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
             var session = _connections.GetConnection(request.OwnerUri)
                 ?? throw new InvalidOperationException("Select a connection first");
             var dataSources = _connections.GetAllConnections();
-            using var connection = new Sql4CdsConnection(dataSources);
+            using var connection = new Sql4CdsConnection(dataSources)
+            {
+                IncludeDetailedErrorTelemetry = Sql4CdsSettings.Instance?.IncludeDetailedErrorTelemetry ?? false
+            };
             connection.ChangeDatabase(session.DataSource.Name);
             connection.UseTDSEndpoint = false;
 

@@ -16,6 +16,7 @@ export interface Sql4CdsSettings {
     maxRetrievesPerQuery: number;
     localFormatDates: boolean;
     useSchemaColumnOrdering: boolean;
+    includeDetailedErrorTelemetry: boolean;
     objectExplorerPinned: boolean;
     propertiesPinned: boolean;
     includeActualPlan: boolean;
@@ -38,6 +39,7 @@ export const defaultSettings: Sql4CdsSettings = {
     maxRetrievesPerQuery: 100,
     localFormatDates: false,
     useSchemaColumnOrdering: false,
+    includeDetailedErrorTelemetry: false,
     objectExplorerPinned: true,
     propertiesPinned: false,
     includeActualPlan: false,
@@ -66,6 +68,7 @@ const settingDescriptors: SettingDescriptor[] = [
     { key: "useLocalTimeZone", label: "Use local time zone", description: "Shows and accepts date/time values in your local time zone rather than UTC" },
     { key: "localFormatDates", label: "Locally format dates", description: "Formats date/time values using your local formatting preferences" },
     { key: "useSchemaColumnOrdering", label: "Schema column ordering", description: "Orders columns by schema position rather than alphabetically" },
+    { key: "includeDetailedErrorTelemetry", label: "Include detailed error telemetry", description: "Sends SQL query text and full exception details, including stack traces, to Microsoft Application Insights. These details may contain sensitive data. Applies to existing connections without restarting." },
     { key: "useTdsEndpoint", label: "Use TDS Endpoint", description: "Not available in Power Platform ToolBox", unsupported: true },
     { key: "useBulkDelete", label: "Use bulk delete", description: "Submit eligible DELETE queries as asynchronous Dataverse bulk delete jobs" },
     { key: "maxDegreeOfParallelism", label: "Max degree of parallelism", description: "Maximum concurrent operations (0 = Dataverse recommendation, or 1 until a recommendation is received)", min: 0 },
@@ -88,6 +91,7 @@ export async function saveSettings(settings: Sql4CdsSettings): Promise<void> {
 
 /** Forces settings that can't be supported when running through PPTB back to their defaults */
 function sanitize(settings: Sql4CdsSettings): Sql4CdsSettings {
+    if (typeof settings.includeDetailedErrorTelemetry !== "boolean") settings.includeDetailedErrorTelemetry = defaultSettings.includeDetailedErrorTelemetry;
     if (typeof settings.objectExplorerPinned !== "boolean") settings.objectExplorerPinned = defaultSettings.objectExplorerPinned;
     if (typeof settings.propertiesPinned !== "boolean") settings.propertiesPinned = defaultSettings.propertiesPinned;
     if (typeof settings.includeActualPlan !== "boolean") settings.includeActualPlan = defaultSettings.includeActualPlan;

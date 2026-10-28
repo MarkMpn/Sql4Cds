@@ -2,12 +2,16 @@
 #pragma warning disable VSTHRD003
 using System.Collections.Concurrent;
 using System.Reflection;
+using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.LanguageServer.Configuration;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
+using Microsoft.VisualStudio.LanguageServer.Protocol;
+using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
 
 await CheckAsync("a late authentication cannot replace the retry's environment", async (handler, manager) =>
@@ -54,6 +58,39 @@ Assert(hash != Fingerprint(new(first) { ["connectionId"] = "profile-b" }), "Dist
 Assert(hash != Fingerprint(new(first) { ["clientsecret"] = "changed" }), "Changed credentials reuse a cache identity");
 Assert(Fingerprint(new() { ["connectionName"] = "Legacy ADS" }) == null, "Legacy ADS cache behavior changed");
 Console.WriteLine("PASS: profile cache identity separates credentials and preserves legacy ADS compatibility");
+
+var connections = new ConnectionManager(null, null, null);
+var dataSources = (ConcurrentDictionary<string, DataSource>)typeof(ConnectionManager)
+    .GetField("_dataSources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(connections)!;
+var owners = (ConcurrentDictionary<string, string>)typeof(ConnectionManager)
+    .GetField("_connectedDataSource", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(connections)!;
+dataSources["test"] = new DataSourceWithInfo(new TestOrganizationService(), "https://example.crm.dynamics.com", null) { Name = "test" };
+foreach (var owner in new[] { "first", "second", "third" }) owners[owner] = "test";
+using var firstConnection = connections.GetConnection("first").Connection;
+using var secondConnection = connections.GetConnection("second").Connection;
+Assert(!firstConnection.IncludeDetailedErrorTelemetry && !secondConnection.IncludeDetailedErrorTelemetry,
+    "Detailed error telemetry must be disabled before configuration arrives");
+var configuration = new ConfigurationHandler(connections);
+void ConfigureTelemetry(JObject settings) => configuration.HandleDidChangeConfiguration(new DidChangeConfigurationParams
+{
+    Settings = new JObject { ["SQL4CDS"] = settings }
+});
+ConfigureTelemetry(new JObject { ["includeDetailedErrorTelemetry"] = true });
+Assert(firstConnection.IncludeDetailedErrorTelemetry && secondConnection.IncludeDetailedErrorTelemetry,
+    "Enabling detailed error telemetry did not update existing connections");
+using var thirdConnection = connections.GetConnection("third").Connection;
+Assert(thirdConnection.IncludeDetailedErrorTelemetry, "New connections did not inherit detailed error telemetry");
+connections.AssociateConnection("third", "associated");
+Assert(ReferenceEquals(thirdConnection, connections.GetConnection("associated").Connection),
+    "Associating a connection replaced it");
+ConfigureTelemetry(new JObject { ["includeDetailedErrorTelemetry"] = false });
+Assert(!firstConnection.IncludeDetailedErrorTelemetry && !secondConnection.IncludeDetailedErrorTelemetry &&
+    !thirdConnection.IncludeDetailedErrorTelemetry, "Disabling detailed error telemetry did not update existing connections");
+ConfigureTelemetry(new JObject { ["includeDetailedErrorTelemetry"] = true });
+ConfigureTelemetry(new JObject());
+Assert(!firstConnection.IncludeDetailedErrorTelemetry && !thirdConnection.IncludeDetailedErrorTelemetry,
+    "Missing configuration must disable detailed error telemetry");
+Console.WriteLine("PASS: detailed error telemetry defaults off and configuration updates existing, new and associated connections");
 
 static ConnectParams Request(string id) => new() { OwnerUri = "editor", RequestId = id, Connection = new() { Options = new() { ["name"] = id } } };
 static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
