@@ -1,8 +1,8 @@
 # SQL 4 CDS for Visual Studio Code
 
-Query and manage Microsoft Dataverse data with the SQL 4 CDS engine directly from Visual Studio Code. The extension provides saved connections, Dataverse metadata browsing, SQL editor assistance, query execution, result inspection, and export while remaining isolated from the Microsoft MSSQL language mode.
+Query and modify Dataverse data using standard SQL syntax inside Visual Studio Code.
 
-The first release combines the SQL 4 CDS query engine with a dedicated Dataverse connection explorer and results grid.
+All standard table data is available to query using `SELECT` statements. Data can also be modified using `INSERT`, `UPDATE` and `DELETE` statements.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ The language service is included in the extension, but it is framework-dependent
 
 ## Install
 
-For a release VSIX, run **Extensions: Install from VSIX…** from the Command Palette, select `sql4cds.vsix`, and reload VS Code.
+Run **Extensions: Install from VSIX…** from the Command Palette, select `sql4cds.vsix`, and reload VS Code.
 
 ## Get started
 
@@ -29,25 +29,23 @@ SQL 4 CDS uses the `.sql4cds` extension and the `sql4cds` language identifier. T
 
 ## Working with results
 
-The results panel uses the same virtualized grid, execution-plan renderer, and node-properties panel as the Power Platform ToolBox tool, with VS Code theme colors and native clipboard, file dialogs, and editors. Multiple result sets are stacked in a single Results tab. Each grid fetches 200-row pages on demand and caches at most ten pages. If the active editor has no results yet, the panel prompts you to run a query or switch editors, and offers a button to hide the panel.
+The results will be shown at the bottom of the screen. By default, any data will be shown in a grid view. If your query produces multiple resultsets, each one will be shown
+in a separate grid - scroll down to review all your results. If desired, switch the output to text to have a simple method to copy & paste all the output.
 
-Click or drag to select cells, use the row-number gutter or column header to select a complete row or column, and use `Shift` to extend a range. `Ctrl+A` (`Cmd+A` on macOS) selects all displayed rows. Use `Ctrl+C` (`Cmd+C`) to copy tab-separated values, or `Ctrl+Shift+C` (`Cmd+Shift+C`) to include headers. Columns can be resized and initially widen to fit loaded values when `SQL4CDS.autoSizeColumns` is enabled. Dataverse record values link to their records in the browser.
+The "Messages" tab will contain any additional status messages that are produced by your query. This is also where you can find any error details, although these will also
+be highlighted with red wavy underlining for the problem section of your query.
 
-Right-click a grid to copy with or without headers, open a record, or export all retained rows. Exports are available after execution finishes and are not restricted by `SQL4CDS.maxResultRows`.
-
-Use **SQL 4 CDS: Display Estimated Execution Plan** (`Ctrl+L` / `Cmd+L`) to inspect a plan without executing the query. Toggle **SQL 4 CDS: Include Actual Execution Plan** in the Command Palette or editor overflow menu before executing to collect runtime plans. Select a plan node to inspect its properties; double-click a FetchXML scan to open its FetchXML in an XML editor beside the query.
-
-On completion, errors select Messages; otherwise queries with result sets select Results and queries without result sets select Messages. Only a successful estimated-plan request selects Execution Plan automatically. Actual plans remain available for manual selection.
-
-The previous VS Code-specific search, filters, sorting, column reordering, multi-format selection copying, and JSON/XML cell viewer have been replaced by the PPTB-style results experience. SQL queries can perform filtering, ordering, and projection; full-result exports remain available in all five formats. The Connections explorer and per-editor connection management remain VS Code-native.
+In the results grid, right-click to get options to export the results in a variety of formats. Any values which are links to other records (from Lookup or primary key
+type columns) will be shown as links - click these to open the record they refer to in your web browser, or right-click them for options to copy the URL for the record or
+create a `SELECT` statement to get more details.
 
 ## Connections and credentials
 
-The first release supports:
+SQL 4 CDS supports connecting to Dataverse with:
 
-- Microsoft Entra interactive authentication for Dataverse Online.
+- Microsoft Entra interactive authentication.
 - Client ID and client secret for an application user.
-- Username and password for supported internet-facing deployments.
+- Username and password for supported on-premises internet-facing deployments.
 - Windows integrated authentication for supported on-premises deployments.
 - An advanced Dataverse connection string.
 
@@ -57,21 +55,11 @@ Tokens are managed by the Dataverse client, cached in the extension's VS Code gl
 
 ## Query safety
 
-Queries run with the permissions of the connected Dataverse user and can modify or delete data. SQL 4 CDS enables safeguards for `UPDATE` and `DELETE` statements without a `WHERE` clause by default and can prompt before operations exceed configured thresholds. Keep these safeguards enabled unless you have a deliberate administrative use case.
-
-Important settings are available under **Settings → Extensions → SQL 4 CDS**:
-
-| Setting | Purpose |
-| --- | --- |
-| `SQL4CDS.blockDeleteWithoutWhere` | Block unfiltered `DELETE` statements. |
-| `SQL4CDS.blockUpdateWithoutWhere` | Block unfiltered `UPDATE` statements. |
-| `SQL4CDS.insertWarnThreshold` | Prompt before inserting more than the configured number of records. |
-| `SQL4CDS.updateWarnThreshold` | Prompt before updating more than the configured number of records. |
-| `SQL4CDS.deleteWarnThreshold` | Prompt before deleting more than the configured number of records. |
-| `SQL4CDS.maxResultRows` | Limit rows rendered in the results view; exports are handled separately. |
-| `SQL4CDS.logDebugInfo` | Enable detailed language-service diagnostic logging. |
-
-`SQL4CDS.servicePath` is a development/recovery override. It can reference either a directory containing `MarkMpn.Sql4Cds.LanguageServer.dll` or the DLL itself.
+If you are executing a command that will change data, a confirmation prompt will appear first. You can adjust the thresholds at which these confirmations appear in the settings.
+By default, all `DELETE` and `UPDATE` statements will produce a confirmation, as will any `INSERT` statement that inserts more than 1 record. If you are running a batch of
+multiple statements you can accept the change for an individual statement by clicking "Yes", or accept all remaining changes from other statements in the batch as well by clicking
+"Yes To All". Any `DELETE` or `UPDATE` statements without a corresponding `WHERE` clause will be blocked by default, allow this in the settings if necessary or add a `WHERE 1=1`
+clause to allow a query to intentionally affect all records in the table.
 
 ## Troubleshooting
 
@@ -110,7 +98,13 @@ The results view applies `SQL4CDS.maxResultRows` to keep the editor responsive. 
 
 The Visual Studio Code extension communicates with the Dataverse environment and Microsoft identity endpoints required by the selected authentication flow.
 
-The language service uses the same lazy-loaded metadata cache for all clients and connection types. Entity and attribute metadata is loaded on demand and cached in individual compressed JSON files below VS Code's per-session extension log directory, under `Metadata`. Autocomplete loads and persists a lightweight entity list only when needed. Query execution, Object Explorer, table-size estimates, and message discovery share the data source's metadata cache. Persisted entries are validated against the organization version and metadata version stamp; legacy full-cache files are no longer read or updated. Authentication token caching uses the extension's VS Code global-storage directory. Diagnostic output and logs remain on the machine or remote extension host where VS Code runs. Logs can include SQL text, environment metadata, and error details; review and redact them before attaching them to an issue. Passwords, client secrets, connection strings, and access tokens should never be included in support reports.
+Metadata is cached in individual compressed JSON files below VS Code's per-session extension log directory, under `Metadata`. Authentication token caching uses the extension's
+VS Code global-storage directory. Diagnostic output and logs remain on the machine or remote extension host where VS Code runs. Logs can include SQL text, environment metadata,
+and error details; review and redact them before attaching them to an issue. Passwords, client secrets, connection strings, and access tokens should never be included in support
+reports.
+
+Basic usage telemetry is reported to Microsoft Application Insights. This includes the type of statement being executed (e.g. SELECT, INSERT, UPDATE or DELETE) or, if an error
+occurred, the SQL error number. No SQL query text, result data or connection details are included.
 
 ## Support and known limitations
 
@@ -120,23 +114,4 @@ Known first-release limitations:
 
 - A .NET 10 runtime must be installed separately.
 - VS Code for the Web is unsupported, and remote extension-host scenarios are not yet fully validated.
-- The displayed row limit is intended for interactive use and is not a Dataverse query limit.
 - SQL 4 CDS language features apply automatically to `.sql4cds` files; `.sql` files require selecting the SQL 4 CDS language mode.
-
-## Development
-
-Development requires Node.js 24 or later, a .NET 10 SDK or later, and the .NET 10 Runtime. From `VSCodeExtension`:
-
-```bash
-npm ci --ignore-scripts
-npm run package
-npm run test:connections
-npm run test:service
-npm run test:host
-```
-
-Packaging type-checks source and tests, runs unit and DOM tests, publishes a fresh framework-dependent Release service, bundles the extension, and verifies the VSIX contents. It never falls back to Debug output.
-
-The host tests download VS Code 1.96.0 and use an isolated temporary profile. Set `VSCODE_TEST_VERSION=stable` to test the current stable editor. On Linux, run `xvfb-run -a npm run test:host`. The connection coordinator tests reference the compiled language server through signed friend-assembly access, use controlled authentication completions, and do not require Dataverse credentials. See [RELEASING.md](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/RELEASING.md) for the release process and live-environment checks.
-
-SQL 4 CDS is licensed under the [MIT License](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/LICENSE). See the [changelog](https://github.com/MarkMpn/Sql4Cds/blob/HEAD/VSCodeExtension/CHANGELOG.md) for release details.
