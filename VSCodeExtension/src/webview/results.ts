@@ -156,6 +156,8 @@ function showEmpty(): void {
 }
 
 window.addEventListener("message", event => {
+  if (event.origin !== window.location.origin) return;
+
   const message = event.data as ResultsState | ResultResponse | { type: "empty" };
   if (message.type === "response") {
     const request = pending.get(message.requestId);
