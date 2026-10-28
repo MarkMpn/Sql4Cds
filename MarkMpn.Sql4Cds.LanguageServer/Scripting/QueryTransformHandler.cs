@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
                 request => Task.Run(() => FormatDocument(request)));
         }
 
-        private TextEdit[] FormatDocument(DocumentFormattingParams request)
+        internal TextEdit[] FormatDocument(DocumentFormattingParams request)
         {
             var query = _documents.GetContent(request.TextDocument.Uri.ToString());
             var addDisplayNames = false;

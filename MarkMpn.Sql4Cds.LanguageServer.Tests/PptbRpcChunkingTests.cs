@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO.Pipes;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.LanguageServer.Pptb;
@@ -18,7 +17,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
     {
         private const string MessageMethod = "dataverse/executeBatch/message";
         private const string ChunkMethod = "dataverse/executeBatch/chunk";
-        private static readonly Type TransportType = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Pptb.PptbRpcChunking", true);
 
         private static JsonRpc CreateRpc(System.IO.Stream stream)
         {
@@ -90,9 +88,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             await connected;
             using var workerRpc = CreateRpc(server);
             using var toolRpc = CreateRpc(client);
-            var transport = Activator.CreateInstance(TransportType);
-            TransportType.GetMethod("Initialize").Invoke(transport, new object[] { workerRpc });
-            TransportType.GetMethod("SetMaxMessageSize").Invoke(transport, new object[] { limit });
+            var transport = new PptbRpcChunking();
+            transport.Initialize(workerRpc);
+            transport.SetMaxMessageSize(limit);
             var requestChunks = new List<string>();
             var handled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var requestCancellation = new CancellationTokenSource();
@@ -125,8 +123,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                         }
                         else if (chunkedResponse)
                         {
-                            var chunks = (System.Collections.IEnumerable)TransportType.GetMethod("Split", BindingFlags.Static | BindingFlags.NonPublic)
-                                .Invoke(null, new object[] { response.ToString(Formatting.None), id, limit });
+                            var chunks = PptbRpcChunking.Split(response.ToString(Formatting.None), id, limit);
                             foreach (var chunk in chunks)
                                 await toolRpc.NotifyWithParameterObjectAsync(ChunkMethod, chunk);
                         }
@@ -147,8 +144,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 toolRpc.AddLocalRpcMethod(ChunkMethod, (JToken parameters) => Receive(ChunkMethod, parameters));
                 toolRpc.StartListening();
                 workerRpc.StartListening();
-                var task = (Task<JObject>)TransportType.GetMethod("RequestAsync").MakeGenericMethod(typeof(JObject), typeof(JObject))
-                    .Invoke(transport, new object[] { request, requestCancellation.Token });
+                var task = transport.RequestAsync<JObject, JObject>(request, requestCancellation.Token);
                 await handled.Task.WaitAsync(timeout.Token);
                 try
                 {
@@ -156,8 +152,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 }
                 finally
                 {
-                    var pending = TransportType.GetField("_pending", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(transport);
-                    Assert.AreEqual(0, pending.GetType().GetProperty("Count").GetValue(pending));
+                    Assert.AreEqual(0, transport.PendingTransferCount);
                 }
             }
         }

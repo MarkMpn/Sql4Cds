@@ -199,7 +199,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             executionContext.Entity = record;
 
             var value = func(executionContext);
-            Assert.AreEqual(true, value);
+            Assert.IsTrue(value);
         }
 
         private ColumnReferenceExpression Col(string name)

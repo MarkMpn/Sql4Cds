@@ -301,13 +301,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             return true;
         }
 
-        private static bool IsOnline(Microsoft.Xrm.Sdk.IOrganizationService connection)
+        internal static bool IsOnline(Microsoft.Xrm.Sdk.IOrganizationService connection)
         {
             var uri = connection is ServiceClient svc ? svc.ConnectedOrgUriActual : (connection as IServiceClient)?.Uri;
             return uri?.Host.EndsWith(".dynamics.com", StringComparison.OrdinalIgnoreCase) == true;
         }
 
-        private static IEnumerable<NodeInfo> GetTableNodes(IAttributeMetadataCache metadata, string nodePath, bool archive)
+        internal static IEnumerable<NodeInfo> GetTableNodes(IAttributeMetadataCache metadata, string nodePath, bool archive)
         {
             var entities = metadata.GetAllEntities();
             if (archive)
@@ -329,7 +329,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             });
         }
 
-        private static IEnumerable<NodeInfo> GetColumnNodes(IAttributeMetadataCache metadata, string nodePath)
+        internal static IEnumerable<NodeInfo> GetColumnNodes(IAttributeMetadataCache metadata, string nodePath)
         {
             var tableName = new Uri(nodePath).AbsolutePath.Split('/')[2];
             var entity = metadata[tableName];

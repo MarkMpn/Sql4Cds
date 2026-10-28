@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using MarkMpn.Sql4Cds.Engine;
-using MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts;
+using MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer;
 using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -25,14 +24,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var client = (IServiceClient)service;
             Assert.AreEqual(new Uri(url), client.Uri);
             Assert.AreEqual(client.Uri, ((IServiceClient)client.Clone()).Uri);
-            var handler = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.ObjectExplorerHandler", true);
-            Assert.AreEqual(expected, handler.GetMethod("IsOnline", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { service }));
-        }
-
-        private static NodeInfo[] Nodes(string method, params object[] args)
-        {
-            var handler = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.ObjectExplorerHandler", true);
-            return ((IEnumerable<NodeInfo>)handler.GetMethod(method, BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, args)).ToArray();
+            Assert.AreEqual(expected, ObjectExplorerHandler.IsOnline(service));
         }
 
         [TestMethod]
@@ -46,13 +38,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
 
             for (var run = 0; run < 2; run++)
             {
-                var tables = Nodes("GetTableNodes", cache, "objectexplorer://session/Tables", false);
+                var tables = ObjectExplorerHandler.GetTableNodes(cache, "objectexplorer://session/Tables", false).ToArray();
                 CollectionAssert.AreEqual(new[] { "account", "archived", "retained", "zeta" }, tables.Select(node => node.Label).ToArray());
                 Assert.IsTrue(tables.All(node => node.NodeType == "Table" && !node.IsLeaf && node.Metadata.Schema == "dbo"));
                 Assert.AreEqual("objectexplorer://session/Tables/account", tables[0].NodePath);
                 Assert.AreEqual(tables[0].NodePath, tables[0].Metadata.Urn);
                 Assert.AreEqual("account", tables[0].Metadata.Name);
-                var archive = Nodes("GetTableNodes", cache, "objectexplorer://session/Archive", true);
+                var archive = ObjectExplorerHandler.GetTableNodes(cache, "objectexplorer://session/Archive", true).ToArray();
                 CollectionAssert.AreEqual(new[] { "archived", "retained" }, archive.Select(node => node.Label).ToArray());
                 Assert.IsTrue(archive.All(node => node.Metadata.Schema == "archive"));
             }
@@ -81,7 +73,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var cache = new MetadataCache(entity);
             for (var run = 0; run < 2; run++)
             {
-                var columns = Nodes("GetColumnNodes", cache, "objectexplorer://session/Tables/account");
+                var columns = ObjectExplorerHandler.GetColumnNodes(cache, "objectexplorer://session/Tables/account").ToArray();
                 CollectionAssert.AreEqual(new[]
                 {
                     "active", "activename", "category", "categoryname", "customerid", "customeridname", "customeridtype",

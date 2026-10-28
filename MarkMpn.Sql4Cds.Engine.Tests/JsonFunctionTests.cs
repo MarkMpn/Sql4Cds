@@ -154,7 +154,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT ISJSON('true', VALUE)";
-                Assert.AreEqual(true, cmd.ExecuteScalar());
+                Assert.IsTrue((bool)cmd.ExecuteScalar());
             }
         }
 
@@ -165,7 +165,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT ISJSON('test string', VALUE)";
-                Assert.AreEqual(false, cmd.ExecuteScalar());
+                Assert.IsFalse((bool)cmd.ExecuteScalar());
             }
         }
 
@@ -176,7 +176,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT ISJSON('\"test string\"', SCALAR)";
-                Assert.AreEqual(true, cmd.ExecuteScalar());
+                Assert.IsTrue((bool)cmd.ExecuteScalar());
             }
         }
 
@@ -197,7 +197,7 @@ SELECT JSON_VALUE(@jsonInfo, @path)";
                     Assert.IsFalse(json1.Contains("\"Attributes\""), "Row 1: should not contain verbose .NET Entity serialization");
 
                     var doc1 = System.Text.Json.JsonDocument.Parse(json1);
-                    Assert.AreEqual(false, doc1.RootElement.GetProperty("OneDriveRoot_Error").GetBoolean());
+                    Assert.IsFalse(doc1.RootElement.GetProperty("OneDriveRoot_Error").GetBoolean());
 
                     // Nested Entity should appear as a JSON object, not serialized with Attributes[]
                     var user1 = doc1.RootElement.GetProperty("user");

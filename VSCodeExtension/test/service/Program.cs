@@ -1,8 +1,6 @@
 // Deliberately share completion signals to control cross-thread authentication ordering.
 #pragma warning disable VSTHRD003
 using System.Collections.Concurrent;
-using System.Reflection;
-using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Configuration;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
@@ -48,9 +46,7 @@ await CheckAsync("disconnect prevents a pending authentication from attaching", 
 });
 
 // Exercise the actual cache identity policy without authenticating to Dataverse.
-var identity = typeof(ConnectParams).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.ConnectionManager")!
-    .GetMethod("GetConnectionIdentity", BindingFlags.Static | BindingFlags.NonPublic)!;
-string Fingerprint(Dictionary<string, object> options) => (string)identity.Invoke(null, new[] { new ConnectionDetails { Options = options } });
+string Fingerprint(Dictionary<string, object> options) => ConnectionManager.GetConnectionIdentity(new ConnectionDetails { Options = options });
 var first = new Dictionary<string, object> { ["connectionId"] = "profile-a", ["connectionName"] = "Shared name", ["clientsecret"] = "secret" };
 var hash = Fingerprint(first);
 Assert(hash == Fingerprint(first.Reverse().ToDictionary(pair => pair.Key, pair => pair.Value)), "Identity depends on option order");
@@ -60,12 +56,8 @@ Assert(Fingerprint(new() { ["connectionName"] = "Legacy ADS" }) == null, "Legacy
 Console.WriteLine("PASS: profile cache identity separates credentials and preserves legacy ADS compatibility");
 
 var connections = new ConnectionManager(null, null, null);
-var dataSources = (ConcurrentDictionary<string, DataSource>)typeof(ConnectionManager)
-    .GetField("_dataSources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(connections)!;
-var owners = (ConcurrentDictionary<string, string>)typeof(ConnectionManager)
-    .GetField("_connectedDataSource", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(connections)!;
-dataSources["test"] = new DataSourceWithInfo(new TestOrganizationService(), "https://example.crm.dynamics.com", null) { Name = "test" };
-foreach (var owner in new[] { "first", "second", "third" }) owners[owner] = "test";
+connections._dataSources["test"] = new DataSourceWithInfo(new TestOrganizationService(), "https://example.crm.dynamics.com", null) { Name = "test" };
+foreach (var owner in new[] { "first", "second", "third" }) connections._connectedDataSource[owner] = "test";
 using var firstConnection = connections.GetConnection("first").Connection;
 using var secondConnection = connections.GetConnection("second").Connection;
 Assert(!firstConnection.IncludeDetailedErrorTelemetry && !secondConnection.IncludeDetailedErrorTelemetry,

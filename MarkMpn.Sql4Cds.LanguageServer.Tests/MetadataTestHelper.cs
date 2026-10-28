@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using Microsoft.Xrm.Sdk;
 using Newtonsoft.Json.Linq;
@@ -37,23 +38,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             return new PptbOrganizationService(new MetadataTransport(entities), "https://example.invalid", "test").Metadata;
         }
 
-        public static IAttributeMetadataCache PersistentCache(string path, JsonRpc rpc, IOrganizationService service, Guid orgId)
+        public static CachedMetadata PersistentCache(string path, JsonRpc rpc, IOrganizationService service, Guid orgId)
         {
-            var cacheType = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.CachedMetadata", true);
-            return (IAttributeMetadataCache)Activator.CreateInstance(cacheType, service, PersistentCacheStore(path, rpc), orgId, "9.2");
+            return new CachedMetadata(service, new PersistentMetadataCache(path, rpc), orgId, "9.2");
         }
 
         public static DataSource DataSource(string path, JsonRpc rpc, IOrganizationService service)
         {
-            var sourceType = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.DataSourceWithInfo", true);
-            return (DataSource)Activator.CreateInstance(sourceType, service, "https://example.invalid", PersistentCacheStore(path, rpc));
-        }
-
-        private static object PersistentCacheStore(string path, JsonRpc rpc)
-        {
-            // The connection cache types are internal to the signed language server assembly.
-            var persistentType = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.PersistentMetadataCache", true);
-            return Activator.CreateInstance(persistentType, path, rpc);
+            return new DataSourceWithInfo(service, "https://example.invalid", new PersistentMetadataCache(path, rpc));
         }
 
         internal sealed class MetadataTransport : IWebApiTransport

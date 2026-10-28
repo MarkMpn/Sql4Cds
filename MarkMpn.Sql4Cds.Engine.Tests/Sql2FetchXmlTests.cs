@@ -2306,6 +2306,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var ds = _localDataSources["local"];
             var con = ds.Connection;
             ds.Connection = null;
+            ds.DefaultCollation = Collation.USEnglish;
             try
             {
                 var planBuilder = new ExecutionPlanBuilder(new SessionContext(_localDataSources, new OptionsWrapper(this) { UseTDSEndpoint = true }), new OptionsWrapper(this) { UseTDSEndpoint = true });

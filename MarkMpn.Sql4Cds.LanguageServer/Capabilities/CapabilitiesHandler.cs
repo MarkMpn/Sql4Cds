@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Capabilities
             lsp.AddHandler(CapabilitiesRequest.Type, HandleCapabilities);
         }
 
-        private InitializeResult HandleInitialize(ClientInitializeParams arg)
+        internal InitializeResult HandleInitialize(ClientInitializeParams arg)
         {
             _connectionManager.ApplicationName = String.IsNullOrWhiteSpace(arg.ClientInfo?.Name)
                 ? "SQL 4 CDS LSP"

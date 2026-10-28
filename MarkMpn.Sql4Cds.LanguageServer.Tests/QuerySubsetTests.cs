@@ -1,12 +1,10 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Configuration;
-using MarkMpn.Sql4Cds.LanguageServer.Pptb;
+using MarkMpn.Sql4Cds.LanguageServer.QueryExecution;
 using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
@@ -19,8 +17,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
     public class QuerySubsetTests
     {
         private const string OwnerUri = "test://query/subset";
-        private static readonly Type HandlerType = typeof(WebApiMetadataQuery).Assembly.GetType(
-            "MarkMpn.Sql4Cds.LanguageServer.QueryExecution.QueryExecutionHandler", true);
         private Sql4CdsSettings _previousSettings;
 
         [TestInitialize]
@@ -60,7 +56,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         {
             var handler = CreateHandler(out var result);
             Assert.AreEqual(3, Subset(handler, 0, 200).ResultSubset.RowCount);
-            Values(result).Add(new object[] { null });
+            result.Values.Add(new object[] { null });
             result.RowCount++;
             var subset = Subset(handler, 2, 200).ResultSubset;
             Assert.AreEqual(2, subset.RowCount);
@@ -76,8 +72,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var path = Path.GetTempFileName();
             try
             {
-                var response = (SaveResultRequestResult)HandlerType.GetMethod("HandleExportJson").Invoke(handler,
-                    new object[] { new SaveResultsAsJsonRequestParams { OwnerUri = OwnerUri, ResultSetIndex = 0, FilePath = path } });
+                var response = handler.HandleExportJson(new SaveResultsAsJsonRequestParams { OwnerUri = OwnerUri, ResultSetIndex = 0, FilePath = path });
                 Assert.IsTrue(String.IsNullOrEmpty(response.Messages), response.Messages);
                 var rows = JArray.Parse(File.ReadAllText(path));
                 CollectionAssert.AreEqual(new[] { "Zulu", "Alpha", "Mike" },
@@ -100,28 +95,20 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             Assert.IsFalse(subset.Rows[0][0].IsNull);
         }
 
-        private static object CreateHandler(out ResultSetSummary result)
+        private static QueryExecutionHandler CreateHandler(out ResultSetSummary result)
         {
-            var handler = Activator.CreateInstance(HandlerType, new object[] { null, null, null, null });
+            var handler = new QueryExecutionHandler(null, null, null, null);
             result = new ResultSetSummary
             {
                 Id = 0, BatchId = 0, RowCount = 3, SpecialAction = new SpecialAction(),
                 ColumnInfo = new[] { new DbColumnWrapper("name", "nvarchar", null) }
             };
-            Values(result).AddRange(new[] { new object[] { "Zulu" }, new object[] { "Alpha" }, new object[] { "Mike" } });
-            var results = (ConcurrentDictionary<string, List<ResultSetSummary>>)HandlerType
-                .GetField("_resultSets", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(handler);
-            results[OwnerUri] = new List<ResultSetSummary> { result };
+            result.Values.AddRange(new[] { new object[] { "Zulu" }, new object[] { "Alpha" }, new object[] { "Mike" } });
+            handler._resultSets[OwnerUri] = new List<ResultSetSummary> { result };
             return handler;
         }
 
-        private static List<object[]> Values(ResultSetSummary result) => (List<object[]>)typeof(ResultSetSummary)
-            .GetProperty("Values", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(result);
-
-        private static SubsetResult Subset(object handler, long start, int count) =>
-            (SubsetResult)HandlerType.GetMethod("HandleSubset").Invoke(handler, new object[]
-            {
-                new SubsetParams { OwnerUri = OwnerUri, ResultSetIndex = 0, RowsStartIndex = start, RowsCount = count }
-            });
+        private static SubsetResult Subset(QueryExecutionHandler handler, long start, int count) =>
+            handler.HandleSubset(new SubsetParams { OwnerUri = OwnerUri, ResultSetIndex = 0, RowsStartIndex = start, RowsCount = count });
     }
 }

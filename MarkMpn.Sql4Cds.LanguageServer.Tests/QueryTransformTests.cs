@@ -1,9 +1,13 @@
 using System;
-using System.Reflection;
 using System.Collections.Generic;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using MarkMpn.Sql4Cds.LanguageServer.Capabilities;
+using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Pptb;
+using MarkMpn.Sql4Cds.LanguageServer.QueryExecution;
+using MarkMpn.Sql4Cds.LanguageServer.Scripting;
+using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
@@ -15,12 +19,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
     [TestClass]
     public class QueryTransformTests
     {
-        private static object Invoke(string method, params object[] args)
-        {
-            var handler = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Scripting.QueryTransformHandler", true);
-            return handler.GetMethod(method, BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, args);
-        }
-
         [TestMethod]
         public void DocumentFormattingReadsSyncedDocumentAndReturnsStandardTextEdits()
         {
@@ -43,28 +41,19 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var options = Newtonsoft.Json.JsonConvert.DeserializeObject<FormattingOptions>(
                 "{\"tabSize\":4,\"insertSpaces\":true,\"addDisplayNames\":true}");
             Assert.IsTrue((bool)options.OtherOptions["addDisplayNames"]);
-            var error = Assert.ThrowsException<TargetInvocationException>(() => FormatDocument("SELECT name FROM account", options));
-            Assert.IsInstanceOfType<InvalidOperationException>(error.InnerException);
-            StringAssert.Contains(error.InnerException.Message, "connection");
+            var error = Assert.ThrowsException<InvalidOperationException>(() => FormatDocument("SELECT name FROM account", options));
+            StringAssert.Contains(error.Message, "connection");
             options.OtherOptions["addDisplayNames"] = false;
             Assert.AreEqual(1, FormatDocument("select 1", options).Length);
             options.OtherOptions["addDisplayNames"] = "true";
-            error = Assert.ThrowsException<TargetInvocationException>(() => FormatDocument("select 1", options));
-            Assert.IsInstanceOfType<ArgumentException>(error.InnerException);
+            Assert.ThrowsException<ArgumentException>(() => FormatDocument("select 1", options));
         }
 
         [TestMethod]
         public void InitializeAdvertisesStandardDocumentFormattingCapability()
         {
-            var assembly = typeof(WebApiMetadataQuery).Assembly;
-            var chunking = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Pptb.PptbRpcChunking", true));
-            var type = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Capabilities.CapabilitiesHandler", true);
-            var queryEvents = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.QueryExecution.QueryEventStream", true));
-            var connections = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.ConnectionManager", true),
-                new object[] { null, null, null });
-            var handler = Activator.CreateInstance(type, new object[] { null, chunking, queryEvents, connections });
-            var result = type.GetMethod("HandleInitialize", BindingFlags.Instance | BindingFlags.NonPublic)
-                .Invoke(handler, new object[] { new ClientInitializeParams() });
+            var handler = new CapabilitiesHandler(null, new PptbRpcChunking(), new QueryEventStream(), new ConnectionManager(null, null, null));
+            var result = handler.HandleInitialize(new ClientInitializeParams());
             var json = JObject.FromObject(result, Newtonsoft.Json.JsonSerializer.Create(new Newtonsoft.Json.JsonSerializerSettings
             {
                 ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
@@ -74,43 +63,36 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
 
         private static TextEdit[] FormatDocument(string query, FormattingOptions options)
         {
-            var assembly = typeof(WebApiMetadataQuery).Assembly;
-            var documentsType = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Workspace.TextDocumentManager", true);
-            var documents = Activator.CreateInstance(documentsType);
+            var documents = new TextDocumentManager();
             const string uri = "pptb://query/1";
-            documentsType.GetMethod("SetContent").Invoke(documents, new object[] { uri, query });
-            var connectionsType = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.ConnectionManager", true);
-            var connections = Activator.CreateInstance(connectionsType, new object[] { null, null, null });
-            var handlerType = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Scripting.QueryTransformHandler", true);
-            var handler = Activator.CreateInstance(handlerType, new[] { connections, documents });
-            return (TextEdit[])handlerType.GetMethod("FormatDocument", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(handler,
-                new object[] { new DocumentFormattingParams { TextDocument = new TextDocumentIdentifier { Uri = new Uri(uri) }, Options = options } });
+            documents.SetContent(uri, query);
+            var handler = new QueryTransformHandler(new ConnectionManager(null, null, null), documents);
+            return handler.FormatDocument(new DocumentFormattingParams { TextDocument = new TextDocumentIdentifier { Uri = new Uri(uri) }, Options = options });
         }
 
         [TestMethod]
         public void FormatPreservesCommentsAndFormatsSql()
         {
-            var formatted = (string)Invoke("Format", "-- Keep this comment\nselect name from account where name='Contoso'", null);
+            var formatted = QueryTransformHandler.Format("-- Keep this comment\nselect name from account where name='Contoso'", null);
             StringAssert.Contains(formatted, "-- Keep this comment");
             StringAssert.Contains(formatted, "SELECT");
             StringAssert.Contains(formatted, "FROM");
             StringAssert.Contains(formatted, "'Contoso'");
-            Assert.AreEqual(formatted, Invoke("Format", formatted, null));
+            Assert.AreEqual(formatted, QueryTransformHandler.Format(formatted, null));
         }
 
         [TestMethod]
         public void FormatReportsInvalidSqlInsteadOfReturningUnchangedText()
         {
-            var error = Assert.ThrowsException<TargetInvocationException>(() => Invoke("Format", "select from", null));
-            Assert.IsInstanceOfType<ArgumentException>(error.InnerException);
-            StringAssert.Contains(error.InnerException.Message, "Line 1");
+            var error = Assert.ThrowsException<ArgumentException>(() => QueryTransformHandler.Format("select from", null));
+            StringAssert.Contains(error.Message, "Line 1");
         }
 
         [TestMethod]
         public void ConvertToMEscapesQuotesNewlinesAndLiteralEscapeSequences()
         {
             var query = "-- comment\r\nSELECT \"name\", '#(lf)' FROM account\tWHERE name = 'A'";
-            var m = (string)Invoke("ConvertToM", query, "contoso.crm.dynamics.com");
+            var m = QueryTransformHandler.ConvertToM(query, "contoso.crm.dynamics.com");
             StringAssert.Contains(m, "CommonDataService.Database(\"contoso.crm.dynamics.com\")");
             StringAssert.Contains(m, "-- comment#(cr)#(lf)SELECT \"\"name\"\", '#(#)(lf)' FROM account#(tab)WHERE");
             StringAssert.Contains(m, "Value.NativeQuery");
@@ -121,14 +103,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         public void FetchXmlConversionUsesMetadataWithoutExecutingQueriesAndWarnsAboutProcessing()
         {
             using var connection = CreateConnection(out _);
-            var results = (string[])Invoke("ConvertToFetchXml", "SELECT name FROM account", connection);
+            var results = QueryTransformHandler.ConvertToFetchXml("SELECT name FROM account", connection);
             Assert.AreEqual(1, results.Length);
             StringAssert.Contains(results[0], "<fetch");
             StringAssert.Contains(results[0], "<entity name=\"account\"");
             StringAssert.Contains(results[0], "<attribute name=\"name\"");
             Assert.IsFalse(results[0].Contains("additional processing"));
 
-            results = (string[])Invoke("ConvertToFetchXml", "SELECT UPPER(name) FROM account", connection);
+            results = QueryTransformHandler.ConvertToFetchXml("SELECT UPPER(name) FROM account", connection);
             StringAssert.Contains(results[0], "additional processing");
         }
 
@@ -143,7 +125,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 Connection = connection,
                 DataSources = dataSources
             };
-            var formatted = (string)Invoke("Format", "SELECT name, name AS Existing FROM account", options);
+            var formatted = QueryTransformHandler.Format("SELECT name, name AS Existing FROM account", options);
             StringAssert.Contains(formatted, "[Account Name]");
             StringAssert.Contains(formatted, "Existing");
         }
@@ -165,10 +147,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             {
                 Name = "test",
                 Metadata = metadata,
-                TableSizeCache = new TableSizes()
+                TableSizeCache = new TableSizes(),
+                DefaultCollation = Collation.USEnglish
             };
-            var collation = typeof(Collation).GetProperty("USEnglish", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
-            typeof(DataSource).GetProperty("DefaultCollation", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(dataSource, collation);
             dataSources = new Dictionary<string, DataSource> { ["test"] = dataSource };
             return new Sql4CdsConnection(dataSources) { UseTDSEndpoint = false };
         }

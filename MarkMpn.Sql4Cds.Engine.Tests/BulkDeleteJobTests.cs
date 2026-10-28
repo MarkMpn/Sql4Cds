@@ -72,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Submissions++;
                     Assert.AreEqual("account", bulk.QuerySet[0].EntityName);
-                    Assert.AreEqual(false, bulk.SendEmailNotification);
+                    Assert.IsFalse(bulk.SendEmailNotification);
                     Assert.AreEqual("", bulk.RecurrencePattern);
                     var result = new BulkDeleteResponse();
                     result.Results["JobId"] = JobId;

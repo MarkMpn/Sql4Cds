@@ -149,13 +149,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Id = Guid.NewGuid(),
                 ["name"] = name,
-                ["organizationid"] = Guid.NewGuid(),
-                ["basecurrencyid"] = new EntityReference("transactioncurrency", Guid.NewGuid()),
-                ["basecurrencyname"] = "US Dollar",
-                ["basecurrencyprecision"] = 2,
-                ["basecurrencycode"] = "USD",
-                ["defaultlocaleid"] = lcid
+                ["localeid"] = lcid
             };
+            org["organizationid"] = org.Id;
+
             context.Data[org.LogicalName] = new Dictionary<Guid, Entity> { [org.Id] = org };
         }
 

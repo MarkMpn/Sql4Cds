@@ -37,6 +37,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
 
         public int? MaxMessageSize => _maxMessageSize > 0 ? _maxMessageSize : (int?)null;
 
+        internal int PendingTransferCount => _pending.Count;
+
         public void Initialize(JsonRpc rpc)
         {
             _rpc = rpc;
@@ -152,7 +154,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             }
         }
 
-        private static IReadOnlyList<PptbRpcChunk> Split(string payload, string id, int maxMessageSize)
+        internal static IReadOnlyList<PptbRpcChunk> Split(string payload, string id, int maxMessageSize)
         {
             var elements = new List<string>();
             foreach (var codePoint in payload.EnumerateRunes())
@@ -244,7 +246,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Pptb
             public JToken Data { get; set; }
         }
 
-        class PptbRpcChunk
+        internal class PptbRpcChunk
         {
             public string Id { get; set; }
             public int Sequence { get; set; }

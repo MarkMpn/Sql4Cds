@@ -61,7 +61,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             Assert.AreEqual("BulkDelete", request.Url);
             var body = JObject.Parse(request.Body);
             Assert.AreEqual("SQL bulk delete", body.Value<string>("JobName"));
-            Assert.AreEqual(false, body.Value<bool>("SendEmailNotification"));
+            Assert.IsFalse(body.Value<bool>("SendEmailNotification"));
             Assert.AreEqual("", body.Value<string>("RecurrencePattern"));
             Assert.AreEqual(start, body.Value<DateTime>("StartDateTime"));
             Assert.AreEqual(0, ((JArray)body["ToRecipients"]).Count);

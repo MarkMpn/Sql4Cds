@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -90,8 +91,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 Assert.AreEqual("Accounts description", metadata.Description.LocalizedLabels.Single().Label);
                 Assert.AreEqual(1, metadata.ObjectTypeCode);
                 Assert.AreEqual(MetadataService.ProviderId, metadata.DataProviderId);
-                Assert.AreEqual(true, metadata.IsArchivalEnabled);
-                Assert.AreEqual(false, metadata.IsRetentionEnabled);
+                Assert.IsTrue(metadata.IsArchivalEnabled);
+                Assert.IsFalse(metadata.IsRetentionEnabled);
                 Assert.IsNull(metadata.Attributes);
                 Assert.AreEqual(run == 0 ? 1 : 0, service.EntityListLoads);
                 Assert.AreEqual(0, service.FullEntityLoads);
@@ -102,8 +103,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
 
         private static Task EnsureAllEntitiesLoadedAsync(IAttributeMetadataCache cache)
         {
-            return (Task)cache.GetType().GetMethod("EnsureAllEntitiesLoadedAsync",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(cache, null);
+            return ((CachedMetadata)cache).EnsureAllEntitiesLoadedAsync();
         }
 
         [TestMethod]
@@ -133,7 +133,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             var diskService = new MetadataService { AllowDownloads = false };
             var diskCache = Cache(diskService);
             await EnsureAllEntitiesLoadedAsync(diskCache);
-            Assert.AreEqual(true, diskCache.GetAllEntities().Single().IsArchivalEnabled);
+            Assert.IsTrue(diskCache.GetAllEntities().Single().IsArchivalEnabled);
             Assert.AreEqual(0, diskService.EntityListLoads);
         }
 

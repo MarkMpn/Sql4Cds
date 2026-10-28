@@ -2,7 +2,7 @@
     "name": "@markmpn/pptb-sql4cds",
     "version": "0.1.0",
     "displayName": "SQL 4 CDS",
-    "description": "Query and modify Dataverse data using standard SQL syntax, powered by the SQL 4 CDS engine.",
+    "description": "Query and modify Dataverse data using standard SQL syntax",
     "main": "index.html",
     "icon": "icons/sql4cds.svg",
     "author": "Mark Carrington",

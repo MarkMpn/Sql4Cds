@@ -29,8 +29,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         private readonly PersistentMetadataCache _persistentMetadataCache;
         private readonly PptbRpcChunking _pptbRpcChunking;
         private readonly JsonRpc _rpc;
-        private readonly ConcurrentDictionary<string, DataSource> _dataSources;
-        private readonly ConcurrentDictionary<string, string> _connectedDataSource;
+        internal readonly ConcurrentDictionary<string, DataSource> _dataSources;
+        internal readonly ConcurrentDictionary<string, string> _connectedDataSource;
         private readonly ConcurrentDictionary<string, Sql4CdsConnection> _connections;
         private readonly object _settingsLock = new object();
         private bool _includeDetailedErrorTelemetry;
@@ -324,7 +324,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             return Path.Combine(dataDir, "TokenCache");
         }
 
-        private static string GetConnectionIdentity(ConnectionDetails connection)
+        internal static string GetConnectionIdentity(ConnectionDetails connection)
         {
             // ADS refreshes its account token independently of the underlying connection.
             // Profile identity is supplied by VS Code; keep legacy ADS reuse unchanged.

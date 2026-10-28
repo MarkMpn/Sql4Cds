@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO.Pipes;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Export.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Configuration;
+using MarkMpn.Sql4Cds.LanguageServer.Capabilities;
 using MarkMpn.Sql4Cds.LanguageServer.Capabilities.Contracts;
+using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Pptb;
+using MarkMpn.Sql4Cds.LanguageServer.QueryExecution;
 using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
@@ -21,8 +23,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
     [TestClass]
     public class QueryEventStreamTests
     {
-        private static readonly Type StreamType = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.QueryExecution.QueryEventStream", true);
-        private static readonly Type BatchType = typeof(WebApiMetadataQuery).Assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.QueryExecution.QueryEventBatch", true);
         private Sql4CdsSettings _previousSettings;
 
         [TestInitialize]
@@ -35,8 +35,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [TestCleanup]
         public void RestoreSettings() => Sql4CdsSettings.Instance = _previousSettings;
 
-        private static Task Send(object batch, string method, object data) =>
-            (Task)BatchType.GetMethod("NotifyAsync", new[] { typeof(string), typeof(object) }).Invoke(batch, new[] { method, data });
+        private static Task Send(QueryEventBatch batch, string method, object data) =>
+            batch.NotifyAsync(method, data);
 
         [DataTestMethod]
         [DataRow(null, 1024, false)]
@@ -45,9 +45,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [DataRow(1, null, false)]
         public void RequiresSupportedOptInAndMessageLimit(int? version, int? limit, bool expected)
         {
-            var stream = Activator.CreateInstance(StreamType);
-            StreamType.GetMethod("Configure").Invoke(stream, new object[] { version, limit, null });
-            Assert.AreEqual(expected, StreamType.GetProperty("Enabled").GetValue(stream));
+            var stream = new QueryEventStream();
+            stream.Configure(version, limit, null);
+            Assert.AreEqual(expected, stream.Enabled);
         }
 
         [DataTestMethod]
@@ -55,20 +55,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [DataRow(200, 200)]
         public void InitializationAcknowledgesTheOptIn(int? initialRowCount, int expected)
         {
-            var assembly = StreamType.Assembly;
-            var stream = Activator.CreateInstance(StreamType);
-            var chunks = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Pptb.PptbRpcChunking", true));
-            var type = assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Capabilities.CapabilitiesHandler", true);
-            var connections = Activator.CreateInstance(assembly.GetType("MarkMpn.Sql4Cds.LanguageServer.Connection.ConnectionManager", true),
-                new object[] { null, null, null });
-            var handler = Activator.CreateInstance(type, new object[] { null, chunks, stream, connections });
+            var stream = new QueryEventStream();
+            var handler = new CapabilitiesHandler(null, new PptbRpcChunking(), stream, new ConnectionManager(null, null, null));
             var request = JsonConvert.DeserializeObject<ClientInitializeParams>(
                 "{\"capabilities\":{\"experimental\":{\"pptb\":{\"maxMessageSizeBytes\":33554432},\"sql4cds\":{\"queryEvents\":{\"version\":1,\"initialRowCount\":" +
                 (initialRowCount?.ToString() ?? "null") + "}}}}}");
-            var result = type.GetMethod("HandleInitialize", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(handler, new object[] { request });
+            var result = handler.HandleInitialize(request);
             var json = JObject.FromObject(result, JsonSerializer.Create(new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() }));
             Assert.AreEqual(1, json["capabilities"]["experimental"]["sql4cds"]["queryEvents"].Value<int>("version"));
-            Assert.AreEqual(true, StreamType.GetProperty("Enabled").GetValue(stream));
+            Assert.IsTrue(stream.Enabled);
             Assert.AreEqual(expected, json["capabilities"]["experimental"]["sql4cds"]["queryEvents"].Value<int>("initialRowCount"));
         }
 
@@ -79,24 +74,21 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [DataRow(3, 2, 0)]
         public void InitialRowsRequireAnExplicitSupportedOptIn(int? requested, int version, int expected)
         {
-            var stream = Activator.CreateInstance(StreamType);
-            StreamType.GetMethod("Configure").Invoke(stream, new object[] { version, 1024, requested });
-            Assert.AreEqual(expected, StreamType.GetProperty("InitialRowCount").GetValue(stream));
+            var stream = new QueryEventStream();
+            stream.Configure(version, 1024, requested);
+            Assert.AreEqual(expected, stream.InitialRowCount);
         }
 
         [TestMethod]
         public void NegativeInitialRowCountIsRejected()
         {
-            var stream = Activator.CreateInstance(StreamType);
-            var error = Assert.ThrowsException<TargetInvocationException>(() =>
-                StreamType.GetMethod("Configure").Invoke(stream, new object[] { 1, 1024, -1 }));
-            Assert.IsInstanceOfType<ArgumentOutOfRangeException>(error.InnerException);
+            var stream = new QueryEventStream();
+            Assert.ThrowsException<ArgumentOutOfRangeException>(() => stream.Configure(1, 1024, -1));
         }
 
         private static void AddRow(ResultSetSummary summary, params object[] values)
         {
-            var rows = (List<object[]>)typeof(ResultSetSummary).GetProperty("Values", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(summary);
-            rows.Add(values);
+            summary.Values.Add(values);
             summary.RowCount++;
         }
 
@@ -448,12 +440,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
                 ["jsonrpc"] = "2.0", ["method"] = "sql4cds/queryEvents", ["params"] = reference.Single()
             }.ToString(Formatting.None));
             await Exchange(sender => Send(sender, "query/complete", new QueryCompleteParams()), limit: limit);
-            var error = await Assert.ThrowsExceptionAsync<TargetInvocationException>(() =>
+            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() =>
                 Exchange(sender => Send(sender, "query/complete", new QueryCompleteParams()), limit: limit - 1));
-            Assert.IsInstanceOfType<InvalidOperationException>(error.InnerException);
         }
 
-        private static async Task<List<JObject>> Exchange(Func<object, Task> send, bool enabled = true, int limit = 1024 * 1024, Action<JObject> onReceive = null, int initialRowCount = 0)
+        private static async Task<List<JObject>> Exchange(Func<QueryEventBatch, Task> send, bool enabled = true, int limit = 1024 * 1024, Action<JObject> onReceive = null, int initialRowCount = 0)
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var pipeName = "query-events-" + Guid.NewGuid().ToString("N");
@@ -494,7 +485,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             });
             tool.StartListening();
             worker.StartListening();
-            using var batch = (IDisposable)Activator.CreateInstance(BatchType, worker, "owner", "execution", enabled, limit, initialRowCount);
+            using var batch = new QueryEventBatch(worker, "owner", "execution", enabled, limit, initialRowCount);
             await send(batch);
             await completed.Task.WaitAsync(timeout.Token);
             return messages;

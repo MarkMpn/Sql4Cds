@@ -5470,7 +5470,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual(1, plans.Length);
 
             var update = AssertNode<UpdateNode>(plans[0]);
-            Assert.AreEqual(false, update.BypassCustomPluginExecution);
+            Assert.IsFalse(update.BypassCustomPluginExecution);
         }
 
         [TestMethod]
@@ -5485,7 +5485,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual(1, plans.Length);
 
             var update = AssertNode<UpdateNode>(plans[0]);
-            Assert.AreEqual(true, update.BypassCustomPluginExecution);
+            Assert.IsTrue(update.BypassCustomPluginExecution);
         }
 
         [TestMethod]
@@ -8843,7 +8843,7 @@ WHERE a.accountid = '9B8AAC69-EECA-497A-99AB-C65B9E702D89'";
         {
             // https://github.com/MarkMpn/Sql4Cds/issues/593
             var metadataLog = new HashSet<string>();
-            var dataSource = new FakeXrmDataSource(_localDataSource.Connection, new LoggingMetadataCache(_localDataSource.Metadata, msg => metadataLog.Add(msg)), _localDataSource.TableSizeCache, _localDataSource.MessageCache);
+            var dataSource = new FakeXrmDataSource(_localDataSource.Connection, new LoggingMetadataCache(_localDataSource.Metadata, msg => metadataLog.Add(msg)), _localDataSource.TableSizeCache, _localDataSource.MessageCache) { Name = "local" };
             var planBuilder = new ExecutionPlanBuilder(new SessionContext(new Dictionary<string, DataSource> { [dataSource.Name] = dataSource }, this), this);
 
             var query = "SELECT fullname FROM contact";

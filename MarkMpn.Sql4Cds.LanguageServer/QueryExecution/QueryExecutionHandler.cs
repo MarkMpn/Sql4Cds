@@ -35,7 +35,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         private readonly QueryEventStream _queryEvents;
         private readonly ConnectionManager _connectionManager;
         private readonly TextDocumentManager _documentManager;
-        private readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
+        internal readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
         private readonly ConcurrentDictionary<string, IDbCommand> _commands;
         private readonly ConcurrentDictionary<string, ManualResetEventSlim> _confirmationEvents;
         private readonly ConcurrentDictionary<string, ConfirmationResult> _confirmationResults;
