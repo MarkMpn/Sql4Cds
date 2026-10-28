@@ -45,6 +45,7 @@ function load(relativePath, dependencies, globals = {}, extra = "") {
 }
 
 function setup(pinned = true) {
+    const logs = [];
     let now = 1000;
     const elements = new Map();
     const document = {
@@ -110,6 +111,11 @@ function setup(pinned = true) {
         "./settings": settingsApi,
     }, {
         document, window, Node: Element, Element,
+        console: {
+            error: (message) => logs.push({ type: "error", message }),
+            warn: (message) => logs.push({ type: "warning", message }),
+            log: (message) => logs.push({ type: "info", message }),
+        },
         setInterval: (callback) => { timers.set(++nextTimer, callback); return nextTimer; },
         clearInterval: (id) => timers.delete(id),
     }, "\nexports.App = App;");
@@ -190,8 +196,24 @@ function setup(pinned = true) {
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, setNow: (value) => { now = value; } };
+    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, setNow: (value) => { now = value; } };
 }
+
+test("server warnings and errors are logged and shown as PPTB notifications", async () => {
+    const { clientEvents, window, logs } = setup();
+    const notifications = [];
+    window.toolboxAPI = { utils: { showNotification: async (notification) => notifications.push(notification) } };
+    for (const type of [1, 2, 3, 4]) clientEvents.log({ type, message: `message ${type}` });
+    await Promise.resolve();
+    assert.deepEqual(notifications.map(notification => ({ ...notification })), [
+        { title: "SQL 4 CDS", body: "message 1", type: "error" },
+        { title: "SQL 4 CDS", body: "message 2", type: "warning" },
+    ]);
+    assert.deepEqual(logs, [
+        { type: "error", message: "message 1" }, { type: "warning", message: "message 2" },
+        { type: "info", message: "message 3" }, { type: "info", message: "message 4" },
+    ]);
+});
 
 function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };

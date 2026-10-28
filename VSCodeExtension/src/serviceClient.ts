@@ -2,7 +2,7 @@ import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import * as vscode from "vscode";
-import { InitializeParams, LanguageClient, LanguageClientOptions, ServerOptions, State, TransportKind } from "vscode-languageclient/node";
+import { InitializeParams, LanguageClient, LanguageClientOptions, LogMessageNotification, MessageType, ServerOptions, State, TransportKind } from "vscode-languageclient/node";
 import {
   ConnectionCompleteParams,
   ConnectionDetails,
@@ -16,6 +16,19 @@ import { assertServicePrerequisites } from "./serviceRuntime";
 export class Sql4CdsLanguageClient extends LanguageClient {
   constructor(private readonly clientVersion: string, serverOptions: ServerOptions, clientOptions: LanguageClientOptions) {
     super("sql4cds", "SQL 4 CDS Language Service", serverOptions, clientOptions);
+    this.onNotification(LogMessageNotification.type, params => {
+      if (params.type === MessageType.Error) {
+        this.error(params.message, undefined, false);
+        void vscode.window.showErrorMessage(params.message);
+      } else if (params.type === MessageType.Warning) {
+        this.warn(params.message, undefined, false);
+        void vscode.window.showWarningMessage(params.message);
+      } else if (params.type === MessageType.Info) {
+        this.info(params.message, undefined, false);
+      } else {
+        this.outputChannel.appendLine(params.message);
+      }
+    });
   }
 
   protected override fillInitializeParams(params: InitializeParams): void {

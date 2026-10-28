@@ -116,6 +116,8 @@ To load the tool locally:
 
 After LSP initialization, the client requests `capabilities/list` with its host name
 and package version. The response is currently unused.
+Server `window/logMessage` warnings and errors are also shown using PPTB notifications;
+all message levels remain logged in the console.
 
 The client sends `Power Platform ToolBox` and its npm package version in the
 standard LSP `initialize.clientInfo` property. Vite embeds the package version at

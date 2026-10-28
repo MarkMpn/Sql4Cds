@@ -95,7 +95,10 @@ class App implements QueryTabHost {
             },
             log: (params) => {
                 if (params.type === 1) console.error(params.message);
+                else if (params.type === 2) console.warn(params.message);
                 else console.log(params.message);
+                if (params.type === 1 || params.type === 2)
+                    void notify("SQL 4 CDS", params.message, params.type === 1 ? "error" : "warning");
             },
             failed: (message) => {
                 this.ready = false;

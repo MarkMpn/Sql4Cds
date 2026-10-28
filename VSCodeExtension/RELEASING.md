@@ -15,6 +15,8 @@ publishing the generated packages remains a separate release action.
 
 After LSP initialization, including service restarts, the client requests
 `capabilities/list` with its host name and package version. The response is currently unused.
+Server `window/logMessage` warnings and errors are also shown as VS Code notifications;
+all message levels remain logged in the language-service output.
 
 ## Build and automated verification
 
