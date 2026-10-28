@@ -240,7 +240,8 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (_tableSizeCache.TryGetValue(server, out var tableSizeCache))
                 return tableSizeCache;
 
-            tableSizeCache = new TableSizeCache(ConnectCDS(conStr), metadata);
+            var org = ConnectCDS(conStr);
+            tableSizeCache = new TableSizeCache(org, metadata, org.ConnectedOrgVersion);
             _tableSizeCache[server] = tableSizeCache;
 
             return tableSizeCache;
