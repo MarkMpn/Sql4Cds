@@ -8,6 +8,7 @@
     <ProjectReference Include="../../../MarkMpn.Sql4Cds.LanguageServer/MarkMpn.Sql4Cds.LanguageServer.csproj" />
     <!-- Run the production coordinator against controlled authentication completions. -->
     <Compile Include="../../../MarkMpn.Sql4Cds.LanguageServer/Connection/ConnectionHandler.cs" Link="ConnectionHandler.cs" />
+    <Compile Include="../../../MarkMpn.Sql4Cds.LanguageServer/Connection/ConnectionManager.cs" Link="ConnectionManager.cs" />
     <Compile Include="../../../MarkMpn.Sql4Cds.LanguageServer/JsonRpcExtensions.cs" Link="JsonRpcExtensions.cs" />
     <Compile Include="../../../MarkMpn.Sql4Cds.LanguageServer/IJsonRpcMethodHandler.cs" Link="IJsonRpcMethodHandler.cs" />
   </ItemGroup>
