@@ -13,6 +13,9 @@ connection's `ApplicationName`, falling back to `SQL 4 CDS` for clients that omi
 the name. The same pipeline stamps and packages the PPTB client and its worker;
 publishing the generated packages remains a separate release action.
 
+After LSP initialization, including service restarts, the client requests
+`capabilities/list` with its host name and package version. The response is currently unused.
+
 ## Build and automated verification
 
 Use Node.js 24+, a .NET 10 SDK or later, and the .NET 10 Runtime. From this directory:

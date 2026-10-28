@@ -114,6 +114,9 @@ To load the tool locally:
 
 ### Client identity and release versions
 
+After LSP initialization, the client requests `capabilities/list` with its host name
+and package version. The response is currently unused.
+
 The client sends `Power Platform ToolBox` and its npm package version in the
 standard LSP `initialize.clientInfo` property. Vite embeds the package version at
 build time. The language server uses the client name as each connection's

@@ -253,6 +253,7 @@ export class Sql4CdsClient {
             throw new Error("The server acknowledged an invalid initial row count");
         this.initialRowCount = this.compactQueryEvents ? initialRowCount : 0;
         await this.notify("initialized", {});
+        await this.request("capabilities/list", { hostName: "Power Platform ToolBox", hostVersion: __SQL4CDS_VERSION__ });
         await this.changeConfiguration(settings);
     }
 

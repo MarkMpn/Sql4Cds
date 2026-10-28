@@ -12,6 +12,7 @@ async function createClient(responseHeaders = {}, options = {}) {
     const notificationMethods = [];
     const logs = [];
     const rpcRequests = [];
+    const startupMessages = [];
     let complete;
     const response = new Promise((resolve) => { complete = resolve; });
     const execute = (transaction) => async (...args) => {
@@ -42,12 +43,18 @@ async function createClient(responseHeaders = {}, options = {}) {
                     stop: async () => {},
                     request: async (method, params) => {
                         rpcRequests.push({ method, params });
+                        startupMessages.push(method);
+                        if (method === "capabilities/list") {
+                            if (options.capabilitiesRequest) return options.capabilitiesRequest(params);
+                            return {};
+                        }
                         if (options.request && method !== "initialize") return options.request(method, params);
                         return method === "initialize" && options.queryEventsVersion
                             ? { capabilities: { experimental: { sql4cds: { queryEvents: { version: options.queryEventsVersion, initialRowCount: options.initialRowCount } } } } }
                             : {};
                     },
                     notify: async (method, params) => {
+                        startupMessages.push(method);
                         if (options.notify) await options.notify(method, params);
                         if (method !== "dataverse/executeBatch/chunk" && method !== "dataverse/executeBatch/message") return;
                         notifications.push(params);
@@ -64,7 +71,7 @@ async function createClient(responseHeaders = {}, options = {}) {
     }, { filename });
     const client = new module.exports.Sql4CdsClient(options.events ?? {});
     await client.start({});
-    return { client, handlers, calls, notifications, notificationMethods, response, logs, rpcRequests };
+    return { client, handlers, calls, notifications, notificationMethods, response, logs, rpcRequests, startupMessages };
 }
 
 test("production build embeds the release package version", async () => {
@@ -81,6 +88,23 @@ test("initialize advertises the PPTB client name and release package version", a
     assert.equal(initialize.params.clientInfo.name, "Power Platform ToolBox");
     assert.equal(initialize.params.clientInfo.version,
         JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8")).version);
+});
+
+test("startup requests capabilities after initialization without consuming the result", async () => {
+    const { rpcRequests, startupMessages } = await createClient({}, { capabilitiesRequest: () => null });
+    assert.deepEqual(startupMessages.slice(0, 4), [
+        "initialize", "initialized", "capabilities/list", "workspace/didChangeConfiguration",
+    ]);
+    const capabilities = rpcRequests.find(request => request.method === "capabilities/list");
+    assert.deepEqual({ ...capabilities.params }, {
+        hostName: "Power Platform ToolBox",
+        hostVersion: JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8")).version,
+    });
+});
+
+test("capabilities request failures propagate from startup", async () => {
+    const failure = new Error("Capabilities unavailable");
+    await assert.rejects(createClient({}, { capabilitiesRequest: () => { throw failure; } }), error => error === failure);
 });
 
 function batch(transaction = false, continueOnError = false) {

@@ -22,6 +22,11 @@ export class Sql4CdsLanguageClient extends LanguageClient {
     super.fillInitializeParams(params);
     params.clientInfo = { name: "VS Code", version: this.clientVersion };
   }
+
+  public override async start(): Promise<void> {
+    await super.start();
+    await this.sendRequest("capabilities/list", { hostName: "VS Code", hostVersion: this.clientVersion });
+  }
 }
 
 export class Sql4CdsService implements vscode.Disposable {
