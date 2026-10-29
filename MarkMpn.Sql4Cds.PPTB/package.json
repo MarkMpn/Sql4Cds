@@ -57,7 +57,7 @@
         "@pptb/types": "1.2.8-beta.1",
         "monaco-editor": "^0.52.2",
         "typescript": "^5.0.0",
-        "vite": "^6.4.1"
+        "vite": "^6.4.5"
     },
     "files": [
         "dist",
