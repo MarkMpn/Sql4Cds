@@ -12,30 +12,42 @@ using System.Threading.Tasks;
 using Data8.PowerPlatform.Dataverse.Client;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
+using MarkMpn.Sql4Cds.LanguageServer.Pptb;
+using StreamJsonRpc;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.PowerPlatform.Dataverse.Client.Model;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 {
     class ConnectionManager
     {
         private readonly PersistentMetadataCache _persistentMetadataCache;
-        private readonly ConcurrentDictionary<string, DataSource> _dataSources;
-        private readonly ConcurrentDictionary<string, string> _connectedDataSource;
+        private readonly PptbRpcChunking _pptbRpcChunking;
+        private readonly JsonRpc _rpc;
+        internal readonly ConcurrentDictionary<string, DataSource> _dataSources;
+        internal readonly ConcurrentDictionary<string, string> _connectedDataSource;
         private readonly ConcurrentDictionary<string, Sql4CdsConnection> _connections;
+        private readonly object _settingsLock = new object();
+        private bool _includeDetailedErrorTelemetry;
 
-        public ConnectionManager(PersistentMetadataCache persistentMetadataCache)
+        public string ApplicationName { get; set; } = "SQL 4 CDS";
+
+        public ConnectionManager(PersistentMetadataCache persistentMetadataCache, PptbRpcChunking pptbRpcChunking, JsonRpc rpc)
         {
             _persistentMetadataCache = persistentMetadataCache;
+            _pptbRpcChunking = pptbRpcChunking;
+            _rpc = rpc;
             _dataSources = new ConcurrentDictionary<string, DataSource>();
             _connectedDataSource = new ConcurrentDictionary<string, string>();
             _connections = new ConcurrentDictionary<string, Sql4CdsConnection>();
         }
 
-        public Session Connect(ConnectionDetails connection, string ownerUri)
+        public virtual Session Connect(ConnectionDetails connection, string ownerUri)
         {
             var dataSourceName = GetDataSourceName(connection);
 
@@ -52,7 +64,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             return GetConnection(ownerUri);
         }
 
-        public void Disconnect(string ownerUri)
+        public virtual void Disconnect(string ownerUri)
         {
             if (_connectedDataSource.TryRemove(ownerUri, out var dataSourceName) &&
                 !_connectedDataSource.Any(kvp => kvp.Value == dataSourceName))
@@ -61,7 +73,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             _connections.TryRemove(ownerUri, out _);
         }
 
-        public Session AssociateConnection(string pendingOwnerUri, string ownerUri)
+        public virtual Session AssociateConnection(string pendingOwnerUri, string ownerUri)
         {
             var dataSourceName = _connectedDataSource[pendingOwnerUri];
             Disconnect(ownerUri);
@@ -69,6 +81,21 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (_connections.TryRemove(pendingOwnerUri, out var connection))
                 _connections[ownerUri] = connection;
             _connectedDataSource.TryRemove(pendingOwnerUri, out _);
+            return GetConnection(ownerUri);
+        }
+
+        public Session AttachConnection(string sourceOwnerUri, string ownerUri)
+        {
+            if (String.IsNullOrEmpty(sourceOwnerUri) ||
+                !_connectedDataSource.TryGetValue(sourceOwnerUri, out var dataSourceName) ||
+                !_dataSources.ContainsKey(dataSourceName))
+                throw new InvalidOperationException("The selected connection has not been registered");
+
+            if (sourceOwnerUri == ownerUri)
+                throw new InvalidOperationException("A document cannot be associated with itself");
+
+            Disconnect(ownerUri);
+            _connectedDataSource[ownerUri] = dataSourceName;
             return GetConnection(ownerUri);
         }
 
@@ -80,7 +107,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (!_dataSources.TryGetValue(dsName, out var ds))
                 return null;
 
-            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = "VS Code" });
+            Sql4CdsConnection con;
+            lock (_settingsLock)
+            {
+                con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = ApplicationName });
+                con.IncludeDetailedErrorTelemetry = _includeDetailedErrorTelemetry;
+            }
             con.ChangeDatabase(ds.Name);
 
             return new Session
@@ -97,6 +129,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 .Values
                 .Cast<DataSource>()
                 .ToDictionary(ds => ds.Name);
+        }
+
+        public void SetIncludeDetailedErrorTelemetry(bool includeDetailedErrorTelemetry)
+        {
+            lock (_settingsLock)
+            {
+                _includeDetailedErrorTelemetry = includeDetailedErrorTelemetry;
+                foreach (var connection in _connections.Values)
+                    connection.IncludeDetailedErrorTelemetry = includeDetailedErrorTelemetry;
+            }
         }
 
         private Uri GetUri(ConnectionDetails connection)
@@ -248,6 +290,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                         org = new OnPremiseClient(url);
                         break;
 
+                    case "PPTB":
+                        // Power Platform ToolBox never exposes the access token, so all requests are proxied
+                        // back to the tool which executes them using its own Dataverse API
+                        if (!connection.Options.TryGetValue("connectionTarget", out var connectionTarget) || connectionTarget == null)
+                            connectionTarget = "primary";
+
+                        org = new PptbOrganizationService(new JsonRpcWebApiTransport(_rpc, _pptbRpcChunking, connectionTarget), url, GetDataSourceName(connection));
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException("Unknown authenticationType " + authType);
                 }
@@ -273,7 +324,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             return Path.Combine(dataDir, "TokenCache");
         }
 
-        private static string GetConnectionIdentity(ConnectionDetails connection)
+        internal static string GetConnectionIdentity(ConnectionDetails connection)
         {
             // ADS refreshes its account token independently of the underlying connection.
             // Profile identity is supplied by VS Code; keep legacy ADS reuse unchanged.
@@ -304,35 +355,51 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public string ConnectionIdentity { get; set; }
         private readonly string _url;
 
-        public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org)
+        public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org, null, null, null)
         {
             UniqueName = Name;
             ServerName = new Uri(url).Host;
             _url = url;
 
-            using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource> { [Name] = this }))
-            using (var cmd = con.CreateCommand())
-            {
-                con.ApplicationName = "VS Code";
-                cmd.CommandText = "SELECT fullname FROM systemuser WHERE systemuserid = CURRENT_USER";
-                Username = (string)cmd.ExecuteScalar();
-            }
-
             if (org is ServiceClient svc)
             {
-                Version = svc.ConnectedOrgVersion.ToString();
                 OrgId = svc.ConnectedOrgId;
             }
             else
             {
-                var resp = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
-                Version = resp.Version;
-
                 var whoAmI = (WhoAmIResponse)org.Execute(new WhoAmIRequest());
                 OrgId = whoAmI.OrganizationId;
             }
 
-            Metadata = new CachedMetadata(org, persistentMetadataCache);
+            Metadata = new CachedMetadata(org, persistentMetadataCache, OrgId, Version.ToString());
+            TableSizeCache = new TableSizeCache(org, Metadata, Version);
+            MessageCache = new MessageCache(org, Metadata);
+            if (org is PptbOrganizationService pptb)
+            {
+                pptb.SetMetadataCache(Metadata);
+                pptb.MessageCache = MessageCache;
+            }
+
+            // Get the LocaleId and Username in one query. We need to get the OrgId separately earlier so the
+            // PersistentMetadataCache can store the metadata appropriately when translating this query (for PPTB)
+            var query = """
+                <fetch>
+                    <entity name="systemuser">
+                        <attribute name="domainname" />
+                        <link-entity name="organization" from="organizationid" to="organizationid" link-type="inner" alias="organization">
+                            <attribute name="localeid" />
+                        </link-entity>
+                        <filter>
+                            <condition attribute="systemuserid" operator="eq-userid" />
+                        </filter>
+                    </entity>
+                </fetch>
+                """;
+
+            var response = org.Execute(new RetrieveMultipleRequest { Query = new FetchExpression(query) }) as RetrieveMultipleResponse;
+            var user = response.EntityCollection.Entities.Single();
+            Username = user.GetAttributeValue<string>("domainname");
+            DefaultCollation = CollationFromLocaleId((int)user.GetAttributeValue<AliasedValue>("organization.localeid")?.Value);
         }
 
         public string UniqueName { get; set; }
@@ -340,8 +407,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public Guid OrgId { get; set; }
 
         public string ServerName { get; set; }
-
-        public string Version { get; set; }
 
         public string Username { get; set; }
 

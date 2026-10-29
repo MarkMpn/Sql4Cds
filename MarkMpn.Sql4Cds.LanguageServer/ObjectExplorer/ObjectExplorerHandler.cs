@@ -9,6 +9,7 @@ using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts;
 using Microsoft.PowerPlatform.Dataverse.Client;
+using Microsoft.Xrm.Sdk.Metadata;
 using StreamJsonRpc;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
@@ -26,7 +27,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
 
         public void Initialize(JsonRpc lsp)
         {
-            lsp.AddHandler(CreateSessionRequest.Type, HandleCreateSession);
+            lsp.AddAsyncHandler(CreateSessionRequest.Type, request => Task.Run(() => HandleCreateSession(request)));
             lsp.AddHandler(ExpandRequest.Type, HandleExpand);
             lsp.AddHandler(RefreshRequest.Type, HandleRefresh);
             lsp.AddHandler(CloseSessionRequest.Type, HandleCloseSession);
@@ -38,8 +39,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
 
             _ = Task.Run(async () =>
             {
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                _ = _lsp.NotifyAsync(CreateSessionCompleteNotification.Type, new SessionCreatedParameters
+                await _lsp.NotifyAsync(CreateSessionCompleteNotification.Type, new SessionCreatedParameters
                 {
                     Success = true,
                     SessionId = session.SessionId,
@@ -89,321 +89,278 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
 
             _ = Task.Run(async () =>
             {
-                var url = new Uri(request.NodePath);
-                var nodes = new List<NodeInfo>();
-
-                if (url.AbsolutePath == "/")
+                try
                 {
-                    nodes.Add(new NodeInfo
-                    {
-                        IsLeaf = false,
-                        Label = "Tables",
-                        NodePath = request.NodePath + "/Tables",
-                        NodeType = "Folder",
-                    });
+                    var url = new Uri(request.NodePath);
+                    var nodes = new List<NodeInfo>();
+                    if ((url.AbsolutePath == "/Tables" || url.AbsolutePath == "/Archive") &&
+                        session.DataSource.Metadata is CachedMetadata cachedMetadata)
+                        await cachedMetadata.EnsureAllEntitiesLoadedAsync();
 
-                    if (session.DataSource.Connection is ServiceClient svc && svc.ConnectedOrgUriActual.Host.EndsWith(".dynamics.com"))
+                    if (url.AbsolutePath == "/")
                     {
                         nodes.Add(new NodeInfo
                         {
                             IsLeaf = false,
-                            Label = "Long Term Retention",
-                            NodePath = request.NodePath + "/Archive",
+                            Label = "Tables",
+                            NodePath = request.NodePath + "/Tables",
                             NodeType = "Folder",
                         });
-                    }
 
-                    if (session.DataSource.Metadata.RecycleBinEntities != null)
+                        if (IsOnline(session.DataSource.Connection))
+                        {
+                            nodes.Add(new NodeInfo
+                            {
+                                IsLeaf = false,
+                                Label = "Long Term Retention",
+                                NodePath = request.NodePath + "/Archive",
+                                NodeType = "Folder",
+                            });
+                        }
+
+                        if (session.DataSource.Metadata.RecycleBinEntities != null)
+                        {
+                            nodes.Add(new NodeInfo
+                            {
+                                IsLeaf = false,
+                                Label = "Recycle Bin",
+                                NodePath = request.NodePath + "/Bin",
+                                NodeType = "Folder",
+                            });
+                        }
+
+                        nodes.Add(new NodeInfo
+                        {
+                            IsLeaf = false,
+                            Label = "Metadata",
+                            NodePath = request.NodePath + "/Metadata",
+                            NodeType = "Folder"
+                        });
+                        nodes.Add(new NodeInfo
+                        {
+                            IsLeaf = false,
+                            Label = "Programmability",
+                            NodePath = request.NodePath + "/Programmability",
+                            NodeType = "Folder"
+                        });
+                    }
+                    else if (url.AbsolutePath == "/Programmability")
                     {
                         nodes.Add(new NodeInfo
                         {
                             IsLeaf = false,
-                            Label = "Recycle Bin",
-                            NodePath = request.NodePath + "/Bin",
+                            Label = "Table-valued Functions",
+                            NodePath = request.NodePath + "/TVF",
                             NodeType = "Folder",
                         });
-                    }
-
-                    nodes.Add(new NodeInfo
-                    {
-                        IsLeaf = false,
-                        Label = "Metadata",
-                        NodePath = request.NodePath + "/Metadata",
-                        NodeType = "Folder"
-                    });
-                    nodes.Add(new NodeInfo
-                    {
-                        IsLeaf = false,
-                        Label = "Programmability",
-                        NodePath = request.NodePath + "/Programmability",
-                        NodeType = "Folder"
-                    });
-                }
-                else if (url.AbsolutePath == "/Programmability")
-                {
-                    nodes.Add(new NodeInfo
-                    {
-                        IsLeaf = false,
-                        Label = "Table-valued Functions",
-                        NodePath = request.NodePath + "/TVF",
-                        NodeType = "Folder",
-                    });
-                    nodes.Add(new NodeInfo
-                    {
-                        IsLeaf = false,
-                        Label = "Stored Procedures",
-                        NodePath = request.NodePath + "/SProcs",
-                        NodeType = "Folder"
-                    });
-                }
-                else if (url.AbsolutePath == "/Tables")
-                {
-                    using (var cmd = session.Connection.CreateCommand())
-                    {
-                        cmd.CommandText = "SELECT logicalname FROM metadata.entity ORDER BY 1";
-
-                        using (var reader = await cmd.ExecuteReaderAsync())
-                        {
-                            while (await reader.ReadAsync())
-                            {
-                                var logicalName = reader.GetString(0);
-
-                                nodes.Add(new NodeInfo
-                                {
-                                    IsLeaf = false,
-                                    Label = logicalName,
-                                    NodePath = request.NodePath + "/" + logicalName,
-                                    NodeType = "Table",
-                                    Metadata = new ObjectMetadata
-                                    {
-                                        Urn = request.NodePath + "/" + logicalName,
-                                        MetadataType = MetadataType.Table,
-                                        Schema = "dbo",
-                                        Name = logicalName
-                                    }
-                                });
-                            }
-                        }
-                    }
-                }
-                else if (url.AbsolutePath == "/Archive")
-                {
-                    using (var cmd = session.Connection.CreateCommand())
-                    {
-                        cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE isarchivalenabled = 1 OR isretentionenabled = 1 ORDER BY 1";
-
-                        using (var reader = await cmd.ExecuteReaderAsync())
-                        {
-                            while (await reader.ReadAsync())
-                            {
-                                var logicalName = reader.GetString(0);
-
-                                nodes.Add(new NodeInfo
-                                {
-                                    IsLeaf = false,
-                                    Label = logicalName,
-                                    NodePath = request.NodePath + "/" + logicalName,
-                                    NodeType = "Table",
-                                    Metadata = new ObjectMetadata
-                                    {
-                                        Urn = request.NodePath + "/" + logicalName,
-                                        MetadataType = MetadataType.Table,
-                                        Schema = "archive",
-                                        Name = logicalName
-                                    }
-                                });
-                            }
-                        }
-                    }
-                }
-                else if (url.AbsolutePath == "/Bin")
-                {
-                    foreach (var entity in session.DataSource.Metadata.RecycleBinEntities)
-                    {
                         nodes.Add(new NodeInfo
                         {
                             IsLeaf = false,
-                            Label = entity,
-                            NodePath = request.NodePath + "/" + entity,
-                            NodeType = "Table",
-                            Metadata = new ObjectMetadata
-                            {
-                                Urn = request.NodePath + "/" + entity,
-                                MetadataType = MetadataType.Table,
-                                Schema = "bin",
-                                Name = entity
-                            }
+                            Label = "Stored Procedures",
+                            NodePath = request.NodePath + "/SProcs",
+                            NodeType = "Folder"
                         });
                     }
-                }
-                else if (url.AbsolutePath.StartsWith("/Tables/") && url.AbsolutePath.Split('/').Length == 3)
-                {
-                    var tableName = url.AbsolutePath.Split('/')[2];
-
-                    using (var cmd = session.Connection.CreateCommand())
+                    else if (url.AbsolutePath == "/Tables" || url.AbsolutePath == "/Archive")
                     {
-                        cmd.CommandText = "SELECT logicalname, attributetypename, targets FROM metadata.attribute WHERE entitylogicalname = @entity AND attributeof IS NULL ORDER BY 1";
-                        var param = cmd.CreateParameter();
-                        param.ParameterName = "@entity";
-                        param.Value = tableName;
-                        cmd.Parameters.Add(param);
-
-                        using (var reader = await cmd.ExecuteReaderAsync())
+                        nodes.AddRange(GetTableNodes(session.DataSource.Metadata, request.NodePath, url.AbsolutePath == "/Archive"));
+                    }
+                    else if (url.AbsolutePath == "/Bin")
+                    {
+                        foreach (var entity in session.DataSource.Metadata.RecycleBinEntities)
                         {
-                            while (await reader.ReadAsync())
+                            nodes.Add(new NodeInfo
                             {
-                                var logicalName = reader.GetString(0);
-                                var attributeTypeName = reader.GetString(1);
-                                var targets = await reader.IsDBNullAsync(2) ? null : reader.GetString(2);
+                                IsLeaf = false,
+                                Label = entity,
+                                NodePath = request.NodePath + "/" + entity,
+                                NodeType = "Table",
+                                Metadata = new ObjectMetadata
+                                {
+                                    Urn = request.NodePath + "/" + entity,
+                                    MetadataType = MetadataType.Table,
+                                    Schema = "bin",
+                                    Name = entity
+                                }
+                            });
+                        }
+                    }
+                    else if (url.AbsolutePath.StartsWith("/Tables/") && url.AbsolutePath.Split('/').Length == 3)
+                    {
+                        nodes.AddRange(GetColumnNodes(session.DataSource.Metadata, request.NodePath));
+                    }
+                    else if (url.AbsolutePath == "/Metadata")
+                    {
+                        var metadata = MetaMetadataCache.GetMetadata();
 
+                        foreach (var table in metadata.OrderBy(t => t.LogicalName))
+                        {
+                            nodes.Add(new NodeInfo
+                            {
+                                IsLeaf = false,
+                                Label = table.LogicalName,
+                                NodePath = request.NodePath + "/" + table.LogicalName,
+                                NodeType = "Table",
+                                Metadata = new ObjectMetadata
+                                {
+                                    Urn = request.NodePath + "/" + table.LogicalName,
+                                    MetadataType = MetadataType.Table,
+                                    Schema = "metadata",
+                                    Name = table.LogicalName
+                                }
+                            });
+                        }
+                    }
+                    else if (url.AbsolutePath.StartsWith("/Metadata/") && url.AbsolutePath.Split('/').Length == 3)
+                    {
+                        var tableName = url.AbsolutePath.Split('/')[2];
+                        var metadata = MetaMetadataCache.GetMetadata();
+                        var table = metadata.Single(t => t.LogicalName == tableName);
+
+                        foreach (var attribute in table.Attributes)
+                        {
+                            nodes.Add(new NodeInfo
+                            {
+                                IsLeaf = true,
+                                Label = attribute.LogicalName,
+                                NodePath = request.NodePath + "/" + attribute.LogicalName,
+                                NodeType = "Column",
+                                Metadata = new ObjectMetadata
+                                {
+                                    Urn = request.NodePath + "/" + attribute.LogicalName,
+                                    Name = tableName + "." + attribute.LogicalName
+                                }
+                            });
+                        }
+                    }
+                    else if (url.AbsolutePath == "/Programmability/TVF")
+                    {
+                        foreach (var msg in session.DataSource.MessageCache.GetAllMessages(false).OrderBy(m => m.Name))
+                        {
+                            if (msg.IsValidAsTableValuedFunction())
+                            {
                                 nodes.Add(new NodeInfo
                                 {
                                     IsLeaf = true,
-                                    Label = logicalName,
-                                    NodePath = request.NodePath + "/" + logicalName,
-                                    NodeType = "Column",
+                                    Label = msg.Name,
+                                    NodePath = request.NodePath + "/" + msg.Name,
+                                    NodeType = "TableValuedFunction",
                                     Metadata = new ObjectMetadata
                                     {
-                                        Urn = request.NodePath + "/" + logicalName,
-                                        Name = tableName + "." + logicalName
+                                        Urn = request.NodePath + "/" + msg.Name,
+                                        MetadataType = MetadataType.Function,
+                                        Schema = "dbo",
+                                        Name = msg.Name
                                     }
                                 });
-
-                                if (attributeTypeName == "BooleanType" || attributeTypeName == "PicklistType" || attributeTypeName == "StateType" || attributeTypeName == "StatusType" || attributeTypeName == "LookupType" || attributeTypeName == "OwnerType" || attributeTypeName == "CustomerType")
+                            }
+                        }
+                    }
+                    else if (url.AbsolutePath == "/Programmability/SProcs")
+                    {
+                        foreach (var msg in session.DataSource.MessageCache.GetAllMessages(false).OrderBy(m => m.Name))
+                        {
+                            if (msg.IsValidAsStoredProcedure())
+                            {
+                                nodes.Add(new NodeInfo
                                 {
-                                    nodes.Add(new NodeInfo
+                                    IsLeaf = true,
+                                    Label = msg.Name,
+                                    NodePath = request.NodePath + "/" + msg.Name,
+                                    NodeType = "StoredProcedure",
+                                    Metadata = new ObjectMetadata
                                     {
-                                        IsLeaf = true,
-                                        Label = logicalName + "name",
-                                        NodePath = request.NodePath + "/" + logicalName + "name",
-                                        NodeType = "Column",
-                                        Metadata = new ObjectMetadata
-                                        {
-                                            Urn = request.NodePath + "/" + logicalName + "name",
-                                            Name = tableName + "." + logicalName + "name"
-                                        }
-                                    });
-                                }
-
-                                if (!String.IsNullOrEmpty(targets) && targets.Split(',').Length > 1)
-                                {
-                                    nodes.Add(new NodeInfo
-                                    {
-                                        IsLeaf = true,
-                                        Label = logicalName + "type",
-                                        NodePath = request.NodePath + "/" + logicalName + "type",
-                                        NodeType = "Column",
-                                        Metadata = new ObjectMetadata
-                                        {
-                                            Urn = request.NodePath + "/" + logicalName + "type",
-                                            Name = tableName + "." + logicalName + "type"
-                                        }
-                                    });
-                                }
+                                        Urn = request.NodePath + "/" + msg.Name,
+                                        MetadataType = MetadataType.SProc,
+                                        Schema = "dbo",
+                                        Name = msg.Name
+                                    }
+                                });
                             }
                         }
                     }
-                }
-                else if (url.AbsolutePath == "/Metadata")
-                {
-                    var metadata = MetaMetadataCache.GetMetadata();
 
-                    foreach (var table in metadata.OrderBy(t => t.LogicalName))
+                    await _lsp.NotifyAsync(ExpandCompleteNotification.Type, new ExpandResponse
                     {
-                        nodes.Add(new NodeInfo
-                        {
-                            IsLeaf = false,
-                            Label = table.LogicalName,
-                            NodePath = request.NodePath + "/" + table.LogicalName,
-                            NodeType = "Table",
-                            Metadata = new ObjectMetadata
-                            {
-                                Urn = request.NodePath + "/" + table.LogicalName,
-                                MetadataType = MetadataType.Table,
-                                Schema = "metadata",
-                                Name = table.LogicalName
-                            }
-                        });
-                    }
+                        SessionId = request.SessionId,
+                        NodePath = request.NodePath,
+                        Nodes = nodes.ToArray()
+                    });
                 }
-                else if (url.AbsolutePath.StartsWith("/Metadata/") && url.AbsolutePath.Split('/').Length == 3)
+                catch (Exception ex)
                 {
-                    var tableName = url.AbsolutePath.Split('/')[2];
-                    var metadata = MetaMetadataCache.GetMetadata();
-                    var table = metadata.Single(t => t.LogicalName == tableName);
-
-                    foreach (var attribute in table.Attributes)
+                    await _lsp.NotifyAsync(ExpandCompleteNotification.Type, new ExpandResponse
                     {
-                        nodes.Add(new NodeInfo
-                        {
-                            IsLeaf = true,
-                            Label = attribute.LogicalName,
-                            NodePath = request.NodePath + "/" + attribute.LogicalName,
-                            NodeType = "Column",
-                            Metadata = new ObjectMetadata
-                            {
-                                Urn = request.NodePath + "/" + attribute.LogicalName,
-                                Name = tableName + "." + attribute.LogicalName
-                            }
-                        });
-                    }
+                        SessionId = request.SessionId,
+                        NodePath = request.NodePath,
+                        ErrorMessage = ex.Message
+                    });
                 }
-                else if (url.AbsolutePath == "/Programmability/TVF")
-                {
-                    foreach (var msg in session.DataSource.MessageCache.GetAllMessages(false).OrderBy(m => m.Name))
-                    {
-                        if (msg.IsValidAsTableValuedFunction())
-                        {
-                            nodes.Add(new NodeInfo
-                            {
-                                IsLeaf = true,
-                                Label = msg.Name,
-                                NodePath = request.NodePath + "/" + msg.Name,
-                                NodeType = "TableValuedFunction",
-                                Metadata = new ObjectMetadata
-                                {
-                                    Urn = request.NodePath + "/" + msg.Name,
-                                    MetadataType = MetadataType.Function,
-                                    Schema = "dbo",
-                                    Name = msg.Name
-                                }
-                            });
-                        }
-                    }
-                }
-                else if (url.AbsolutePath == "/Programmability/SProcs")
-                {
-                    foreach (var msg in session.DataSource.MessageCache.GetAllMessages(false).OrderBy(m => m.Name))
-                    {
-                        if (msg.IsValidAsStoredProcedure())
-                        {
-                            nodes.Add(new NodeInfo
-                            {
-                                IsLeaf = true,
-                                Label = msg.Name,
-                                NodePath = request.NodePath + "/" + msg.Name,
-                                NodeType = "StoredProcedure",
-                                Metadata = new ObjectMetadata
-                                {
-                                    Urn = request.NodePath + "/" + msg.Name,
-                                    MetadataType = MetadataType.SProc,
-                                    Schema = "dbo",
-                                    Name = msg.Name
-                                }
-                            });
-                        }
-                    }
-                }
-
-                await _lsp.NotifyAsync(ExpandCompleteNotification.Type, new ExpandResponse
-                {
-                    SessionId = request.SessionId,
-                    NodePath = request.NodePath,
-                    Nodes = nodes.ToArray()
-                });
             });
 
             return true;
+        }
+
+        internal static bool IsOnline(Microsoft.Xrm.Sdk.IOrganizationService connection)
+        {
+            var uri = connection is ServiceClient svc ? svc.ConnectedOrgUriActual : (connection as IServiceClient)?.Uri;
+            return uri?.Host.EndsWith(".dynamics.com", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        internal static IEnumerable<NodeInfo> GetTableNodes(IAttributeMetadataCache metadata, string nodePath, bool archive)
+        {
+            var entities = metadata.GetAllEntities();
+            if (archive)
+                entities = entities.Where(entity => entity.IsArchivalEnabled == true || entity.IsRetentionEnabled == true);
+
+            return entities.OrderBy(entity => entity.LogicalName).Select(entity => new NodeInfo
+            {
+                IsLeaf = false,
+                Label = entity.LogicalName,
+                NodePath = nodePath + "/" + entity.LogicalName,
+                NodeType = "Table",
+                Metadata = new ObjectMetadata
+                {
+                    Urn = nodePath + "/" + entity.LogicalName,
+                    MetadataType = MetadataType.Table,
+                    Schema = archive ? "archive" : "dbo",
+                    Name = entity.LogicalName
+                }
+            });
+        }
+
+        internal static IEnumerable<NodeInfo> GetColumnNodes(IAttributeMetadataCache metadata, string nodePath)
+        {
+            var tableName = new Uri(nodePath).AbsolutePath.Split('/')[2];
+            var entity = metadata[tableName];
+            foreach (var attribute in entity.Attributes.Where(attribute => attribute.AttributeOf == null).OrderBy(attribute => attribute.LogicalName))
+            {
+                yield return Column(attribute.LogicalName);
+                if (attribute.AttributeType == AttributeTypeCode.Boolean ||
+                    attribute.AttributeType == AttributeTypeCode.Picklist ||
+                    attribute.AttributeType == AttributeTypeCode.State ||
+                    attribute.AttributeType == AttributeTypeCode.Status ||
+                    attribute.AttributeType == AttributeTypeCode.Lookup ||
+                    attribute.AttributeType == AttributeTypeCode.Owner ||
+                    attribute.AttributeType == AttributeTypeCode.Customer)
+                    yield return Column(attribute.LogicalName + "name");
+
+                if (attribute is LookupAttributeMetadata lookup && lookup.Targets?.Length > 1)
+                    yield return Column(attribute.LogicalName + "type");
+            }
+
+            NodeInfo Column(string name) => new NodeInfo
+            {
+                IsLeaf = true,
+                Label = name,
+                NodePath = nodePath + "/" + name,
+                NodeType = "Column",
+                Metadata = new ObjectMetadata
+                {
+                    Urn = nodePath + "/" + name,
+                    Name = tableName + "." + name
+                }
+            };
         }
 
         private bool HasEntity(DataSourceWithInfo dataSource, string logicalName)

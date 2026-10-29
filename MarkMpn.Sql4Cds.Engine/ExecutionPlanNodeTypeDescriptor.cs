@@ -467,6 +467,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (value is ICustomTypeDescriptor desc)
                 value = desc.GetPropertyOwner(null);
 
+            if (value == null)
+                return string.Empty;
+
             var values = (float[])value;
             var maxValue = values.Max();
             var minValue = values.Min();

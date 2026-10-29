@@ -78,9 +78,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
             _context.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
             _context.AddGenericFakeMessageExecutor(ExpandoMessageExecutor.MessageName, new ExpandoMessageExecutor());
+            AddOrganization(_context, "uat", 1033);
 
             _service = _context.GetOrganizationService();
-            _dataSource = new FakeXrmDataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
+            _dataSource = new FakeXrmDataSource(_service, new AttributeMetadataCache(_service), new StubTableSizeCache(), new StubMessageCache());
             _context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource.Metadata));
 
             _context2 = new XrmFakedContext();
@@ -90,9 +91,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context2.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
             _context2.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
             _context2.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
+            AddOrganization(_context2, "prod", 1033);
 
             _service2 = _context2.GetOrganizationService();
-            _dataSource2 = new FakeXrmDataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
+            _dataSource2 = new FakeXrmDataSource(_service2, new AttributeMetadataCache(_service2), new StubTableSizeCache(), new StubMessageCache());
             _context2.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource2.Metadata));
 
             _context3 = new XrmFakedContext();
@@ -102,15 +104,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context3.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
             _context3.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
             _context3.AddGenericFakeMessageExecutor(SetStateMessageExecutor.MessageName, new SetStateMessageExecutor());
+            AddOrganization(_context3, "french", 1036);
 
             _service3 = _context3.GetOrganizationService();
-            Collation.TryParse("French_CI_AI", out var frenchCIAI);
-            _dataSource3 = new FakeXrmDataSource { Name = "french", Connection = _service3, Metadata = new AttributeMetadataCache(_service3), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = frenchCIAI };
+            _dataSource3 = new FakeXrmDataSource(_service3, new AttributeMetadataCache(_service3), new StubTableSizeCache(), new StubMessageCache());
             _context3.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(_dataSource3.Metadata));
 
             _dataSources = new[] { _dataSource, _dataSource2, _dataSource3 }.ToDictionary(ds => ds.Name, ds => (DataSource)ds);
 
-            _localDataSource = new FakeXrmDataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache, DefaultCollation = Collation.USEnglish };
+            _localDataSource = new FakeXrmDataSource(_service, new AttributeMetadataCache(_service), new StubTableSizeCache(), new StubMessageCache()) { Name = "local" };
             _localDataSources = new Dictionary<string, DataSource>
             {
                 ["local"] = _localDataSource
@@ -139,6 +141,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetRelationships(_context);
             SetRelationships(_context2);
+        }
+
+        private void AddOrganization(XrmFakedContext context, string name, int lcid)
+        {
+            var org = new Entity("organization")
+            {
+                Id = Guid.NewGuid(),
+                ["name"] = name,
+                ["localeid"] = lcid
+            };
+            org["organizationid"] = org.Id;
+
+            context.Data[org.LogicalName] = new Dictionary<Guid, Entity> { [org.Id] = org };
         }
 
         private void SetPrimaryNameAttributes(XrmFakedContext context)

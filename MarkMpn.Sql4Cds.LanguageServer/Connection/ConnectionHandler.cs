@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
+using Microsoft.VisualStudio.LanguageServer.Protocol;
 using StreamJsonRpc;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Connection
@@ -22,6 +23,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public void Initialize(JsonRpc lsp)
         {
             lsp.AddHandler(ConnectionRequest.Type, HandleConnection);
+            lsp.AddHandler(new LspRequest<ConnectParams, bool>("connection/associate"), request =>
+            {
+                if (String.IsNullOrEmpty(request.SourceOwnerUri))
+                    throw new ArgumentException("A registered connection owner is required");
+                return HandleConnection(request);
+            });
             lsp.AddHandler(CancelConnectRequest.Type, HandleCancelConnect);
             lsp.AddHandler(DisconnectRequest.Type, HandleDisconnect);
         }
@@ -36,7 +43,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 {
                     // Authenticate on a temporary owner. A superseded or cancelled attempt
                     // must never change the editor's currently attached environment.
-                    _connectionManager.Connect(request.Connection, pendingOwnerUri);
+                    if (request.SourceOwnerUri == null)
+                        _connectionManager.Connect(request.Connection, pendingOwnerUri);
+                    else
+                        _connectionManager.AttachConnection(request.SourceOwnerUri, pendingOwnerUri);
                     lock (_attemptLock)
                     {
                         if (!_attempts.TryGetValue(request.OwnerUri, out var current) || !ReferenceEquals(current, request))

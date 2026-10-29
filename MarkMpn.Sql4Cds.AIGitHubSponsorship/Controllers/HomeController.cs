@@ -330,6 +330,7 @@ namespace MarkMpn.Sql4Cds.AIGitHubSponsorship.Controllers
                 .Include(u => u.OrganizationMemberships)
                     .ThenInclude(om => om.Organization)
                         .ThenInclude(o => o.TokenUsages)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(u => u.GitHubUsername == username);
 
             if (user != null)

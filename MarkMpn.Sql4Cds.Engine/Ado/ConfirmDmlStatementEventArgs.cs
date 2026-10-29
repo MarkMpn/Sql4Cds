@@ -18,11 +18,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="count">The number of records that will be affected</param>
         /// <param name="metadata">The metadata of the entity that will be affected</param>
         /// <param name="bypassCustomPluginExecution">Indicates if custom plugins will be bypassed by the operation</param>
-        internal ConfirmDmlStatementEventArgs(int count, EntityMetadata metadata, bool bypassCustomPluginExecution)
+        /// <param name="targetDataSource">The data source in which the operation will take place</param>
+        internal ConfirmDmlStatementEventArgs(int count, EntityMetadata metadata, bool bypassCustomPluginExecution, DataSource targetDataSource)
         {
             Count = count;
             Metadata = metadata;
             BypassCustomPluginExecution = bypassCustomPluginExecution;
+            TargetDataSource = targetDataSource;
         }
 
         /// <summary>
@@ -57,5 +59,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if custom plugins will be bypassed by the operation
         /// </summary>
         public bool BypassCustomPluginExecution { get; }
+
+        /// <summary>
+        /// The data source in which the operation will take place.
+        /// </summary>
+        public DataSource TargetDataSource { get; }
     }
 }

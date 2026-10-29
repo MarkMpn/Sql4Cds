@@ -32,16 +32,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
     class QueryExecutionHandler : IJsonRpcMethodHandler
     {
         private readonly JsonRpc _lsp;
+        private readonly QueryEventStream _queryEvents;
         private readonly ConnectionManager _connectionManager;
         private readonly TextDocumentManager _documentManager;
-        private readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
+        internal readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
         private readonly ConcurrentDictionary<string, IDbCommand> _commands;
         private readonly ConcurrentDictionary<string, ManualResetEventSlim> _confirmationEvents;
         private readonly ConcurrentDictionary<string, ConfirmationResult> _confirmationResults;
 
-        public QueryExecutionHandler(JsonRpc lsp, ConnectionManager connectionManager, TextDocumentManager documentManager)
+        public QueryExecutionHandler(JsonRpc lsp, ConnectionManager connectionManager, TextDocumentManager documentManager, QueryEventStream queryEvents)
         {
             _lsp = lsp;
+            _queryEvents = queryEvents;
             _connectionManager = connectionManager;
             _documentManager = documentManager;
             _resultSets = new ConcurrentDictionary<string, List<ResultSetSummary>>();
@@ -140,6 +142,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
         private async Task ExecuteAsync(Connection.Session session, ExecuteRequestParamsBase request, string qry, SelectionData selection)
         {
+            using var events = _queryEvents.Create(_lsp, request.OwnerUri, request.ExecutionId);
             // query/batchStart (BatchEventParams)
             // query/message (MessagePArams)
             // query/resultSetAvailable (ResultSetAvailableEventPArams)
@@ -157,11 +160,28 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 Selection = selection
             };
 
-            await _lsp.NotifyAsync(BatchStartEvent.Type, new BatchEventParams
+            await events.NotifyAsync(BatchStartEvent.Type, new BatchEventParams
             {
                 OwnerUri = request.OwnerUri,
                 BatchSummary = batchSummary
             });
+
+            var messageCount = 0;
+            Task SendMessageAsync(string message, bool isError = false)
+            {
+                Interlocked.Increment(ref messageCount);
+                return events.NotifyAsync(MessageEvent.Type, new MessageParams
+                {
+                    OwnerUri = request.OwnerUri,
+                    Message = new ResultMessage
+                    {
+                        BatchId = batchSummary.Id,
+                        Time = DateTime.UtcNow.ToString("o"),
+                        Message = message,
+                        IsError = isError
+                    }
+                });
+            }
 
             var infoMessageHandler = (EventHandler<InfoMessageEventArgs>)((object sender, InfoMessageEventArgs msg) =>
             {
@@ -170,37 +190,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 if (msg.Message.Class != 0 && msg.Message.Class != 10)
                     message += $"\r\nMsg {msg.Message.Number}, Level {msg.Message.Class}, State {msg.Message.State}";
 
-                _ = _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
-                {
-                    OwnerUri = request.OwnerUri,
-                    Message = new ResultMessage
-                    {
-                        BatchId = batchSummary.Id,
-                        Time = DateTime.UtcNow.ToString("o"),
-                        Message = message
-                    }
-                });
+                _ = SendMessageAsync(message);
             });
             var progressHandler = (EventHandler<ProgressEventArgs>)((object sender, ProgressEventArgs progress) =>
             {
-                var progressParam = new Dictionary<string, object>
-                {
-                    ["msg"] = progress.Message,
-                };
-
-                if (progress.Progress != null)
-                    progressParam["progress"] = progress.Progress.Value * 100;
-
-                _ = _lsp.NotifyAsync("sql4cds/progress", progress.Message);
-
-                if (resultSetInProgress != null)
-                {
-                    _ = _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
-                    {
-                        OwnerUri = request.OwnerUri,
-                        ResultSetSummary = resultSetInProgress,
-                    });
-                }
+                _ = events.NotifyAsync("sql4cds/progress", progress.Message);
             });
             var confirm = (ConfirmDmlStatementEventArgs e, int threshold, string operation) =>
             {
@@ -208,10 +202,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                 if ((e.Count > threshold || e.BypassCustomPluginExecution) && e.Metadata != null && !bypassWarnings)
                 {
-                    var msg = $"{operation} will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)}.";
+                    var msg = $"{operation} will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)} in the {e.TargetDataSource.Name} environment.";
                     if (e.BypassCustomPluginExecution)
                         msg += " This operation will bypass any custom plugins.";
-                    msg += " Do you want to proceed?";
+                    msg += " SQL 4 CDS does not provide a method to undo this operation. Do you want to proceed?";
 
                     var evt = new ManualResetEventSlim();
                     _confirmationEvents[request.OwnerUri] = evt;
@@ -283,18 +277,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     cmd.StatementCompleted += (_, stmt) =>
                     {
                         if (stmt.Message != null)
-                        {
-                            _ = _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
-                            {
-                                OwnerUri = request.OwnerUri,
-                                Message = new ResultMessage
-                                {
-                                    BatchId = batchSummary.Id,
-                                    Time = DateTime.UtcNow.ToString("o"),
-                                    Message = stmt.Message
-                                }
-                            });
-                        }
+                            _ = SendMessageAsync(stmt.Message);
                     };
 
                     if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
@@ -314,18 +297,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 };
                                 resultSets.Add(resultSet);
 
-                                _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
+                                events.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
                                 {
                                     OwnerUri = request.OwnerUri,
                                     ResultSetSummary = resultSet,
                                 }).ConfigureAwait(false).GetAwaiter().GetResult();
-                                _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                                events.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
                                 {
                                     OwnerUri = request.OwnerUri,
                                     ResultSetSummary = resultSet,
                                     ExecutionPlans = new List<ExecutionPlanGraph> { ConvertExecutionPlan(stmt.Statement, true) }
                                 }).ConfigureAwait(false).GetAwaiter().GetResult();
-                                _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
+                                events.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
                                 {
                                     OwnerUri = request.OwnerUri,
                                     ResultSetSummary = resultSet,
@@ -359,11 +342,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 resultSetInProgress = resultSet;
                                 resultSets.Add(resultSet);
 
-                                await _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
+                                await events.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
                                 {
                                     OwnerUri = request.OwnerUri,
                                     ResultSetSummary = resultSet,
                                 });
+
+                                var lastUpdateTime = DateTime.UtcNow;
 
                                 while (await reader.ReadAsync())
                                 {
@@ -371,23 +356,31 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     reader.GetValues(row);
                                     resultSet.Values.Add(row);
 
-                                    var providerSpecificRow = new object[reader.FieldCount];
-                                    reader.GetProviderSpecificValues(providerSpecificRow);
-                                    resultSet.ProviderSpecificValues.Add(providerSpecificRow);
-
                                     resultSet.RowCount++;
+
+                                    if (resultSet.RowCount < events.InitialRowCount && lastUpdateTime < DateTime.UtcNow.AddSeconds(-1) ||
+                                        resultSet.RowCount == events.InitialRowCount ||
+                                        lastUpdateTime < DateTime.UtcNow.AddSeconds(-10))
+                                    {
+                                        await events.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                                        {
+                                            OwnerUri = request.OwnerUri,
+                                            ResultSetSummary = resultSet,
+                                        });
+                                        lastUpdateTime = DateTime.UtcNow;
+                                    }
                                 }
 
                                 resultSet.Complete = true;
                                 resultSetInProgress = null;
 
-                                await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                                await events.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
                                 {
                                     OwnerUri = request.OwnerUri,
                                     ResultSetSummary = resultSet,
                                 });
 
-                                await _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
+                                await events.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
                                 {
                                     OwnerUri = request.OwnerUri,
                                     ResultSetSummary = resultSet
@@ -411,18 +404,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         };
                         resultSets.Add(resultSet);
 
-                        await _lsp.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
+                        await events.NotifyAsync(ResultSetAvailableEvent.Type, new ResultSetAvailableEventParams
                         {
                             OwnerUri = request.OwnerUri,
                             ResultSetSummary = resultSet,
                         });
-                        await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                        await events.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
                         {
                             OwnerUri = request.OwnerUri,
                             ResultSetSummary = resultSet,
                             ExecutionPlans = cmd.GeneratePlan(false).Select(plan => ConvertExecutionPlan(plan, false)).ToList()
                         });
-                        await _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
+                        await events.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
                         {
                             OwnerUri = request.OwnerUri,
                             ResultSetSummary = resultSet,
@@ -457,29 +450,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                             parts.Add($"Line {Math.Max(sql4CdsError.LineNumber, 1)}");
                         }
 
-                        await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
-                        {
-                            OwnerUri = request.OwnerUri,
-                            Message = new ResultMessage
-                            {
-                                BatchId = batchSummary.Id,
-                                Time = DateTime.UtcNow.ToString("o"),
-                                Message = String.Join(", ", parts),
-                                IsError = true
-                            }
-                        });
-
-                        await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
-                        {
-                            OwnerUri = request.OwnerUri,
-                            Message = new ResultMessage
-                            {
-                                BatchId = batchSummary.Id,
-                                Time = DateTime.UtcNow.ToString("o"),
-                                Message = sql4CdsError.Message,
-                                IsError = true
-                            }
-                        });
+                        await SendMessageAsync(String.Join(", ", parts), true);
+                        await SendMessageAsync(sql4CdsError.Message, true);
 
                         if (sql4CdsError.Fragment != null && sql4CdsError.Fragment.FragmentLength > 0)
                         {
@@ -532,17 +504,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     });
                 }
 
-                await _lsp.NotifyAsync(MessageEvent.Type, new MessageParams
-                {
-                    OwnerUri = request.OwnerUri,
-                    Message = new ResultMessage
-                    {
-                        BatchId = batchSummary.Id,
-                        Time = DateTime.UtcNow.ToString("o"),
-                        Message = GetErrorMessage(ex, sql4CdsException),
-                        IsError = true
-                    }
-                });
+                await SendMessageAsync(GetErrorMessage(ex, sql4CdsException), true);
 
                 var error = ex;
 
@@ -593,6 +555,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
             var endTime = DateTime.UtcNow;
 
+            foreach (var message in GetCompletionMessages(Volatile.Read(ref messageCount), resultSets, DateTimeOffset.Now))
+                await SendMessageAsync(message);
+
             batchSummary.ExecutionEnd = endTime.ToLocalTime().ToString("o");
             batchSummary.ExecutionElapsed = (endTime - startTime).ToString();
             batchSummary.ResultSetSummaries = resultSets.ToArray();
@@ -601,13 +566,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             if (request.ExecutionPlanOptions.IncludeActualExecutionPlanXml || request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
                 batchSummary.SpecialAction.ExpectYukonXMLShowPlan = true;
 
-            await _lsp.NotifyAsync(BatchCompleteEvent.Type, new BatchEventParams
+            await events.NotifyAsync(BatchCompleteEvent.Type, new BatchEventParams
             {
                 OwnerUri = request.OwnerUri,
                 BatchSummary = batchSummary
             });
 
-            await _lsp.NotifyAsync(QueryCompleteEvent.Type, new QueryCompleteParams
+            await events.NotifyAsync(QueryCompleteEvent.Type, new QueryCompleteParams
             {
                 OwnerUri = request.OwnerUri,
                 BatchSummaries = new[]
@@ -615,6 +580,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     batchSummary
                 }
             });
+        }
+
+        internal static IEnumerable<string> GetCompletionMessages(int messageCount, IEnumerable<ResultSetSummary> resultSets, DateTimeOffset completionTime)
+        {
+            // Execution plans are returned as result sets but aren't shown as results
+            if (messageCount == 0 && !resultSets.Any(rs => rs.SpecialAction?.ExpectYukonXMLShowPlan != true))
+                yield return "Commands completed successfully.";
+
+            yield return $"\r\nCompletion time: {completionTime:O}";
         }
 
         private string GetErrorMessage(Exception error, Sql4CdsException rootException)
@@ -750,7 +724,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 RowCountDisplayString = rows,
                 Subtext = node.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries),
                 TopOperationsData = GetTopOperations(node, executed),
-                Type = node.GetType().Name.Replace("Node", "")
+                Type = node.GetType().Name.Replace("Node", ""),
+                NodeType = node.GetType().Name
             };
 
             if (node is IExecutionPlanNodeWarning warning && warning.Warning != null)
@@ -1015,8 +990,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     ResultSubset = new ResultSetSubset
                     {
                         RowCount = 1,
-                        TotalRowCount = 1,
-                        ViewVersion = request.ViewVersion,
                         Rows = new[]
                         {
                             new[]
@@ -1034,38 +1007,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 };
             }
 
-            var hasTransform = !String.IsNullOrWhiteSpace(request.SearchText) ||
-                request.Filters?.Length > 0 ||
-                request.Sort != null;
-
-            var session = _connectionManager.GetConnection(request.OwnerUri);
-
-            // Preserve the inexpensive Skip/Take path for ordinary paging. Transformations need
-            // a snapshot so filtering, sorting and pagination all observe the same row set.
-            IReadOnlyList<object[]> transformedRows = hasTransform
-                ? ResultSetViewTransformer.Transform(
-                    resultSet.Values.ToArray(),
-                    resultSet.ProviderSpecificValues.ToArray(),
-                    resultSet.ColumnInfo,
-                    request,
-                    session.Connection.Session,
-                    session.Connection.Options,
-                    (value, col) => ValueFormatter.Format(
-                        value,
-                        col.DataTypeName,
-                        col.NumericScale.GetValueOrDefault(),
-                        Sql4CdsSettings.Instance.LocalFormatDates).DisplayValue)
-                : resultSet.Values;
-            var rows = transformedRows
+            var rows = resultSet.Values
                 .Skip((int)Math.Min(Math.Max(0, request.RowsStartIndex), Int32.MaxValue))
                 .Take(Math.Max(0, request.RowsCount))
-                .Select(row => row
-                    .Select((value, colIndex) =>
-                    {
-                        var col = resultSet.ColumnInfo[colIndex];
-                        return ValueFormatter.Format(value, col.DataTypeName, col.NumericScale.GetValueOrDefault(), Sql4CdsSettings.Instance.LocalFormatDates);
-                    })
-                    .ToArray())
+                .Select(row => ValueFormatter.FormatRow(row, resultSet.ColumnInfo, Sql4CdsSettings.Instance.LocalFormatDates))
                 .ToArray();
 
             return new SubsetResult
@@ -1073,8 +1018,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 ResultSubset = new ResultSetSubset
                 {
                     RowCount = rows.Length,
-                    TotalRowCount = transformedRows.Count,
-                    ViewVersion = request.ViewVersion,
                     Rows = rows
                 }
             };

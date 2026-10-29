@@ -38,6 +38,8 @@ await new Promise((resolve, reject) => {
 const required = [
   "extension.vsixmanifest", "[Content_Types].xml", "extension/package.json",
   "extension/dist/THIRD_PARTY_NOTICES.txt",
+  "extension/dist/results.js", "extension/dist/results.css",
+  "extension/dist/plan-images/FallbackNode.ico", "extension/dist/plan-images/FetchXmlScan.ico",
   `extension/${manifest.main.replace(/^\.\//, "")}`, "extension/readme.md", "extension/changelog.md", "extension/LICENSE.txt",
   `extension/${manifest.icon}`, "extension/language-configuration.json", "extension/snippets/sql4cds.json", "extension/syntaxes/sql4cds.tmLanguage.json",
   ...["MarkMpn.Sql4Cds.LanguageServer.dll", "MarkMpn.Sql4Cds.LanguageServer.deps.json", "MarkMpn.Sql4Cds.LanguageServer.runtimeconfig.json", "MarkMpn.Sql4Cds.Engine.dll", "MarkMpn.Sql4Cds.Export.dll"].map(file => `extension/out/sql4cdstoolsservice/${file}`)

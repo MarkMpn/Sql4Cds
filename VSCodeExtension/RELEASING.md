@@ -5,6 +5,19 @@ The release candidate retains the existing version, **0.3.0**, and publisher ide
 that Marketplace publisher before publishing. Do not change the publisher or extension
 name after release; those fields form the extension's identity.
 
+The Azure release pipeline (`../build.yml`) stamps this package's version with
+`GitVersion.SemVer` before packaging. The extension sends that package version
+(not the VS Code host version) and the name `VS Code` in the standard LSP
+`initialize.clientInfo`. The language server uses the client name as the
+connection's `ApplicationName`, falling back to `SQL 4 CDS` for clients that omit
+the name. The same pipeline stamps and packages the PPTB client and its worker;
+publishing the generated packages remains a separate release action.
+
+After LSP initialization, including service restarts, the client requests
+`capabilities/list` with its host name and package version. The response is currently unused.
+Server `window/logMessage` warnings and errors are also shown as VS Code notifications;
+all message levels remain logged in the language-service output.
+
 ## Build and automated verification
 
 Use Node.js 24+, a .NET 10 SDK or later, and the .NET 10 Runtime. From this directory:

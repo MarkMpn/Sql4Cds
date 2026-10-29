@@ -272,13 +272,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var ds = Session.DataSources[dataSource];
 
-#if NETCOREAPP
-            var svc = (ServiceClient)ds.Connection;
-#else
-            var svc = (CrmServiceClient)ds.Connection;
-#endif
-
-            svc = svc.Clone();
+            var svc = ds.Connection.CloneConnection();
 
             var session = new SessionContext(
                 new Dictionary<string, DataSource>(Session.DataSources),

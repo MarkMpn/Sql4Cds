@@ -8,6 +8,18 @@
     <AssemblyOriginatorKeyFile>Key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
+  <!-- Packaged as a .NET tool so Power Platform ToolBox can run it as a worker (see MarkMpn.Sql4Cds.PPTB) -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>sql4cds-lsp</ToolCommandName>
+    <PackageId>MarkMpn.Sql4Cds.LanguageServer</PackageId>
+    <Version>0.1.2</Version>
+    <Authors>Mark Carrington</Authors>
+    <Description>SQL 4 CDS language server, used by the SQL 4 CDS Power Platform ToolBox tool</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MarkMpn/Sql4Cds</PackageProjectUrl>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Data8.PowerPlatform.Dataverse.Client" Version="2.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
@@ -18,6 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\MarkMpn.Sql4Cds.XTB\Formatter.cs" Link="Scripting\Formatter.cs" />
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Export\MarkMpn.Sql4Cds.Export.csproj" />
   </ItemGroup>
