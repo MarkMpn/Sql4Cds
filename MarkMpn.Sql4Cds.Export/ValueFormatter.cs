@@ -10,6 +10,14 @@ namespace MarkMpn.Sql4Cds.Export
 {
     public static class ValueFormatter
     {
+        public static DbCellValue[] FormatRow(object[] values, DbColumnWrapper[] columns, bool localFormatDates)
+        {
+            var cells = new DbCellValue[values.Length];
+            for (var i = 0; i < values.Length; i++)
+                cells[i] = Format(values[i], columns[i].DataTypeName, columns[i].NumericScale.GetValueOrDefault(), localFormatDates);
+            return cells;
+        }
+
         public static DbCellValue Format(object value, string dataTypeName, int? numericScale, bool localFormatDates)
         {
             if (value == null || value is DBNull || value is INullable nullable && nullable.IsNull)

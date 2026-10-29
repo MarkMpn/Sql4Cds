@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.IO;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Export.Contracts;
-using SkiaSharp;
 
 namespace MarkMpn.Sql4Cds.Export.DataStorage
 {
@@ -17,11 +16,8 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
     /// </summary>
     public class SaveAsExcelFileStreamWriter : SaveAsStreamWriter
     {
-        // Font family used in Excel sheet
-        private const string FontFamily = "Calibri";
-
-        // Font size in Excel sheet (points with conversion to pixels)
-        private const float FontSizePixels = 11F * (96F / 72F);
+        // Approximate character width for 11 point Calibri, without requiring native font libraries.
+        private const float CharacterPixelWidth = 7F;
 
         // Pixel width of auto-filter button
         private const float AutoFilterPixelWidth = 17F;
@@ -37,8 +33,6 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
 
         private bool headerWritten;
         private SaveAsExcelFileStreamWriterHelper.ExcelSheet sheet;
-
-        private SKPaint paint;
 
         #endregion
 
@@ -81,30 +75,17 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
                 // If the caller requested headers the column widths can be initially set based on the header values
                 if (requestParams.IncludeHeaders)
                 {
-                    // Setup for measuring the header, set font style based on whether the header should be bold or not
-                    using (var headerPaint = new SKPaint())
+                    for (int columnIndex = columnStartIndex; columnIndex < columnEndIndex; ++columnIndex)
                     {
-                        headerPaint.Typeface = SKTypeface.FromFamilyName(FontFamily, requestParams.BoldHeaderRow ? SKFontStyle.Bold : SKFontStyle.Normal);
-                        headerPaint.TextSize = FontSizePixels;
-                        var skBounds = SKRect.Empty;
+                        var columnNumber = columnIndex - columnStartIndex;
+                        var textWidth = EstimateTextWidth(columns[columnIndex].ColumnName, requestParams.BoldHeaderRow);
 
-                        // Loop over all the columns
-                        for (int columnIndex = columnStartIndex; columnIndex < columnEndIndex; ++columnIndex)
+                        if (requestParams.AutoFilterHeaderRow)
                         {
-                            var columnNumber = columnIndex - columnStartIndex;
-
-                            // Measure the header text
-                            var textWidth = headerPaint.MeasureText(columns[columnIndex].ColumnName.AsSpan(), ref skBounds);
-
-                            // Add extra for the auto filter button if requested
-                            if (requestParams.AutoFilterHeaderRow)
-                            {
-                                textWidth += AutoFilterPixelWidth;
-                            }
-
-                            // Just store the width as a starting point
-                            columnWidths[columnNumber] = textWidth;
+                            textWidth += AutoFilterPixelWidth;
                         }
+
+                        columnWidths[columnNumber] = textWidth;
                     }
                 }
             }
@@ -121,28 +102,37 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
         /// <param name="row">The row of data to measure</param>
         public override void MeasureRowColumns(IList<DbCellValue> row)
         {
-            // Create the paint object if not done already
-            if (paint == null)
-            {
-                paint = new SKPaint();
-
-                paint.Typeface = SKTypeface.FromFamilyName(FontFamily);
-                paint.TextSize = FontSizePixels;
-            }
-
-            var skBounds = SKRect.Empty;
-
             // Loop over all the columns
             for (int columnIndex = columnStartIndex; columnIndex < columnEndIndex; ++columnIndex)
             {
                 var columnNumber = columnIndex - columnStartIndex;
 
                 // Measure the width of the text
-                var textWidth = paint.MeasureText(row[columnIndex].DisplayValue.AsSpan(), ref skBounds);
+                var textWidth = EstimateTextWidth(row[columnIndex].DisplayValue);
 
                 // Update the max if the new width is greater
                 columnWidths[columnNumber] = Math.Max(columnWidths[columnNumber], textWidth);
             }
+        }
+
+        private static float EstimateTextWidth(string text, bool bold = false)
+        {
+            var longestLine = 0;
+            var lineLength = 0;
+            foreach (var character in text ?? String.Empty)
+            {
+                if (character == '\r' || character == '\n')
+                {
+                    longestLine = Math.Max(longestLine, lineLength);
+                    lineLength = 0;
+                }
+                else
+                {
+                    lineLength += character == '\t' ? 4 : 1;
+                }
+            }
+
+            return Math.Max(longestLine, lineLength) * CharacterPixelWidth * (bold ? 1.1F : 1F);
         }
 
         /// <summary>
@@ -159,11 +149,8 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
             // Check to make sure the sheet has been created
             if (sheet == null)
             {
-                // Get rid of any paint object from the auto-sizing
-                paint?.Dispose();
-
                 // Create the blank sheet
-                sheet = helper.AddSheet(null, columns.Count);
+                sheet = helper.AddSheet(null, ColumnCount);
 
                 // The XLSX format has strict ordering requirements so these must be done in the proper order
                 

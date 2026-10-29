@@ -1271,6 +1271,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             public virtual string GetTextForReplace() => Text;
 
+            public virtual string GetTextForReplace(bool preloadMetadata) => GetTextForReplace();
+
             public virtual string MenuText { get; set; }
 
             public virtual string CompareText => Text;
@@ -1566,6 +1568,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 _metadata.TryGetMinimalData(_entity.LogicalName, out _);
                 return base.GetTextForReplace();
             }
+
+            public override string GetTextForReplace(bool preloadMetadata) => preloadMetadata ? GetTextForReplace() : Text;
         }
 
         class TVFAutocompleteItem : SqlAutocompleteItem
@@ -1729,6 +1733,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 _metadata.TryGetMinimalData(_lhs, out _);
                 return base.GetTextForReplace();
             }
+
+            public override string GetTextForReplace(bool preloadMetadata) => preloadMetadata ? GetTextForReplace() : Text;
         }
 
         class AttributeAutocompleteItem : SqlAutocompleteItem

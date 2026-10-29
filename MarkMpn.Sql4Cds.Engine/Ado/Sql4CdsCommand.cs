@@ -379,9 +379,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 exTelem = new ExceptionTelemetry(ex)
                 {
                     Properties =
-                        {
-                            ["Sql"] = CommandText,
-                        }
+                    {
+                        ["Sql"] = CommandText,
+                    }
                 };
             }
             else

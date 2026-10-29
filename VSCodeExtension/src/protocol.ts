@@ -1,3 +1,5 @@
+import type { ExecutionPlanGraph } from "../../MarkMpn.Sql4Cds.PPTB/src/resultsProtocol";
+
 export type AuthenticationType = "AzureMFA" | "SqlLogin" | "Integrated" | "None" | "ConnectionString";
 
 export interface ConnectionProfile {
@@ -78,6 +80,7 @@ export interface ResultSetSummary {
   rowCount: number;
   complete: boolean;
   columnInfo: ColumnInfo[];
+  specialAction?: { expectYukonXMLShowPlan?: boolean };
 }
 
 export interface BatchSummary {
@@ -92,6 +95,7 @@ export interface BatchSummary {
 export interface ResultSetEventParams {
   ownerUri: string;
   resultSetSummary: ResultSetSummary;
+  executionPlans?: ExecutionPlanGraph[];
 }
 
 export interface ResultMessage {
@@ -151,48 +155,17 @@ export interface CellValue {
   rawObject?: unknown;
 }
 
-export type ResultFilterOperator =
-  | "contains"
-  | "notContains"
-  | "equals"
-  | "notEquals"
-  | "startsWith"
-  | "endsWith"
-  | "isEmpty"
-  | "isNotEmpty"
-  | "greaterThan"
-  | "greaterThanOrEqual"
-  | "lessThan"
-  | "lessThanOrEqual";
-
-export interface ResultSetFilter {
-  columnIndex: number;
-  operator: ResultFilterOperator;
-  value?: string;
-}
-
-export interface ResultSetSort {
-  columnIndex: number;
-  direction: "asc" | "desc";
-}
-
 export interface SubsetParams {
   ownerUri: string;
   batchIndex: number;
   resultSetIndex: number;
   rowsStartIndex: number;
   rowsCount: number;
-  searchText?: string;
-  filters?: ResultSetFilter[];
-  sort?: ResultSetSort;
-  viewVersion?: number;
 }
 
 export interface SubsetResult {
   resultSubset?: {
     rowCount: number;
-    totalRowCount?: number;
-    viewVersion?: number;
     rows: CellValue[][];
   };
 }

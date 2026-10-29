@@ -16,6 +16,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             lsp.AddLocalRpcMethod(request.Name, (JToken token) => handler(token.ToObject<TIn>()));
         }
 
+        public static void AddAsyncHandler<TIn, TOut>(this JsonRpc lsp, LspRequest<TIn, TOut> request, Func<TIn, Task<TOut>> handler)
+        {
+            lsp.AddLocalRpcMethod(request.Name, (JToken token) => handler(token.ToObject<TIn>()));
+        }
+
         public static void AddHandler<TIn>(this JsonRpc lsp, LspNotification<TIn> notification, Action<TIn> handler)
         {
             lsp.AddLocalRpcMethod(notification.Name, (JToken token) => handler(token.ToObject<TIn>()));

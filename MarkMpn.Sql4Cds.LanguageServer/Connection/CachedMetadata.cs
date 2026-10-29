@@ -1,9 +1,9 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.ServiceModel;
 using System.Threading.Tasks;
-using System.Xml.Linq;
+using System.Threading;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -16,46 +16,57 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
     {
         private readonly IOrganizationService _org;
         private readonly AttributeMetadataCache _defaultCache;
-        private Dictionary<string, EntityMetadata> _persistentCacheByName;
-        private Dictionary<int, EntityMetadata> _persistentCacheByOtc;
-        private bool _cacheUnavailable;
-        private EntityMetadata[] _autocompleteCache;
+        private volatile bool _cacheUnavailable = true;
+        private volatile EntityMetadata[] _autocompleteCache;
+        private readonly PersistentMetadataCache _persistentMetadataCache;
+        private readonly Guid _orgId;
+        private readonly Lazy<string> _version;
+        private readonly ConcurrentDictionary<string, Lazy<EntityMetadata>> _lazyEntities = new ConcurrentDictionary<string, Lazy<EntityMetadata>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Task> _lazyLoading = new Dictionary<string, Task>(StringComparer.OrdinalIgnoreCase);
+        private readonly object _backgroundLoadLock = new object();
+        private readonly SemaphoreSlim _backgroundLoader = new SemaphoreSlim(1);
+        private readonly object _autocompleteLock = new object();
+        private Task _autocompleteLoad;
+        private Lazy<string[]> _recycleBinEntities;
+        private Task<string[]> _recycleBinLoad;
 
-        public CachedMetadata(IOrganizationService org, PersistentMetadataCache persistentMetadataCache)
+        public CachedMetadata(IOrganizationService org, PersistentMetadataCache persistentMetadataCache, Guid orgId, string version)
         {
             _org = org;
             _defaultCache = new AttributeMetadataCache(org);
-            _ = Task.Run(() => persistentMetadataCache.GetMetadataAsync(org, false))
-                .ContinueWith(loader =>
+            _persistentMetadataCache = persistentMetadataCache;
+            _orgId = orgId;
+            _version = new Lazy<string>(() =>
+            {
+                // An impossible entity ID returns the metadata stamp without loading any entities.
+                var response = (RetrieveMetadataChangesResponse)org.Execute(new RetrieveMetadataChangesRequest
                 {
-                    if (loader.IsCanceled || loader.IsFaulted || loader.Result == null)
+                    Query = new EntityQueryExpression
                     {
-                        _cacheUnavailable = true;
-                        return;
+                        Criteria = new MetadataFilterExpression
+                        {
+                            Conditions =
+                            {
+                                new MetadataConditionExpression(nameof(EntityMetadata.MetadataId), MetadataConditionOperator.Equals, Guid.Empty)
+                            }
+                        },
+                        Properties = new MetadataPropertiesExpression(nameof(EntityMetadata.MetadataId))
                     }
-
-                    _persistentCacheByName = loader.Result
-                        .ToDictionary(e => e.LogicalName);
-                    _persistentCacheByOtc = loader.Result
-                        .Where(e => e.ObjectTypeCode != null)
-                        .ToDictionary(e => e.ObjectTypeCode.Value);
-                    _autocompleteCache = loader.Result;
-                }, TaskScheduler.Default);
+                });
+                if (String.IsNullOrEmpty(response.ServerVersionStamp))
+                    throw new InvalidOperationException("Dataverse did not return a metadata version stamp");
+                return version + ":" + response.ServerVersionStamp;
+            }, LazyThreadSafetyMode.ExecutionAndPublication);
+            _recycleBinEntities = new Lazy<string[]>(() => _persistentMetadataCache.GetLazyMetadata(
+                _orgId, _version.Value, "autocomplete:recyclebin", 1, () => _defaultCache.RecycleBinEntities, allowNull: true),
+                LazyThreadSafetyMode.ExecutionAndPublication);
         }
 
         public EntityMetadata this[string name]
         {
             get
             {
-                if (_persistentCacheByName != null)
-                {
-                    if (_persistentCacheByName.TryGetValue(name, out var entity))
-                        return entity;
-
-                    throw new FaultException("Unknown entity " + name);
-                }
-
-                return _defaultCache[name];
+                return GetLazyEntity("name:" + name.ToLowerInvariant(), () => _defaultCache[name]);
             }
         }
 
@@ -63,68 +74,194 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         {
             get
             {
-                if (_persistentCacheByOtc != null)
-                {
-                    if (_persistentCacheByOtc.TryGetValue(otc, out var entity))
-                        return entity;
-
-                    throw new FaultException("Unknown entity " + otc);
-                }
-
-                return _defaultCache[otc];
+                var loaded = _lazyEntities.Values
+                    .Where(e => e.IsValueCreated)
+                    .Select(e => e.Value)
+                    .FirstOrDefault(e => e.ObjectTypeCode == otc);
+                return loaded ?? GetLazyEntity("otc:" + otc, () => _defaultCache[otc]);
             }
         }
 
         public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
         {
-            if (_persistentCacheByName != null)
-                return _persistentCacheByName.TryGetValue(logicalName, out metadata);
-
-            return _defaultCache.TryGetMinimalData(logicalName, out metadata);
+            return TryGetValue(logicalName, out metadata);
         }
 
         public bool TryGetValue(string logicalName, out EntityMetadata metadata)
         {
-            if (_persistentCacheByName != null)
-                return _persistentCacheByName.TryGetValue(logicalName, out metadata);
+            var entry = GetLazyEntry("name:" + logicalName.ToLowerInvariant(), () => _defaultCache[logicalName]);
+            if (entry.IsValueCreated)
+            {
+                lock (_backgroundLoadLock)
+                    _lazyLoading.Remove(logicalName);
+                metadata = entry.Value;
+                return true;
+            }
 
-            return _defaultCache.TryGetValue(logicalName, out metadata);
+            lock (_backgroundLoadLock)
+            {
+                if (!_lazyLoading.TryGetValue(logicalName, out var load) || load.IsCompleted)
+                {
+                    var key = "name:" + logicalName.ToLowerInvariant();
+                    if (_persistentMetadataCache.TryGetLazyMetadata(_orgId, () => _version.Value, key, 2, out metadata))
+                    {
+                        var cached = metadata;
+                        var diskEntry = new Lazy<EntityMetadata>(() => cached, LazyThreadSafetyMode.ExecutionAndPublication);
+                        _ = diskEntry.Value;
+                        _lazyEntities[key] = diskEntry;
+                        if (cached.ObjectTypeCode != null)
+                            _lazyEntities.TryAdd("otc:" + cached.ObjectTypeCode.Value, diskEntry);
+                        return true;
+                    }
+                    _lazyLoading[logicalName] = LoadLazyEntityAsync(logicalName);
+                }
+            }
+            metadata = null;
+            return false;
         }
 
-        public string[] RecycleBinEntities => _defaultCache.RecycleBinEntities;
+        public string[] RecycleBinEntities
+        {
+            get
+            {
+                Lazy<string[]> entities;
+                lock (_backgroundLoadLock)
+                    entities = _recycleBinEntities;
+                return entities.Value;
+            }
+        }
+
+        private async Task LoadLazyEntityAsync(string logicalName)
+        {
+            await _backgroundLoader.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await Task.Run(() => this[logicalName]).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _persistentMetadataCache.ReportLazyLoadFailure(logicalName, ex);
+            }
+            finally
+            {
+                _backgroundLoader.Release();
+            }
+        }
+
+        private Lazy<EntityMetadata> GetLazyEntry(string key, Func<EntityMetadata> load)
+        {
+            return _lazyEntities.GetOrAdd(key, _ => new Lazy<EntityMetadata>(
+                () => _persistentMetadataCache.GetEntityMetadata(_orgId, _version.Value, key, load),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+        }
+
+        private EntityMetadata GetLazyEntity(string key, Func<EntityMetadata> load)
+        {
+            var entry = GetLazyEntry(key, load);
+            try
+            {
+                var entity = entry.Value;
+                _lazyEntities.TryAdd("name:" + entity.LogicalName.ToLowerInvariant(), entry);
+                if (entity.ObjectTypeCode != null)
+                    _lazyEntities.TryAdd("otc:" + entity.ObjectTypeCode.Value, entry);
+                return entity;
+            }
+            catch
+            {
+                _lazyEntities.TryRemove(key, out _);
+                throw;
+            }
+        }
 
         public IEnumerable<EntityMetadata> GetAllEntities()
         {
-            if (_cacheUnavailable && _autocompleteCache == null)
+            lock (_autocompleteLock)
             {
-                // Start loading a basic cache in the background to use for autocomplete
-                _autocompleteCache = Array.Empty<EntityMetadata>();
-                _cacheUnavailable = false;
-
-                _ = Task.Run(() =>
+                if (_cacheUnavailable && _autocompleteCache == null)
                 {
-                    _autocompleteCache = ((RetrieveMetadataChangesResponse)_org.Execute(new RetrieveMetadataChangesRequest
+                    if (_persistentMetadataCache.TryGetLazyMetadata(
+                        _orgId, () => _version.Value, "autocomplete:entities", 2, out EntityMetadata[] cached))
                     {
-                        Query = new EntityQueryExpression
+                        _autocompleteCache = cached;
+                        _cacheUnavailable = false;
+                        return cached;
+                    }
+
+                    // Start loading a basic cache in the background to use for autocomplete
+                    _autocompleteCache = Array.Empty<EntityMetadata>();
+                    _cacheUnavailable = false;
+
+                    var load = _autocompleteLoad = Task.Run(() =>
+                    {
+                        var properties = new MetadataPropertiesExpression(
+                            nameof(EntityMetadata.LogicalName),
+                            nameof(EntityMetadata.DisplayName),
+                            nameof(EntityMetadata.Description),
+                            nameof(EntityMetadata.IsArchivalEnabled),
+                            nameof(EntityMetadata.IsRetentionEnabled),
+                            nameof(EntityMetadata.ObjectTypeCode),
+                            nameof(EntityMetadata.DataProviderId));
+
+                        EntityMetadata[] LoadEntities() => ((RetrieveMetadataChangesResponse)_org.Execute(new RetrieveMetadataChangesRequest
                         {
-                            Properties = new MetadataPropertiesExpression
+                            Query = new EntityQueryExpression
                             {
-                                PropertyNames =
-                            {
-                                nameof(EntityMetadata.LogicalName),
-                                nameof(EntityMetadata.DisplayName),
-                                nameof(EntityMetadata.Description)
+                                Properties = properties
                             }
+                        })).EntityMetadata
+                        .ToArray();
+
+                        _autocompleteCache = _persistentMetadataCache.GetLazyMetadata(_orgId, _version.Value, "autocomplete:entities", 2, LoadEntities);
+                    });
+                    _ = load.ContinueWith(task =>
+                    {
+                        if (task.IsFaulted)
+                        {
+                            _persistentMetadataCache.ReportLazyLoadFailure("autocomplete", task.Exception.GetBaseException());
+                            lock (_autocompleteLock)
+                            {
+                                _autocompleteCache = null;
+                                _cacheUnavailable = true;
                             }
                         }
-                    })).EntityMetadata
-                    .ToArray();
-                });
-            }
+                    }, TaskScheduler.Default);
+                }
 
-            return _autocompleteCache ?? Array.Empty<EntityMetadata>();
+                return _autocompleteCache ?? Array.Empty<EntityMetadata>();
+            }
         }
 
-        public string[] TryGetRecycleBinEntities() => _defaultCache.TryGetRecycleBinEntities();
+        internal async Task EnsureAllEntitiesLoadedAsync()
+        {
+            Task load;
+            lock (_autocompleteLock)
+            {
+                GetAllEntities();
+                load = _autocompleteLoad;
+            }
+            if (load != null)
+                await load.ConfigureAwait(false);
+        }
+
+        public string[] TryGetRecycleBinEntities()
+        {
+            Task<string[]> load;
+            lock (_backgroundLoadLock)
+            {
+                if (_recycleBinEntities.IsValueCreated)
+                    return _recycleBinEntities.Value;
+
+                if (_recycleBinLoad == null && _persistentMetadataCache.TryGetLazyMetadata(
+                    _orgId, () => _version.Value, "autocomplete:recyclebin", 1, out string[] cached, allowNull: true))
+                {
+                    _recycleBinEntities = new Lazy<string[]>(() => cached, LazyThreadSafetyMode.ExecutionAndPublication);
+                    return _recycleBinEntities.Value;
+                }
+                load = _recycleBinLoad ??= Task.Run(() => _recycleBinEntities.Value);
+            }
+            if (load.IsCompleted)
+                return load.GetAwaiter().GetResult();
+            return Array.Empty<string>();
+        }
     }
 }

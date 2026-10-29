@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>SQL 4 CDS</title>
+    </head>
+    <body>
+        <div id="app">
+            <div class="toolbar" role="toolbar" aria-label="Query commands">
+                <select id="connection-select" aria-label="Connection" title="Connection" disabled></select>
+                <button id="btn-new" title="New query (Ctrl+Alt+N)"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5h7l3 3V14H3zM10 1.5V5h3M5 8h6M8 5v6" /></svg> New Query</button>
+                <button id="btn-open" class="icon-only" aria-label="Open" title="Open a saved SQL query (Ctrl+O)"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 13.5v-10H6l2 2h6v3M2 13.5l2-6h11l-2 6z" /></svg></button>
+                <div class="toolbar-split">
+                    <button id="btn-save" class="icon-only" aria-label="Save" title="Save the current query (Ctrl+S)"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h10l2 2v10H2zM5 2v4h6V2M5 14V9h6v5" /></svg></button>
+                    <button id="btn-save-menu" class="split-toggle" aria-label="Save options" aria-haspopup="menu" aria-expanded="false" aria-controls="save-menu" title="Save options">▾</button>
+                    <div id="save-menu" class="toolbar-menu" role="menu" hidden>
+                        <button id="btn-save-as" role="menuitem" title="Save the current query to a new file (Ctrl+Shift+S)">Save As</button>
+                    </div>
+                </div>
+                <span class="toolbar-separator"></span>
+                <button id="btn-run" title="Execute the selected text, or the whole query if nothing is selected (F5 / Ctrl+E)" disabled><svg class="icon execute-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l9 6-9 6z" /></svg> Execute</button>
+                <button id="btn-cancel" class="icon-only" aria-label="Stop" title="Stop the running query" disabled><svg class="icon stop-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v10H3z" /></svg></button>
+                <button id="btn-estimated-plan" class="icon-only" aria-label="Estimated Execution Plan" title="Display the estimated execution plan without running the query (Ctrl+L)" disabled><svg class="icon plan-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6h4v4H1zM11 1.5h4v4h-4zM11 10.5h4v4h-4zM5 8h3M8 3.5v9M8 3.5h3M8 12.5h3" /></svg></button>
+                <button id="btn-edit-fetchxml" class="icon-only" aria-label="Edit in FetchXML Studio" title="Edit in FetchXML Studio" disabled><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3L1 8l4 5M11 3l4 5-4 5M9 2L7 14" /></svg></button>
+                <div class="toolbar-split">
+                    <button id="btn-convert" title="Convert to FetchXML" disabled><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5h11l-3-3M14 11H3l3 3M13 5l-3 3M3 11l3-3" /></svg> Convert</button>
+                    <button id="btn-convert-menu" class="split-toggle" aria-label="Convert options" aria-haspopup="menu" aria-expanded="false" aria-controls="convert-menu" title="Convert options" disabled>▾</button>
+                    <div id="convert-menu" class="toolbar-menu" role="menu" hidden>
+                        <button id="btn-convert-fetchxml" role="menuitemradio" aria-checked="true">FetchXML</button>
+                        <button id="btn-convert-m" role="menuitemradio" aria-checked="false">Power BI (M)</button>
+                    </div>
+                </div>
+                <span class="toolbar-separator"></span>
+                <button id="btn-actual-plan" class="toggle icon-only" aria-label="Actual Execution Plan" title="Include the actual execution plan when running the query (Ctrl+M)" aria-pressed="false"><svg class="icon plan-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6h4v4H1zM11 1.5h4v4h-4zM11 10.5h4v4h-4zM5 8h3M8 3.5v9M8 3.5h3M8 12.5h3M1 2l1 1 2-2" /></svg></button>
+                <button id="btn-results-text" class="toggle icon-only" aria-label="Results to Text" title="Results to Text (Ctrl+T); applies to the next execution" aria-pressed="false"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v12H2zM4 5h8M4 8h8M4 11h5" /></svg></button>
+                <button id="btn-results-grid" class="toggle icon-only" aria-label="Results to Grid" title="Results to Grid (Ctrl+D); applies to the next execution" aria-pressed="true"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v12H2zM2 6h12M2 10h12M6 2v12M10 2v12" /></svg></button>
+                <span class="toolbar-separator"></span>
+                <div class="toolbar-split">
+                    <button id="btn-format" title="Format SQL document" disabled><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3h9M5 6h6M5 9h9M5 12h6M1 3h1M1 6h1M1 9h1M1 12h1" /></svg> Format</button>
+                    <button id="btn-format-menu" class="split-toggle" aria-label="Format options" aria-haspopup="menu" aria-expanded="false" aria-controls="format-menu" title="Format options" disabled>▾</button>
+                    <div id="format-menu" class="toolbar-menu" role="menu" hidden>
+                        <button id="btn-display-names" role="menuitem">Add Display Names</button>
+                    </div>
+                </div>
+                <button id="btn-settings" title="Settings"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4l.5 2 2 .5L14 6v4l-1.5 2.5-2 .5-.5 2H6l-.5-2-2-.5L2 10V6l1.5-2.5 2-.5z" /><circle cx="8" cy="8" r="2.5" /></svg> Settings</button>
+                <span class="toolbar-spacer"></span>
+                <a class="toolbar-credit" href="https://markcarrington.dev/sql-4-cds/" target="_blank" rel="noopener noreferrer">SQL 4 CDS by Mark Carrington</a>
+            </div>
+            <div class="tool-content">
+                <button id="explorer-tab" class="pane-tab" aria-label="Show Object Explorer" aria-controls="object-explorer" aria-expanded="false" hidden>Object Explorer</button>
+                <aside id="object-explorer" class="side-pane object-explorer" aria-label="Object Explorer">
+                    <div class="pane-heading">
+                        <strong>Object Explorer</strong>
+                        <button id="explorer-pin" class="pane-pin" title="Unpin Object Explorer" aria-label="Unpin Object Explorer" aria-pressed="true">
+                            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2h6M6 2v5l-2 3h8l-2-3V2M8 10v5" /></svg>
+                        </button>
+                    </div>
+                    <div id="explorer-tree" class="explorer-tree"></div>
+                </aside>
+                <div id="explorer-splitter" class="pane-splitter" role="separator" aria-label="Resize Object Explorer" aria-orientation="vertical"></div>
+                <div class="query-area">
+                    <div id="tab-strip" class="tab-strip" role="tablist"></div>
+                    <div id="workspace" class="workspace">
+                        <div id="editor" class="editor"></div>
+                        <div id="splitter" class="splitter" role="separator" aria-orientation="horizontal"></div>
+                        <div id="results-host" class="results-host"></div>
+                    </div>
+                </div>
+                <div id="properties-splitter" class="pane-splitter" role="separator" aria-label="Resize Properties" aria-orientation="vertical"></div>
+                <aside id="properties" class="side-pane properties-pane" aria-label="Properties">
+                    <div class="pane-heading">
+                        <strong>Properties</strong>
+                        <button id="properties-pin" class="pane-pin" title="Unpin Properties" aria-label="Unpin Properties" aria-pressed="true">
+                            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2h6M6 2v5l-2 3h8l-2-3V2M8 10v5" /></svg>
+                        </button>
+                    </div>
+                    <div id="properties-title" class="properties-title"></div>
+                    <div id="properties-grid" class="properties-grid" aria-label="Properties of the selected item"></div>
+                </aside>
+                <button id="properties-tab" class="pane-tab" aria-label="Show Properties" aria-controls="properties" aria-expanded="false" hidden>Properties</button>
+            </div>
+            <div class="status-bar">
+                <span id="status-message" role="status">
+                    <span id="status-icon" aria-hidden="true"></span>
+                    <span id="status-text">Loading…</span>
+                </span>
+                <span id="status-progress" class="status-progress"></span>
+                <span id="status-server">
+                    <span id="status-lock" aria-hidden="true"></span>
+                    <span id="status-domain"></span>
+                </span>
+                <span id="status-user"></span>
+                <span id="status-database"></span>
+                <span id="status-elapsed" title="Elapsed query time">00:00:00</span>
+                <span id="status-rows" title="Total rows across all result sets">0 rows</span>
+            </div>
+        </div>
+        <script type="module" src="./app.ts"></script>
+    </body>
+</html>

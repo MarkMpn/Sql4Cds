@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using FakeXrmEasy;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
@@ -18,6 +19,39 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     [TestClass]
     public class ExecutionPlanNodeTests : FakeXrmEasyTestsBase
     {
+        [TestMethod]
+        public void DynamicParallelDoesNotCaptureCallerTaskScheduler()
+        {
+            var scheduler = new ConcurrentExclusiveSchedulerPair(TaskScheduler.Default, 1);
+            var processed = 0;
+            var finalized = 0;
+            var loop = new DynamicParallel<int, object, DynamicParallelLoopState>(
+                Enumerable.Range(0, 3),
+                new ParallelOptions { MaxDegreeOfParallelism = 1 },
+                () => new object(),
+                async (item, state, local) =>
+                {
+                    await Task.Delay(10).ConfigureAwait(false);
+                    Interlocked.Increment(ref processed);
+                },
+                async (state, local) =>
+                {
+                    await Task.Delay(10).ConfigureAwait(false);
+                    Interlocked.Increment(ref finalized);
+                });
+
+            var execution = Task.Factory.StartNew(
+                () => loop.ForEach(CancellationToken.None),
+                CancellationToken.None,
+                TaskCreationOptions.None,
+                scheduler.ExclusiveScheduler);
+
+            Assert.IsTrue(execution.Wait(TimeSpan.FromSeconds(10)), "The parallel executor deadlocked on the caller's task scheduler.");
+            Assert.AreEqual(3, processed);
+            Assert.AreEqual(1, finalized);
+            scheduler.Complete();
+        }
+
         [TestMethod]
         public void ConstantScanTest()
         {

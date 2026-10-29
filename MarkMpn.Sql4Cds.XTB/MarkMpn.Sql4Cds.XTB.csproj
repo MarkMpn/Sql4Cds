@@ -429,7 +429,6 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PostBuildEvent>mkdir $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)SkiaSharp.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)System.Text.Encoding.CodePages.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)Anthropic.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)Azure.AI.OpenAI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
@@ -451,7 +450,6 @@ copy $(TargetDir)QuikGraph.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.
   <PropertyGroup>
     <PostBuildEvent>mkdir $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)MarkMpn.Sql4Cds.XTB.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
-copy $(TargetDir)SkiaSharp.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)System.Text.Encoding.CodePages.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)Anthropic.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds
 copy $(TargetDir)Azure.AI.OpenAI.dll $(AppData)\MscrmTools\XrmToolBox\Plugins\MarkMpn.Sql4Cds

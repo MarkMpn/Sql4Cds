@@ -67,7 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                var confirmArgs = new ConfirmDmlStatementEventArgs(Int32.MaxValue, meta, false);
+                var confirmArgs = new ConfirmDmlStatementEventArgs(Int32.MaxValue, meta, false, dataSource);
                 if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmDelete(confirmArgs);

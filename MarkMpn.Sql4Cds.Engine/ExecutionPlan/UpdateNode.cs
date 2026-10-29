@@ -162,7 +162,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
                 var confirmArgs = dataTable != null
                     ? new ConfirmDmlStatementEventArgs(entities.Count, dataTable, BypassCustomPluginExecution)
-                    : new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
+                    : new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution, dataSource);
                 if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
                 context.Options.ConfirmUpdate(confirmArgs);
@@ -450,6 +450,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                         {
                                             if (preImage.Contains(attr) && Equals(preImage[attr], update[attr]))
                                                 update.Attributes.Remove(attr);
+                                        }
+                                    }
+
+                                    if (dataSource.Connection is IServiceClient webApiClient && webApiClient.UsesWebAPI &&
+                                        update.Attributes.Keys.Any(a => attributes[a].AttributeType == AttributeTypeCode.PartyList))
+                                    {
+                                        foreach (var attribute in meta.Attributes.Where(a => a.AttributeType == AttributeTypeCode.PartyList))
+                                        {
+                                            if (!update.Contains(attribute.LogicalName))
+                                                update[attribute.LogicalName] = preImage.GetAttributeValue<EntityCollection>(attribute.LogicalName);
                                         }
                                     }
 

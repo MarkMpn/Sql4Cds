@@ -34,6 +34,8 @@
 
         public bool UseSchemaColumnOrdering { get; set; }
 
+        public bool IncludeDetailedErrorTelemetry { get; set; }
+
         public static Sql4CdsSettings Instance { get; set; }
     }
 }

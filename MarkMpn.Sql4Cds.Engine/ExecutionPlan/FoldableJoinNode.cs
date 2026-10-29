@@ -471,7 +471,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rightLinkCount = rightFetch.Entity.GetLinkEntities().Count() + 1;
 
             // Max limit of 10 joins, raised to 15 in 9.2.22043
-            if (leftLinkCount + rightLinkCount > 10 && (leftLinkCount + rightLinkCount > 15 || dataSource.Connection == null || GetVersion(dataSource.Connection) < new Version("9.2.22043")))
+            if (leftLinkCount + rightLinkCount > 10 && (leftLinkCount + rightLinkCount > 15 || dataSource.Connection == null || dataSource.Version < new Version("9.2.22043")))
                 return false;
 
             // If we're doing a right outer join, switch everything round to do a left outer join
@@ -695,20 +695,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return false;
-        }
-
-        private Version GetVersion(IOrganizationService org)
-        {
-#if NETCOREAPP
-            if (org is ServiceClient svc)
-                return svc.ConnectedOrgVersion;
-#else
-            if (org is CrmServiceClient svc)
-                return svc.ConnectedOrgVersion;
-#endif
-
-            var resp = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
-            return new Version(resp.Version);
         }
 
         private bool FoldMetadataJoin(NodeCompilationContext context, IList<OptimizerHint> hints, MetadataQueryNode leftMeta, INodeSchema leftSchema, MetadataQueryNode rightMeta, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
