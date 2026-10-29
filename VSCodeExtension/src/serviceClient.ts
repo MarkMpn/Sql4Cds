@@ -37,6 +37,10 @@ export class Sql4CdsLanguageClient extends LanguageClient {
   }
 
   public override async start(): Promise<void> {
+    // sendRequest re-enters start() via the base client, so only request capabilities on a fresh start.
+    if (this.state !== State.Stopped) {
+      return super.start();
+    }
     await super.start();
     await this.sendRequest("capabilities/list", { hostName: "VS Code", hostVersion: this.clientVersion });
   }

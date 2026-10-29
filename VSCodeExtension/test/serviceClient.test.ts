@@ -16,6 +16,7 @@ function fixture(failure?: Error) {
   const visible: { type: string; message: string }[] = [];
   const logged: { type: string; message: string }[] = [];
   let initialized = false;
+  const State = { Stopped: 1, Running: 2, Starting: 3 };
   const nodeRequire = createRequire(__filename);
   class LanguageClient {
     outputChannel = { appendLine: (message: string) => logged.push({ type: "log", message }) };
@@ -25,14 +26,27 @@ function fixture(failure?: Error) {
     error(message: string): void { logged.push({ type: "error", message }); }
     warn(message: string): void { logged.push({ type: "warning", message }); }
     info(message: string): void { logged.push({ type: "info", message }); }
-    async start(): Promise<void> {
+    state = State.Stopped;
+    private starting: Promise<void> | undefined;
+    start(): Promise<void> {
+      if (this.starting) return this.starting;
+      this.state = State.Starting;
       initialized = false;
       calls.push("initialize");
-      await Promise.resolve();
-      initialized = true;
-      calls.push("initialized");
+      this.starting = Promise.resolve().then(() => {
+        initialized = true;
+        this.state = State.Running;
+        calls.push("initialized");
+      });
+      return this.starting;
+    }
+    async stop(): Promise<void> {
+      this.starting = undefined;
+      this.state = State.Stopped;
     }
     async sendRequest(method: string, params: unknown): Promise<unknown> {
+      // Mirrors vscode-languageclient, which awaits start() before every request.
+      await this.start();
       assert.equal(initialized, true);
       calls.push(method);
       requests.push({ method, params });
@@ -48,7 +62,7 @@ function fixture(failure?: Error) {
       showWarningMessage: (message: string) => { visible.push({ type: "warning", message }); }
     } } : name === "vscode-languageclient/node" ? {
       LanguageClient, LogMessageNotification: { type: "window/logMessage" },
-      MessageType: { Error: 1, Warning: 2, Info: 3, Log: 4 }
+      MessageType: { Error: 1, Warning: 2, Info: 3, Log: 4 }, State
     } : nodeRequire(name)
   });
   const client = new module.exports.Sql4CdsLanguageClient("1.2.3", { command: "unused" }, { documentSelector: [] });
@@ -72,6 +86,8 @@ test("VS Code logs every server message and visibly notifies only warnings and e
 test("VS Code requests capabilities after initialization on startup and restart", async () => {
   const { client, calls, requests } = fixture();
   await client.start();
+  await client.start();
+  await client.stop();
   await client.start();
   assert.deepEqual(calls, [
     "initialize", "initialized", "capabilities/list",
