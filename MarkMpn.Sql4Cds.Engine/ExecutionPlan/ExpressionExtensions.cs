@@ -1734,7 +1734,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!comparisonType.IsSameAs(type))
                         comparisonValue = SqlTypeConverter.Convert(comparisonValue, contextParam, comparisonType, type);
 
-                    var comparison = inPred.NotDefined ? Expression.NotEqual(convertedExprValue, comparisonValue) : Expression.Equal(convertedExprValue, comparisonValue);
+                    var comparison = inPred.NotDefined ? (Expression)Expression.NotEqual(convertedExprValue, comparisonValue) : Expression.Equal(convertedExprValue, comparisonValue);
+                    comparison = Expression.IsTrue(comparison);
 
                     if (result == null)
                         result = comparison;

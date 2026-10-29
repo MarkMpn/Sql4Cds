@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.5.33209.295
+# Visual Studio Version 18
+VisualStudioVersion = 18.10.12210.168 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.Tests", "MarkMpn.Sql4Cds.Engine.Tests\MarkMpn.Sql4Cds.Engine.Tests.csproj", "{4448712A-17B8-4D1B-8CEE-6F8CB558FCC1}"
 EndProject
@@ -42,6 +42,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.AIGitHubSponsorship", "MarkMpn.Sql4Cds.AIGitHubSponsorship\MarkMpn.Sql4Cds.AIGitHubSponsorship.csproj", "{82C21104-6DCA-49A3-B506-936792F4636E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.LanguageServer.Tests", "MarkMpn.Sql4Cds.LanguageServer.Tests\MarkMpn.Sql4Cds.LanguageServer.Tests.csproj", "{AE466A08-AFA5-4C78-9B9B-3B976223B3B1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.Tests.NetCore", "MarkMpn.Sql4Cds.Engine.Tests.NetCore\MarkMpn.Sql4Cds.Engine.Tests.NetCore.csproj", "{DAF313F9-202F-4478-B4C4-2D848608C0D3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -280,6 +282,22 @@ Global
 		{AE466A08-AFA5-4C78-9B9B-3B976223B3B1}.Release|x64.Build.0 = Release|Any CPU
 		{AE466A08-AFA5-4C78-9B9B-3B976223B3B1}.Release|x86.ActiveCfg = Release|Any CPU
 		{AE466A08-AFA5-4C78-9B9B-3B976223B3B1}.Release|x86.Build.0 = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|arm64.Build.0 = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|x64.Build.0 = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Debug|x86.Build.0 = Debug|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|arm64.ActiveCfg = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|arm64.Build.0 = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|x64.ActiveCfg = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|x64.Build.0 = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|x86.ActiveCfg = Release|Any CPU
+		{DAF313F9-202F-4478-B4C4-2D848608C0D3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

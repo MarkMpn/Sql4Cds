@@ -55,6 +55,7 @@ steps:
     configuration: '$(buildConfiguration)'
     testAssemblyVer2: |
       **/MarkMpn.*.Tests.dll
+      **/MarkMpn.*.Tests.NetCore.dll
       !**\obj\**
   
 - task: NodeTool@0
