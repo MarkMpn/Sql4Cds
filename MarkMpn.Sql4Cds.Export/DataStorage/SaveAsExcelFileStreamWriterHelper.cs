@@ -314,7 +314,7 @@ namespace MarkMpn.Sql4Cds.Export.DataStorage
 
                 for (int columnIndex = 0; columnIndex < columnWidths.Length; columnIndex++)
                 {
-                    var columnWidth = Math.Truncate((columnWidths[columnIndex] + 15) / FontPixelWidth * 256) / 256;
+                    var columnWidth = Math.Min(255, Math.Truncate((columnWidths[columnIndex] + 15) / FontPixelWidth * 256) / 256);
 
                     writer.WriteStartElement("col");
                     writer.WriteAttributeString("min", (columnIndex + 1).ToString());

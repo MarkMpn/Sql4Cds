@@ -41,23 +41,12 @@ namespace MarkMpn.Sql4Cds.Engine
             "relationship"
         };
 
-        public TableSizeCache(IOrganizationService org, IAttributeMetadataCache metadata)
+        public TableSizeCache(IOrganizationService org, IAttributeMetadataCache metadata, Version version)
         {
             _tableSize = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             _org = org;
             _metadata = metadata;
-
-#if NETCOREAPP
-            if (org is ServiceClient svc)
-                _version = svc.ConnectedOrgVersion;
-            else
-#else
-            if (org is CrmServiceClient svc)
-                _version = svc.ConnectedOrgVersion;
-            else
-#endif
-
-                _version = new Version(((RetrieveVersionResponse)_org.Execute(new RetrieveVersionRequest())).Version);
+            _version = version ?? org.GetConnectedOrgVersion();
         }
 
         private bool UseRetrieveTotalRecordCountRequest => _version.Major >= 9;

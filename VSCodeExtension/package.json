@@ -1,7 +1,7 @@
 {
   "name": "vscode-sql4cds",
   "displayName": "SQL 4 CDS for Visual Studio Code",
-  "description": "Query Microsoft Dataverse with SQL 4 CDS",
+  "description": "Query and modify Dataverse data using standard SQL syntax",
   "version": "0.3.0",
   "publisher": "markcarrington",
   "license": "MIT",
@@ -28,12 +28,12 @@
   "main": "./dist/extension.js",
   "scripts": {
     "clean": "rimraf dist out",
-    "compile": "tsc -p . --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap --legal-comments=linked --outfile=dist/extension.js",
+    "compile": "tsc -p . --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap --legal-comments=linked --outfile=dist/extension.js && node scripts/build-results.mjs",
     "copy-assets": "node ./scripts/copy-assets.mjs",
     "build": "npm run clean && npm run compile && npm run copy-assets",
     "package": "npm run check && npm test && vsce package --no-dependencies --out sql4cds.vsix && npm run verify:package",
     "check": "tsc -p . --noEmit && tsc -p tsconfig.test.json",
-    "test": "rimraf .test-dist && esbuild test/*.test.ts --bundle --external:jsdom --platform=node --format=cjs --outdir=.test-dist && node --test .test-dist/*.test.js test/*.test.mjs",
+    "test": "rimraf .test-dist && esbuild test/*.test.ts --bundle --external:jsdom --external:esbuild --platform=node --format=cjs --outdir=.test-dist && node --test .test-dist/*.test.js test/*.test.mjs",
     "test:service": "node ./scripts/smoke-language-service.mjs",
     "vscode:prepublish": "npm run build",
     "test:host": "node ./scripts/test-extension-host.mjs",
@@ -121,6 +121,17 @@
         "command": "sql4cds.runQuery",
         "title": "SQL 4 CDS: Execute Query",
         "icon": "$(play)"
+      },
+      {
+        "command": "sql4cds.estimatedPlan",
+        "title": "SQL 4 CDS: Display Estimated Execution Plan",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "sql4cds.actualPlan",
+        "title": "SQL 4 CDS: Include Actual Execution Plan",
+        "icon": "$(type-hierarchy)",
+        "toggled": "sql4cds.actualPlan"
       },
       {
         "command": "sql4cds.cancelQuery",
@@ -273,6 +284,16 @@
       ],
       "editor/title": [
         {
+          "command": "sql4cds.estimatedPlan",
+          "when": "editorLangId == sql4cds && !sql4cds.queryRunning",
+          "group": "sql4cds@1"
+        },
+        {
+          "command": "sql4cds.actualPlan",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@2"
+        },
+        {
           "command": "sql4cds.runQuery",
           "when": "editorLangId == sql4cds && !sql4cds.queryRunning",
           "group": "navigation@1"
@@ -300,6 +321,12 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "sql4cds.estimatedPlan",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "editorLangId == sql4cds && !sql4cds.queryRunning"
+      },
       {
         "command": "sql4cds.runQuery",
         "key": "ctrl+shift+e",
@@ -416,6 +443,12 @@
           "default": null,
           "description": "Optional development override containing the language-service DLL. Reload VS Code after changing this setting.",
           "scope": "machine"
+        },
+        "SQL4CDS.includeDetailedErrorTelemetry": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Include SQL query text and full exception details, including stack traces, in error telemetry sent to Microsoft Application Insights. These details may contain sensitive data. Applies to existing connections without restarting."
         },
         "SQL4CDS.useSchemaColumnOrdering": {
           "type": "boolean",

@@ -21,7 +21,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 System.Diagnostics.Debugger.Launch();
 
             var logDirArg = "--log-dir=";
-            var logDir = args.Single(a => a.StartsWith(logDirArg)).Substring(logDirArg.Length);
+            // Hosts such as Power Platform ToolBox start the server without any arguments, so fall back to a
+            // per-user data folder when no explicit log directory is supplied.
+            var logDir = args.SingleOrDefault(a => a.StartsWith(logDirArg))?.Substring(logDirArg.Length);
+
+            if (String.IsNullOrEmpty(logDir))
+                logDir = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create), "MarkMpn", "SQL4CDS", "LanguageServer");
 
             var formatter = new JsonMessageFormatter();
             formatter.JsonSerializer.ContractResolver = new DefaultContractResolver

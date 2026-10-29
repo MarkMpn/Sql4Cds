@@ -109,7 +109,7 @@ namespace MarkMpn.Sql4Cds.XTB
             if (!_dataSources.ContainsKey(con.ConnectionName))
             {
                 var metadata = new SharedMetadataCache(con, GetNewServiceClient(con));
-                var tableSize = new TableSizeCache(GetNewServiceClient(con), metadata);
+                var tableSize = new TableSizeCache(GetNewServiceClient(con), metadata, new Version(con.OrganizationVersion));
                 var messages = new MessageCache(GetNewServiceClient(con), metadata);
 
                 _dataSources[con.ConnectionName] = new XtbDataSource(con, GetNewServiceClient, metadata, tableSize, messages);

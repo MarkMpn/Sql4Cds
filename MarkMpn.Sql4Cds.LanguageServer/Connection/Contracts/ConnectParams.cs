@@ -13,6 +13,11 @@
         public string RequestId { get; set; }
 
         /// <summary>
+        /// The registered connection owner to reuse for a document association.
+        /// </summary>
+        public string SourceOwnerUri { get; set; }
+
+        /// <summary>
         /// Contains the required parameters to initialize a connection to a database.
         /// A connection will identified by its server name, database name and user name.
         /// This may be changed in the future to support multiple connections with different 

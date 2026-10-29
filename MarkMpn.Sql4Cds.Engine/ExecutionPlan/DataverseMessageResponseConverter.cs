@@ -198,7 +198,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SerializeAttribute(writer, attribute.Value, serializer);
 
                         // Add type annotation for types that need special deserialization
-                        if (attribute.Value != null && !(attribute.Value is string) && !(attribute.Value is bool) && !(attribute.Value is int))
+                        if (attribute.Value != null && !(attribute.Value is string) && !(attribute.Value is bool))
                         {
                             writer.WritePropertyName(attribute.Key + "@odata.type");
                             writer.WriteValue(attribute.Value.GetType().Name);
@@ -245,6 +245,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 switch (typeName)
                 {
+                    case "Int32": return token.Value<int>();
+                    case "Int64": return token.Value<long>();
+                    case "Guid": return Guid.Parse(token.Value<string>());
+                    case "DateTime": return token.Type == JTokenType.Date ? token.Value<DateTime>() :
+                        DateTime.Parse(token.Value<string>(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
+                    case "Decimal": return token.Value<decimal>();
+                    case "Double": return token.Value<double>();
+                    case "Single": return token.Value<float>();
+                    case "Byte[]": return Convert.FromBase64String(token.Value<string>());
                     case "OptionSetValue": return new OptionSetValue((int)token);
                     case "Money": return new Money((decimal)token);
                     case "EntityReference": return token.ToObject<EntityReference>(serializer);

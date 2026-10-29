@@ -3,7 +3,6 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
-using Microsoft.Crm.Sdk.Messages;
 using System.Linq;
 using System.ServiceModel;
 using System.Threading.Tasks;
@@ -30,28 +29,30 @@ namespace MarkMpn.Sql4Cds.Engine
         public DataSource(IOrganizationService org) : this(org, null, null, null)
         {
             Metadata = new AttributeMetadataCache(org);
-            TableSizeCache = new TableSizeCache(org, Metadata);
+            TableSizeCache = new TableSizeCache(org, Metadata, Version);
             MessageCache = new MessageCache(org, Metadata);
         }
 
         public DataSource(IOrganizationService org, IAttributeMetadataCache metadata, ITableSizeCache tableSize, IMessageCache messages)
         {
             string name = null;
-            Version version = null;
 
 #if NETCOREAPP
             if (org is ServiceClient svc)
             {
                 name = svc.ConnectedOrgUniqueName;
-                version = svc.ConnectedOrgVersion;
             }
 #else
             if (org is CrmServiceClient svc)
             {
                 name = svc.ConnectedOrgUniqueName;
-                version = svc.ConnectedOrgVersion;
             }
 #endif
+
+            if (name == null && org is IServiceClient sc)
+            {
+                name = sc.Name;
+            }
 
             if (name == null)
             {
@@ -59,12 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 name = orgDetails.GetAttributeValue<string>("name");
             }
 
-            if (version == null)
-            {
-                var ver = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
-                version = new Version(ver.Version);
-            }
-
+            Version = org.GetConnectedOrgVersion();
             Connection = org;
             Metadata = metadata;
             Name = name;
@@ -77,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 JoinOperator.LeftOuter
             };
 
-            if (version >= new Version("9.1.0.17461"))
+            if (Version >= new Version("9.1.0.17461"))
             {
                 // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
                 joinOperators.Add(JoinOperator.In);
@@ -89,9 +85,9 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             JoinOperatorsAvailable = joinOperators;
-            ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
-            CrossTableColumnComparisonAvailable = version >= new Version("9.2");
-            OrderByEntityNameAvailable = version >= new Version("9.1.0.25249");
+            ColumnComparisonAvailable = Version >= new Version("9.1.0.19251");
+            CrossTableColumnComparisonAvailable = Version >= new Version("9.2");
+            OrderByEntityNameAvailable = Version >= new Version("9.1.0.25249");
         }
 
         /// <summary>
@@ -105,6 +101,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The identifier for this instance
         /// </summary>
         public string Name { get; set; }
+
+        /// <summary>
+        /// The server version of the instance
+        /// </summary>
+        public Version Version { get; }
 
         /// <summary>
         /// The connection to the instance to use to retrieve or modify data
@@ -278,6 +279,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var lcid = org.GetAttributeValue<int>("localeid");
 
+            return CollationFromLocaleId(lcid);
+        }
+
+        protected Collation CollationFromLocaleId(int lcid)
+        {
             // Collation options are set based on the default language. Most are CI/AI but a few are not
             // https://learn.microsoft.com/en-us/power-platform/admin/language-collations#language-and-associated-collation-used-with-dataverse
             // On-prem databases may be configured with any default collation, but this is not exposed through any API.

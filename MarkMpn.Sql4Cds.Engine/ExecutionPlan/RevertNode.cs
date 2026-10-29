@@ -77,6 +77,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (dataSource.Connection is CrmServiceClient svc)
                         svc.CallerId = Guid.Empty;
 #endif
+                    else if (dataSource.Connection is IServiceClient client)
+                        client.CallerId = Guid.Empty;
                     else
                         throw new QueryExecutionException("Unexpected organization service type") { Node = this };
 

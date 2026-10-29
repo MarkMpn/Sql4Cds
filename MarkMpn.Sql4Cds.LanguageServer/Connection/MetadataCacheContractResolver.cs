@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 {
 
     /// <summary>
-    /// Provides a contract resolver to be used for (de)serializing <see cref="MetadataCache"/> instances using
+    /// Provides a contract resolver to be used for (de)serializing persisted metadata using
     /// Json.NET.
     /// </summary>
     /// <remarks>

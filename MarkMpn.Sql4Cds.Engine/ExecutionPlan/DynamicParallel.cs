@@ -54,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             StartThread(cancellationToken);
 
-            var monitor = Task.Factory.StartNew(async () => await MonitorAsync(cancellationToken)).Unwrap();
+            var monitor = Task.Run(() => MonitorAsync(cancellationToken));
             monitor.Wait();
 
             if (!_exceptions.IsEmpty)
@@ -67,7 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 CancellationToken = cancellationToken
             };
-            threadState.Task = Task.Factory.StartNew((state) => RunThread((DynamicParallelThreadState)state), threadState).Unwrap();
+            threadState.Task = Task.Run(() => RunThread(threadState));
             _threads.Add(threadState);
         }
 
@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     !threadState.IsStopped &&
                     _queue.TryDequeue(out var item))
                 {
-                    await _body(item, _loopState, local);
+                    await _body(item, _loopState, local).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
@@ -91,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             finally
             {
-                await _localFinally(_loopState, local);
+                await _localFinally(_loopState, local).ConfigureAwait(false);
                 threadState.IsStopped = true;
             }
         }
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var allTasks = Task.WhenAll(_threads.Select(t => t.Task).ToArray());
                 var timeout = Task.Delay(1000, cancellationToken);
-                var task = await Task.WhenAny(allTasks, timeout);
+                var task = await Task.WhenAny(allTasks, timeout).ConfigureAwait(false);
 
                 if (task == allTasks)
                     break;

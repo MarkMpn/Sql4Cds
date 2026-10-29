@@ -2544,6 +2544,16 @@ namespace MarkMpn.Sql4Cds.Engine
                     existingAttributes.Add(targetAttrName);
             }
 
+            // Web API updates replace the shared activity-party collection, including roles not explicitly changed.
+            if (dataSource.Connection is IServiceClient webApiClient && webApiClient.UsesWebAPI &&
+                targetMetadata != null && newValueMappings.Keys.Any(c =>
+                    targetMetadata.Attributes.Any(a => a.LogicalName.Equals(c.MultiPartIdentifier.Identifiers.Last().Value, StringComparison.OrdinalIgnoreCase) &&
+                        a.AttributeType == AttributeTypeCode.PartyList)))
+            {
+                foreach (var attribute in targetMetadata.Attributes.Where(a => a.AttributeType == AttributeTypeCode.PartyList))
+                    existingAttributes.Add(attribute.LogicalName);
+            }
+
             // quote/salesorder/invoice have custom logic for updating closed records, so load in the existing statecode & statuscode fields too
             if (useStateTransitions && (targetLogicalName == "quote" || targetLogicalName == "salesorder" || targetLogicalName == "invoice"))
             {

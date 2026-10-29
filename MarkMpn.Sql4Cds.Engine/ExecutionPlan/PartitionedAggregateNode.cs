@@ -144,19 +144,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var org = context.Session.DataSources[fetchXmlNode.DataSource].Connection;
             _lock = new object();
 
-#if NETCOREAPP
-            var svc = org as ServiceClient;
-#else
-            var svc = org as CrmServiceClient;
-#endif
-
             var maxDop = MaxDOP;
 
             if (!ParallelismHelper.CanParallelise(org))
                 maxDop = 1;
-
-            if (maxDop == 1)
-                svc = null;
 
             try
             {
@@ -182,7 +173,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var partitionContext = context.CreateChildContext(partitionParameterTypes, partitionParameterValues);
 
                         // Use a clone of the service client for each thread
-                        if (svc != null)
+                        if (maxDop > 1)
                             partitionContext = partitionContext.CreateClonedSession(fetchXmlNode.DataSource);
 
                         Interlocked.Increment(ref _threadCount);

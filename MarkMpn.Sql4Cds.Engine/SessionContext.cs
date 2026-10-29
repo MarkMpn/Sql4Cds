@@ -48,18 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine
             private SqlString GetVersion()
             {
                 var dataSource = _context.DataSources[_context._options.PrimaryDataSource];
-                string orgVersion = null;
-
-#if NETCOREAPP
-                if (dataSource.Connection is ServiceClient svc)
-                    orgVersion = svc.ConnectedOrgVersion.ToString();
-#else
-                if (dataSource.Connection is CrmServiceClient svc)
-                    orgVersion = svc.ConnectedOrgVersion.ToString();
-#endif
-
-                if (orgVersion == null)
-                    orgVersion = ((RetrieveVersionResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(new RetrieveVersionRequest(), _context._options, "Retrieving server version...")).Version;
+                var orgVersion = dataSource.Version.ToString();
 
                 var assembly = typeof(Sql4CdsConnection).Assembly;
                 var assemblyVersion = assembly.GetName().Version;

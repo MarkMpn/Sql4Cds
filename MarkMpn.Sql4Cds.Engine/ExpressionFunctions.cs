@@ -1488,19 +1488,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     return new SqlVariant(DataTypeHelpers.Int, new SqlInt32(System.Diagnostics.Process.GetCurrentProcess().Id), context);
 
                 case "productversion":
-                    string orgVersion = null;
-
-#if NETCOREAPP
-                    if (svc != null)
-                        orgVersion = svc.ConnectedOrgVersion.ToString();
-#else
-                    if (svc != null)
-                        orgVersion = svc.ConnectedOrgVersion.ToString();
-#endif
-
-                    if (orgVersion == null)
-                        orgVersion = ((RetrieveVersionResponse)dataSource.ExecuteWithServiceProtectionLimitLogging(new RetrieveVersionRequest(), context.Options, "Retrieving server version...")).Version;
-
+                    var orgVersion = dataSource.Version.ToString();
                     return new SqlVariant(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), dataSource.DefaultCollation.ToSqlString(orgVersion), context);
             }
 

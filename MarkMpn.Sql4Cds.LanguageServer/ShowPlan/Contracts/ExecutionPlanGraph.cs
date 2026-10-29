@@ -41,6 +41,10 @@ namespace Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts
         /// </summary>
         public string Type { get; set; }
         /// <summary>
+        /// Name of the SQL 4 CDS execution plan node class, e.g. <c>FetchXmlScan</c> or <c>HashJoinNode</c>
+        /// </summary>
+        public string NodeType { get; set; }
+        /// <summary>
         /// Cost associated with the node
         /// </summary>
         public double Cost { get; set; }

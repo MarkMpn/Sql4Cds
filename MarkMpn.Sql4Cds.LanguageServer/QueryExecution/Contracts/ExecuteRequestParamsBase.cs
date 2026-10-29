@@ -7,6 +7,8 @@
         /// </summary>
         public string OwnerUri { get; set; }
 
+        public string ExecutionId { get; set; }
+
         /// <summary>
         /// Execution plan options
         /// </summary>
