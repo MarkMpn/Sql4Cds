@@ -202,6 +202,44 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.IsTrue(value);
         }
 
+        [TestMethod]
+        [DataRow("971881cc-c03c-e811-8125-5065f38bd4e1", true)]
+        [DataRow("5fc2f54e-6ab6-f111-aaac-000d3ab0e540", true)]
+        [DataRow("772caee8-4ffb-4ccd-8bbc-917de9251543", false)]
+        [DataRow(null, false)]
+        public void GuidInStringList(string value, bool expected)
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/825
+
+            var expr = new InPredicate
+            {
+                Expression = Col("metadataid"),
+                Values =
+                {
+                    Str("971881cc-c03c-e811-8125-5065f38bd4e1"),
+                    Str("5fc2f54e-6ab6-f111-aaac-000d3ab0e540")
+                }
+            };
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>
+            {
+                ["metadataid"] = new ExecutionPlan.ColumnDefinition(DataTypeHelpers.UniqueIdentifier, true, false)
+            }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var options = new StubOptions();
+            var compilationContext = new ExpressionCompilationContext(new SessionContext(_localDataSources, options), options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
+
+            var record = new Entity
+            {
+                ["metadataid"] = value == null ? SqlGuid.Null : SqlGuid.Parse(value)
+            };
+            var executionContext = new ExpressionExecutionContext(compilationContext);
+            executionContext.Entity = record;
+
+            var actual = func(executionContext);
+            Assert.AreEqual((SqlBoolean)expected, actual);
+        }
+
         private ColumnReferenceExpression Col(string name)
         {
             return new ColumnReferenceExpression
