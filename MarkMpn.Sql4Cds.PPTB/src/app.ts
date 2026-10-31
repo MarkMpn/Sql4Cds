@@ -10,7 +10,7 @@ import { PropertiesPanel } from "./propertiesPanel";
 import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 
-const DEFAULT_QUERY = "-- Enter your SQL query here and press F5 or Ctrl+E to run it\nSELECT TOP 10 *\nFROM   account\n";
+const DEFAULT_QUERY = "";
 
 class App implements QueryTabHost {
     readonly client: Sql4CdsClient;
