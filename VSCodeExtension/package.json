@@ -435,6 +435,11 @@
           "default": true,
           "description": "Automatically size result columns from their visible content. When disabled, result columns start at a fixed width with ellipsis for overflow. Columns can still be resized manually in either mode."
         },
+        "SQL4CDS.showMessageLineNumbers": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show sequential line numbers next to each message in the Messages pane."
+        },
         "SQL4CDS.servicePath": {
           "type": [
             "string",

@@ -215,6 +215,20 @@ test("server warnings and errors are logged and shown as PPTB notifications", as
     ]);
 });
 
+test("Messages tab line numbers follow the showMessageLineNumbers preference and default to off", async () => {
+    const { app, createTab } = setup();
+    app.settings.showMessageLineNumbers = false;
+    const { tab: tabOff } = createTab();
+    const paneOff = tabOff.resultsElement.children.find(child => child.className === "messages-pane");
+    assert.ok(paneOff);
+    assert.equal(paneOff.classes.has("show-line-numbers"), false);
+
+    app.settings.showMessageLineNumbers = true;
+    const { tab: tabOn } = createTab();
+    const paneOn = tabOn.resultsElement.children.find(child => child.className === "messages-pane");
+    assert.equal(paneOn.classes.has("show-line-numbers"), true);
+});
+
 function summary(batchId, id, rowCount) {
     return { batchId, id, rowCount, columnInfo: [], complete: false };
 }

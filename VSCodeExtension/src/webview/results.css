@@ -39,13 +39,13 @@ body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
   font-family: var(--vscode-editor-font-family);
   font-size: var(--vscode-editor-font-size);
 }
-.messages-pane { counter-reset: message-line; }
-.messages-pane .message:not(.summary) {
+.messages-pane.show-line-numbers { counter-reset: message-line; }
+.messages-pane.show-line-numbers .message:not(.summary) {
   position: relative;
   padding-left: 3.5em;
   counter-increment: message-line;
 }
-.messages-pane .message:not(.summary)::before {
+.messages-pane.show-line-numbers .message:not(.summary)::before {
   content: counter(message-line);
   position: absolute;
   left: 0;

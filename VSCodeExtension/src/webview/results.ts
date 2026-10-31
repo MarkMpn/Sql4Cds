@@ -139,6 +139,7 @@ function update(next: ResultsState): void {
     limit.textContent = `Displaying the first ${result.displayRowCount.toLocaleString()} of ${result.rowCount.toLocaleString()} rows. Export includes all rows.`;
     nodes.push(limit);
   }
+  messages.classList.toggle("show-line-numbers", next.showMessageLineNumbers);
   messages.replaceChildren(...nodes);
   const hasErrors = next.status === "failed" || next.messages.some(message => message.isError);
   if (hasErrors) select("messages");

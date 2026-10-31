@@ -44,6 +44,7 @@ namespace MarkMpn.Sql4Cds.XTB
             showTooltipsCheckbox.Checked = settings.ShowIntellisenseTooltips;
             maxDopUpDown.Value = settings.MaxDegreeOfPaallelism;
             autoSizeColumnsCheckBox.Checked = settings.AutoSizeColumns;
+            showMessageLineNumbersCheckBox.Checked = settings.ShowMessageLineNumbers;
             rememberSessionCheckbox.Checked = settings.RememberSession;
             rememberSessionConnectionsCheckBox.Checked = settings.RememberSessionConnections;
             localDateFormatCheckbox.Checked = settings.LocalFormatDates;
@@ -134,6 +135,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 _settings.ShowIntellisenseTooltips = showTooltipsCheckbox.Checked;
                 _settings.MaxDegreeOfPaallelism = (int) maxDopUpDown.Value;
                 _settings.AutoSizeColumns = autoSizeColumnsCheckBox.Checked;
+                _settings.ShowMessageLineNumbers = showMessageLineNumbersCheckBox.Checked;
                 _settings.RememberSession = rememberSessionCheckbox.Checked;
                 _settings.RememberSessionConnections = rememberSessionConnectionsCheckBox.Checked;
                 _settings.LocalFormatDates = localDateFormatCheckbox.Checked;

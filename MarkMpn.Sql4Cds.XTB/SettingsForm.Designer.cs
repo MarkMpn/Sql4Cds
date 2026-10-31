@@ -91,6 +91,7 @@
             this.label27 = new System.Windows.Forms.Label();
             this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
             this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
+            this.showMessageLineNumbersCheckBox = new System.Windows.Forms.CheckBox();
             this.tabPage4 = new System.Windows.Forms.TabPage();
             this.fetchXml2SqlConversionAdvancedLinkLabel = new System.Windows.Forms.LinkLabel();
             this.nativeSqlScintilla = new ScintillaNET.Scintilla();
@@ -812,6 +813,7 @@
             this.tabPage6.Controls.Add(this.label27);
             this.tabPage6.Controls.Add(this.localDateFormatCheckbox);
             this.tabPage6.Controls.Add(this.autoSizeColumnsCheckBox);
+            this.tabPage6.Controls.Add(this.showMessageLineNumbersCheckBox);
             this.tabPage6.Location = new System.Drawing.Point(4, 22);
             this.tabPage6.Name = "tabPage6";
             this.tabPage6.Size = new System.Drawing.Size(409, 330);
@@ -873,6 +875,16 @@
             this.autoSizeColumnsCheckBox.TabIndex = 5;
             this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
             this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
+            // 
+            // showMessageLineNumbersCheckBox
+            // 
+            this.showMessageLineNumbersCheckBox.AutoSize = true;
+            this.showMessageLineNumbersCheckBox.Location = new System.Drawing.Point(6, 97);
+            this.showMessageLineNumbersCheckBox.Name = "showMessageLineNumbersCheckBox";
+            this.showMessageLineNumbersCheckBox.Size = new System.Drawing.Size(188, 17);
+            this.showMessageLineNumbersCheckBox.TabIndex = 14;
+            this.showMessageLineNumbersCheckBox.Text = "Show line numbers in Messages tab";
+            this.showMessageLineNumbersCheckBox.UseVisualStyleBackColor = true;
             // 
             // tabPage4
             // 
@@ -1269,6 +1281,7 @@
         private System.Windows.Forms.Label label27;
         private System.Windows.Forms.CheckBox localDateFormatCheckbox;
         private System.Windows.Forms.CheckBox autoSizeColumnsCheckBox;
+        private System.Windows.Forms.CheckBox showMessageLineNumbersCheckBox;
         private System.Windows.Forms.ComboBox aiProviderComboBox;
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.Label label28;

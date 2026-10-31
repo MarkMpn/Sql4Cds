@@ -368,6 +368,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       type: "state", ownerUri: uri, runId: state.runId, status: state.status, estimatedPlan: state.estimatedPlan,
       planVersion: state.planVersion,
       autoSizeColumns: vscode.workspace.getConfiguration("SQL4CDS").get<boolean>("autoSizeColumns", true),
+      showMessageLineNumbers: vscode.workspace.getConfiguration("SQL4CDS").get<boolean>("showMessageLineNumbers", false),
       plans: [...state.plans].map(([key, graphs]) => ({ key, graphs })),
       results: [...state.results].map(([key, result]) => ({
         key, rowCount: result.rowCount, complete: result.complete,

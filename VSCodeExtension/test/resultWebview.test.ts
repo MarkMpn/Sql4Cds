@@ -49,7 +49,7 @@ function fixture() {
     window.dispatchEvent(new window.MessageEvent("message", { data: message, origin }));
   const state = (overrides: Partial<ResultsState> = {}, origin = window.location.origin) => emit({
     type: "state", ownerUri: "untitled:query", runId: 1, status: "completed", estimatedPlan: false,
-    results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, ...overrides
+    results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, showMessageLineNumbers: false, ...overrides
   }, origin);
   const respond = (request: Record<string, any>, value?: unknown, error?: string) => emit({
     type: "response", requestId: request.requestId, value, error
@@ -272,24 +272,52 @@ test("Messages pane shows only server messages without a client-generated summar
   } finally { ui.close(); }
 });
 
-test("Messages pane numbers each server message (visually only) but not the truncation summary", () => {
+test("Messages pane numbers each server message when enabled (visually only), but not the truncation summary", () => {
   const dom = new JSDOM(`<!doctype html><html><head><style>${resultsCss}</style></head>
-    <body><div class="messages-pane">
+    <body>
+    <div class="messages-pane">
       <div class="message">first</div>
       <div class="message error">second</div>
       <div class="message summary">Displaying the first 200 of 500 rows. Export includes all rows.</div>
-    </div></body></html>`);
+    </div>
+    <div class="messages-pane show-line-numbers">
+      <div class="message">first</div>
+      <div class="message error">second</div>
+      <div class="message summary">Displaying the first 200 of 500 rows. Export includes all rows.</div>
+    </div>
+    </body></html>`);
   try {
     const { window } = dom;
-    const messages = [...window.document.querySelectorAll(".messages-pane .message")];
-    const [first, second, summary] = messages.map(node => window.getComputedStyle(node).counterIncrement);
+    const [defaultPane, enabledPane] = window.document.querySelectorAll(".messages-pane");
+
+    const defaultMessages = [...defaultPane.querySelectorAll(".message")];
+    for (const message of defaultMessages) {
+      assert.ok(!window.getComputedStyle(message).counterIncrement,
+        "line numbers must be off by default, for consistency with SSMS");
+    }
+
+    const enabledMessages = [...enabledPane.querySelectorAll(".message")];
+    const [first, second, summary] = enabledMessages.map(node => window.getComputedStyle(node).counterIncrement);
     assert.equal(first, "message-line");
     assert.equal(second, "message-line");
     assert.ok(!summary, `expected the truncation summary to be excluded from numbering, got ${JSON.stringify(summary)}`);
     // Line numbers are rendered via CSS counters, so selecting/copying message text never includes them.
-    assert.equal(messages[0].textContent, "first");
+    assert.equal(enabledMessages[0].textContent, "first");
   } finally { dom.window.close(); }
 });
+
+test("Messages pane line numbers reflect the showMessageLineNumbers setting", () => {
+  const ui = fixture();
+  try {
+    const document = ui.window.document;
+    ui.state({ messages: [{ message: "first", isError: false }, { message: "second", isError: false }] });
+    assert.equal(document.getElementById("messages")!.classList.contains("show-line-numbers"), false);
+
+    ui.state({ messages: [{ message: "first", isError: false }, { message: "second", isError: false }], showMessageLineNumbers: true });
+    assert.equal(document.getElementById("messages")!.classList.contains("show-line-numbers"), true);
+  } finally { ui.close(); }
+});
+
 
 test("Results tab appears only once a running query returns a result set", () => {
   const ui = fixture();

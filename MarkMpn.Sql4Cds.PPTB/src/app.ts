@@ -494,6 +494,10 @@ class App implements QueryTabHost {
         return this.settings.includeActualPlan;
     }
 
+    get showMessageLineNumbers(): boolean {
+        return this.settings.showMessageLineNumbers;
+    }
+
     private async toggleActualPlan(): Promise<void> {
         const save = this.saveSetting("includeActualPlan", !this.settings.includeActualPlan);
         this.updateToolbar();

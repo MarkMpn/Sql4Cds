@@ -79,3 +79,43 @@ test("settings dialog exposes, saves and resets detailed error telemetry", async
     assert.equal(saved[0].key, "settings");
     assert.equal(saved[0].value.includeDetailedErrorTelemetry, true);
 });
+
+test("Messages tab line numbers default to off in PPTB and VS Code, for consistency with SSMS", async () => {
+    for (const stored of [undefined, {}, { showMessageLineNumbers: "true" }]) {
+        const { settings } = fixture(stored);
+        assert.equal((await settings.loadSettings()).showMessageLineNumbers, false);
+    }
+    for (const enabled of [false, true]) {
+        const { settings } = fixture({ showMessageLineNumbers: enabled });
+        assert.equal((await settings.loadSettings()).showMessageLineNumbers, enabled);
+    }
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "..", "VSCodeExtension", "package.json"), "utf8"));
+    const setting = manifest.contributes.configuration.properties["SQL4CDS.showMessageLineNumbers"];
+    assert.equal(setting.type, "boolean");
+    assert.equal(setting.default, false);
+});
+
+test("settings dialog exposes, saves and resets the Messages tab line number preference", async () => {
+    const { settings, elements, saved } = fixture();
+    const result = settings.showSettingsDialog({ ...settings.defaultSettings });
+    const label = elements.find(element => element.className === "setting-label" &&
+        element.textContent === "Show line numbers in Messages tab");
+    assert.ok(label);
+    const row = elements.find(element => element.children.includes(label));
+    const checkbox = row.children.find(element => element.tag === "input");
+    assert.equal(checkbox.type, "checkbox");
+    assert.equal(checkbox.checked, false);
+    checkbox.checked = true;
+    elements.find(element => element.textContent === "Reset to defaults").events.click();
+    assert.equal(checkbox.checked, false);
+    checkbox.checked = true;
+    const dialog = elements.find(element => element.tag === "dialog");
+    dialog.returnValue = "ok";
+    dialog.events.close();
+    const updated = await result;
+    assert.equal(updated.showMessageLineNumbers, true);
+    await settings.saveSettings(updated);
+    assert.equal(saved[0].key, "settings");
+    assert.equal(saved[0].value.showMessageLineNumbers, true);
+});
+

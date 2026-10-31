@@ -8,6 +8,7 @@ export interface ResultsState {
   estimatedPlan: boolean;
   planVersion: number;
   autoSizeColumns: boolean;
+  showMessageLineNumbers: boolean;
   results: {
     key: string;
     rowCount: number;

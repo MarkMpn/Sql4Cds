@@ -399,12 +399,19 @@ namespace MarkMpn.Sql4Cds.XTB
             scintilla.Styles[1].ForeColor = Color.Red;
             scintilla.Styles[2].ForeColor = Color.Black;
 
-            // Show line numbers
-            CalcLineNumberWidth(scintilla);
-            scintilla.Styles[Style.LineNumber].ForeColor = Color.FromArgb(255, 128, 128, 128);  //Dark Gray
-            scintilla.Styles[Style.LineNumber].BackColor = Color.FromArgb(255, 228, 228, 228);  //Light Gray
+            if (Settings.Instance.ShowMessageLineNumbers)
+            {
+                // Show line numbers
+                CalcLineNumberWidth(scintilla);
+                scintilla.Styles[Style.LineNumber].ForeColor = Color.FromArgb(255, 128, 128, 128);  //Dark Gray
+                scintilla.Styles[Style.LineNumber].BackColor = Color.FromArgb(255, 228, 228, 228);  //Light Gray
 
-            scintilla.TextChanged += (s, e) => CalcLineNumberWidth((Scintilla)s);
+                scintilla.TextChanged += (s, e) => CalcLineNumberWidth((Scintilla)s);
+            }
+            else
+            {
+                scintilla.Margins[0].Width = 0;
+            }
 
             return scintilla;
         }

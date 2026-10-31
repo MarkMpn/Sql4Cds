@@ -11,6 +11,8 @@ export interface QueryTabHost {
     readonly client: Sql4CdsClient;
     /** Indicates if queries should be executed with the actual execution plan */
     readonly includeActualPlan: boolean;
+    /** Indicates if sequential line numbers should be shown in the Messages tab */
+    readonly showMessageLineNumbers: boolean;
     /** Gets the connection options to use for a PPTB connection slot */
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
@@ -139,6 +141,7 @@ export class QueryTab {
 
         this.messagesPane = document.createElement("div");
         this.messagesPane.className = "messages-pane";
+        this.messagesPane.classList.toggle("show-line-numbers", host.showMessageLineNumbers);
 
         this.planView = new ExecutionPlanView(
             getNodeImageUrl,
