@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -180,6 +181,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override Type GetProviderSpecificFieldType(int ordinal)
         {
             return _reader.GetProviderSpecificFieldType(ordinal);
+        }
+
+        public DataTypeReference GetSqlType(int ordinal)
+        {
+            return (_reader as SelectDataReader)?.GetSqlType(ordinal) ?? GetProviderSpecificFieldType(ordinal).ToSqlType(_context.PrimaryDataSource);
         }
 
         public override object GetProviderSpecificValue(int ordinal)

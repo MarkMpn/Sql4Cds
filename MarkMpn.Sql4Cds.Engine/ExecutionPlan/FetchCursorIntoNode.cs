@@ -54,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         for (var i = 0; i < Variables.Count; i++)
                         {
-                            var sourceType = reader.GetProviderSpecificFieldType(i).ToSqlType(context.PrimaryDataSource);
+                            var sourceType = reader.GetSqlType(i);
                             var targetType = context.ParameterTypes[Variables[i].Name];
 
                             if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))

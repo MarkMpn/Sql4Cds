@@ -168,6 +168,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Add the operators to calculate the row number and set up the insert statement
             var segmentColumn = context.GetExpressionName("Segment");
             var rowNumberColumn = context.GetExpressionName("RowNumber");
+            populationColumns.Insert(0, new SelectColumn { SourceColumn = rowNumberColumn, OutputColumn = tempTable.PrimaryKey[0].ColumnName });
             var populationQuery = new InsertNode
             {
                 DataSource = context.Options.PrimaryDataSource,
@@ -185,30 +186,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         [rowNumberColumn] = new Aggregate
                         {
-                            AggregateType = AggregateType.RowNumber
+                            AggregateType = AggregateType.RowNumber,
+                            ReturnType = DataTypeHelpers.BigInt,
                         }
                     }
-                },
-                Accessors = new List<AttributeAccessor>()
+                }
             };
 
             // Set up the accessors to populate the temporary table
-            populationQuery.Accessors.Add(new AttributeAccessor
-            {
-                TargetAttribute = tempTable.PrimaryKey[0].ColumnName,
-                Accessor = eec => (long)(SqlInt64)eec.Entity[rowNumberColumn],
-                SourceAttributes = new[] { rowNumberColumn }
-            });
-
-            foreach (var col in populationColumns)
-            {
-                populationQuery.Accessors.Add(new AttributeAccessor
-                {
-                    TargetAttribute = col.OutputColumn,
-                    Accessor = eec => eec.Entity[col.SourceColumn],
-                    SourceAttributes = new[] { col.SourceColumn }
-                });
-            }
+            var reader = new EntityReader(tempTable, context, context.PrimaryDataSource, null, null, populationQuery.Source);
+            var targetColumns = populationColumns.Select(col => col.OutputColumn.ToColumnReference()).ToList();
+            var sourceColumns = populationColumns.Select(col => col.SourceColumn).ToArray();
+            populationQuery.Accessors = reader.ValidateInsertColumnMapping(targetColumns, sourceColumns);
 
             // Fetch query filters the results from the temporary table by the row number
             var rowNumberVariable = $"@{context.GetExpressionName()}";

@@ -3285,5 +3285,46 @@ INSERT INTO account (name, employees) VALUES ('Data8', 20);";
                 }
             }
         }
+
+        [TestMethod]
+        public void ConcatenateMetadataStringsAndLiteralsForNonEnglishOrgs()
+        {
+            // Metadata query exposes its schema as LCID 1033.
+            // Local variable inherits the connection LCID of 1036
+            // Literal values are also local LCID 1036
+            // Execution plan thinks the string concatenation is between two values in LCID 1036, but the
+            // variable has actually been set to a value in 1033 without it being converted
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                con.ChangeDatabase("french");
+                cmd.CommandText = @"
+DECLARE c CURSOR FOR
+SELECT logicalname FROM metadata.entity
+
+DECLARE @tablename nvarchar(100)
+
+OPEN c
+FETCH NEXT FROM c INTO @tablename
+WHILE @@FETCH_STATUS = 0 BEGIN
+    PRINT 'Table Name: ' + @tablename
+    FETCH NEXT FROM c INTO @tablename
+END
+
+CLOSE c
+DEALLOCATE c";
+
+                var msgCount = 0;
+
+                con.InfoMessage += (sender, args) =>
+                {
+                    msgCount++;
+                };
+
+                cmd.ExecuteNonQuery();
+
+                Assert.AreNotEqual(0, msgCount);
+            }
+        }
     }
 }
