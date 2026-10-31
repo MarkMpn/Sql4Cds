@@ -54,6 +54,8 @@ body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
   color: var(--fg-muted);
   user-select: none;
 }
+.message.navigable { cursor: pointer; }
+.message.navigable:hover { text-decoration: underline; }
 button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .query-results[hidden], .empty-state[hidden] { display: none; }
 .empty-state {

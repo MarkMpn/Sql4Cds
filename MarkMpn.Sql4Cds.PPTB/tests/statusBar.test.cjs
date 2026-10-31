@@ -13,7 +13,11 @@ class Element {
         this.attributes = {};
         this.events = {};
         this.classes = new Set();
-        this.classList = { toggle: (name, value) => value ? this.classes.add(name) : this.classes.delete(name) };
+        this.classList = {
+            toggle: (name, value) => value ? this.classes.add(name) : this.classes.delete(name),
+            add: (name) => this.classes.add(name),
+            remove: (name) => this.classes.delete(name),
+        };
     }
     append(...children) { this.children.push(...children); }
     appendChild(child) { this.children.push(child); }
@@ -92,11 +96,19 @@ function setup(pinned = true) {
     const { App } = load("app.ts", {
         "./styles.css": {},
         "./connections": { ConnectionRegistry: class { constructor() { return registry; } } },
-        "./editor/monacoSetup": { monaco: { Range: class {
-            constructor(startLineNumber, startColumn, endLineNumber, endColumn) {
-                Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
+        "./editor/monacoSetup": {
+            toMonacoRange: (range) => ({
+                startLineNumber: range.start.line + 1, startColumn: range.start.character + 1,
+                endLineNumber: range.end.line + 1, endColumn: range.end.character + 1,
+            }),
+            monaco: {
+                Range: class {
+                    constructor(startLineNumber, startColumn, endLineNumber, endColumn) {
+                        Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
+                    }
+                }
             }
-        } } },
+        },
         "./lsp/client": { Sql4CdsClient: class { constructor(events) { clientEvents = events; return client; } } },
         "./lsp/protocol": {},
         "./query/queryTab": {},
@@ -227,6 +239,36 @@ test("Messages tab line numbers follow the showMessageLineNumbers preference and
     const { tab: tabOn } = createTab();
     const paneOn = tabOn.resultsElement.children.find(child => child.className === "messages-pane");
     assert.equal(paneOn.classes.has("show-line-numbers"), true);
+});
+
+test("double-clicking a message with a range navigates to it in the editor, but non-navigable messages are inert", async () => {
+    const { app, createTab } = setup();
+    const { events } = createTab();
+    const range = { start: { line: 2, character: 4 }, end: { line: 2, character: 10 } };
+    const setSelections = [];
+    const revealedRanges = [];
+    let focused = false;
+    app.editor = {
+        setSelection: (r) => setSelections.push(r),
+        revealRangeInCenterIfOutsideViewport: (r) => revealedRanges.push(r),
+        focus: () => { focused = true; },
+    };
+
+    events.message({ message: { message: "SQL error", isError: true, range } });
+    events.message({ message: { message: "info with no location", isError: false } });
+
+    const navigable = app.activeTab.messagesPane.children.find(child => child.classes.has("navigable"));
+    const inert = app.activeTab.messagesPane.children.find(child => !child.classes.has("navigable"));
+    assert.ok(navigable);
+    assert.ok(inert);
+
+    inert.events.dblclick?.();
+    assert.equal(setSelections.length, 0, "Messages without a range must not trigger navigation");
+
+    navigable.events.dblclick();
+    assert.deepEqual(setSelections, [{ startLineNumber: 3, startColumn: 5, endLineNumber: 3, endColumn: 11 }]);
+    assert.deepEqual(revealedRanges, setSelections);
+    assert.equal(focused, true);
 });
 
 function summary(batchId, id, rowCount) {

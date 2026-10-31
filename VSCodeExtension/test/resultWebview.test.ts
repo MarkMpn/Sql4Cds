@@ -318,6 +318,30 @@ test("Messages pane line numbers reflect the showMessageLineNumbers setting", ()
   } finally { ui.close(); }
 });
 
+test("double-clicking a message with a range asks the extension to navigate to it, but non-navigable messages are inert", () => {
+  const ui = fixture();
+  try {
+    const document = ui.window.document;
+    const range = { start: { line: 1, character: 2 }, end: { line: 1, character: 10 } };
+    ui.state({
+      messages: [
+        { message: "Msg 547, Level 16, State 0, Line 2", isError: true, range },
+        { message: "Commands completed successfully.", isError: false }
+      ]
+    });
+    const [navigable, inert] = [...document.querySelectorAll("#messages .message")];
+    assert.equal(navigable.classList.contains("navigable"), true);
+    assert.equal(inert.classList.contains("navigable"), false);
+
+    navigable.dispatchEvent(new ui.window.Event("dblclick", { bubbles: true }));
+    assert.deepEqual(ui.sent.at(-1), { type: "navigateToMessage", ownerUri: "untitled:query", range });
+
+    ui.sent.length = 0;
+    inert.dispatchEvent(new ui.window.Event("dblclick", { bubbles: true }));
+    assert.equal(ui.sent.length, 0, "non-navigable messages must not post a navigation request");
+  } finally { ui.close(); }
+});
+
 
 test("Results tab appears only once a running query returns a result set", () => {
   const ui = fixture();

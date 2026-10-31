@@ -4,7 +4,7 @@ import { State } from "vscode-languageclient/node";
 import { DocumentConnectionManager, errorMessage } from "./documentConnections";
 import {
   CellValue, MessageParams, Methods, QueryCancelResult, QueryCompleteParams, QueryDisposeResult,
-  ResultSetEventParams, ResultSetSummary, SaveResultRequestResult, SubsetResult
+  Range, ResultSetEventParams, ResultSetSummary, SaveResultRequestResult, SubsetResult
 } from "./protocol";
 import { createExportParams, exportMethod, opensInTextEditor, resultExportChoices } from "./resultExport";
 import { buildDataverseRecordUrl, extractDataverseRecordReference } from "./dataverseRecordLink";
@@ -41,6 +41,7 @@ interface WebviewMessage {
   reference?: unknown;
   text?: string;
   format?: ExportFormat;
+  range?: Range;
 }
 
 export class QueryController implements vscode.Disposable, vscode.WebviewViewProvider {
@@ -252,6 +253,10 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       void vscode.window.showErrorMessage(`SQL 4 CDS: ${message.text}`);
       return;
     }
+    if (message.type === "navigateToMessage") {
+      await this.navigateToMessage(message.ownerUri, message.range);
+      return;
+    }
     if (!Number.isSafeInteger(message.requestId)) { throw new Error("Invalid results request."); }
     try {
       const value = await this.handleResultRequest(message);
@@ -357,6 +362,17 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     } else if (action === "Reveal in Finder/Explorer") { await vscode.commands.executeCommand("revealFileInOS", target); }
   }
 
+  private async navigateToMessage(ownerUri: string | undefined, range: Range | undefined): Promise<void> {
+    if (!ownerUri || !range) { return; }
+    const document = vscode.workspace.textDocuments.find(document => document.uri.toString() === ownerUri);
+    if (!document) { return; }
+    const editor = await vscode.window.showTextDocument(document, { preview: false });
+    const start = new vscode.Position(range.start.line, range.start.character);
+    const end = new vscode.Position(range.end.line, range.end.character);
+    editor.selection = new vscode.Selection(start, end);
+    editor.revealRange(new vscode.Range(start, end), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  }
+
   private publishState(uri: string): void {
     const state = this.states.get(uri);
     if (!state || uri !== this.selectedUri) { return; }
@@ -375,7 +391,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
         columns: result.columnInfo.map(column => column.columnName ?? column.name ?? ""),
         displayRowCount: Math.min(result.rowCount, maxRows), truncated: result.rowCount > maxRows
       })),
-      messages: state.messages.map(message => ({ isError: message.isError, message: message.message }))
+      messages: state.messages.map(message => ({ isError: message.isError, message: message.message, range: message.range }))
     } satisfies ResultsState);
   }
 

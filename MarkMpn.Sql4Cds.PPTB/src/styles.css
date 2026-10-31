@@ -809,6 +809,14 @@ button.toggle[aria-pressed="true"] {
     margin-top: 6px;
 }
 
+.message.navigable {
+    cursor: pointer;
+}
+
+.message.navigable:hover {
+    text-decoration: underline;
+}
+
 /* Results grid */
 
 .results-grid {

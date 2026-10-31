@@ -131,6 +131,13 @@ function update(next: ResultsState): void {
     const node = document.createElement("div");
     node.className = message.isError ? "message error" : "message";
     node.textContent = message.message;
+    if (message.range) {
+      node.classList.add("navigable");
+      node.title = "Double-click to go to the query";
+      node.addEventListener("dblclick", () => {
+        vscode.postMessage({ type: "navigateToMessage", ownerUri: state?.ownerUri, range: message.range });
+      });
+    }
     return node;
   });
   for (const result of next.results.filter(result => result.truncated)) {
