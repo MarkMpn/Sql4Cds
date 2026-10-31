@@ -121,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string GetDataTypeName(int i)
         {
             // Return T-SQL data type name
-            var sqlType = _schema.Schema[_columnSet[i].SourceColumn].Type;
+            var sqlType = GetSqlType(i);
 
             if (sqlType is SqlDataTypeReference sql)
                 return sql.SqlDataTypeOption.ToString().ToLower();
@@ -159,12 +159,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override Type GetProviderSpecificFieldType(int ordinal)
         {
-            var type = _schema.Schema[_columnSet[ordinal].SourceColumn].Type.ToNetType(out _);
+            var type = GetSqlType(ordinal).ToNetType(out _);
 
             if (type == typeof(SqlVariant))
                 type = typeof(object);
 
             return type;
+        }
+
+        public DataTypeReference GetSqlType(int ordinal)
+        {
+            return _schema.Schema[_columnSet[ordinal].SourceColumn].Type;
         }
 
         public override float GetFloat(int i)
