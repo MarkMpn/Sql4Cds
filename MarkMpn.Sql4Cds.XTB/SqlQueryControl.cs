@@ -119,7 +119,7 @@ namespace MarkMpn.Sql4Cds.XTB
         private readonly Scintilla _editor;
         private readonly Action<string> _log;
         private readonly PropertiesWindow _properties;
-        private int _maxLineNumberCharLength;
+        private readonly IDictionary<Scintilla, int> _maxLineNumberCharLengths = new Dictionary<Scintilla, int>();
         private static int _queryCounter;
         private static ImageList _images;
         private static Icon _sqlIcon;
@@ -399,6 +399,13 @@ namespace MarkMpn.Sql4Cds.XTB
             scintilla.Styles[1].ForeColor = Color.Red;
             scintilla.Styles[2].ForeColor = Color.Black;
 
+            // Show line numbers
+            CalcLineNumberWidth(scintilla);
+            scintilla.Styles[Style.LineNumber].ForeColor = Color.FromArgb(255, 128, 128, 128);  //Dark Gray
+            scintilla.Styles[Style.LineNumber].BackColor = Color.FromArgb(255, 228, 228, 228);  //Light Gray
+
+            scintilla.TextChanged += (s, e) => CalcLineNumberWidth((Scintilla)s);
+
             return scintilla;
         }
 
@@ -606,14 +613,14 @@ namespace MarkMpn.Sql4Cds.XTB
             // Did the number of characters in the line number display change?
             // i.e. nnn VS nn, or nnnn VS nn, etc...
             var maxLineNumberCharLength = scintilla.Lines.Count.ToString().Length;
-            if (maxLineNumberCharLength == _maxLineNumberCharLength)
+            if (_maxLineNumberCharLengths.TryGetValue(scintilla, out var previousMaxLineNumberCharLength) && maxLineNumberCharLength == previousMaxLineNumberCharLength)
                 return;
 
             // Calculate the width required to display the last line number
             // and include some padding for good measure.
             const int padding = 2;
             scintilla.Margins[0].Width = scintilla.TextWidth(Style.LineNumber, new string('9', maxLineNumberCharLength + 1)) + padding;
-            _maxLineNumberCharLength = maxLineNumberCharLength;
+            _maxLineNumberCharLengths[scintilla] = maxLineNumberCharLength;
         }
 
         private AutocompleteMenu CreateAutocomplete()

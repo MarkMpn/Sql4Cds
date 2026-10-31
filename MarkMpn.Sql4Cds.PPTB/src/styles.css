@@ -778,6 +778,23 @@ button.toggle[aria-pressed="true"] {
     padding: 6px 10px;
     font-family: Consolas, "Courier New", monospace;
     white-space: pre-wrap;
+    counter-reset: message-line;
+}
+
+.message:not(.summary) {
+    position: relative;
+    padding-left: 3.5em;
+    counter-increment: message-line;
+}
+
+.message:not(.summary)::before {
+    content: counter(message-line);
+    position: absolute;
+    left: 0;
+    width: 3em;
+    text-align: right;
+    color: var(--fg-muted);
+    user-select: none;
 }
 
 .message.error {

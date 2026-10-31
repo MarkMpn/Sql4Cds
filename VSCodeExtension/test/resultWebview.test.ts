@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildSync } from "esbuild";
 import { JSDOM, VirtualConsole } from "jsdom";
 import type * as vscode from "vscode";
 import { resultsHtml } from "../src/resultWebview";
 import type { ResultsState } from "../src/webview/protocol";
+
+const resultsCss = readFileSync("src/webview/results.css", "utf8");
 
 const script = buildSync({
   entryPoints: ["src/webview/results.ts"], bundle: true, write: false, platform: "browser",
@@ -267,6 +270,25 @@ test("Messages pane shows only server messages without a client-generated summar
     assert.deepEqual([...ui.window.document.querySelectorAll("#messages .message")].map(node => node.textContent),
       ["Commands completed successfully.", "Completion time: 2026-10-26T19:48:24.6811234+00:00"]);
   } finally { ui.close(); }
+});
+
+test("Messages pane numbers each server message (visually only) but not the truncation summary", () => {
+  const dom = new JSDOM(`<!doctype html><html><head><style>${resultsCss}</style></head>
+    <body><div class="messages-pane">
+      <div class="message">first</div>
+      <div class="message error">second</div>
+      <div class="message summary">Displaying the first 200 of 500 rows. Export includes all rows.</div>
+    </div></body></html>`);
+  try {
+    const { window } = dom;
+    const messages = [...window.document.querySelectorAll(".messages-pane .message")];
+    const [first, second, summary] = messages.map(node => window.getComputedStyle(node).counterIncrement);
+    assert.equal(first, "message-line");
+    assert.equal(second, "message-line");
+    assert.ok(!summary, `expected the truncation summary to be excluded from numbering, got ${JSON.stringify(summary)}`);
+    // Line numbers are rendered via CSS counters, so selecting/copying message text never includes them.
+    assert.equal(messages[0].textContent, "first");
+  } finally { dom.window.close(); }
 });
 
 test("Results tab appears only once a running query returns a result set", () => {
