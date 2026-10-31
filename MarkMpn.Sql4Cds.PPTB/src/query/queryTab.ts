@@ -1,7 +1,7 @@
 import { monaco, applyDiagnostics } from "../editor/monacoSetup";
 import { ConnectionRegistry } from "../connections";
 import type { Sql4CdsClient } from "../lsp/client";
-import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, ExecutionPlanNode, PptbConnectionOptions, ResultSetEventParams, ResultSetSummary, SelectionData } from "../lsp/protocol";
+import type { ConfirmationParams, ConnectionCompleteParams, EntityReferenceValue, ExecutionPlanNode, PptbConnectionOptions, Range, ResultSetEventParams, ResultSetSummary, SelectionData } from "../lsp/protocol";
 import { exportFormats, type ExportFormat } from "../lsp/protocol";
 import { ExecutionPlanView } from "../executionPlan/executionPlanView";
 import { getNodeImageUrl } from "../executionPlan/nodeImages";
@@ -11,6 +11,8 @@ export interface QueryTabHost {
     readonly client: Sql4CdsClient;
     /** Indicates if queries should be executed with the actual execution plan */
     readonly includeActualPlan: boolean;
+    /** Indicates if sequential line numbers should be shown in the Messages tab */
+    readonly showMessageLineNumbers: boolean;
     /** Gets the connection options to use for a PPTB connection slot */
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
@@ -24,6 +26,8 @@ export interface QueryTabHost {
     openRecord(reference: EntityReferenceValue): void;
     copyRecordUrl(reference: EntityReferenceValue): void;
     getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string>;
+    /** Activates the tab (if necessary) and selects/reveals the given range in the shared editor */
+    revealRange(tab: QueryTab, range: Range): void;
 }
 
 type ResultsView = "results" | "messages" | "plan";
@@ -139,6 +143,7 @@ export class QueryTab {
 
         this.messagesPane = document.createElement("div");
         this.messagesPane.className = "messages-pane";
+        this.messagesPane.classList.toggle("show-line-numbers", host.showMessageLineNumbers);
 
         this.planView = new ExecutionPlanView(
             getNodeImageUrl,
@@ -157,7 +162,7 @@ export class QueryTab {
             host.client.addListener(this.uri, {
                 connectionComplete: (p) => this.onConnectionComplete(p),
                 batchStart: () => {},
-                message: (p) => this.addMessage(p.message.message, p.message.isError),
+                message: (p) => this.addMessage(p.message.message, p.message.isError, p.message.range),
                 resultSetAvailable: (p) => this.onResultSetAvailable(p),
                 resultSetUpdated: (p) => this.onResultSetUpdated(p),
                 resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
@@ -439,7 +444,7 @@ export class QueryTab {
         }
     }
 
-    private addMessage(text: string, isError: boolean): void {
+    private addMessage(text: string, isError: boolean, range?: Range): void {
         if (isError) {
             this.hasErrors = true;
             this.statusMessage = text;
@@ -450,6 +455,11 @@ export class QueryTab {
         const line = document.createElement("div");
         line.className = isError ? "message error" : "message";
         line.textContent = text;
+        if (range) {
+            line.classList.add("navigable");
+            line.title = "Double-click to go to the query";
+            line.addEventListener("dblclick", () => this.host.revealRange(this, range));
+        }
         this.messagesPane.appendChild(line);
         this.messagesPane.scrollTop = this.messagesPane.scrollHeight;
     }

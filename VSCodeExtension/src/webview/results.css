@@ -39,6 +39,21 @@ body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
   font-family: var(--vscode-editor-font-family);
   font-size: var(--vscode-editor-font-size);
 }
+.messages-pane.show-line-numbers { counter-reset: message-line; }
+.messages-pane.show-line-numbers .message:not(.summary) {
+  position: relative;
+  padding-left: 3.5em;
+  counter-increment: message-line;
+}
+.messages-pane.show-line-numbers .message:not(.summary)::before {
+  content: counter(message-line);
+  position: absolute;
+  left: 0;
+  width: 3em;
+  text-align: right;
+  color: var(--fg-muted);
+  user-select: none;
+}
 button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .query-results[hidden], .empty-state[hidden] { display: none; }
 .empty-state {
