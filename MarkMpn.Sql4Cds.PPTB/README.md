@@ -2,7 +2,60 @@
 
 Query and modify Dataverse data using standard SQL syntax inside [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) (PPTB).
 
-All standard table data is available to query using `SELECT` statements. Data can also be modified using `INSERT`, `UPDATE` and `DELETE` statements.
+All standard table data is available to query using `SELECT` statements. Data can also be modified using `INSERT`, `UPDATE`
+and `DELETE` statements. Most Dataverse messages can also be invoked using either stored procedure or table-valued function
+syntax.
+
+## Examples
+
+```sql
+-- Simple SELECT statement
+SELECT TOP 10
+       name
+FROM   account
+WHERE  ownerid = CURRENT_USER
+
+-- Add a record using INSERT
+INSERT INTO account (name)
+VALUES ('Hello from PPTB!')
+
+-- UPDATE existing records
+UPDATE account
+SET    name = 'PPTB'
+WHERE  name = 'XrmToolBox'
+
+-- DELETE unwanted records
+DELETE account
+WHERE  name = 'MSCRM'
+
+-- Compare records across instances
+SELECT uat_users.fullname, prod_users.fullname
+FROM   uat.dbo.systemuser AS uat_users
+       FULL OUTER JOIN
+       prod.dbo.systemuser AS prod_users
+       ON uat_users.domainname = prod_users.domainname
+WHERE  uat_users.fullname IS DISTINCT FROM prod_users.fullname
+
+-- Copy missing records across instances
+INSERT INTO prod.dbo.accounts (name)
+SELECT name
+FROM   uat.dbo.accounts uat_accounts
+       LEFT OUTER JOIN
+       prod.dbo.accounts prod_accounts
+       ON uat_accounts.name = prod_accounts.name
+WHERE  prod_accounts.accountid IS NULL
+
+-- Query metadata
+SELECT logicalname, displayname
+FROM   metadata.entity
+
+-- Execute messages
+EXEC WhoAmI
+
+DECLARE @accountid EntityReference
+SELECT TOP 1 @accountid = accountid FROM account
+SELECT * FROM RetrieveRecordChangeHistory(@accountid)
+```
 
 ## Features
 
