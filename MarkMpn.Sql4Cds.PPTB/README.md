@@ -69,8 +69,11 @@ As you type a query, autocomplete dropdowns may appear to show possible table na
 
 Hover the mouse over a table, column, function or stored procedure name to view a tooltip with more details.
 
-Queries can be saved and opened to allow you to reuse them. If you close SQL 4 CDS while you have unsaved changes, you'll be prompted to cancel the closure to give you
-chance to save them, though you can always click "Ingore & Close" to close the tool anyway without saving.
+Queries can be saved and opened to allow you to reuse them. By default, SQL 4 CDS also remembers your session - any open query tabs, including unsaved changes and the
+connection each tab was using, are reopened the next time the tool starts. Turn off the "Remember session" option in the settings if you'd prefer not to persist your
+queries. With that option off, if you close SQL 4 CDS while you have unsaved changes you'll be prompted to cancel the closure to give you chance to save them, though you
+can always click "Ignore & Close" to close the tool anyway without saving. The separate "Remember session connections" option controls whether each reopened tab
+reconnects to the connection it was using in the previous session.
 
 To help keep queries consistent, use the "Format" toolbar button. Your query will be adjusted with standard line breaks, spacing and other rules enforced, but the structure
 of the query itself will remain unchanged.

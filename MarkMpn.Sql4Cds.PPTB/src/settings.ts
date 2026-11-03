@@ -16,6 +16,8 @@ export interface Sql4CdsSettings {
     maxRetrievesPerQuery: number;
     localFormatDates: boolean;
     useSchemaColumnOrdering: boolean;
+    rememberSession: boolean;
+    rememberSessionConnections: boolean;
     includeDetailedErrorTelemetry: boolean;
     objectExplorerPinned: boolean;
     propertiesPinned: boolean;
@@ -39,6 +41,8 @@ export const defaultSettings: Sql4CdsSettings = {
     maxRetrievesPerQuery: 100,
     localFormatDates: false,
     useSchemaColumnOrdering: false,
+    rememberSession: true,
+    rememberSessionConnections: true,
     includeDetailedErrorTelemetry: false,
     objectExplorerPinned: true,
     propertiesPinned: false,
@@ -68,6 +72,8 @@ const settingDescriptors: SettingDescriptor[] = [
     { key: "useLocalTimeZone", label: "Use local time zone", description: "Shows and accepts date/time values in your local time zone rather than UTC" },
     { key: "localFormatDates", label: "Locally format dates", description: "Formats date/time values using your local formatting preferences" },
     { key: "useSchemaColumnOrdering", label: "Schema column ordering", description: "Orders columns by schema position rather than alphabetically" },
+    { key: "rememberSession", label: "Remember session", description: "Saves your open query tabs, including any unsaved changes, and reopens them the next time the tool starts" },
+    { key: "rememberSessionConnections", label: "Remember session connections", description: "Reconnects each reopened query tab to the connection it was using in the previous session" },
     { key: "includeDetailedErrorTelemetry", label: "Include detailed error telemetry", description: "Sends SQL query text and full exception details, including stack traces, to Microsoft Application Insights. These details may contain sensitive data. Applies to existing connections without restarting." },
     { key: "useTdsEndpoint", label: "Use TDS Endpoint", description: "Not available in Power Platform ToolBox", unsupported: true },
     { key: "useBulkDelete", label: "Use bulk delete", description: "Submit eligible DELETE queries as asynchronous Dataverse bulk delete jobs" },
@@ -92,6 +98,8 @@ export async function saveSettings(settings: Sql4CdsSettings): Promise<void> {
 /** Forces settings that can't be supported when running through PPTB back to their defaults */
 function sanitize(settings: Sql4CdsSettings): Sql4CdsSettings {
     if (typeof settings.includeDetailedErrorTelemetry !== "boolean") settings.includeDetailedErrorTelemetry = defaultSettings.includeDetailedErrorTelemetry;
+    if (typeof settings.rememberSession !== "boolean") settings.rememberSession = defaultSettings.rememberSession;
+    if (typeof settings.rememberSessionConnections !== "boolean") settings.rememberSessionConnections = defaultSettings.rememberSessionConnections;
     if (typeof settings.objectExplorerPinned !== "boolean") settings.objectExplorerPinned = defaultSettings.objectExplorerPinned;
     if (typeof settings.propertiesPinned !== "boolean") settings.propertiesPinned = defaultSettings.propertiesPinned;
     if (typeof settings.includeActualPlan !== "boolean") settings.includeActualPlan = defaultSettings.includeActualPlan;
