@@ -1,8 +1,8 @@
 import "./styles.css";
+import { configureMonaco, monaco, toMonacoRange } from "./editor/monacoSetup";
 import { ConnectionRegistry } from "./connections";
-import { configureMonaco, monaco } from "./editor/monacoSetup";
 import { Sql4CdsClient } from "./lsp/client";
-import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue } from "./lsp/protocol";
+import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue, type Range } from "./lsp/protocol";
 import { QueryTab, type QueryTabHost } from "./query/queryTab";
 import { ObjectExplorer } from "./objectExplorer";
 import { PinnablePane } from "./pinnablePane";
@@ -11,7 +11,7 @@ import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 import { loadSession, saveSession, type SessionState, type SessionTab } from "./session";
 
-const DEFAULT_QUERY = "-- Enter your SQL query here and press F5 or Ctrl+E to run it\nSELECT TOP 10 *\nFROM   account\n";
+const DEFAULT_QUERY = "";
 
 class App implements QueryTabHost {
     readonly client: Sql4CdsClient;
@@ -405,6 +405,14 @@ class App implements QueryTabHost {
         this.openPreview(fetchXml, "xml", "FetchXML");
     }
 
+    revealRange(tab: QueryTab, range: Range): void {
+        this.activateTab(tab);
+        const monacoRange = toMonacoRange(range);
+        this.editor.setSelection(monacoRange);
+        this.editor.revealRangeInCenterIfOutsideViewport(monacoRange);
+        this.editor.focus();
+    }
+
     private openPreview(text: string, language: string, title: string): void {
         const tab = new QueryTab(this, text, {
             language,
@@ -595,6 +603,10 @@ class App implements QueryTabHost {
 
     get includeActualPlan(): boolean {
         return this.settings.includeActualPlan;
+    }
+
+    get showMessageLineNumbers(): boolean {
+        return this.settings.showMessageLineNumbers;
     }
 
     private async toggleActualPlan(): Promise<void> {

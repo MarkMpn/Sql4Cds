@@ -155,7 +155,7 @@ function toMarker(diagnostic: Diagnostic): monaco.editor.IMarkerData {
     };
 }
 
-function toMonacoRange(range: { start: { line: number; character: number }; end: { line: number; character: number } }): monaco.Range {
+export function toMonacoRange(range: { start: { line: number; character: number }; end: { line: number; character: number } }): monaco.Range {
     return new monaco.Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
 }
 
