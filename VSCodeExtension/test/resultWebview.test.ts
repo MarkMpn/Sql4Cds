@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildSync } from "esbuild";
 import { JSDOM, VirtualConsole } from "jsdom";
 import type * as vscode from "vscode";
 import { resultsHtml } from "../src/resultWebview";
 import type { ResultsState } from "../src/webview/protocol";
+
+const resultsCss = readFileSync("src/webview/results.css", "utf8");
 
 const script = buildSync({
   entryPoints: ["src/webview/results.ts"], bundle: true, write: false, platform: "browser",
@@ -46,7 +49,7 @@ function fixture() {
     window.dispatchEvent(new window.MessageEvent("message", { data: message, origin }));
   const state = (overrides: Partial<ResultsState> = {}, origin = window.location.origin) => emit({
     type: "state", ownerUri: "untitled:query", runId: 1, status: "completed", estimatedPlan: false,
-    results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, ...overrides
+    results: [result], messages: [], plans: [], planVersion: 1, autoSizeColumns: true, showMessageLineNumbers: false, ...overrides
   }, origin);
   const respond = (request: Record<string, any>, value?: unknown, error?: string) => emit({
     type: "response", requestId: request.requestId, value, error
@@ -268,6 +271,77 @@ test("Messages pane shows only server messages without a client-generated summar
       ["Commands completed successfully.", "Completion time: 2026-10-26T19:48:24.6811234+00:00"]);
   } finally { ui.close(); }
 });
+
+test("Messages pane numbers each server message when enabled (visually only), but not the truncation summary", () => {
+  const dom = new JSDOM(`<!doctype html><html><head><style>${resultsCss}</style></head>
+    <body>
+    <div class="messages-pane">
+      <div class="message">first</div>
+      <div class="message error">second</div>
+      <div class="message summary">Displaying the first 200 of 500 rows. Export includes all rows.</div>
+    </div>
+    <div class="messages-pane show-line-numbers">
+      <div class="message">first</div>
+      <div class="message error">second</div>
+      <div class="message summary">Displaying the first 200 of 500 rows. Export includes all rows.</div>
+    </div>
+    </body></html>`);
+  try {
+    const { window } = dom;
+    const [defaultPane, enabledPane] = window.document.querySelectorAll(".messages-pane");
+
+    const defaultMessages = [...defaultPane.querySelectorAll(".message")];
+    for (const message of defaultMessages) {
+      assert.ok(!window.getComputedStyle(message).counterIncrement,
+        "line numbers must be off by default, for consistency with SSMS");
+    }
+
+    const enabledMessages = [...enabledPane.querySelectorAll(".message")];
+    const [first, second, summary] = enabledMessages.map(node => window.getComputedStyle(node).counterIncrement);
+    assert.equal(first, "message-line");
+    assert.equal(second, "message-line");
+    assert.ok(!summary, `expected the truncation summary to be excluded from numbering, got ${JSON.stringify(summary)}`);
+    // Line numbers are rendered via CSS counters, so selecting/copying message text never includes them.
+    assert.equal(enabledMessages[0].textContent, "first");
+  } finally { dom.window.close(); }
+});
+
+test("Messages pane line numbers reflect the showMessageLineNumbers setting", () => {
+  const ui = fixture();
+  try {
+    const document = ui.window.document;
+    ui.state({ messages: [{ message: "first", isError: false }, { message: "second", isError: false }] });
+    assert.equal(document.getElementById("messages")!.classList.contains("show-line-numbers"), false);
+
+    ui.state({ messages: [{ message: "first", isError: false }, { message: "second", isError: false }], showMessageLineNumbers: true });
+    assert.equal(document.getElementById("messages")!.classList.contains("show-line-numbers"), true);
+  } finally { ui.close(); }
+});
+
+test("double-clicking a message with a range asks the extension to navigate to it, but non-navigable messages are inert", () => {
+  const ui = fixture();
+  try {
+    const document = ui.window.document;
+    const range = { start: { line: 1, character: 2 }, end: { line: 1, character: 10 } };
+    ui.state({
+      messages: [
+        { message: "Msg 547, Level 16, State 0, Line 2", isError: true, range },
+        { message: "Commands completed successfully.", isError: false }
+      ]
+    });
+    const [navigable, inert] = [...document.querySelectorAll("#messages .message")];
+    assert.equal(navigable.classList.contains("navigable"), true);
+    assert.equal(inert.classList.contains("navigable"), false);
+
+    navigable.dispatchEvent(new ui.window.Event("dblclick", { bubbles: true }));
+    assert.deepEqual(ui.sent.at(-1), { type: "navigateToMessage", ownerUri: "untitled:query", range });
+
+    ui.sent.length = 0;
+    inert.dispatchEvent(new ui.window.Event("dblclick", { bubbles: true }));
+    assert.equal(ui.sent.length, 0, "non-navigable messages must not post a navigation request");
+  } finally { ui.close(); }
+});
+
 
 test("Results tab appears only once a running query returns a result set", () => {
   const ui = fixture();

@@ -1,4 +1,5 @@
 import type { ExecutionPlanGraph } from "../../../MarkMpn.Sql4Cds.PPTB/src/resultsProtocol";
+import type { Range } from "../protocol";
 
 export interface ResultsState {
   type: "state";
@@ -8,6 +9,7 @@ export interface ResultsState {
   estimatedPlan: boolean;
   planVersion: number;
   autoSizeColumns: boolean;
+  showMessageLineNumbers: boolean;
   results: {
     key: string;
     rowCount: number;
@@ -17,7 +19,7 @@ export interface ResultsState {
     truncated: boolean;
   }[];
   plans: { key: string; graphs: ExecutionPlanGraph[] }[];
-  messages: { message: string; isError: boolean }[];
+  messages: { message: string; isError: boolean; range?: Range }[];
 }
 
 export interface ResultResponse {

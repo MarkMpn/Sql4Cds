@@ -17,6 +17,7 @@ export interface Sql4CdsSettings {
     localFormatDates: boolean;
     useSchemaColumnOrdering: boolean;
     includeDetailedErrorTelemetry: boolean;
+    showMessageLineNumbers: boolean;
     objectExplorerPinned: boolean;
     propertiesPinned: boolean;
     includeActualPlan: boolean;
@@ -40,6 +41,7 @@ export const defaultSettings: Sql4CdsSettings = {
     localFormatDates: false,
     useSchemaColumnOrdering: false,
     includeDetailedErrorTelemetry: false,
+    showMessageLineNumbers: false,
     objectExplorerPinned: true,
     propertiesPinned: false,
     includeActualPlan: false,
@@ -68,6 +70,7 @@ const settingDescriptors: SettingDescriptor[] = [
     { key: "useLocalTimeZone", label: "Use local time zone", description: "Shows and accepts date/time values in your local time zone rather than UTC" },
     { key: "localFormatDates", label: "Locally format dates", description: "Formats date/time values using your local formatting preferences" },
     { key: "useSchemaColumnOrdering", label: "Schema column ordering", description: "Orders columns by schema position rather than alphabetically" },
+    { key: "showMessageLineNumbers", label: "Show line numbers in Messages tab", description: "Shows sequential line numbers next to each message in the Messages tab" },
     { key: "includeDetailedErrorTelemetry", label: "Include detailed error telemetry", description: "Sends SQL query text and full exception details, including stack traces, to Microsoft Application Insights. These details may contain sensitive data. Applies to existing connections without restarting." },
     { key: "useTdsEndpoint", label: "Use TDS Endpoint", description: "Not available in Power Platform ToolBox", unsupported: true },
     { key: "useBulkDelete", label: "Use bulk delete", description: "Submit eligible DELETE queries as asynchronous Dataverse bulk delete jobs" },
@@ -95,6 +98,7 @@ function sanitize(settings: Sql4CdsSettings): Sql4CdsSettings {
     if (typeof settings.objectExplorerPinned !== "boolean") settings.objectExplorerPinned = defaultSettings.objectExplorerPinned;
     if (typeof settings.propertiesPinned !== "boolean") settings.propertiesPinned = defaultSettings.propertiesPinned;
     if (typeof settings.includeActualPlan !== "boolean") settings.includeActualPlan = defaultSettings.includeActualPlan;
+    if (typeof settings.showMessageLineNumbers !== "boolean") settings.showMessageLineNumbers = defaultSettings.showMessageLineNumbers;
     for (const descriptor of settingDescriptors) {
         if (descriptor.unsupported) {
             (settings as unknown as Record<string, unknown>)[descriptor.key] = defaultSettings[descriptor.key];

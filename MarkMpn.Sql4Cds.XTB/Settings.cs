@@ -43,6 +43,8 @@ namespace MarkMpn.Sql4Cds.XTB
 
         public bool AutoSizeColumns { get; set; } = true;
 
+        public bool ShowMessageLineNumbers { get; set; }
+
         public int MaxRetrievesPerQuery { get; set; } = 100;
 
         public bool BypassCustomPlugins { get; set; }

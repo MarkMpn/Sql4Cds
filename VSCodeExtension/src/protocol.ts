@@ -98,11 +98,15 @@ export interface ResultSetEventParams {
   executionPlans?: ExecutionPlanGraph[];
 }
 
+export interface Position { line: number; character: number; }
+export interface Range { start: Position; end: Position; }
+
 export interface ResultMessage {
   batchId?: number;
   isError: boolean;
   time?: string;
   message: string;
+  range?: Range;
 }
 
 export interface MessageParams { ownerUri: string; message: ResultMessage; }

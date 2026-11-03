@@ -131,6 +131,13 @@ function update(next: ResultsState): void {
     const node = document.createElement("div");
     node.className = message.isError ? "message error" : "message";
     node.textContent = message.message;
+    if (message.range) {
+      node.classList.add("navigable");
+      node.title = "Double-click to go to the query";
+      node.addEventListener("dblclick", () => {
+        vscode.postMessage({ type: "navigateToMessage", ownerUri: state?.ownerUri, range: message.range });
+      });
+    }
     return node;
   });
   for (const result of next.results.filter(result => result.truncated)) {
@@ -139,6 +146,7 @@ function update(next: ResultsState): void {
     limit.textContent = `Displaying the first ${result.displayRowCount.toLocaleString()} of ${result.rowCount.toLocaleString()} rows. Export includes all rows.`;
     nodes.push(limit);
   }
+  messages.classList.toggle("show-line-numbers", next.showMessageLineNumbers);
   messages.replaceChildren(...nodes);
   const hasErrors = next.status === "failed" || next.messages.some(message => message.isError);
   if (hasErrors) select("messages");

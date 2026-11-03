@@ -64,6 +64,7 @@
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.includedDetailedErrorTelemetryCheckBox = new System.Windows.Forms.CheckBox();
             this.schemaColumnOrderingCheckbox = new System.Windows.Forms.CheckBox();
             this.showFetchXMLInEstimatedExecutionPlansCheckBox = new System.Windows.Forms.CheckBox();
             this.pictureBox6 = new System.Windows.Forms.PictureBox();
@@ -91,6 +92,7 @@
             this.label27 = new System.Windows.Forms.Label();
             this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
             this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
+            this.showMessageLineNumbersCheckBox = new System.Windows.Forms.CheckBox();
             this.tabPage4 = new System.Windows.Forms.TabPage();
             this.fetchXml2SqlConversionAdvancedLinkLabel = new System.Windows.Forms.LinkLabel();
             this.nativeSqlScintilla = new ScintillaNET.Scintilla();
@@ -113,7 +115,6 @@
             this.label22 = new System.Windows.Forms.Label();
             this.aiEndpointTextBox = new System.Windows.Forms.TextBox();
             this.label21 = new System.Windows.Forms.Label();
-            this.includedDetailedErrorTelemetryCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -542,6 +543,16 @@
             this.tabPage1.Text = "Query Execution";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // includedDetailedErrorTelemetryCheckBox
+            // 
+            this.includedDetailedErrorTelemetryCheckBox.AutoSize = true;
+            this.includedDetailedErrorTelemetryCheckBox.Location = new System.Drawing.Point(6, 216);
+            this.includedDetailedErrorTelemetryCheckBox.Name = "includedDetailedErrorTelemetryCheckBox";
+            this.includedDetailedErrorTelemetryCheckBox.Size = new System.Drawing.Size(340, 17);
+            this.includedDetailedErrorTelemetryCheckBox.TabIndex = 32;
+            this.includedDetailedErrorTelemetryCheckBox.Text = "Include full SQL query and error messages in error telemetry reports";
+            this.includedDetailedErrorTelemetryCheckBox.UseVisualStyleBackColor = true;
+            // 
             // schemaColumnOrderingCheckbox
             // 
             this.schemaColumnOrderingCheckbox.AutoSize = true;
@@ -812,6 +823,7 @@
             this.tabPage6.Controls.Add(this.label27);
             this.tabPage6.Controls.Add(this.localDateFormatCheckbox);
             this.tabPage6.Controls.Add(this.autoSizeColumnsCheckBox);
+            this.tabPage6.Controls.Add(this.showMessageLineNumbersCheckBox);
             this.tabPage6.Location = new System.Drawing.Point(4, 22);
             this.tabPage6.Name = "tabPage6";
             this.tabPage6.Size = new System.Drawing.Size(409, 330);
@@ -873,6 +885,16 @@
             this.autoSizeColumnsCheckBox.TabIndex = 5;
             this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
             this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
+            // 
+            // showMessageLineNumbersCheckBox
+            // 
+            this.showMessageLineNumbersCheckBox.AutoSize = true;
+            this.showMessageLineNumbersCheckBox.Location = new System.Drawing.Point(6, 100);
+            this.showMessageLineNumbersCheckBox.Name = "showMessageLineNumbersCheckBox";
+            this.showMessageLineNumbersCheckBox.Size = new System.Drawing.Size(195, 17);
+            this.showMessageLineNumbersCheckBox.TabIndex = 14;
+            this.showMessageLineNumbersCheckBox.Text = "Show line numbers in Messages tab";
+            this.showMessageLineNumbersCheckBox.UseVisualStyleBackColor = true;
             // 
             // tabPage4
             // 
@@ -1123,16 +1145,6 @@
             this.label21.TabIndex = 2;
             this.label21.Text = "Endpoint";
             // 
-            // includedDetailedErrorTelemetryCheckBox
-            // 
-            this.includedDetailedErrorTelemetryCheckBox.AutoSize = true;
-            this.includedDetailedErrorTelemetryCheckBox.Location = new System.Drawing.Point(6, 216);
-            this.includedDetailedErrorTelemetryCheckBox.Name = "includedDetailedErrorTelemetryCheckBox";
-            this.includedDetailedErrorTelemetryCheckBox.Size = new System.Drawing.Size(340, 17);
-            this.includedDetailedErrorTelemetryCheckBox.TabIndex = 32;
-            this.includedDetailedErrorTelemetryCheckBox.Text = "Include full SQL query and error messages in error telemetry reports";
-            this.includedDetailedErrorTelemetryCheckBox.UseVisualStyleBackColor = true;
-            // 
             // SettingsForm
             // 
             this.AcceptButton = this.okButton;
@@ -1269,6 +1281,7 @@
         private System.Windows.Forms.Label label27;
         private System.Windows.Forms.CheckBox localDateFormatCheckbox;
         private System.Windows.Forms.CheckBox autoSizeColumnsCheckBox;
+        private System.Windows.Forms.CheckBox showMessageLineNumbersCheckBox;
         private System.Windows.Forms.ComboBox aiProviderComboBox;
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.Label label28;

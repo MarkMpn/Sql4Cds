@@ -1,4 +1,5 @@
 ﻿using System;
+using Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
 {
@@ -28,6 +29,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
         /// Message contents
         /// </summary>
         public string Message { get; set; }
+
+        /// <summary>
+        /// The location within the query text that generated this message, if known.
+        /// Used by the clients to navigate to the relevant part of the query when the
+        /// message is double-clicked.
+        /// </summary>
+        public Microsoft.VisualStudio.LanguageServer.Protocol.Range Range { get; set; }
 
         /// <summary>
         /// Constructor with default "Now" time

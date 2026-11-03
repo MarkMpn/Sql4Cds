@@ -780,6 +780,26 @@ button.toggle[aria-pressed="true"] {
     white-space: pre-wrap;
 }
 
+.messages-pane.show-line-numbers {
+    counter-reset: message-line;
+}
+
+.messages-pane.show-line-numbers .message:not(.summary) {
+    position: relative;
+    padding-left: 3.5em;
+    counter-increment: message-line;
+}
+
+.messages-pane.show-line-numbers .message:not(.summary)::before {
+    content: counter(message-line);
+    position: absolute;
+    left: 0;
+    width: 3em;
+    text-align: right;
+    color: var(--fg-muted);
+    user-select: none;
+}
+
 .message.error {
     color: var(--error);
 }

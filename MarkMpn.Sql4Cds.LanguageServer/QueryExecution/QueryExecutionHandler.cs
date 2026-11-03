@@ -167,7 +167,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             });
 
             var messageCount = 0;
-            Task SendMessageAsync(string message, bool isError = false)
+            Task SendMessageAsync(string message, bool isError = false, Microsoft.VisualStudio.LanguageServer.Protocol.Range range = null)
             {
                 Interlocked.Increment(ref messageCount);
                 return events.NotifyAsync(MessageEvent.Type, new MessageParams
@@ -178,9 +178,50 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         BatchId = batchSummary.Id,
                         Time = DateTime.UtcNow.ToString("o"),
                         Message = message,
-                        IsError = isError
+                        IsError = isError,
+                        Range = range
                     }
                 });
+            }
+
+            Microsoft.VisualStudio.LanguageServer.Protocol.Range GetRangeFromOffset(int index, int length)
+            {
+                if (index < 0)
+                    return null;
+
+                int GetLineAndColumn(int offset, out int line)
+                {
+                    line = 0;
+                    var lastNewLine = -1;
+
+                    for (var i = 0; i < offset && i < qry.Length; i++)
+                    {
+                        if (qry[i] == '\n')
+                        {
+                            line++;
+                            lastNewLine = i;
+                        }
+                    }
+
+                    return offset - lastNewLine - 1;
+                }
+
+                var startColumn = GetLineAndColumn(index, out var startLine);
+                var endColumn = GetLineAndColumn(index + length, out var endLine);
+
+                return new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                {
+                    Start = new Position
+                    {
+                        Line = startLine + selection.StartLine,
+                        Character = startColumn + (startLine == 0 ? selection.StartColumn : 0)
+                    },
+                    End = new Position
+                    {
+                        Line = endLine + selection.StartLine,
+                        Character = endColumn + (endLine == 0 ? selection.StartColumn : 0)
+                    }
+                };
             }
 
             var infoMessageHandler = (EventHandler<InfoMessageEventArgs>)((object sender, InfoMessageEventArgs msg) =>
@@ -277,7 +318,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     cmd.StatementCompleted += (_, stmt) =>
                     {
                         if (stmt.Message != null)
-                            _ = SendMessageAsync(stmt.Message);
+                            _ = SendMessageAsync(stmt.Message, false, stmt.Statement != null ? GetRangeFromOffset(stmt.Statement.Index, stmt.Statement.Length) : null);
                     };
 
                     if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
@@ -450,51 +491,51 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                             parts.Add($"Line {Math.Max(sql4CdsError.LineNumber, 1)}");
                         }
 
-                        await SendMessageAsync(String.Join(", ", parts), true);
-                        await SendMessageAsync(sql4CdsError.Message, true);
+                        Microsoft.VisualStudio.LanguageServer.Protocol.Range errorRange;
 
                         if (sql4CdsError.Fragment != null && sql4CdsError.Fragment.FragmentLength > 0)
                         {
                             var lines = sql4CdsError.Fragment.ToSql().Split('\n');
 
-                            diagnostics.Add(new Diagnostic
+                            errorRange = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
                             {
-                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                Start = new Position
                                 {
-                                    Start = new Position
-                                    {
-                                        Line = sql4CdsError.Fragment.StartLine - 1 + selection.StartLine,
-                                        Character = sql4CdsError.Fragment.StartColumn - 1 + (sql4CdsError.Fragment.StartLine == 1 ? selection.StartColumn : 0)
-                                    },
-                                    End = new Position
-                                    {
-                                        Line = sql4CdsError.Fragment.StartLine - 1 + selection.StartLine + lines.Length - 1,
-                                        Character = lines.Length > 1 ? lines.Last().Length - 1 : sql4CdsError.Fragment.StartColumn - 1 + (sql4CdsError.Fragment.StartLine == 1 ? selection.StartColumn : 0) + sql4CdsError.Fragment.FragmentLength
-                                    }
+                                    Line = sql4CdsError.Fragment.StartLine - 1 + selection.StartLine,
+                                    Character = sql4CdsError.Fragment.StartColumn - 1 + (sql4CdsError.Fragment.StartLine == 1 ? selection.StartColumn : 0)
                                 },
-                                Message = sql4CdsError.Message
-                            });
+                                End = new Position
+                                {
+                                    Line = sql4CdsError.Fragment.StartLine - 1 + selection.StartLine + lines.Length - 1,
+                                    Character = lines.Length > 1 ? lines.Last().Length - 1 : sql4CdsError.Fragment.StartColumn - 1 + (sql4CdsError.Fragment.StartLine == 1 ? selection.StartColumn : 0) + sql4CdsError.Fragment.FragmentLength
+                                }
+                            };
                         }
                         else
                         {
-                            diagnostics.Add(new Diagnostic
+                            errorRange = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
                             {
-                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                Start = new Position
                                 {
-                                    Start = new Position
-                                    {
-                                        Line = Math.Max(sql4CdsError.LineNumber, 1) - 1 + selection.StartLine,
-                                        Character = 0
-                                    },
-                                    End = new Position
-                                    {
-                                        Line = Math.Max(sql4CdsError.LineNumber, 1) - 1 + selection.StartLine,
-                                        Character = qry.Split('\n')[Math.Max(sql4CdsError.LineNumber, 1) - 1].Length
-                                    }
+                                    Line = Math.Max(sql4CdsError.LineNumber, 1) - 1 + selection.StartLine,
+                                    Character = 0
                                 },
-                                Message = sql4CdsError.Message
-                            });
+                                End = new Position
+                                {
+                                    Line = Math.Max(sql4CdsError.LineNumber, 1) - 1 + selection.StartLine,
+                                    Character = qry.Split('\n')[Math.Max(sql4CdsError.LineNumber, 1) - 1].Length
+                                }
+                            };
                         }
+
+                        await SendMessageAsync(String.Join(", ", parts), true, errorRange);
+                        await SendMessageAsync(sql4CdsError.Message, true, errorRange);
+
+                        diagnostics.Add(new Diagnostic
+                        {
+                            Range = errorRange,
+                            Message = sql4CdsError.Message
+                        });
                     }
 
                     await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
@@ -504,16 +545,30 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     });
                 }
 
-                await SendMessageAsync(GetErrorMessage(ex, sql4CdsException), true);
-
                 var error = ex;
 
                 while (error.InnerException != null)
                     error = error.InnerException;
 
+                Microsoft.VisualStudio.LanguageServer.Protocol.Range parseErrorRange = null;
+
                 if (error is QueryParseException parseException)
                 {
                     var length = Regex.Match(qry.Substring(parseException.Error.Offset), "\\b", RegexOptions.None, TimeSpan.FromSeconds(1)).Index;
+
+                    parseErrorRange = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                    {
+                        Start = new Position
+                        {
+                            Line = parseException.Error.Line - 1 + selection.StartLine,
+                            Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? selection.StartColumn : 0)
+                        },
+                        End = new Position
+                        {
+                            Line = parseException.Error.Line - 1 + selection.StartLine,
+                            Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? selection.StartColumn : 0) + length
+                        }
+                    };
 
                     await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
                     {
@@ -522,24 +577,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         {
                             new Diagnostic
                             {
-                                Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
-                                {
-                                    Start = new Position
-                                    {
-                                        Line = parseException.Error.Line - 1 + selection.StartLine,
-                                        Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? selection.StartColumn : 0)
-                                    },
-                                    End = new Position
-                                    {
-                                        Line = parseException.Error.Line - 1 + selection.StartLine,
-                                        Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? selection.StartColumn : 0) + length
-                                    }
-                                },
+                                Range = parseErrorRange,
                                 Message = parseException.Message
                             }
                         }
                     });
                 }
+
+                await SendMessageAsync(GetErrorMessage(ex, sql4CdsException), true, parseErrorRange);
             }
             finally
             {

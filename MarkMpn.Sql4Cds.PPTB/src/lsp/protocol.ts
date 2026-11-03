@@ -155,6 +155,7 @@ export interface ResultMessage {
     isError: boolean;
     time?: string;
     message: string;
+    range?: Range;
 }
 
 export interface MessageParams {
