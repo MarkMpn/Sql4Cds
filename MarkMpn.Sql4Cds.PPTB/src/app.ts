@@ -117,7 +117,8 @@ class App implements QueryTabHost {
         this.connections = new ConnectionRegistry(this.client);
         this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
             (message) => { void notify("Object Explorer", message, "error"); },
-            (text) => this.insertObjectName(text));
+            (text) => this.insertObjectName(text),
+            (connection, query) => this.addTab(query, connection.slot));
     }
 
     private async openQuery(): Promise<void> {

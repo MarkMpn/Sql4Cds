@@ -40,8 +40,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             get
             {
-                var options = GetProperty(Target, "MyOptions");
-                var execSettings = GetProperty(options, "ExecutionSettings");
+                var options = GetProperty(Target, "UserSettings");
+                var execSettings = GetProperty(options, "QueryExecution");
                 return (bool) GetProperty(execSettings, "SetQuotedIdentifier");
             }
         }

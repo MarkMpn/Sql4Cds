@@ -609,6 +609,10 @@ export class Sql4CdsClient {
         return this.request("objectexplorer/refresh", { sessionId, nodePath });
     }
 
+    generateObjectExplorerScript(sessionId: string, nodePath: string, action: string): Promise<string> {
+        return this.request("objectexplorer/generateScript", { sessionId, nodePath, action });
+    }
+
     closeObjectExplorerSession(sessionId: string): Promise<ObjectExplorerSessionDisconnected> {
         return this.request("objectexplorer/closesession", { sessionId });
     }
