@@ -99,7 +99,7 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
     this.changedEmitter.fire(item);
   }
 
-  public async searchTables(profile?: ConnectionProfile): Promise<{ profile: ConnectionProfile; node: NodeInfo } | undefined> {
+  public async searchTables(profile?: ConnectionProfile): Promise<{ profile: ConnectionProfile; node: NodeInfo; sessionId: string } | undefined> {
     profile ??= await this.profiles.pick("Select a connection to search");
     if (!profile) { return undefined; }
 
@@ -124,7 +124,7 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
         matchOnDetail: true,
         ignoreFocusOut: true
       });
-      return selection ? { profile, node: selection.node } : undefined;
+      return selection ? { profile, node: selection.node, sessionId: session.sessionId } : undefined;
     } catch (error) {
       void vscode.window.showErrorMessage(`Could not search tables: ${errorMessage(error)}`);
       return undefined;
@@ -204,10 +204,31 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<Sql4CdsTr
   }
 }
 
+export type ScriptAction = "SELECT" | "SELECT_TOP_1000" | "INSERT" | "UPDATE" | "DELETE" | "EXECUTE";
+
 export function selectTopQuery(metadata: ObjectMetadata | undefined): string | undefined {
   if (!metadata?.name) { return undefined; }
   const quote = (value: string) => `[${value.replaceAll(']', ']]')}]`;
   return `SELECT TOP 1000 *\nFROM ${quote(metadata.schema || "dbo")}.${quote(metadata.name)};`;
+}
+
+export function scriptObjectQuery(node: NodeInfo, action: ScriptAction): string | undefined {
+  const quote = (value: string) => `[${value.replaceAll(']', ']]')}]`;
+  const name = `${quote(node.metadata?.schema || "dbo")}.${quote(node.metadata?.name || node.label)}`;
+  if (action === "SELECT" && (node.nodeType === "Table" || node.nodeType === "TableValuedFunction")) {
+    return `SELECT *\nFROM ${name}${node.nodeType === "TableValuedFunction" ? "()" : ""};`;
+  }
+  if (node.nodeType === "Table") {
+    switch (action) {
+      case "INSERT": return `INSERT INTO ${name} ([column])\nVALUES ('<value>');`;
+      case "UPDATE": return `UPDATE ${name}\nSET [column] = '<value>'\nWHERE [primarykey] = '<value>';`;
+      case "DELETE": return `DELETE FROM ${name}\nWHERE [primarykey] = '<value>';`;
+    }
+  }
+  if (action === "EXECUTE" && node.nodeType === "StoredProcedure") {
+    return `EXECUTE ${name};`;
+  }
+  return undefined;
 }
 
 export function sqlIdentifier(metadata: ObjectMetadata | undefined, fallback?: string): string | undefined {

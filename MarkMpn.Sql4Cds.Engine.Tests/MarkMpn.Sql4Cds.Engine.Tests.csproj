@@ -107,6 +107,7 @@
     <Compile Include="OptionsWrapper.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />
     <Compile Include="AdoProviderTests.cs" />
+    <Compile Include="AutocompleteTests.cs" />
     <Compile Include="RetrieveAllOptionSetsHandler.cs" />
     <Compile Include="RetrieveMetadataChangesHandler.cs" />
     <Compile Include="SetStateMessageExecutor.cs" />

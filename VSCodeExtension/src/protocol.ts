@@ -183,6 +183,7 @@ export const Methods = {
   objectExplorerSessionCreated: "objectexplorer/sessioncreated",
   expandObjectExplorer: "objectexplorer/expand",
   objectExplorerExpanded: "objectexplorer/expandCompleted",
+  generateObjectExplorerScript: "objectexplorer/generateScript",
   closeObjectExplorerSession: "objectexplorer/closesession",
   executeString: "query/executeString",
   executeDocumentSelection: "query/executeDocumentSelection",

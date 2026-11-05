@@ -6,9 +6,9 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk;
 
-namespace MarkMpn.Sql4Cds.XTB
+namespace MarkMpn.Sql4Cds.Engine
 {
-    class FunctionMetadata
+    public static class FunctionMetadata
     {
         [AttributeUsage(AttributeTargets.Method)]
         public class AggregateAttribute : Attribute
@@ -211,6 +211,21 @@ namespace MarkMpn.Sql4Cds.XTB
 
             [Description("Creates a unique value of type uniqueidentifier")]
             public abstract Guid newid();
+
+            [Description("Returns the absolute (positive) value of the specified numeric expression")]
+            public abstract double abs(double expression);
+
+            [Description("Returns the positive (+1), zero (0), or negative (-1) sign of the specified numeric expression")]
+            public abstract double sign(double expression);
+
+            [Description("Returns the smallest integer greater than, or equal to, the specified numeric expression")]
+            public abstract double ceiling(double expression);
+
+            [Description("Returns the largest integer less than or equal to the specified numeric expression")]
+            public abstract double floor(double expression);
+
+            [Description("Returns a numeric value, rounded to the specified length or precision")]
+            public abstract double round(double expression, int length, int function = 0);
         }
     }
 }

@@ -19,10 +19,15 @@ function walk(element) {
     return [element, ...element.children.flatMap(walk)];
 }
 
+function findButton(element, text) {
+    return walk(element).find((candidate) => candidate.tagName === "BUTTON" && candidate.textContent === text);
+}
+
 function setup() {
     const document = { activeElement: null };
     class Element {
-        constructor() {
+        constructor(tagName = "div") {
+            this.tagName = tagName.toUpperCase();
             this.children = [];
             this.attributes = {};
             this.events = {};
@@ -33,11 +38,28 @@ function setup() {
         addEventListener(name, callback) { this.events[name] = callback; }
         removeEventListener(name) { delete this.events[name]; }
         appendChild(child) { this.children.push(child); child.parent = this; }
-        append(...children) { this.children.push(...children); }
+        append(...children) { for (const child of children) this.appendChild(child); }
         replaceChildren(...children) { this.children = children.flatMap((child) => child.fragment ? child.children : [child]); }
         contains(element) { return walk(this).includes(element); }
-        focus() { document.activeElement = this; }
-        querySelector() { return walk(this).find((element) => element.tabIndex === 0); }
+        focus() { document.activeElement = this; this.events.focus?.({ target: this }); }
+        hasAttribute(name) { return Object.hasOwn(this.attributes, name); }
+        querySelector(selector) {
+            if (selector === "button:enabled") return walk(this).find((element) => element.tagName === "BUTTON" && !element.disabled);
+            if (selector === ":scope > .explorer-context-submenu") return this.children.find((element) => element.className === "explorer-context-submenu");
+            if (selector === ":scope > button") return this.children.find((element) => element.tagName === "BUTTON");
+            return walk(this).find((element) => element.tabIndex === 0);
+        }
+        querySelectorAll(selector) {
+            if (selector === "button:enabled") return walk(this).filter((element) => element.tagName === "BUTTON" && !element.disabled);
+            return [];
+        }
+        closest(selector) {
+            for (let element = this; element; element = element.parent) {
+                if (selector === ".explorer-context-submenu" && element.className === "explorer-context-submenu") return element;
+                if (selector === ".explorer-context-submenu[hidden]" && element.className === "explorer-context-submenu" && element.hidden) return element;
+            }
+            return null;
+        }
         getBoundingClientRect() { return { left: 10, top: 20, width: 140, height: 32 }; }
         remove() { this.parent.children = this.parent.children.filter((child) => child !== this); }
     }
@@ -48,11 +70,12 @@ function setup() {
     const window = new Element();
     window.innerWidth = 800;
     window.innerHeight = 600;
-    document.createElement = () => new Element();
+    document.createElement = (tagName) => new Element(tagName);
     document.createDocumentFragment = () => Object.assign(new Element(), { fragment: true });
     const calls = [];
     const errors = [];
     const inserted = [];
+    const newQueries = [];
     let nextSession = 0;
     const client = {
         isRunning: true,
@@ -63,11 +86,19 @@ function setup() {
         },
         expandObjectExplorerNode: async (...args) => { calls.push(["expand", ...args]); return true; },
         refreshObjectExplorerNode: async (...args) => { calls.push(["refresh", ...args]); return true; },
+        generateObjectExplorerScript: async (sessionId, nodePath, action) => {
+            calls.push(["script", sessionId, nodePath, action]);
+            if (action === "SELECT_TOP_1000") return "SELECT TOP 1000 [accountid], [name]\nFROM dbo.account";
+            if (nodePath.endsWith("/tvf")) return "SELECT *\nFROM GetAccounts(<@owner, uniqueidentifier>)";
+            if (nodePath.endsWith("/proc")) return "DECLARE @RC int";
+            return "SELECT [accountid], [name]\nFROM dbo.account";
+        },
         closeObjectExplorerSession: async (sessionId) => { calls.push(["close", sessionId]); return { sessionId, success: true }; },
     };
     const tree = new Element();
     const { ObjectExplorer } = load("objectExplorer.ts", { document, window, Node: Element });
-    const explorer = new ObjectExplorer(client, tree, (message) => errors.push(message), (text) => inserted.push(text));
+    const explorer = new ObjectExplorer(client, tree, (message) => errors.push(message), (text) => inserted.push(text),
+        (connection, query) => newQueries.push({ connection, query }));
     function session(sessionId = "s1") {
         explorer.sessionCreated({ sessionId, success: true, rootNode: node(`objectexplorer://${sessionId}`, "SERVERNODE", "Server") });
     }
@@ -80,7 +111,7 @@ function setup() {
         tree.events.keydown({ key, shiftKey, preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
         return { prevented, stopped };
     }
-    return { explorer, client, tree, calls, errors, inserted, session, complete, key, document, window };
+    return { explorer, client, tree, calls, errors, inserted, newQueries, session, complete, key, document, window };
 }
 
 function connection(slot = 0) {
@@ -281,6 +312,77 @@ test("right-click selects the clicked node and Refresh targets its session, with
     menu.children[0].events.click();
     await settle();
     assert.deepEqual(calls.at(-1), ["refresh", "s1", "objectexplorer://s1/Tables"]);
+});
+
+test("object scripts expose type-gated actions and editor, file and clipboard destinations", async () => {
+    const { explorer, tree, newQueries, session, complete, key, document, window } = setup();
+    const objects = [
+        { ...node("objectexplorer://s1/account", "account", "Table", true), metadata: { schema: "dbo", name: "account" } },
+        { ...node("objectexplorer://s1/tvf", "GetAccounts", "TableValuedFunction", true), metadata: { schema: "dbo", name: "GetAccounts" } },
+        { ...node("objectexplorer://s1/proc", "Reassign", "StoredProcedure", true), metadata: { schema: "dbo", name: "Reassign" } },
+    ];
+    await explorer.setConnections([connection()]);
+    key("ArrowRight");
+    await settle();
+    session();
+    complete("objectexplorer://s1", objects);
+
+    const table = walk(tree).find((element) => element.dataset.path === objects[0].nodePath);
+    const play = table.children[0].children.find((element) => element.className === "explorer-select-top");
+    assert.ok(play);
+    play.events.click({ stopPropagation() {} });
+    await settle();
+    assert.equal(newQueries.at(-1).query, "SELECT TOP 1000 [accountid], [name]\nFROM dbo.account");
+
+    window.toolboxAPI = {
+        fileSystem: { saveFile: async (...args) => { window.savedFile = args; return "C:\\scripts\\account.sql"; } },
+        utils: { copyToClipboard: async (text) => { window.copiedText = text; } },
+    };
+    const openTableMenu = () => {
+        table.children[0].events.contextmenu({ clientX: 10, clientY: 20, preventDefault() {}, stopPropagation() {} });
+        const menu = document.body.children[0];
+        findButton(menu, "Script Table as").events.pointerenter();
+        return menu;
+    };
+    let menu = openTableMenu();
+    findButton(menu, "SELECT To").events.pointerenter();
+    findButton(menu, "New Query Editor Window").events.click();
+    await settle();
+    assert.equal(newQueries.at(-1).query, "SELECT [accountid], [name]\nFROM dbo.account");
+
+    menu = openTableMenu();
+    findButton(menu, "SELECT To").events.pointerenter();
+    findButton(menu, "File...").events.click();
+    await settle();
+    assert.equal(window.savedFile[0], "account.sql");
+    assert.equal(window.savedFile[1], "SELECT [accountid], [name]\nFROM dbo.account");
+
+    menu = openTableMenu();
+    findButton(menu, "SELECT To").events.pointerenter();
+    findButton(menu, "Clipboard").events.click();
+    await settle();
+    assert.equal(window.copiedText, "SELECT [accountid], [name]\nFROM dbo.account");
+
+    menu = openTableMenu();
+    findButton(menu, "EXECUTE To").events.pointerenter();
+    assert.equal(findButton(menu, "EXECUTE To").disabled, true);
+
+    const procedure = walk(tree).find((element) => element.dataset.path === objects[2].nodePath);
+    procedure.children[0].events.contextmenu({ clientX: 10, clientY: 20, preventDefault() {}, stopPropagation() {} });
+    menu = document.body.children[0];
+    findButton(menu, "Script Stored Procedure as").events.pointerenter();
+    assert.equal(findButton(menu, "SELECT To").disabled, true);
+    assert.equal(findButton(menu, "INSERT To").disabled, true);
+    assert.equal(findButton(menu, "EXECUTE To").disabled, false);
+
+    const functionItem = walk(tree).find((element) => element.dataset.path === objects[1].nodePath);
+    functionItem.children[0].events.contextmenu({ clientX: 10, clientY: 20, preventDefault() {}, stopPropagation() {} });
+    menu = document.body.children[0];
+    findButton(menu, "Script Table-Valued Function as").events.pointerenter();
+    findButton(menu, "SELECT To").events.pointerenter();
+    findButton(menu, "New Query Editor Window").events.click();
+    await settle();
+    assert.equal(newQueries.at(-1).query, "SELECT *\nFROM GetAccounts(<@owner, uniqueidentifier>)");
 });
 
 test("context menus support keyboard access, Escape, outside clicks, scrolling and lifecycle cleanup", async () => {

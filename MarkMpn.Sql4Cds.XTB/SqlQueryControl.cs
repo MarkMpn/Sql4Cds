@@ -691,7 +691,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 var suggestions = new Autocomplete(autocompleteDataSources, _control.Connection.ConnectionName, Settings.Instance.ColumnOrdering).GetSuggestions(text, pos).ToList();
 
                 foreach (var suggestion in suggestions)
-                    yield return suggestion;
+                    yield return new SqlAutocompleteMenuItem(suggestion);
             }
         }
 

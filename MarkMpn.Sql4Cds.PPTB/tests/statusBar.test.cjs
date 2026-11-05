@@ -121,6 +121,7 @@ function setup(pinned = true) {
         "./executionPlan/executionPlanView": { getFetchXmlQuery: (node) =>
             node.nodeType === "FetchXmlScan" ? node.properties?.find(property => property.name === "FetchXML")?.value ?? null : null },
         "./settings": settingsApi,
+        "./session": { loadSession: async () => null, saveSession: async () => {} },
     }, {
         document, window, Node: Element, Element,
         console: {

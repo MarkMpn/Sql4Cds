@@ -8,13 +8,12 @@ using System.Reflection;
 using System.Text;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
-using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
-using static MarkMpn.Sql4Cds.LanguageServer.Autocomplete.FunctionMetadata;
+using static MarkMpn.Sql4Cds.Engine.FunctionMetadata;
 
-namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
+namespace MarkMpn.Sql4Cds.Engine
 {
     /// <summary>
     /// Produces Intellisense suggestions
@@ -295,7 +294,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                         foreach (var table in tables.Values)
                         {
                             if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.GetAllEntities().Any(e => e.LogicalName.Equals(tableName, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
-                                instance.Metadata.TryGetMinimalData(table, out _);
+                                instance.Metadata.TryGetMinimalData(tableName, out _);
                         }
                     }
 
@@ -678,7 +677,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     }
                     else if (clause == "select")
                     {
-                        // In the SELECT clause with no tables, just offer known functions
+                        // In the SELECT clause with no tables, just offer known functions and variables
                         var items = new List<SqlAutocompleteItem>();
                         items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
                         items.AddRange(AutocompleteVariableName(currentWord, text.Substring(0, pos)));
@@ -799,7 +798,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                         list.AddRange(ds.Metadata.GetAllEntities().Select(x => new EntityAutocompleteItem(x, ds.Metadata, currentLength, false)));
 
                     // Show TVF list
-                    if (fromClause && ds.Metadata != null)
+                    if (fromClause && ds.MessageCache != null)
                         list.AddRange(ds.MessageCache.GetAllMessages(true).Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, _columnOrdering, ds, currentLength)));
                 }
             }
@@ -819,7 +818,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     // Could be a schema name
                     var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
                     if (instance?.Metadata?.TryGetRecycleBinEntities()?.Length > 0)
-                        schemaNames = schemaNames.Append("bin");
+                        schemaNames = schemaNames.Concat(new[] { "bin" });
 
                     schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
 
@@ -914,7 +913,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     // Could be a schema name
                     var schemaNames = (IEnumerable<string>)new[] { "dbo", "archive", "metadata" };
                     if (instance?.Metadata?.TryGetRecycleBinEntities()?.Length > 0)
-                        schemaNames = schemaNames.Append("bin");
+                        schemaNames = schemaNames.Concat(new[] { "bin" });
 
                     schemaNames = schemaNames.Where(s => s.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
 
@@ -1169,55 +1168,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 yield return text.Substring(0, end + 1);
         }
 
-        private static int GetIconIndex(AttributeMetadata a)
-        {
-            switch (a.AttributeType.Value)
-            {
-                case AttributeTypeCode.BigInt:
-                case AttributeTypeCode.Integer:
-                    return 8;
-
-                case AttributeTypeCode.Boolean:
-                case AttributeTypeCode.Picklist:
-                case AttributeTypeCode.State:
-                case AttributeTypeCode.Status:
-                    return 11;
-
-                case AttributeTypeCode.Customer:
-                case AttributeTypeCode.Owner:
-                case AttributeTypeCode.PartyList:
-                    return 12;
-
-                case AttributeTypeCode.DateTime:
-                    return 2;
-
-                case AttributeTypeCode.Decimal:
-                    return 3;
-
-                case AttributeTypeCode.Double:
-                    return -1;
-
-                case AttributeTypeCode.Lookup:
-                    return 9;
-
-                case AttributeTypeCode.Memo:
-                    return 10;
-
-                case AttributeTypeCode.Money:
-                    return 0;
-
-                case AttributeTypeCode.String:
-                case AttributeTypeCode.Virtual:
-                    return 13;
-
-                case AttributeTypeCode.Uniqueidentifier:
-                    return 14;
-
-                default:
-                    return -1;
-            }
-        }
-
         private string GetUniqueTableAlias(string name, IDictionary<string, string> tables)
         {
             var alias = GetUniqueTableName(name, tables);
@@ -1243,37 +1193,59 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             return name + suffix;
         }
 
+        /// <summary>
+        /// A single suggestion produced by <see cref="Autocomplete"/>. Host applications transform these into their own UI-specific items.
+        /// </summary>
         public class SqlAutocompleteItem : IComparable
         {
-            public SqlAutocompleteItem(string text, int replaceLength, CompletionItemKind imageIndex)
+            public SqlAutocompleteItem(string text, int replaceLength, AutocompleteItemKind kind)
             {
                 Text = text;
-                ImageIndex = imageIndex;
+                Kind = kind;
                 ReplaceLength = replaceLength;
                 MenuText = text;
             }
 
+            /// <summary>
+            /// The text of the suggestion
+            /// </summary>
             public string Text { get; }
 
-            public CompletionItemKind ImageIndex { get; }
+            /// <summary>
+            /// The type of object being suggested
+            /// </summary>
+            public AutocompleteItemKind Kind { get; }
+
+            /// <summary>
+            /// The type of attribute being suggested, if this is a <see cref="AutocompleteItemKind.Attribute"/> or <see cref="AutocompleteItemKind.VirtualAttribute"/> suggestion
+            /// </summary>
+            public virtual AttributeTypeCode? AttributeType => null;
 
             public virtual string ToolTipText
             {
                 get => Text;
-                set { }
             }
 
             public virtual string ToolTipTitle
             {
                 get => Text;
-                set { }
             }
 
+            /// <summary>
+            /// Gets the text to insert when this suggestion is accepted, preloading any metadata likely to be required next
+            /// </summary>
             public virtual string GetTextForReplace() => Text;
 
+            /// <summary>
+            /// Gets the text to insert when this suggestion is accepted
+            /// </summary>
+            /// <param name="preloadMetadata">Indicates if metadata likely to be required next should be preloaded</param>
             public virtual string GetTextForReplace(bool preloadMetadata) => GetTextForReplace();
 
-            public virtual string MenuText { get; set; }
+            /// <summary>
+            /// The text to display in the list of suggestions
+            /// </summary>
+            public string MenuText { get; protected set; }
 
             public virtual string CompareText => Text;
 
@@ -1496,7 +1468,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly DataSource _dataSource;
 
-            public InstanceAutocompleteItem(DataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, CompletionItemKind.Reference)
+            public InstanceAutocompleteItem(DataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, AutocompleteItemKind.Instance)
             {
                 _dataSource = dataSource;
             }
@@ -1504,26 +1476,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _dataSource.Name;
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
                 get => $"Access data from the {_dataSource.Name} instance";
-                set => base.ToolTipText = value;
             }
         }
 
         class SchemaAutocompleteItem : SqlAutocompleteItem
         {
-            public SchemaAutocompleteItem(string schema, int replaceLength) : base(schema, replaceLength, CompletionItemKind.Module)
+            public SchemaAutocompleteItem(string schema, int replaceLength) : base(schema, replaceLength, AutocompleteItemKind.Schema)
             {
             }
 
             public override string ToolTipTitle
             {
                 get => Text + " Schema";
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
@@ -1532,7 +1501,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                        Text == "archive" ? "Schema containing long-term retention tables" :
                        Text == "bin" ? "Schema containing recycle bin tables" :
                        "Schema containing the data tables";
-                set => base.ToolTipText = value;
             }
         }
 
@@ -1545,7 +1513,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             {
             }
 
-            public EntityAutocompleteItem(EntityMetadata entity, string alias, IAttributeMetadataCache metadata, int replaceLength) : base(alias, replaceLength, CompletionItemKind.Field)
+            public EntityAutocompleteItem(EntityMetadata entity, string alias, IAttributeMetadataCache metadata, int replaceLength) : base(alias, replaceLength, AutocompleteItemKind.Table)
             {
                 _entity = entity;
                 _metadata = metadata;
@@ -1554,13 +1522,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _entity.DisplayName?.UserLocalizedLabel?.Label;
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
                 get => _entity.Description?.UserLocalizedLabel?.Label;
-                set => base.ToolTipText = value;
             }
 
             public override string GetTextForReplace()
@@ -1578,14 +1544,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             private readonly ColumnOrdering _columnOrdering;
             private readonly DataSource _dataSource;
 
-            public TVFAutocompleteItem(Message message, ColumnOrdering columnOrdering, DataSource dataSource, int replaceLength) : base(message.Name, replaceLength, CompletionItemKind.Function)
+            public TVFAutocompleteItem(Message message, ColumnOrdering columnOrdering, DataSource dataSource, int replaceLength) : base(message.Name, replaceLength, AutocompleteItemKind.TableValuedFunction)
             {
                 _message = message;
                 _columnOrdering = columnOrdering;
                 _dataSource = dataSource;
             }
 
-            public TVFAutocompleteItem(Message message, DataSource dataSource, string alias, int replaceLength) : base(alias, replaceLength, CompletionItemKind.Function)
+            public TVFAutocompleteItem(Message message, DataSource dataSource, string alias, int replaceLength) : base(alias, replaceLength, AutocompleteItemKind.TableValuedFunction)
             {
                 _message = message;
                 _dataSource = dataSource;
@@ -1594,7 +1560,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _message.Name + " SDK Message";
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
@@ -1611,7 +1576,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
                     return _message.Name + "(" + String.Join(", ", parameters.Select(p => p.Name + " " + p.GetSqlDataType(_dataSource).ToSql())) + ")";
                 }
-                set => base.ToolTipText = value;
             }
 
             public override string GetTextForReplace()
@@ -1626,7 +1590,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             private readonly ColumnOrdering _columnOrdering;
             private readonly DataSource _dataSource;
 
-            public SprocAutocompleteItem(Message message, ColumnOrdering columnOrdering, DataSource dataSource, int replaceLength) : base(message.Name, replaceLength, CompletionItemKind.Method)
+            public SprocAutocompleteItem(Message message, ColumnOrdering columnOrdering, DataSource dataSource, int replaceLength) : base(message.Name, replaceLength, AutocompleteItemKind.StoredProcedure)
             {
                 _message = message;
                 _columnOrdering = columnOrdering;
@@ -1636,7 +1600,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _message.Name + " SDK Message";
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
@@ -1653,7 +1616,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
                     return _message.Name + " " + String.Join(", ", parameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + " OUTPUT]"))));
                 }
-                set => base.ToolTipText = value;
             }
         }
 
@@ -1663,7 +1625,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             private readonly MessageParameter _parameter;
             private readonly DataSource _dataSource;
 
-            public SprocParameterAutocompleteItem(Message message, MessageParameter parameter, DataSource dataSource, int replaceLength) : base("@" + parameter.Name, replaceLength, CompletionItemKind.Variable)
+            public SprocParameterAutocompleteItem(Message message, MessageParameter parameter, DataSource dataSource, int replaceLength) : base("@" + parameter.Name, replaceLength, AutocompleteItemKind.StoredProcedureParameter)
             {
                 _message = message;
                 _parameter = parameter;
@@ -1673,13 +1635,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + _parameter.GetSqlDataType(_dataSource).ToSql() + ")";
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
                 get => _message.Name + " " + string.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : (_message.InputParameters.Count == 0 ? "" : ",") + " " + string.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + p.GetSqlDataType(_dataSource).ToSql() + " OUTPUT]")));
-                set => base.ToolTipText = value;
             }
         }
 
@@ -1690,7 +1650,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             private readonly string _lhs;
             private readonly IAttributeMetadataCache _metadata;
 
-            public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, IAttributeMetadataCache metadata, int replaceLength) : base(join, replaceLength, CompletionItemKind.Snippet)
+            public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, IAttributeMetadataCache metadata, int replaceLength) : base(join, replaceLength, oneToMany ? AutocompleteItemKind.OneToManyJoin : AutocompleteItemKind.ManyToOneJoin)
             {
                 _rhs = metadata.GetAllEntities().SingleOrDefault(e => e.LogicalName == relationship.ReferencingEntity);
                 _lhs = relationship.ReferencedEntity;
@@ -1710,7 +1670,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
                     return _rhs?.DisplayName?.UserLocalizedLabel?.Label;
                 }
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
@@ -1722,7 +1681,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
                     return _rhs?.Description?.UserLocalizedLabel?.Label;
                 }
-                set => base.ToolTipText = value;
             }
 
             public override string GetTextForReplace()
@@ -1742,7 +1700,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             private readonly AttributeMetadata _attribute;
             private readonly string _virtualSuffix;
 
-            public AttributeAutocompleteItem(AttributeMetadata attribute, int replaceLength, string virtualSuffix = null) : base(attribute.LogicalName + virtualSuffix, replaceLength, CompletionItemKind.Field)
+            public AttributeAutocompleteItem(AttributeMetadata attribute, int replaceLength, string virtualSuffix = null) : base(attribute.LogicalName + virtualSuffix, replaceLength, virtualSuffix == null ? AutocompleteItemKind.Attribute : AutocompleteItemKind.VirtualAttribute)
             {
                 _attribute = attribute;
                 _virtualSuffix = virtualSuffix;
@@ -1756,10 +1714,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     yield return new AttributeAutocompleteItem(attribute, replaceLength, virtualAttr.Suffix);
             }
 
+            public override AttributeTypeCode? AttributeType => _attribute.AttributeType;
+
             public override string ToolTipTitle
             {
                 get => _attribute.DisplayName?.UserLocalizedLabel?.Label;
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
@@ -1781,7 +1740,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
                     return description;
                 }
-                set => base.ToolTipText = value;
             }
         }
 
@@ -1789,20 +1747,20 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly MethodInfo _method;
 
-            public FunctionAutocompleteItem(MethodInfo method, int replaceLength) : base(GetInsertText(method), replaceLength, CompletionItemKind.Function)
+            public FunctionAutocompleteItem(MethodInfo method, int replaceLength) : base(GetInsertText(method), replaceLength, GetKind(method))
             {
                 _method = method;
                 MenuText = GetSignature(method);
             }
 
-            private static int GetIconIndex(MethodInfo method)
+            private static AutocompleteItemKind GetKind(MethodInfo method)
             {
                 var aggregate = method.GetCustomAttribute<AggregateAttribute>();
 
                 if (aggregate != null)
-                    return 24;
+                    return AutocompleteItemKind.AggregateFunction;
 
-                return 23;
+                return AutocompleteItemKind.Function;
             }
 
             private static string GetInsertText(MethodInfo method)
@@ -1850,7 +1808,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => MenuText;
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
@@ -1859,10 +1816,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 {
                     var description = _method.GetCustomAttribute<DescriptionAttribute>();
                     return description?.Description ?? "";
-                }
-                set
-                {
-                    base.ToolTipText = value;
                 }
             }
 
@@ -1873,7 +1826,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly OptionMetadata _option;
 
-            public OptionSetAutocompleteItem(OptionMetadata option, int replaceLength) : base(option.Value.Value.ToString(CultureInfo.InvariantCulture), replaceLength, CompletionItemKind.Field)
+            public OptionSetAutocompleteItem(OptionMetadata option, int replaceLength) : base(option.Value.Value.ToString(CultureInfo.InvariantCulture), replaceLength, AutocompleteItemKind.OptionSetValue)
             {
                 _option = option;
 
@@ -1884,13 +1837,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _option.Label?.UserLocalizedLabel?.Label ?? Text;
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
                 get => _option.Label?.UserLocalizedLabel?.Label ?? Text;
-                set => base.ToolTipText = value;
             }
         }
 
@@ -1898,7 +1849,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly EntityMetadata _entity;
 
-            public EntityNameAutocompleteItem(EntityMetadata entity, int replaceLength) : base(entity.LogicalName, replaceLength, CompletionItemKind.Text)
+            public EntityNameAutocompleteItem(EntityMetadata entity, int replaceLength) : base(entity.LogicalName, replaceLength, AutocompleteItemKind.EntityName)
             {
                 _entity = entity;
             }
@@ -1906,13 +1857,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _entity.DisplayName?.UserLocalizedLabel?.Label ?? _entity.LogicalName;
-                set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
                 get => _entity.Description?.UserLocalizedLabel?.Label;
-                set => base.ToolTipText = value;
             }
 
             public override string GetTextForReplace()
@@ -1925,7 +1874,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly Collation _collation;
 
-            public CollationAutocompleteItem(Collation collation, int replaceLength) : base(collation.Name, replaceLength, CompletionItemKind.Field)
+            public CollationAutocompleteItem(Collation collation, int replaceLength) : base(collation.Name, replaceLength, AutocompleteItemKind.Collation)
             {
                 _collation = collation;
             }
@@ -1933,32 +1882,28 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
             public override string ToolTipTitle
             {
                 get => _collation.Name;
-                set { }
             }
 
             public override string ToolTipText
             {
                 get => _collation.Description;
-                set { }
             }
         }
 
         class VariableAutocompleteItem : SqlAutocompleteItem
         {
-            public VariableAutocompleteItem(string name, int replaceLength) : base(name, replaceLength, CompletionItemKind.Variable)
+            public VariableAutocompleteItem(string name, int replaceLength) : base(name, replaceLength, AutocompleteItemKind.Variable)
             {
             }
 
             public override string ToolTipTitle
             {
                 get => Text;
-                set { }
             }
 
             public override string ToolTipText
             {
                 get => Text.StartsWith("@@") ? "Global variable" : "User-defined variable";
-                set { }
             }
         }
     }
