@@ -100,16 +100,13 @@ across all of them. The user interface features available depend on the host app
 | Joins, subqueries, `UNION` / `INTERSECT` / `EXCEPT`, CTEs | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `GROUP BY`, `HAVING`, aggregates (incl. `STRING_AGG`, `COUNT(DISTINCT)`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Window functions (`ROW_NUMBER`, `RANK`, `OVER` etc.) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `OUTPUT` clause<sup>1</sup> | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | Variables, `#temp` tables and cursors | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Control flow (`IF`, `WHILE`, `TRY`/`CATCH`, `GOTO`, `RETURN`, `THROW`, `RAISERROR`, `PRINT`, `WAITFOR`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Dynamic SQL (`EXEC`, `sp_executesql`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Impersonation (`EXECUTE AS` / `REVERT`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | String, date, math, JSON (`OPENJSON`, `JSON_VALUE` etc.) and `STRING_SPLIT` functions | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `OPENROWSET(BULK ...)` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `MERGE`, `PIVOT` / `UNPIVOT`, transactions | ❌ | ❌ | ❌ | ❌ | ❌ |
-
-<sup>1</sup> `OUTPUT INTO` is not supported.
+| `MERGE`, `OUTPUT`, `PIVOT` / `UNPIVOT`, transactions | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 ### Dataverse Translation
 
@@ -129,25 +126,25 @@ across all of them. The user interface features available depend on the host app
 | Bulk delete jobs | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Local time zone conversion | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Block `UPDATE` / `DELETE` without `WHERE` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Confirm data modifications before they are executed<sup>2</sup> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Confirm data modifications before they are executed<sup>1</sup> | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Estimated and actual execution plans | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Convert SQL to FetchXML | ✅ | ✅ | ✅ | ⚠️<sup>3</sup> | ✅ |
+| Convert SQL to FetchXML | ✅ | ✅ | ✅ | ⚠️<sup>2</sup> | ✅ |
 | Convert FetchXML to SQL | ✅ | ✅ | ❌ | ❌ | ✅ |
 | Convert SQL to Power BI (M) | ❌ | ✅ | ✅ | ❌ | ✅ |
 
-<sup>2</sup> The engine raises events (`PreInsert`, `PreUpdate`, `PreDelete`, `PreRetrieve`) for the application to confirm or cancel the operation.<br />
-<sup>3</sup> The FetchXML for each query can be opened from the execution plan, but there is no dedicated conversion command.
+<sup>1</sup> The engine raises events (`PreInsert`, `PreUpdate`, `PreDelete`, `PreRetrieve`) for the application to confirm or cancel the operation.<br />
+<sup>2</sup> The FetchXML for each query can be opened from the execution plan, but there is no dedicated conversion command.
 
 ### Query Editor
 
 | Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
 |--|:--:|:--:|:--:|:--:|:--:|
 | Syntax highlighting | ➖ | ✅ | ✅ | ✅ | 🔷 |
-| Autocomplete | ✅<sup>4</sup> | ✅ | ✅ | ✅ | 🔷 |
-| Hover tooltips | ✅<sup>4</sup> | ✅ | ✅ | ✅ | 🔷 |
-| Function signature help | ✅<sup>4</sup> | ❌ | ✅ | ✅ | 🔷 |
+| Autocomplete | ✅<sup>3</sup> | ✅ | ✅ | ✅ | 🔷 |
+| Hover tooltips, including function signatures | ✅<sup>3</sup> | ✅ | ✅ | ✅ | 🔷 |
+| Parameter hints while typing function and message calls | ❌ | ❌ | ✅ | ✅ | 🔷 |
 | Error highlighting | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Format query | ❌ | ✅ | ✅ | ✅ | ❌ |
+| Format query | ❌ | ✅ | ✅ | ✅ | 🔷 |
 | Add display name comments | ❌ | ✅ | ✅ | ❌ | ❌ |
 | Snippets | ➖ | ❌ | ❌ | ✅ | 🔷 |
 | Open and save query files | ➖ | ✅ | ✅ | 🔷 | 🔷 |
@@ -155,7 +152,7 @@ across all of them. The user interface features available depend on the host app
 | Run whole query or current selection, and cancel running queries | ✅ | ✅ | ✅ | ✅ | ✅ |
 | AI assistant (Copilot) | ➖ | ✅ | ❌ | ❌ | ❌ |
 
-<sup>4</sup> Exposed through the `Autocomplete` class for client applications to use.
+<sup>3</sup> Exposed through the `Autocomplete` class for client applications to use.
 
 ### Results
 
@@ -175,13 +172,13 @@ across all of them. The user interface features available depend on the host app
 
 | Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
 |--|:--:|:--:|:--:|:--:|:--:|
-| Browse tables, columns, relationships and messages | ➖ | ✅ | ✅ | ✅ | 🔷<sup>5</sup> |
+| Browse tables, columns, relationships and messages | ➖ | ✅ | ✅ | ✅ | 🔷<sup>4</sup> |
 | Insert object names into the query | ➖ | ✅ | ✅ | ✅ | 🔷 |
-| Select Top 1000 Rows | ✅<sup>6</sup> | ✅ | ✅ | ✅ | 🔷 |
-| Script as `SELECT` / `INSERT` / `UPDATE` / `DELETE` / `EXECUTE` to a new query, file or clipboard | ✅<sup>6</sup> | ✅ | ✅ | ✅ | 🔷<sup>5</sup> |
+| Select Top 1000 Rows | ✅<sup>5</sup> | ✅ | ✅ | ✅ | 🔷 |
+| Script as `SELECT` / `INSERT` / `UPDATE` / `DELETE` / `EXECUTE` to a new query, file or clipboard | ✅<sup>5</sup> | ✅ | ✅ | ✅ | 🔷<sup>4</sup> |
 
-<sup>5</sup> Uses the standard SSMS Object Explorer for the TDS Endpoint, which only shows tables.<br />
-<sup>6</sup> Script generation is exposed through the `ScriptGenerator` class for client applications to use.
+<sup>4</sup> Uses the standard SSMS Object Explorer for the TDS Endpoint, which only shows tables.<br />
+<sup>5</sup> Script generation is exposed through the `ScriptGenerator` class for client applications to use.
 
 ### Connections
 
