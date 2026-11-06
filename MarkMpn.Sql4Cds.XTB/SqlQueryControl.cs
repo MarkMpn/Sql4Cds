@@ -368,13 +368,13 @@ namespace MarkMpn.Sql4Cds.XTB
             _connection.BlockDeleteWithoutWhere = false;
             _connection.BlockUpdateWithoutWhere = false;
 
-            var options = new FormatterOptions
+            var options = new QueryFormatterOptions
             {
                 AddDisplayNames = addDisplayNames,
                 Connection = _connection,
                 DataSources = DataSources,
             };
-            _editor.Text = Formatter.Format(_editor.Text, options);
+            _editor.Text = QueryFormatter.Format(_editor.Text, options);
         }
 
         private Scintilla CreateEditor()
@@ -1980,18 +1980,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull && DataSources.TryGetValue(er.DataSource, out var dataSource))
             {
-                var select = "\r\n\r\nSELECT * FROM ";
-
-                if (er.DataSource != _con.ConnectionName)
-                    select += $"{Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.DataSource)}.dbo.";
-
-                select += Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.LogicalName);
-
                 var metadata = dataSource.Metadata[er.LogicalName];
+                var select = ScriptGenerator.GenerateRecordSelectQuery(_con.ConnectionName, er.DataSource, metadata, er.Id);
 
-                select += $" WHERE {Autocomplete.SqlAutocompleteItem.EscapeIdentifier(metadata.PrimaryIdAttribute)} = '{er.Id}'";
-
-                _editor.AppendText(select);
+                _editor.AppendText("\r\n\r\n" + select);
             }
         }
 

@@ -8,7 +8,6 @@ using MarkMpn.Sql4Cds.LanguageServer.Pptb;
 using MarkMpn.Sql4Cds.LanguageServer.QueryExecution;
 using MarkMpn.Sql4Cds.LanguageServer.Scripting;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
-using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
@@ -84,7 +83,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         [TestMethod]
         public void FormatReportsInvalidSqlInsteadOfReturningUnchangedText()
         {
-            var error = Assert.ThrowsException<ArgumentException>(() => QueryTransformHandler.Format("select from", null));
+            var error = Assert.ThrowsException<QueryParseException>(() => QueryTransformHandler.Format("select from", null));
             StringAssert.Contains(error.Message, "Line 1");
         }
 
@@ -118,7 +117,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         public void DisplayNamesUsesMetadataAliasesAndPreservesExistingAliases()
         {
             using var connection = CreateConnection(out var dataSources);
-            var options = new FormatterOptions
+            var options = new QueryFormatterOptions
             {
                 AddDisplayNames = true,
                 ThrowOnError = true,

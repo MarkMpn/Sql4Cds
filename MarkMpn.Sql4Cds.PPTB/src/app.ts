@@ -639,8 +639,8 @@ class App implements QueryTabHost {
         })().catch((err) => notify("Unable to copy record URL", errorMessage(err), "error"));
     }
 
-    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string> {
-        return this.connections.getRecordSelectStatement(reference, currentDataSource);
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
+        return this.connections.getRecordSelectStatement(ownerUri, reference);
     }
 
     onStateChanged(tab: QueryTab): void {

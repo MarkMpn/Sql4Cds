@@ -298,13 +298,20 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
         return;
       }
       case "openRecord": {
-        const reference = extractDataverseRecordReference(message.reference);
-        if (!reference) { throw new Error("Invalid Dataverse record reference."); }
-        const profile = this.connections.findByName(reference.dataSource);
-        if (!profile?.url) { throw new Error(`No connection URL is available for '${reference.dataSource}'.`); }
-        if (!await vscode.env.openExternal(vscode.Uri.parse(buildDataverseRecordUrl(profile.url, reference)))) {
+        const url = this.getRecordUrl(message.reference);
+        if (!await vscode.env.openExternal(vscode.Uri.parse(url))) {
           throw new Error("The Dataverse record could not be opened.");
         }
+        return;
+      }
+      case "copyRecordUrl":
+        await vscode.env.clipboard.writeText(this.getRecordUrl(message.reference));
+        return;
+      case "createSelect": {
+        const reference = extractDataverseRecordReference(message.reference);
+        if (!reference) { throw new Error("Invalid Dataverse record reference."); }
+        const sql = await this.service.languageClient.sendRequest<string>(Methods.recordSelect, { ownerUri: uri, ...reference });
+        await appendToDocument(uri, sql);
         return;
       }
       case "openFetchXml":
@@ -314,6 +321,14 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
         return;
       default: throw new Error("Unknown results action.");
     }
+  }
+
+  private getRecordUrl(value: unknown): string {
+    const reference = extractDataverseRecordReference(value);
+    if (!reference) { throw new Error("Invalid Dataverse record reference."); }
+    const profile = this.connections.findByName(reference.dataSource);
+    if (!profile?.url) { throw new Error(`No connection URL is available for '${reference.dataSource}'.`); }
+    return buildDataverseRecordUrl(profile.url, reference);
   }
 
   private async exportResult(uri: string, key: string, choice: typeof resultExportChoices[number]): Promise<void> {
@@ -491,3 +506,17 @@ function formatDuration(milliseconds: number): string {
 }
 
 function isRunning(status: QueryStatus | undefined): boolean { return status === "running" || status === "cancelling"; }
+
+async function appendToDocument(uri: string, text: string): Promise<void> {
+  const document = vscode.workspace.textDocuments.find(item => item.uri.toString() === uri);
+  if (!document || document.isClosed) { throw new Error("The query editor is no longer open."); }
+  const eol = document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n";
+  const end = document.lineAt(document.lineCount - 1).range.end;
+  const edit = new vscode.WorkspaceEdit();
+  edit.insert(document.uri, end, document.getText().length ? `${eol}${eol}${text}` : text);
+  if (!await vscode.workspace.applyEdit(edit)) { throw new Error("The SELECT statement could not be added to the query."); }
+  const editor = await vscode.window.showTextDocument(document, { preserveFocus: false, preview: false });
+  const last = document.lineAt(document.lineCount - 1).range.end;
+  editor.selection = new vscode.Selection(last, last);
+  editor.revealRange(new vscode.Range(last, last));
+}

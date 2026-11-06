@@ -108,6 +108,7 @@
     <Compile Include="PropertyEqualityComparer.cs" />
     <Compile Include="AdoProviderTests.cs" />
     <Compile Include="AutocompleteTests.cs" />
+    <Compile Include="QueryFormatterTests.cs" />
     <Compile Include="RetrieveAllOptionSetsHandler.cs" />
     <Compile Include="RetrieveMetadataChangesHandler.cs" />
     <Compile Include="SetStateMessageExecutor.cs" />

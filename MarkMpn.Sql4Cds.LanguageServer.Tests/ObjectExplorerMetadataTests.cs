@@ -28,6 +28,26 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         }
 
         [TestMethod]
+        public void RecordSelectQueryQualifiesCrossInstanceReferencesAndEscapesIdentifiers()
+        {
+            var id = new Guid("00000000-0000-0000-0000-000000000123");
+            var entity = new EntityMetadata { LogicalName = "email" };
+            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryIdAttribute)).SetValue(entity, "activityid");
+
+            Assert.AreEqual($"SELECT * FROM email WHERE activityid = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery("Other Source", "OTHER SOURCE", entity, id));
+            Assert.AreEqual($"SELECT * FROM [Other Source].dbo.email WHERE activityid = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery("First", "Other Source", entity, id));
+            Assert.AreEqual($"SELECT * FROM [Other Source].dbo.email WHERE activityid = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery(null, "Other Source", entity, id));
+
+            entity.LogicalName = "table]name";
+            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryIdAttribute)).SetValue(entity, "key]name");
+            Assert.AreEqual($"SELECT * FROM [table]]name] WHERE [key]]name] = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery("First", "First", entity, id));
+        }
+
+        [TestMethod]
         public void TablesUseCachedEntityListAndArchiveFlagsWithoutLoadingFullMetadata()
         {
             var cache = new MetadataCache(

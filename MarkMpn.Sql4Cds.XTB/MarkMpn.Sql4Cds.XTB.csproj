@@ -73,7 +73,6 @@
     <Compile Include="AsyncEnumerableExtensions.cs" />
     <Compile Include="Autocomplete\IAutocompleteItemSource.cs" />
     <Compile Include="CopilotScriptObject.cs" />
-    <Compile Include="Formatter.cs" />
     <Compile Include="IconColorizer.cs" />
     <Compile Include="IResultOutput.cs" />
     <Compile Include="MarkdownExtensions.cs" />

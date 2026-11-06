@@ -3,6 +3,7 @@ import type {
     BatchSummary,
     CompletionItem,
     CompletionList,
+    EntityReferenceValue,
     Hover,
     FormattingOptions,
     TextEdit,
@@ -537,6 +538,11 @@ export class Sql4CdsClient {
 
     transformQuery(ownerUri: string, query: string, target: "fetchxml" | "m"): Promise<string[]> {
         return this.request("sql4cds/transform", { ownerUri, query, target });
+    }
+
+    recordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
+        const { dataSource, logicalName, id } = reference;
+        return this.request("sql4cds/recordSelect", { ownerUri, dataSource, logicalName, id });
     }
 
     formatDocument(uri: string, options: FormattingOptions): Promise<TextEdit[] | null> {

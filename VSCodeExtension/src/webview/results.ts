@@ -108,7 +108,10 @@ function update(next: ResultsState): void {
         reference => void request("openRecord", { reference }).catch(showError),
         (text, isError) => { status.textContent = text; status.classList.toggle("error", isError); },
         (format: ExportFormat) => request("export", { key: result.key, format }),
-        undefined,
+        {
+          copyUrl: reference => void request("copyRecordUrl", { reference }).catch(showError),
+          createSelect: reference => void request("createSelect", { reference }).catch(showError)
+        },
         next.autoSizeColumns
       );
       grids.set(result.key, grid);

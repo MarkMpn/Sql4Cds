@@ -202,5 +202,6 @@ export const Methods = {
   saveXml: "query/saveXml",
   progress: "sql4cds/progress",
   confirmation: "sql4cds/confirmation",
-  confirm: "sql4cds/confirm"
+  confirm: "sql4cds/confirm",
+  recordSelect: "sql4cds/recordSelect"
 } as const;

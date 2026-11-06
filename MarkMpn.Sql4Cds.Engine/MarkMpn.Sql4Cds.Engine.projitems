@@ -51,6 +51,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)NodeContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)QueryFormatter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ScriptGenerator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataTypeHelpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />

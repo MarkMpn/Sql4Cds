@@ -144,15 +144,15 @@ across all of them. The user interface features available depend on the host app
 | Hover tooltips, including function signatures | ✅<sup>3</sup> | ✅ | ✅ | ✅ | 🔷 |
 | Parameter hints while typing function and message calls | ❌ | ❌ | ✅ | ✅ | 🔷 |
 | Error highlighting | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Format query | ❌ | ✅ | ✅ | ✅ | 🔷 |
-| Add display name comments | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Format query, preserving comments | ✅<sup>3</sup> | ✅ | ✅ | ✅ | 🔷 |
+| Add display names as column aliases | ✅<sup>3</sup> | ✅ | ✅ | ✅ | ❌ |
 | Snippets | ➖ | ❌ | ❌ | ✅ | 🔷 |
 | Open and save query files | ➖ | ✅ | ✅ | 🔷 | 🔷 |
 | Restore open queries on restart | ➖ | ✅ | ✅ | 🔷 | 🔷 |
 | Run whole query or current selection, and cancel running queries | ✅ | ✅ | ✅ | ✅ | ✅ |
 | AI assistant (Copilot) | ➖ | ✅ | ❌ | ❌ | ❌ |
 
-<sup>3</sup> Exposed through the `Autocomplete` class for client applications to use.
+<sup>3</sup> Exposed through the `Autocomplete` and `QueryFormatter` classes for client applications to use.
 
 ### Results
 
@@ -163,7 +163,7 @@ across all of them. The user interface features available depend on the host app
 | Copy with headers | ➖ | ✅ | ✅ | ✅ | 🔷 |
 | Export results | ➖ | CSV, Excel | CSV, Excel, JSON, Markdown, XML | CSV, Excel, JSON, Markdown, XML | 🔷 |
 | Open records in the browser from lookup and primary key values | ➖ | ✅ | ✅ | ✅ | ❌ |
-| Copy record URL / create `SELECT` statement from a record | ➖ | ✅ | ✅ | ❌ | ❌ |
+| Copy record URL / create `SELECT` statement from a record | ➖ | ✅ | ✅ | ✅ | ❌ |
 | Execution plan node properties | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Open FetchXML from execution plan | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Edit FetchXML in an external tool | ➖ | FetchXML Builder | FetchXML Studio | ❌ | ❌ |

@@ -457,6 +457,13 @@
         { "command": "sql4cds.scriptEXECUTEToFile" },
         { "command": "sql4cds.scriptEXECUTEToClipboard" }
       ],
+      "editor/context": [
+        {
+          "command": "sql4cds.addDisplayNames",
+          "when": "editorLangId == sql4cds && sql4cds.connected",
+          "group": "1_modification@9"
+        }
+      ],
       "editor/title": [
         {
           "command": "sql4cds.estimatedPlan",

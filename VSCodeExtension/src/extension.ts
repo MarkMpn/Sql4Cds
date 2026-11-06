@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { addDisplayNames } from "./displayNames";
 import { DocumentConnectionManager, errorMessage } from "./documentConnections";
 import { ObjectExplorerProvider, ScriptAction, sqlIdentifier, Sql4CdsTreeItem } from "./objectExplorer";
 import { ConnectionProfile } from "./protocol";
@@ -32,7 +33,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const documentConnections = new DocumentConnectionManager(service, profiles);
   const objectExplorer = new ObjectExplorerProvider(service, profiles);
-  const queries = new QueryController(service, documentConnections, context.extensionUri);
+  const queries = new QueryController(service, documentConnections, context.extensionUri, context.globalState);
   context.subscriptions.push(documentConnections, objectExplorer, queries);
   context.subscriptions.push(vscode.window.registerTreeDataProvider("sql4cds.objectExplorer", objectExplorer));
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("sql4cdsQueryResults", queries, {
@@ -58,6 +59,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("sql4cds.testConnection", async (item?: Sql4CdsTreeItem) => { await documentConnections.testConnection(item?.profile); }),
     vscode.commands.registerCommand("sql4cds.runQuery", async () => { await queries.execute(); }),
+    vscode.commands.registerCommand("sql4cds.addDisplayNames", async () => {
+      try { await addDisplayNames(service!.languageClient); }
+      catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to add display names: ${errorMessage(error)}`); }
+    }),
     vscode.commands.registerCommand("sql4cds.estimatedPlan", async () => { await queries.execute(true); }),
     vscode.commands.registerCommand("sql4cds.actualPlan", () => queries.toggleActualPlan()),
     vscode.commands.registerCommand("sql4cds.cancelQuery", async () => { await queries.cancel(); }),

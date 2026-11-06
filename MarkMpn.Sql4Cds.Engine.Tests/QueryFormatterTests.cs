@@ -4,14 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
-using MarkMpn.Sql4Cds.XTB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace MarkMpn.Sql4Cds.Tests
+namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
-    [Ignore("Error initializing FakeXrmEasy")]
-    public class FormatterTests : FakeXrmEasyTestsBase
+    public class QueryFormatterTests : FakeXrmEasyTestsBase
     {
         [TestMethod]
         public void SimpleSelect()
@@ -19,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var original = @"select * from tbl";
             var expected = @"SELECT *
 FROM   tbl;";
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -30,7 +28,7 @@ select * from tbl";
             var expected = @"-- comment here
 SELECT *
 FROM   tbl;";
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -41,7 +39,7 @@ FROM   tbl;";
             var expected = @"SELECT *
 FROM   tbl;
 -- comment here";
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -56,7 +54,7 @@ FROM   tbl;
 
 INSERT  INTO tbl (col)
 VALUES          ('foo');";
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -68,7 +66,7 @@ from tbl";
             var expected = @"SELECT *
 -- comment here
 FROM   tbl;";
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -78,7 +76,7 @@ FROM   tbl;";
 from tbl";
             var expected = @"SELECT * /* all cols */
 FROM   tbl;";
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -100,7 +98,7 @@ FROM   workflow AS w CROSS APPLY OPENJSON (JSON_QUERY(w.clientdata, '$.propertie
 WHERE  w.category = 5;
        --AND JSON_VALUE(wfcr.[value], '$.connection.connectionReferenceLogicalName') IS NULL;";
 
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -120,7 +118,7 @@ FROM   (SELECT sc.solutionidname AS uniquename,
                sc.objectid
         FROM   solutioncomponent AS sc) AS sc1;";
 
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -136,7 +134,7 @@ FROM   businessunit;
 	--aaa
 	--bbb";
 
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -152,7 +150,7 @@ FROM businessunit as b";
 	b.*
 FROM   businessunit AS b;";
 
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
@@ -172,24 +170,17 @@ WHERE b.name = ''";
 FROM   businessunit AS b
 WHERE  b.name = '';";
 
-            Assert.AreEqual(expected, Formatter.Format(original));
+            Assert.AreEqual(expected, QueryFormatter.Format(original));
         }
 
         [TestMethod]
         public void AddDisplayNames()
         {
-            var dataSource = new DataSource
-            {
-                Name = "test",
-                Connection = _service,
-                Metadata = new AttributeMetadataCache(_service),
-                TableSizeCache = new TableSizeCache(_service, new AttributeMetadataCache(_service), null),
-                MessageCache = new MessageCache(_service, new AttributeMetadataCache(_service)),
-            };
-            var dataSources = new Dictionary<string, DataSource>
-            {
-                ["test"] = dataSource
-            };
+            var account = _localDataSource.Metadata["account"];
+            SetDisplayName(account, "Account", "name", "Account Name");
+            var contact = _localDataSource.Metadata["contact"];
+            SetDisplayName(contact, "Contact", "fullname", "Full Name");
+            var dataSources = _localDataSources;
 
             var original = @"SELECT
     a.name,
@@ -206,13 +197,33 @@ FROM   account AS a
        contact AS c
        ON c.parentcustomerid = a.accountid;";
 
-            Assert.AreEqual(expected, Formatter.Format(original,
-                new FormatterOptions
+            Assert.AreEqual(expected, QueryFormatter.Format(original,
+                new QueryFormatterOptions
                 {
                     AddDisplayNames = true,
+                    ThrowOnError = true,
                     Connection = new Sql4CdsConnection(dataSources) { ColumnOrdering = ColumnOrdering.Alphabetical },
                     DataSources = dataSources
                 }));
+        }
+
+        [TestMethod]
+        public void InvalidSqlIsReturnedUnchangedUnlessThrowOnErrorIsSet()
+        {
+            Assert.AreEqual("select from", QueryFormatter.Format("select from"));
+
+            var ex = Assert.ThrowsException<QueryParseException>(() => QueryFormatter.Format("select from", new QueryFormatterOptions { ThrowOnError = true }));
+            StringAssert.Contains(ex.Message, "Line 1");
+        }
+
+        private static void SetDisplayName(Microsoft.Xrm.Sdk.Metadata.EntityMetadata entity, string entityDisplayName, string attributeName, string attributeDisplayName)
+        {
+            entity.DisplayName = new Microsoft.Xrm.Sdk.Label(entityDisplayName, 1033);
+            entity.DisplayName.UserLocalizedLabel = entity.DisplayName.LocalizedLabels[0];
+
+            var attribute = entity.Attributes.Single(a => a.LogicalName == attributeName);
+            attribute.DisplayName = new Microsoft.Xrm.Sdk.Label(attributeDisplayName, 1033);
+            attribute.DisplayName.UserLocalizedLabel = attribute.DisplayName.LocalizedLabels[0];
         }
     }
 }

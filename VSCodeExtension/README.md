@@ -27,6 +27,8 @@ Run **Extensions: Install from VSIX…** from the Command Palette, select `sql4c
 
 SQL 4 CDS uses the `.sql4cds` extension and the `sql4cds` language identifier. To use an existing `.sql` document, select the language indicator in the VS Code status bar and choose **SQL 4 CDS**. This does not change the document's filename and avoids taking over `.sql` files used by other database extensions.
 
+Use **Format Document** to tidy up your query while keeping any comments. Once connected, right-click the editor and choose **SQL 4 CDS: Format Query and Add Display Names** to also add column aliases based on the display name of each attribute.
+
 ## Working with results
 
 The results will be shown at the bottom of the screen. By default, any data will be shown in a grid view. If your query produces multiple resultsets, each one will be shown

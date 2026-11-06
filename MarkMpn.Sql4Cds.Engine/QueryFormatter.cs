@@ -1,98 +1,123 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
-namespace MarkMpn.Sql4Cds.XTB
+namespace MarkMpn.Sql4Cds.Engine
 {
-    public static class Formatter
+    /// <summary>
+    /// Formats SQL queries while preserving comments, optionally adding display name aliases to columns
+    /// </summary>
+    public static class QueryFormatter
     {
-        public static string Format(string sql, FormatterOptions options = null)
+        /// <summary>
+        /// Formats a SQL query
+        /// </summary>
+        /// <param name="sql">The SQL to format</param>
+        /// <param name="options">The options to control the formatting</param>
+        /// <returns>The formatted SQL. If the query cannot be parsed and <see cref="QueryFormatterOptions.ThrowOnError"/>
+        /// is not set, the original SQL is returned unchanged.</returns>
+        public static string Format(string sql, QueryFormatterOptions options = null)
         {
             var dom = new TSql160Parser(true);
             var fragment = dom.Parse(new StringReader(sql), out var errors);
 
             if (errors.Count != 0)
+            {
+                if (options?.ThrowOnError == true)
+                    throw new QueryParseException(String.Join("\n", errors.Select(error => $"Line {error.Line}: {error.Message}")));
+
                 return sql;
+            }
 
             if (options?.AddDisplayNames == true)
-            {
-                if (options.Connection == null)
-                    throw new ArgumentNullException();
-
-                var selectStatements = ((TSqlScript)fragment).Batches.SelectMany(batch => batch.Statements).OfType<SelectStatement>();
-
-                if (selectStatements.Any())
-                {
-                    using var cmd = options.Connection.CreateCommand();
-                    cmd.CommandText = sql;
-
-                    try
-                    {
-                        using var reader = cmd.ExecuteReader(System.Data.CommandBehavior.SchemaOnly);
-
-                        foreach (var select in selectStatements)
-                        {
-                            if (select.QueryExpression is QuerySpecification querySpec)
-                            {
-                                var schema = reader.GetSchemaTable();
-
-                                // Check if columns are from multiple tables
-                                var tables = new HashSet<string>();
-
-                                for (var colIndex = 0; colIndex < querySpec.SelectElements.Count; colIndex++)
-                                {
-                                    var table = schema.Rows[colIndex]["BaseTableName"] as string;
-                                    tables.Add(table);
-                                }
-
-                                for (var colIndex = 0; colIndex < querySpec.SelectElements.Count; colIndex++)
-                                {
-                                    if (!(querySpec.SelectElements[colIndex] is SelectScalarExpression scalar))
-                                        break;
-
-                                    if (scalar.ColumnName != null)
-                                        continue; // Already has an alias
-
-                                    var server = schema.Rows[colIndex]["BaseServerName"] as string;
-                                    var table = schema.Rows[colIndex]["BaseTableName"] as string;
-                                    var column = schema.Rows[colIndex]["BaseColumnName"] as string;
-
-                                    if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(table) && !string.IsNullOrEmpty(column) &&
-                                        options.DataSources.TryGetValue(server, out var dataSource) &&
-                                        dataSource.Metadata.TryGetValue(table, out var metadata))
-                                    {
-                                        var attribute = metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(column, StringComparison.OrdinalIgnoreCase));
-
-                                        if (attribute?.DisplayName?.UserLocalizedLabel?.Label != null)
-                                        {
-                                            var alias = attribute.DisplayName.UserLocalizedLabel.Label;
-
-                                            if (tables.Count > 1 && metadata.DisplayName?.UserLocalizedLabel?.Label != null)
-                                                alias += $" ({metadata.DisplayName.UserLocalizedLabel.Label})";
-
-                                            scalar.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = alias, QuoteType = QuoteType.SquareBracket } };
-                                        }
-                                    }
-                                }
-                            }
-
-                            reader.NextResult();
-                        }
-                    }
-                    catch (Sql4CdsException) when (options.ThrowOnError != true)
-                    {
-                    }
-                }
-            }
+                AddDisplayNames(sql, (TSqlScript)fragment, options);
 
             return Format(fragment);
         }
 
+        private static void AddDisplayNames(string sql, TSqlScript script, QueryFormatterOptions options)
+        {
+            if (options.Connection == null)
+                throw new ArgumentNullException(nameof(options.Connection));
+
+            var selectStatements = script.Batches.SelectMany(batch => batch.Statements).OfType<SelectStatement>().ToList();
+
+            if (selectStatements.Count == 0)
+                return;
+
+            using (var cmd = options.Connection.CreateCommand())
+            {
+                cmd.CommandText = sql;
+
+                try
+                {
+                    using (var reader = cmd.ExecuteReader(System.Data.CommandBehavior.SchemaOnly))
+                    {
+                        foreach (var select in selectStatements)
+                        {
+                            if (select.QueryExpression is QuerySpecification querySpec)
+                                AddDisplayNames(querySpec, reader.GetSchemaTable(), options);
+
+                            reader.NextResult();
+                        }
+                    }
+                }
+                catch (Sql4CdsException) when (options.ThrowOnError != true)
+                {
+                }
+            }
+        }
+
+        private static void AddDisplayNames(QuerySpecification querySpec, System.Data.DataTable schema, QueryFormatterOptions options)
+        {
+            // Check if columns are from multiple tables
+            var tables = new HashSet<string>();
+
+            for (var colIndex = 0; colIndex < querySpec.SelectElements.Count; colIndex++)
+            {
+                var table = schema.Rows[colIndex]["BaseTableName"] as string;
+                tables.Add(table);
+            }
+
+            for (var colIndex = 0; colIndex < querySpec.SelectElements.Count; colIndex++)
+            {
+                if (!(querySpec.SelectElements[colIndex] is SelectScalarExpression scalar))
+                    break;
+
+                if (scalar.ColumnName != null)
+                    continue; // Already has an alias
+
+                var server = schema.Rows[colIndex]["BaseServerName"] as string;
+                var table = schema.Rows[colIndex]["BaseTableName"] as string;
+                var column = schema.Rows[colIndex]["BaseColumnName"] as string;
+
+                if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(table) && !string.IsNullOrEmpty(column) &&
+                    options.DataSources != null &&
+                    options.DataSources.TryGetValue(server, out var dataSource) &&
+                    dataSource.Metadata.TryGetValue(table, out var metadata))
+                {
+                    var attribute = metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(column, StringComparison.OrdinalIgnoreCase));
+
+                    if (attribute?.DisplayName?.UserLocalizedLabel?.Label != null)
+                    {
+                        var alias = attribute.DisplayName.UserLocalizedLabel.Label;
+
+                        if (tables.Count > 1 && metadata.DisplayName?.UserLocalizedLabel?.Label != null)
+                            alias += $" ({metadata.DisplayName.UserLocalizedLabel.Label})";
+
+                        scalar.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = alias, QuoteType = QuoteType.SquareBracket } };
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Formats a parsed SQL fragment, preserving any comments from the original token stream
+        /// </summary>
+        /// <param name="fragment">The fragment to format</param>
+        /// <returns>The formatted SQL</returns>
         public static string Format(TSqlFragment fragment)
         {
             var tokens = new Sql160ScriptGenerator().GenerateTokens(fragment);
@@ -114,7 +139,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 if (token.TokenType == TSqlTokenType.MultilineComment || token.TokenType == TSqlTokenType.SingleLineComment)
                 {
                     dstIndex = FindCommentInsertPoint(fragment, srcIndex, tokens, dstIndex);
-                    
+
                     dstIndex += CopyComment(fragment.ScriptTokenStream, ref srcIndex, tokens, dstIndex);
 
                     // Move back one so this is pointing to the last inserted token
@@ -148,14 +173,15 @@ namespace MarkMpn.Sql4Cds.XTB
 
         private static string TokensToString(IList<TSqlParserToken> tokens)
         {
-            using var writer = new StringWriter();
+            using (var writer = new StringWriter())
+            {
+                foreach (var token in tokens)
+                    writer.Write(token.Text);
 
-            foreach (var token in tokens)
-                writer.Write(token.Text);
+                writer.Flush();
 
-            writer.Flush();
-
-            return writer.ToString().Trim();
+                return writer.ToString().Trim();
+            }
         }
 
         private static bool IsSameType(TSqlParserToken srcToken, TSqlParserToken dstToken)
@@ -262,14 +288,29 @@ namespace MarkMpn.Sql4Cds.XTB
         }
     }
 
-    public class FormatterOptions
+    /// <summary>
+    /// Options to control how <see cref="QueryFormatter"/> formats a query
+    /// </summary>
+    public class QueryFormatterOptions
     {
+        /// <summary>
+        /// Indicates if errors parsing the query or loading display names should be thrown rather than ignored
+        /// </summary>
         public bool ThrowOnError { get; set; }
 
+        /// <summary>
+        /// Indicates if column aliases should be added using the display names of the underlying attributes
+        /// </summary>
         public bool AddDisplayNames { get; set; }
 
+        /// <summary>
+        /// The connection to use to identify the source of each column when adding display names
+        /// </summary>
         public Sql4CdsConnection Connection { get; set; }
 
+        /// <summary>
+        /// The data sources to load metadata from when adding display names, keyed by instance name
+        /// </summary>
         public IDictionary<string, DataSource> DataSources { get; set; }
     }
 }

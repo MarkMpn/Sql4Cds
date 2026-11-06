@@ -25,7 +25,7 @@ export interface QueryTabHost {
     copyToClipboard(text: string): void;
     openRecord(reference: EntityReferenceValue): void;
     copyRecordUrl(reference: EntityReferenceValue): void;
-    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string>;
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string>;
     /** Activates the tab (if necessary) and selects/reveals the given range in the shared editor */
     revealRange(tab: QueryTab, range: Range): void;
 }
@@ -422,8 +422,7 @@ export class QueryTab {
 
     private async appendRecordSelectStatement(reference: EntityReferenceValue): Promise<void> {
         try {
-            const source = this.connectionSlot === null ? undefined : this.host.getConnectionOptions(this.connectionSlot)?.connectionName;
-            const sql = await this.host.getRecordSelectStatement(reference, source);
+            const sql = await this.host.getRecordSelectStatement(this.uri, reference);
             if (this.model.isDisposed()) return;
             if (this.readOnly) throw new Error("The query editor is read-only");
             const line = this.model.getLineCount();

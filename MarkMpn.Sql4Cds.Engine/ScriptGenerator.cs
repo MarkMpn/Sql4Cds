@@ -195,6 +195,24 @@ namespace MarkMpn.Sql4Cds.Engine
             return batch.ToSql();
         }
 
+        /// <summary>
+        /// Generates a SELECT statement to retrieve a single record, qualifying the table with the record's
+        /// instance name when it differs from the current connection.
+        /// </summary>
+        /// <param name="currentDataSource">The name of the instance the query will be executed against</param>
+        /// <param name="recordDataSource">The name of the instance the record belongs to</param>
+        /// <param name="metadata">The metadata of the table the record belongs to</param>
+        /// <param name="id">The unique identifier of the record</param>
+        public static string GenerateRecordSelectQuery(string currentDataSource, string recordDataSource, EntityMetadata metadata, Guid id)
+        {
+            var table = Autocomplete.SqlAutocompleteItem.EscapeIdentifier(metadata.LogicalName);
+
+            if (!String.IsNullOrEmpty(recordDataSource) && !String.Equals(currentDataSource, recordDataSource, StringComparison.OrdinalIgnoreCase))
+                table = $"{Autocomplete.SqlAutocompleteItem.EscapeIdentifier(recordDataSource)}.dbo.{table}";
+
+            return $"SELECT * FROM {table} WHERE {Autocomplete.SqlAutocompleteItem.EscapeIdentifier(metadata.PrimaryIdAttribute)} = '{id}'";
+        }
+
         private static IEnumerable<MessageParameter> OrderParameters(IEnumerable<MessageParameter> parameters, ColumnOrdering columnOrdering) =>
             columnOrdering == ColumnOrdering.Alphabetical
                 ? parameters.OrderBy(parameter => parameter.Name, StringComparer.OrdinalIgnoreCase)
