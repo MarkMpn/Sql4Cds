@@ -610,6 +610,10 @@ class App implements QueryTabHost {
         return this.settings.showMessageLineNumbers;
     }
 
+    get resultsToText(): boolean {
+        return this.settings.resultsToText;
+    }
+
     private async toggleActualPlan(): Promise<void> {
         const save = this.saveSetting("includeActualPlan", !this.settings.includeActualPlan);
         this.updateToolbar();
@@ -810,6 +814,8 @@ class App implements QueryTabHost {
         if (!this.activeTab || this.activeTab.readOnly) return;
         this.activeTab.resultsMode = mode;
         this.updateToolbar();
+        // Remember the most recent choice for new tabs and future sessions
+        if (this.settings.resultsToText !== (mode === "text")) void this.saveSetting("resultsToText", mode === "text");
     }
 
     private async transformQuery(operation: "format" | "convert", addDisplayNames = false): Promise<void> {
@@ -900,7 +906,7 @@ class App implements QueryTabHost {
         }
     }
 
-    private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan", value: boolean): Promise<void> {
+    private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan" | "resultsToText", value: boolean): Promise<void> {
         this.settings = { ...this.settings, [setting]: value };
         try {
             await saveSettings(this.settings);

@@ -23,6 +23,8 @@ export interface Sql4CdsSettings {
     objectExplorerPinned: boolean;
     propertiesPinned: boolean;
     includeActualPlan: boolean;
+    /** Shows results as fixed-width text in the Messages tab rather than in a grid. Remembers the most recent choice. */
+    resultsToText: boolean;
 }
 
 export const defaultSettings: Sql4CdsSettings = {
@@ -49,6 +51,7 @@ export const defaultSettings: Sql4CdsSettings = {
     objectExplorerPinned: true,
     propertiesPinned: false,
     includeActualPlan: false,
+    resultsToText: false,
 };
 
 interface SettingDescriptor {
@@ -106,6 +109,7 @@ function sanitize(settings: Sql4CdsSettings): Sql4CdsSettings {
     if (typeof settings.objectExplorerPinned !== "boolean") settings.objectExplorerPinned = defaultSettings.objectExplorerPinned;
     if (typeof settings.propertiesPinned !== "boolean") settings.propertiesPinned = defaultSettings.propertiesPinned;
     if (typeof settings.includeActualPlan !== "boolean") settings.includeActualPlan = defaultSettings.includeActualPlan;
+    if (typeof settings.resultsToText !== "boolean") settings.resultsToText = defaultSettings.resultsToText;
     if (typeof settings.showMessageLineNumbers !== "boolean") settings.showMessageLineNumbers = defaultSettings.showMessageLineNumbers;
     for (const descriptor of settingDescriptors) {
         if (descriptor.unsupported) {

@@ -375,7 +375,7 @@ test("record menu wiring copies the shared URL and appends SELECT SQL at the lat
     window.toolboxAPI = { utils: { copyToClipboard: async text => copied.push(text) } };
     registry.getRecordUrl = ref => { assert.equal(ref, reference); return "https://org/main.aspx?id=123"; };
     let resolveSql;
-    registry.getRecordSelectStatement = (ref, source) => {
+    registry.getRecordSelectStatement = (source, ref) => {
         requests.push([ref, source]);
         return new Promise(resolve => { resolveSql = resolve; });
     };
@@ -398,7 +398,7 @@ test("record menu wiring copies the shared URL and appends SELECT SQL at the lat
     resolveSql(sql);
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(requests[0][0], reference);
-    assert.equal(requests[0][1], "contoso_2");
+    assert.equal(requests[0][1], tab.uri);
     assert.equal(undoStops, 2);
     assert.equal(edits.length, 1);
     assert.equal(edits[0].range.startLineNumber, 2);
@@ -1095,54 +1095,50 @@ test("Power BI previews do not register SQL documents", () => {
     assert.equal(listeners.size, 0);
 });
 
-test("Results to Text is per-tab and snapshots the mode at execution with paged rows and NULLs", async () => {
-    const { app, client, createTab, grids, elements } = setup();
+test("Results to Text is per-tab, remembered for new tabs and asks the language server for text results when the query is executed", async () => {
+    const { app, client, createTab, grids, elements, savedSettings } = setup();
+    const requests = [];
+    client.executeDocumentSelection = async (_uri, _selection, _planOptions, resultsToText) => { requests.push(resultsToText); };
     const { tab, events } = createTab();
     app.setResultsMode("text");
     assert.equal(elements.get("btn-results-text").attributes["aria-pressed"], "true");
     await tab.connect(0);
     await tab.execute(null);
-    app.setResultsMode("grid");
-    const result = { ...summary(0, 0, 201), complete: true, columnInfo: [{ columnName: "Name" }, { columnName: "Value" }] };
-    const pages = [];
-    client.subset = async (_uri, _batch, _result, start, count) => {
-        pages.push({ start, count });
-        return { resultSubset: { rows: Array.from({ length: count }, () => [
-            { displayValue: "Contoso", isNull: false }, { displayValue: "", isNull: true },
-        ]) } };
-    };
-    events.resultSetAvailable({ resultSetSummary: result });
-    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [result] }] });
-    await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(pages, [{ start: 0, count: 200 }, { start: 200, count: 1 }]);
+    events.message({ message: { message: "Name    Value\n------- -----\nContoso NULL ", isError: false, rowCount: 1 } });
+    events.message({ message: { message: "Fabrikam 1   \nNorthwind 2  ", isError: false, rowCount: 2 } });
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [] }] });
     assert.equal(grids.length, 0);
-    assert.equal(tab.textPane.hidden, false);
-    assert.equal(tab.resultsPane.hidden, true);
-    assert.equal(tab.textPane.children[0].textContent, "Name\tValue\n");
-    assert.match(tab.textPane.children[0].children[0].textContent, /^Contoso\tNULL\n/);
+    assert.equal(tab.messagesPane.hidden, false);
+    assert.equal(JSON.stringify(tab.messagesPane.children.map((line) => line.textContent)),
+        JSON.stringify(["Name    Value", "------- -----", "Contoso NULL ", "Fabrikam 1   ", "Northwind 2  "]),
+        "Each line is shown separately so line numbers are correct");
+    assert.equal(tab.totalRowCount, 3, "Rows sent as text count towards the row count");
+    await tab.execute(null, true);
+    assert.equal(tab.totalRowCount, 0);
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [] }] });
+    assert.equal(savedSettings.at(-1).resultsToText, true, "The selected mode is saved in user settings");
+    const textTab = createTab().tab;
+    assert.equal(textTab.resultsMode, "text", "New tabs use the most recently selected mode");
+    app.activeTab = tab;
+    app.setResultsMode("grid");
+    assert.equal(savedSettings.at(-1).resultsToText, false);
+    assert.equal(textTab.resultsMode, "text", "Changing the mode only affects the active tab");
+    await tab.execute(null);
+    assert.deepEqual(requests, [true, false, false], "Estimated plans and grid mode never request text results");
     const second = createTab().tab;
     assert.equal(second.resultsMode, "grid");
 });
 
-test("text result loading errors are visible and stale responses do not append to a new execution", async () => {
-    const { client, createTab } = setup();
-    const { tab, events } = createTab();
-    tab.resultsMode = "text";
-    await tab.connect(0);
-    await tab.execute(null);
-    const result = { ...summary(0, 0, 1), complete: true, columnInfo: [{ columnName: "Name" }] };
-    events.resultSetAvailable({ resultSetSummary: result });
-    client.subset = async () => ({ resultSubset: { rows: [] } });
-    await tab.renderTextResults(tab.resultsGeneration);
-    assert.equal(tab.messagesPane.hidden, false);
-    assert.match(tab.messagesPane.children.at(-1).textContent, /Unable to load text results/);
-    let respond;
-    client.subset = () => new Promise(resolve => { respond = resolve; });
-    const pending = tab.renderTextResults(tab.resultsGeneration);
-    await tab.clearResults();
-    respond({ resultSubset: { rows: [[{ displayValue: "stale", isNull: false }]] } });
-    await pending;
-    assert.equal(tab.textPane.children.length, 0);
+test("the Results to Text preference defaults to off", async () => {
+    let stored;
+    const { loadSettings } = load("settings.ts", {}, {
+        window: { toolboxAPI: { settings: { get: async () => stored, set: async () => {} } } },
+    });
+    assert.equal((await loadSettings()).resultsToText, false);
+    stored = { resultsToText: true };
+    assert.equal((await loadSettings()).resultsToText, true);
+    stored = { resultsToText: "yes" };
+    assert.equal((await loadSettings()).resultsToText, false);
 });
 
 test("each completed grid exports its own entire result set through the native Save As dialog", async () => {

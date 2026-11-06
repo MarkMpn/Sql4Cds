@@ -159,7 +159,7 @@ across all of them. The user interface features available depend on the host app
 | Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
 |--|:--:|:--:|:--:|:--:|:--:|
 | Results grid with multiple result sets and messages | ➖ | ✅ | ✅ | ✅ | 🔷 |
-| Results to text | ➖ | ✅ | ✅ | ❌ | 🔷 |
+| Results to text | ➖ | ✅ | ✅ | ✅ | 🔷 |
 | Copy with headers | ➖ | ✅ | ✅ | ✅ | 🔷 |
 | Export results | ➖ | CSV, Excel | CSV, Excel, JSON, Markdown, XML | CSV, Excel, JSON, Markdown, XML | 🔷 |
 | Open records in the browser from lookup and primary key values | ➖ | ✅ | ✅ | ✅ | ❌ |

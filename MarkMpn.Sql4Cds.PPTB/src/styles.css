@@ -219,21 +219,6 @@ input[type="number"] {
     max-width: 300px;
 }
 
-.results-text {
-    flex: 1;
-    min-height: 0;
-    margin: 0;
-    padding: 8px;
-    overflow: auto;
-    user-select: text;
-    tab-size: 20;
-    font: 13px Consolas, "Courier New", monospace;
-}
-
-.results-text[hidden] {
-    display: none;
-}
-
 /* Side panes (Object Explorer & Properties) */
 
 .tool-content {
@@ -822,7 +807,12 @@ button.toggle[aria-pressed="true"] {
     overflow: auto;
     padding: 6px 10px;
     font-family: Consolas, "Courier New", monospace;
-    white-space: pre-wrap;
+    white-space: pre;
+}
+
+/* Keep blank lines at full height */
+.messages-pane .message:empty::after {
+    content: "\200b";
 }
 
 .messages-pane.show-line-numbers {

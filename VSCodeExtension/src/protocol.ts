@@ -107,6 +107,8 @@ export interface ResultMessage {
   time?: string;
   message: string;
   range?: Range;
+  /** Number of result rows contained in the message when results are sent as text */
+  rowCount?: number | null;
 }
 
 export interface MessageParams { ownerUri: string; message: ResultMessage; }

@@ -65,6 +65,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("sql4cds.estimatedPlan", async () => { await queries.execute(true); }),
     vscode.commands.registerCommand("sql4cds.actualPlan", () => queries.toggleActualPlan()),
+    vscode.commands.registerCommand("sql4cds.resultsToText", () => queries.setResultsToText(true)),
+    vscode.commands.registerCommand("sql4cds.resultsToGrid", () => queries.setResultsToText(false)),
     vscode.commands.registerCommand("sql4cds.cancelQuery", async () => { await queries.cancel(); }),
     vscode.commands.registerCommand("sql4cds.refreshObjectExplorer", (item?: Sql4CdsTreeItem) => objectExplorer.refresh(item)),
     vscode.commands.registerCommand("sql4cds.searchTables", async (item?: Sql4CdsTreeItem) => {

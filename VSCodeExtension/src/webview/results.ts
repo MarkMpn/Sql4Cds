@@ -130,10 +130,10 @@ function update(next: ResultsState): void {
     }
   }
   element("plan-tab").hidden = planView.count === 0;
-  const nodes = next.messages.map(message => {
+  const nodes = next.messages.flatMap(message => message.message.split(/\r?\n/).map(text => {
     const node = document.createElement("div");
     node.className = message.isError ? "message error" : "message";
-    node.textContent = message.message;
+    node.textContent = text;
     if (message.range) {
       node.classList.add("navigable");
       node.title = "Double-click to go to the query";
@@ -142,7 +142,7 @@ function update(next: ResultsState): void {
       });
     }
     return node;
-  });
+  }));
   for (const result of next.results.filter(result => result.truncated)) {
     const limit = document.createElement("div");
     limit.className = "message summary";

@@ -134,9 +134,24 @@
         "toggled": "sql4cds.actualPlan"
       },
       {
+        "command": "sql4cds.resultsToText",
+        "title": "SQL 4 CDS: Results to Text",
+        "toggled": "sql4cds.resultsToText"
+      },
+      {
+        "command": "sql4cds.resultsToGrid",
+        "title": "SQL 4 CDS: Results to Grid",
+        "toggled": "!sql4cds.resultsToText"
+      },
+      {
         "command": "sql4cds.cancelQuery",
         "title": "SQL 4 CDS: Cancel Query",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "sql4cds.addDisplayNames",
+        "title": "SQL 4 CDS: Format Query and Add Display Names",
+        "enablement": "editorLangId == sql4cds && sql4cds.connected && !sql4cds.queryRunning"
       },
       {
         "command": "sql4cds.refreshObjectExplorer",
@@ -476,6 +491,16 @@
           "group": "sql4cds@2"
         },
         {
+          "command": "sql4cds.resultsToGrid",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@3"
+        },
+        {
+          "command": "sql4cds.resultsToText",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@4"
+        },
+        {
           "command": "sql4cds.runQuery",
           "when": "editorLangId == sql4cds && !sql4cds.queryRunning",
           "group": "navigation@1"
@@ -514,6 +539,18 @@
         "key": "ctrl+shift+e",
         "mac": "cmd+shift+e",
         "when": "editorLangId == sql4cds && !sql4cds.queryRunning"
+      },
+      {
+        "command": "sql4cds.resultsToText",
+        "key": "ctrl+t",
+        "mac": "cmd+t",
+        "when": "editorTextFocus && editorLangId == sql4cds"
+      },
+      {
+        "command": "sql4cds.resultsToGrid",
+        "key": "ctrl+d",
+        "mac": "cmd+d",
+        "when": "editorTextFocus && editorLangId == sql4cds"
       }
     ],
     "configuration": {

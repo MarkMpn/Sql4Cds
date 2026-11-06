@@ -14,6 +14,7 @@ import type { ExecutionPlanGraph, ExportFormat } from "../../MarkMpn.Sql4Cds.PPT
 import type { ResultsState } from "./webview/protocol";
 
 const pageSize = 200;
+const resultsToTextKey = "sql4cds.resultsToText";
 const exportFormatNames = { Csv: "csv", Excel: "xlsx", Json: "json", Markdown: "md", Xml: "xml" } as const;
 type QueryStatus = ResultsState["status"];
 
@@ -54,10 +55,13 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   private nextRunId = 1;
   private readonly preparing = new Set<string>();
   private actualPlan = false;
+  private resultsToText = false;
 
   constructor(private readonly service: Sql4CdsService, private readonly connections: DocumentConnectionManager,
-    private readonly extensionUri?: vscode.Uri) {
+    private readonly extensionUri?: vscode.Uri, private readonly globalState?: vscode.Memento) {
     const client = service.languageClient;
+    this.resultsToText = globalState?.get<boolean>(resultsToTextKey, false) ?? false;
+    void vscode.commands.executeCommand("setContext", "sql4cds.resultsToText", this.resultsToText);
     this.queryStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
     this.disposables.push(
       this.queryStatus,
@@ -100,6 +104,13 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   public toggleActualPlan(): void {
     this.actualPlan = !this.actualPlan;
     void vscode.commands.executeCommand("setContext", "sql4cds.actualPlan", this.actualPlan);
+  }
+
+  /** Selects whether query executions show their results as fixed-width text in the Messages tab, as in SSMS. The choice is remembered across sessions. */
+  public setResultsToText(value: boolean): void {
+    this.resultsToText = value;
+    void vscode.commands.executeCommand("setContext", "sql4cds.resultsToText", value);
+    void this.globalState?.update(resultsToTextKey, value);
   }
 
   public async execute(estimatedPlan = false): Promise<void> {
@@ -149,7 +160,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
       this.publishState(uri);
       this.updateRunningContext();
       await this.service.languageClient.sendRequest(Methods.executeDocumentSelection, {
-        ownerUri: uri, querySelection, getFullColumnSchema: false,
+        ownerUri: uri, querySelection, getFullColumnSchema: false, resultsToText: this.resultsToText && !estimatedPlan,
         executionPlanOptions: estimatedPlan || this.actualPlan ? {
           includeEstimatedExecutionPlanXml: estimatedPlan, includeActualExecutionPlanXml: !estimatedPlan && this.actualPlan
         } : undefined
@@ -392,9 +403,10 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     const state = this.states.get(uri);
     if (!state || uri !== this.selectedUri) { return; }
     const maxRows = vscode.workspace.getConfiguration("SQL4CDS").get<number>("maxResultRows", 10000);
-    const returnedRows = [...state.results.values()].reduce((total, result) => total + result.rowCount, 0);
+    const textRows = state.messages.map(message => message.rowCount).filter((value): value is number => typeof value === "number");
+    const returnedRows = [...state.results.values()].reduce((total, result) => total + result.rowCount, 0) + textRows.reduce((total, value) => total + value, 0);
     const affectedRows = state.messages.map(message => affectedRowCount(message.message)).filter((value): value is number => value !== undefined);
-    this.updateQueryStatus(state, returnedRows, affectedRows.length ? affectedRows.reduce((total, value) => total + value, 0) : undefined);
+    this.updateQueryStatus(state, state.results.size > 0 || textRows.length > 0 ? returnedRows : undefined, affectedRows.length ? affectedRows.reduce((total, value) => total + value, 0) : undefined);
     void this.resultsView?.webview.postMessage({
       type: "state", ownerUri: uri, runId: state.runId, status: state.status, estimatedPlan: state.estimatedPlan,
       planVersion: state.planVersion,
@@ -410,9 +422,9 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
     } satisfies ResultsState);
   }
 
-  private updateQueryStatus(state: QueryState, returnedRows: number, affectedRows: number | undefined): void {
+  private updateQueryStatus(state: QueryState, returnedRows: number | undefined, affectedRows: number | undefined): void {
     const parts: string[] = [];
-    if (state.results.size) { parts.push(`${returnedRows.toLocaleString()} ${returnedRows === 1 ? "row" : "rows"} returned`); }
+    if (returnedRows !== undefined) { parts.push(`${returnedRows.toLocaleString()} ${returnedRows === 1 ? "row" : "rows"} returned`); }
     if (affectedRows !== undefined) { parts.push(`${affectedRows.toLocaleString()} ${affectedRows === 1 ? "row" : "rows"} affected`); }
     if (isRunning(state.status)) { parts.push(state.status === "cancelling" ? "$(sync~spin) Cancelling" : "$(sync~spin) Running"); }
     else if (state.ended) { parts.push(`$(clock) ${formatDuration(state.ended - state.started)}`); }

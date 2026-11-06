@@ -91,6 +91,7 @@ clause to allow a query to intentionally affect all records in the table.
 
 The results will be shown at the bottom of the screen. By default, any data will be shown in a grid view. If your query produces multiple resultsets, each one will be shown
 in a separate grid - scroll down to review all your results. If desired, switch the output to text to have a simple method to copy & paste all the output.
+Your most recent choice is remembered for new tabs and the next time you open the tool.
 
 The "Messages" tab will contain any additional status messages that are produced by your query. This is also where you can find any error details, although these will also
 be highlighted with red wavy underlining for the problem section of your query.

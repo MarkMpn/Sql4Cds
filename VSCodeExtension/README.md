@@ -32,7 +32,9 @@ Use **Format Document** to tidy up your query while keeping any comments. Once c
 ## Working with results
 
 The results will be shown at the bottom of the screen. By default, any data will be shown in a grid view. If your query produces multiple resultsets, each one will be shown
-in a separate grid - scroll down to review all your results. If desired, switch the output to text to have a simple method to copy & paste all the output.
+in a separate grid - scroll down to review all your results. If desired, use **SQL 4 CDS: Results to Text** (`Ctrl+T`) from the editor's **...** menu to show the output of
+your queries as fixed-width text in the Messages tab, as in SSMS, to have a simple method to copy & paste all the output. Switch back with **SQL 4 CDS: Results to Grid** (`Ctrl+D`).
+Your choice is remembered the next time you start VS Code.
 
 The "Messages" tab will contain any additional status messages that are produced by your query. This is also where you can find any error details, although these will also
 be highlighted with red wavy underlining for the problem section of your query.

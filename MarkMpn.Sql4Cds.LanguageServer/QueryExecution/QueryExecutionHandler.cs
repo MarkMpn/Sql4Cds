@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -167,7 +168,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             });
 
             var messageCount = 0;
-            Task SendMessageAsync(string message, bool isError = false, Microsoft.VisualStudio.LanguageServer.Protocol.Range range = null)
+            Task SendMessageAsync(string message, bool isError = false, Microsoft.VisualStudio.LanguageServer.Protocol.Range range = null, int? rowCount = null)
             {
                 Interlocked.Increment(ref messageCount);
                 return events.NotifyAsync(MessageEvent.Type, new MessageParams
@@ -179,7 +180,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         Time = DateTime.UtcNow.ToString("o"),
                         Message = message,
                         IsError = isError,
-                        Range = range
+                        Range = range,
+                        RowCount = rowCount
                     }
                 });
             }
@@ -359,8 +361,21 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                         using (var reader = await cmd.ExecuteReaderAsync())
                         {
+                            var textResultCount = 0;
+
                             while (!reader.IsClosed)
                             {
+                                if (request.ResultsToText)
+                                {
+                                    var formatter = new TextResultFormatter(reader.GetSchemaTable(), Sql4CdsSettings.Instance.LocalFormatDates);
+                                    await SendTextResultAsync(reader, formatter, textResultCount++ > 0, (msg, rows) => SendMessageAsync(msg, rowCount: rows));
+
+                                    if (!await reader.NextResultAsync())
+                                        break;
+
+                                    continue;
+                                }
+
                                 var resultSet = new ResultSetSummary
                                 {
                                     Id = resultSets.Count,
@@ -625,6 +640,43 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     batchSummary
                 }
             });
+        }
+
+        /// <summary>
+        /// Sends the rows from the current result set as fixed-width text messages. Rows are sent in batches to avoid
+        /// overwhelming the client with a separate message for every row. Each message is sent along with the number
+        /// of data rows it contains.
+        /// </summary>
+        internal static async Task SendTextResultAsync(DbDataReader reader, TextResultFormatter formatter, bool separateFromPrevious, Func<string, int, Task> sendMessage, int batchSize = 500)
+        {
+            var lines = new List<string>();
+            var rows = 0;
+
+            // Leave a blank line between consecutive result sets
+            if (separateFromPrevious)
+                lines.Add("");
+
+            lines.AddRange(formatter.GetHeaderLines());
+            var lastSend = DateTime.UtcNow;
+
+            while (await reader.ReadAsync())
+            {
+                var row = new object[reader.FieldCount];
+                reader.GetValues(row);
+                lines.Add(formatter.FormatRow(row));
+                rows++;
+
+                if (lines.Count >= batchSize || lastSend < DateTime.UtcNow.AddSeconds(-1))
+                {
+                    await sendMessage(String.Join("\n", lines), rows);
+                    lines.Clear();
+                    rows = 0;
+                    lastSend = DateTime.UtcNow;
+                }
+            }
+
+            if (lines.Count > 0)
+                await sendMessage(String.Join("\n", lines), rows);
         }
 
         internal static IEnumerable<string> GetCompletionMessages(int messageCount, IEnumerable<ResultSetSummary> resultSets, DateTimeOffset completionTime)
