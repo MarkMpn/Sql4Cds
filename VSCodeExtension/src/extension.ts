@@ -5,7 +5,7 @@ import { ObjectExplorerProvider, ScriptAction, sqlIdentifier, Sql4CdsTreeItem } 
 import { ConnectionProfile } from "./protocol";
 import { ProfileStore } from "./profileStore";
 import { QueryController } from "./queryController";
-import { convertToFetchXml } from "./queryConversion";
+import { convertToFetchXml, convertToPowerBi } from "./queryConversion";
 import { Sql4CdsService } from "./serviceClient";
 import { ServicePrerequisiteError } from "./serviceRuntime";
 
@@ -66,6 +66,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("sql4cds.convertToFetchXml", async () => {
       try { await convertToFetchXml(service!.languageClient, documentConnections); }
+      catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to convert query: ${errorMessage(error)}`); }
+    }),
+    vscode.commands.registerCommand("sql4cds.convertToPowerBi", async () => {
+      try { await convertToPowerBi(documentConnections, profiles); }
       catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to convert query: ${errorMessage(error)}`); }
     }),
     vscode.commands.registerCommand("sql4cds.estimatedPlan", async () => { await queries.execute(true); }),

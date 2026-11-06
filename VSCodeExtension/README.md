@@ -31,6 +31,8 @@ Use **Format Document** to tidy up your query while keeping any comments. Once c
 
 Use **SQL 4 CDS: Convert SQL to FetchXML** from the Command Palette, editor context menu, or editor's **...** menu to convert the selected SQL (or the whole document if nothing is selected). You will be prompted to connect if needed. Each converted statement opens in a new XML editor without changing your SQL. As in PPTB, the output includes a warning when additional SQL 4 CDS processing is needed and the FetchXML alone is not equivalent to the SQL.
 
+Use **SQL 4 CDS: Convert SQL to Power BI (M)** from the same menus to generate a Power Query M query for the current connection using the selected SQL, or the whole document. Conversion runs locally and opens a new editor without changing your SQL. Paste the output into Power BI's Power Query Advanced Editor.
+
 ## Working with results
 
 The results will be shown at the bottom of the screen. By default, any data will be shown in a grid view. If your query produces multiple resultsets, each one will be shown
