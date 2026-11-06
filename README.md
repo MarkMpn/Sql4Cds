@@ -124,16 +124,16 @@ across all of them. The user interface features available depend on the host app
 | Batched and parallel data modification requests | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bypass custom plugins | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bulk delete jobs | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Local time zone conversion | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Local time zone conversion | ✅ | ✅ | ✅ | ✅ | ❌<sup>2</sup> |
 | Block `UPDATE` / `DELETE` without `WHERE` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Confirm data modifications before they are executed<sup>1</sup> | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Estimated and actual execution plans | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Convert SQL to FetchXML | ✅ | ✅ | ✅ | ⚠️<sup>2</sup> | ✅ |
+| Convert SQL to FetchXML | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Convert FetchXML to SQL | ✅ | ✅ | ❌ | ❌ | ✅ |
 | Convert SQL to Power BI (M) | ❌ | ✅ | ✅ | ❌ | ✅ |
 
 <sup>1</sup> The engine raises events (`PreInsert`, `PreUpdate`, `PreDelete`, `PreRetrieve`) for the application to confirm or cancel the operation.<br />
-<sup>2</sup> The FetchXML for each query can be opened from the execution plan, but there is no dedicated conversion command.
+<sup>2</sup> Local time zone conversion is not supported in SSMS to maintain compatibility with the TDS Endpoint, which handles most `SELECT` queries in SSMS and always returns datetime values in UTC.
 
 ### Query Editor
 

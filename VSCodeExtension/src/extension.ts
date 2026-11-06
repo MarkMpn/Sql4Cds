@@ -5,6 +5,7 @@ import { ObjectExplorerProvider, ScriptAction, sqlIdentifier, Sql4CdsTreeItem } 
 import { ConnectionProfile } from "./protocol";
 import { ProfileStore } from "./profileStore";
 import { QueryController } from "./queryController";
+import { convertToFetchXml } from "./queryConversion";
 import { Sql4CdsService } from "./serviceClient";
 import { ServicePrerequisiteError } from "./serviceRuntime";
 
@@ -62,6 +63,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("sql4cds.addDisplayNames", async () => {
       try { await addDisplayNames(service!.languageClient); }
       catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to add display names: ${errorMessage(error)}`); }
+    }),
+    vscode.commands.registerCommand("sql4cds.convertToFetchXml", async () => {
+      try { await convertToFetchXml(service!.languageClient, documentConnections); }
+      catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to convert query: ${errorMessage(error)}`); }
     }),
     vscode.commands.registerCommand("sql4cds.estimatedPlan", async () => { await queries.execute(true); }),
     vscode.commands.registerCommand("sql4cds.actualPlan", () => queries.toggleActualPlan()),

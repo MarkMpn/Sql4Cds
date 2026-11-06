@@ -149,6 +149,11 @@
         "icon": "$(debug-stop)"
       },
       {
+        "command": "sql4cds.convertToFetchXml",
+        "title": "SQL 4 CDS: Convert SQL to FetchXML",
+        "enablement": "editorLangId == sql4cds && !sql4cds.queryRunning"
+      },
+      {
         "command": "sql4cds.addDisplayNames",
         "title": "SQL 4 CDS: Format Query and Add Display Names",
         "enablement": "editorLangId == sql4cds && sql4cds.connected && !sql4cds.queryRunning"
@@ -474,12 +479,22 @@
       ],
       "editor/context": [
         {
+          "command": "sql4cds.convertToFetchXml",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@1"
+        },
+        {
           "command": "sql4cds.addDisplayNames",
           "when": "editorLangId == sql4cds && sql4cds.connected",
           "group": "1_modification@9"
         }
       ],
       "editor/title": [
+        {
+          "command": "sql4cds.convertToFetchXml",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@5"
+        },
         {
           "command": "sql4cds.estimatedPlan",
           "when": "editorLangId == sql4cds && !sql4cds.queryRunning",

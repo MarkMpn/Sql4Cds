@@ -205,5 +205,6 @@ export const Methods = {
   progress: "sql4cds/progress",
   confirmation: "sql4cds/confirmation",
   confirm: "sql4cds/confirm",
-  recordSelect: "sql4cds/recordSelect"
+  recordSelect: "sql4cds/recordSelect",
+  transformQuery: "sql4cds/transform"
 } as const;

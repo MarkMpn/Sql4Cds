@@ -29,6 +29,8 @@ SQL 4 CDS uses the `.sql4cds` extension and the `sql4cds` language identifier. T
 
 Use **Format Document** to tidy up your query while keeping any comments. Once connected, right-click the editor and choose **SQL 4 CDS: Format Query and Add Display Names** to also add column aliases based on the display name of each attribute.
 
+Use **SQL 4 CDS: Convert SQL to FetchXML** from the Command Palette, editor context menu, or editor's **...** menu to convert the selected SQL (or the whole document if nothing is selected). You will be prompted to connect if needed. Each converted statement opens in a new XML editor without changing your SQL. As in PPTB, the output includes a warning when additional SQL 4 CDS processing is needed and the FetchXML alone is not equivalent to the SQL.
+
 ## Working with results
 
 The results will be shown at the bottom of the screen. By default, any data will be shown in a grid view. If your query produces multiple resultsets, each one will be shown
