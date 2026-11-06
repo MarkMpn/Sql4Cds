@@ -78,6 +78,20 @@ reconnects to the connection it was using in the previous session.
 To help keep queries consistent, use the "Format" toolbar button. Your query will be adjusted with standard line breaks, spacing and other rules enforced, but the structure
 of the query itself will remain unchanged.
 
+### Receiving FetchXML from other tools
+
+Other PPTB tools can send a FetchXML query to SQL 4 CDS. It is converted using the same engine converter as the XrmToolBox version and opened in a new editable SQL tab connected to the caller's inherited primary connection. Existing tabs are preserved, and the query is not executed automatically.
+
+```typescript
+await window.toolboxAPI.invocation.launchTool(
+    "@markmpn/pptb-sql4cds",
+    { fetchXml: '<fetch><entity name="account"><attribute name="name" /></entity></fetch>' },
+    { noReturn: true },
+);
+```
+
+Tools can also discover SQL 4 CDS through the `fetchxml` capability. Invalid FetchXML or conversion failures are shown as notifications.
+
 ### Query Execution
 
 Write your query in the main editor, and press `F5` or `Ctrl+E` / `Cmd+E` to run it. With no text selected, all the text in the current editor will be executed. To run only

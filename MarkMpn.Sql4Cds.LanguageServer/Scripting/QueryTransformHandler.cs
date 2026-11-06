@@ -104,6 +104,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
                 throw new ArgumentException("Select or enter a query first");
             var session = _connections.GetConnection(request.OwnerUri)
                 ?? throw new InvalidOperationException("Select a connection first");
+            if (request.Target == "sql")
+                return new[] { ConvertFromFetchXml(request.Query, session.DataSource) };
+
             var dataSources = _connections.GetAllConnections();
             using var connection = new Sql4CdsConnection(dataSources)
             {
@@ -143,6 +146,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
             if (results.Count == 0)
                 throw new NotSupportedException("The query did not produce any FetchXML");
             return results.ToArray();
+        }
+
+        internal static string ConvertFromFetchXml(string fetchXml, DataSource dataSource)
+        {
+            return FetchXml2Sql.Convert(dataSource.Connection, dataSource.Metadata, fetchXml, new FetchXml2SqlOptions(), out _);
         }
 
         internal static string Format(string query, QueryFormatterOptions options)

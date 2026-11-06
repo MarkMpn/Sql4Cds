@@ -536,7 +536,7 @@ export class Sql4CdsClient {
         return this.notify("workspace/didChangeConfiguration", { settings: { SQL4CDS: settings } });
     }
 
-    transformQuery(ownerUri: string, query: string, target: "fetchxml" | "m"): Promise<string[]> {
+    transformQuery(ownerUri: string, query: string, target: "fetchxml" | "m" | "sql"): Promise<string[]> {
         return this.request("sql4cds/transform", { ownerUri, query, target });
     }
 

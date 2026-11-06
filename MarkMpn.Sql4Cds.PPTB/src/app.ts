@@ -226,11 +226,32 @@ class App implements QueryTabHost {
         );
         this.renderConnectionList();
 
-        if (!(await this.restoreSession())) this.addTab(DEFAULT_QUERY);
+        const restored = await this.restoreSession();
+        const receivedQuery = await this.openLaunchQuery();
+        if (!restored && !receivedQuery) this.addTab(DEFAULT_QUERY);
         this.sessionRestored = true;
         window.addEventListener("pagehide", () => { void this.saveSessionNow(); });
 
         await this.objectExplorer.setConnections(this.connections.all);
+    }
+
+    private async openLaunchQuery(): Promise<boolean> {
+        try {
+            const context = await window.toolboxAPI.invocation.getLaunchContext();
+            if (!context || !("fetchXml" in context)) return false;
+            if (typeof context.fetchXml !== "string" || !context.fetchXml.trim())
+                throw new Error("The calling tool must provide a non-empty fetchXml string.");
+
+            const connection = this.connections.all[0];
+            if (!connection) throw new Error("Select a connection to convert the received FetchXML query.");
+            await this.connections.register(connection.slot);
+            const queries = await this.client.transformQuery(ConnectionRegistry.ownerUri(connection.slot), context.fetchXml, "sql");
+            for (const query of queries) this.addTab(query, connection.slot);
+            return true;
+        } catch (err) {
+            await notify("Unable to open FetchXML query", errorMessage(err), "error");
+            return false;
+        }
     }
 
     // Session persistence

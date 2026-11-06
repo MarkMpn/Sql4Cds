@@ -129,7 +129,7 @@ across all of them. The user interface features available depend on the host app
 | Confirm data modifications before they are executed | ✅<sup>1</sup> | ✅ | ✅ | ✅ | ✅ |
 | Estimated and actual execution plans | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Convert SQL to FetchXML | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Convert FetchXML to SQL | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Convert FetchXML to SQL | ✅ | ✅ | ✅ | ❌ | ✅ |
 | Convert SQL to Power BI (M) | ❌ | ✅ | ✅ | ✅ | ✅ |
 
 <sup>1</sup> The engine raises events (`PreInsert`, `PreUpdate`, `PreDelete`, `PreRetrieve`) for the application to confirm or cancel the operation.<br />

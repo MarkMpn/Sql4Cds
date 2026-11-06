@@ -114,6 +114,44 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         }
 
         [TestMethod]
+        public void ReceivedFetchXmlConvertsToEditableSqlWithoutExecutingQueries()
+        {
+            using var connection = CreateConnection(out var sources);
+            var sql = QueryTransformHandler.ConvertFromFetchXml(
+                "<fetch top=\"25\"><entity name=\"account\"><attribute name=\"name\" />" +
+                "<filter><condition attribute=\"name\" operator=\"eq\" value=\"O&apos;Brien\" /></filter>" +
+                "<order attribute=\"name\" descending=\"true\" /></entity></fetch>", sources["test"]);
+            StringAssert.Contains(sql, "SELECT");
+            StringAssert.Contains(sql, "TOP 25");
+            StringAssert.Contains(sql, "name");
+            StringAssert.Contains(sql, "FROM");
+            StringAssert.Contains(sql, "account");
+            StringAssert.Contains(sql, "'O''Brien'");
+            StringAssert.Contains(sql, "DESC");
+            // A null organization service ensures conversion cannot execute a Dataverse query.
+            Assert.IsNull(sources["test"].Connection);
+        }
+
+        [TestMethod]
+        public void ReceivedFetchXmlPreservesDataverseOperators()
+        {
+            using var connection = CreateConnection(out var sources);
+            var sql = QueryTransformHandler.ConvertFromFetchXml(
+                "<fetch><entity name=\"account\"><attribute name=\"accountid\" />" +
+                "<filter><condition attribute=\"createdon\" operator=\"last-x-days\" value=\"7\" /></filter>" +
+                "</entity></fetch>", sources["test"]);
+            StringAssert.Contains(sql, "lastxdays");
+        }
+
+        [TestMethod]
+        public void ReceivedFetchXmlReportsMalformedXml()
+        {
+            using var connection = CreateConnection(out var sources);
+            Assert.ThrowsException<InvalidOperationException>(() =>
+                QueryTransformHandler.ConvertFromFetchXml("<fetch>", sources["test"]));
+        }
+
+        [TestMethod]
         public void DisplayNamesUsesMetadataAliasesAndPreservesExistingAliases()
         {
             using var connection = CreateConnection(out var dataSources);

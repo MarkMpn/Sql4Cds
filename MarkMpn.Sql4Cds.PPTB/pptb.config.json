@@ -1,4 +1,16 @@
 {
+    "invocation": {
+        "version": "1.0.0",
+        "capabilities": ["fetchxml"],
+        "prefill": {
+            "properties": {
+                "fetchXml": {
+                    "type": "string",
+                    "description": "FetchXML query to convert to SQL and open for editing without executing it."
+                }
+            }
+        }
+    },
     "workers": {
         "sql4cds": {
             "kind": "dotnet-tool",

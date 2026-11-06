@@ -95,7 +95,10 @@ function setup(pinned = true) {
     const propertiesPanels = [];
     const { App } = load("app.ts", {
         "./styles.css": {},
-        "./connections": { ConnectionRegistry: class { constructor() { return registry; } } },
+        "./connections": { ConnectionRegistry: class {
+            constructor() { return registry; }
+            static ownerUri(slot) { return `pptb://connection/${slot}`; }
+        } },
         "./editor/monacoSetup": {
             toMonacoRange: (range) => ({
                 startLineNumber: range.start.line + 1, startColumn: range.start.character + 1,
@@ -1010,6 +1013,60 @@ test("split menus support keyboard navigation, Escape and outside dismissal", ()
     document.events.pointerdown({ target: new Element() });
     assert.equal(menu.hidden, true);
     assert.equal(toggle.attributes["aria-expanded"], "false");
+});
+
+test("received FetchXML uses the inherited connection and opens editable SQL without executing it", async () => {
+    const { app, client, registry, window, executions, createTab } = setup();
+    const { tab } = createTab();
+    const fetchXml = '<fetch><entity name="account"><attribute name="name" /></entity></fetch>';
+    window.toolboxAPI = { invocation: { getLaunchContext: async () => ({ fetchXml }) } };
+    registry.all = [{ slot: 0 }, { slot: 1 }];
+    const calls = [];
+    registry.register = async (slot) => { calls.push(["register", slot]); };
+    client.transformQuery = async (...args) => {
+        calls.push(["transform", ...args]);
+        return ["SELECT name FROM account"];
+    };
+    app.addTab = (...args) => { calls.push(["addTab", ...args]); };
+    assert.equal(await app.openLaunchQuery(), true);
+    assert.deepEqual(calls, [
+        ["register", 0],
+        ["transform", "pptb://connection/0", fetchXml, "sql"],
+        ["addTab", "SELECT name FROM account", 0],
+    ]);
+    assert.equal(app.activeTab, tab, "Existing tabs are not modified by conversion");
+    assert.equal(executions.length, 0);
+});
+
+test("standalone launches do not convert queries or require a connection", async () => {
+    for (const context of [null, {}, { unrelated: "data" }]) {
+        const { app, window } = setup();
+        window.toolboxAPI = { invocation: { getLaunchContext: async () => context } };
+        assert.equal(await app.openLaunchQuery(), false);
+    }
+});
+
+test("invalid incoming FetchXML and conversion failures are surfaced without opening SQL", async () => {
+    for (const failure of ["invalid-type", "empty", "no-connection", "registration", "conversion", "launch"]) {
+        const { app, client, registry, window } = setup();
+        const notifications = [];
+        window.toolboxAPI = {
+            invocation: { getLaunchContext: async () => {
+                if (failure === "launch") throw new Error("Cannot read launch context");
+                return { fetchXml: failure === "invalid-type" ? 42 : failure === "empty" ? " " : "<fetch />" };
+            } },
+            utils: { showNotification: async (notification) => notifications.push(notification) },
+        };
+        registry.all = failure === "no-connection" ? [] : [{ slot: 0 }];
+        registry.register = async () => {
+            if (failure === "registration") throw new Error("Connection failed");
+        };
+        client.transformQuery = async () => { throw new Error("Invalid FetchXML"); };
+        app.addTab = () => assert.fail("Conversion must not open a tab on failure");
+        assert.equal(await app.openLaunchQuery(), false);
+        assert.equal(notifications.length, 1, failure);
+        assert.equal(notifications[0].title, "Unable to open FetchXML query");
+    }
 });
 
 test("Save and Save As retain their distinct handlers", () => {
