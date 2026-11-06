@@ -5,7 +5,7 @@ By [Mark Carrington](https://markcarrington.dev/sql-4-cds/), supported by [Data8
 SQL 4 CDS provides an [engine](https://www.nuget.org/packages/MarkMpn.Sql4Cds.Engine/),
 [XrmToolBox tool](https://www.xrmtoolbox.com/plugins/MarkMpn.SQL4CDS/),
 [Visual Studio Code extension](VSCodeExtension/README.md),
-[Azure Data Studio plugin](https://github.com/microsoft/azuredatastudio/wiki/List-of-Extensions)
+[Power Platform ToolBox tool](MarkMpn.Sql4Cds.PPTB/README.md)
 and [SSMS plugin](https://markcarrington.dev/sql-4-cds/sql-4-cds-ssms-edition/)
 for using standard SQL syntax to query data stored in Microsoft Dataverse / Dynamics 365.
 
@@ -78,6 +78,119 @@ select @userid, @orgid, @buid
 -- Execute the same message using table valued function syntax
 select * from WhoAmI()
 ```
+
+## Feature Comparison
+
+The same query engine powers every edition of SQL 4 CDS, so the supported SQL language and Dataverse translation are consistent
+across all of them. The user interface features available depend on the host application.
+
+| Key | Meaning |
+|--|--|
+| ✅ | Supported |
+| ⚠️ | Partially supported - see notes |
+| 🔷 | Provided by the host application rather than SQL 4 CDS |
+| ❌ | Not supported |
+| ➖ | Not applicable |
+
+### Query Language
+
+| Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
+|--|:--:|:--:|:--:|:--:|:--:|
+| `SELECT`, `INSERT`, `UPDATE`, `DELETE` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Joins, subqueries, `UNION` / `INTERSECT` / `EXCEPT`, CTEs | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `GROUP BY`, `HAVING`, aggregates (incl. `STRING_AGG`, `COUNT(DISTINCT)`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Window functions (`ROW_NUMBER`, `RANK`, `OVER` etc.) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `OUTPUT` clause<sup>1</sup> | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| Variables, `#temp` tables and cursors | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Control flow (`IF`, `WHILE`, `TRY`/`CATCH`, `GOTO`, `RETURN`, `THROW`, `RAISERROR`, `PRINT`, `WAITFOR`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Dynamic SQL (`EXEC`, `sp_executesql`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Impersonation (`EXECUTE AS` / `REVERT`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| String, date, math, JSON (`OPENJSON`, `JSON_VALUE` etc.) and `STRING_SPLIT` functions | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `OPENROWSET(BULK ...)` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MERGE`, `PIVOT` / `UNPIVOT`, transactions | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+<sup>1</sup> `OUTPUT INTO` is not supported.
+
+### Dataverse Translation
+
+| Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
+|--|:--:|:--:|:--:|:--:|:--:|
+| Translate queries to FetchXML, pushing down joins, filters, sorts, aggregates and paging | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Automatic paging of large result sets | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Work around `AggregateQueryRecordLimit` errors | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Fast `COUNT(*)` with `RetrieveTotalRecordCountRequest` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Query metadata (`metadata` schema) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Long-term retention (`archive` schema) and recycle bin (`bin` schema) data | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Execute Dataverse messages as stored procedures and table-valued functions | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Execute compatible queries using the TDS Endpoint | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Cross-instance queries (`instance.dbo.table`) | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Batched and parallel data modification requests | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Bypass custom plugins | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Bulk delete jobs | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Local time zone conversion | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Block `UPDATE` / `DELETE` without `WHERE` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Confirm data modifications before they are executed<sup>2</sup> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Estimated and actual execution plans | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Convert SQL to FetchXML | ✅ | ✅ | ✅ | ⚠️<sup>3</sup> | ✅ |
+| Convert FetchXML to SQL | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Convert SQL to Power BI (M) | ❌ | ✅ | ✅ | ❌ | ✅ |
+
+<sup>2</sup> The engine raises events (`PreInsert`, `PreUpdate`, `PreDelete`, `PreRetrieve`) for the application to confirm or cancel the operation.<br />
+<sup>3</sup> The FetchXML for each query can be opened from the execution plan, but there is no dedicated conversion command.
+
+### Query Editor
+
+| Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
+|--|:--:|:--:|:--:|:--:|:--:|
+| Syntax highlighting | ➖ | ✅ | ✅ | ✅ | 🔷 |
+| Autocomplete | ✅<sup>4</sup> | ✅ | ✅ | ✅ | 🔷 |
+| Hover tooltips | ✅<sup>4</sup> | ✅ | ✅ | ✅ | 🔷 |
+| Function signature help | ✅<sup>4</sup> | ❌ | ✅ | ✅ | 🔷 |
+| Error highlighting | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Format query | ❌ | ✅ | ✅ | ✅ | ❌ |
+| Add display name comments | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Snippets | ➖ | ❌ | ❌ | ✅ | 🔷 |
+| Open and save query files | ➖ | ✅ | ✅ | 🔷 | 🔷 |
+| Restore open queries on restart | ➖ | ✅ | ✅ | 🔷 | 🔷 |
+| Run whole query or current selection, and cancel running queries | ✅ | ✅ | ✅ | ✅ | ✅ |
+| AI assistant (Copilot) | ➖ | ✅ | ❌ | ❌ | ❌ |
+
+<sup>4</sup> Exposed through the `Autocomplete` class for client applications to use.
+
+### Results
+
+| Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
+|--|:--:|:--:|:--:|:--:|:--:|
+| Results grid with multiple result sets and messages | ➖ | ✅ | ✅ | ✅ | 🔷 |
+| Results to text | ➖ | ✅ | ✅ | ❌ | 🔷 |
+| Copy with headers | ➖ | ✅ | ✅ | ✅ | 🔷 |
+| Export results | ➖ | CSV, Excel | CSV, Excel, JSON, Markdown, XML | CSV, Excel, JSON, Markdown, XML | 🔷 |
+| Open records in the browser from lookup and primary key values | ➖ | ✅ | ✅ | ✅ | ❌ |
+| Copy record URL / create `SELECT` statement from a record | ➖ | ✅ | ✅ | ❌ | ❌ |
+| Execution plan node properties | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Open FetchXML from execution plan | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Edit FetchXML in an external tool | ➖ | FetchXML Builder | FetchXML Studio | ❌ | ❌ |
+
+### Object Explorer
+
+| Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
+|--|:--:|:--:|:--:|:--:|:--:|
+| Browse tables, columns, relationships and messages | ➖ | ✅ | ✅ | ✅ | 🔷<sup>5</sup> |
+| Insert object names into the query | ➖ | ✅ | ✅ | ✅ | 🔷 |
+| Select Top 1000 Rows | ✅<sup>6</sup> | ✅ | ✅ | ✅ | 🔷 |
+| Script as `SELECT` / `INSERT` / `UPDATE` / `DELETE` / `EXECUTE` to a new query, file or clipboard | ✅<sup>6</sup> | ✅ | ✅ | ✅ | 🔷<sup>5</sup> |
+
+<sup>5</sup> Uses the standard SSMS Object Explorer for the TDS Endpoint, which only shows tables.<br />
+<sup>6</sup> Script generation is exposed through the `ScriptGenerator` class for client applications to use.
+
+### Connections
+
+| Feature | Engine | XrmToolBox | Power Platform ToolBox | VS Code | SSMS |
+|--|:--:|:--:|:--:|:--:|:--:|
+| Multiple connections, with a connection per query | ✅ | ✅ | ✅ | ✅ | 🔷 |
+| Impersonate another user from the UI | ➖ | ✅ | ❌ | ❌ | ❌ |
+| Environment highlighting | ➖ | ✅ | ❌ | ❌ | ❌ |
+| Connection management | ➖ | 🔷 | 🔷 | ✅ | 🔷 |
 
 ## FetchXML Builder Integration
 
