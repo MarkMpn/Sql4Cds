@@ -123,7 +123,7 @@ across all of them. The user interface features available depend on the host app
 | Cross-instance queries (`instance.dbo.table`) | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Batched and parallel data modification requests | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bypass custom plugins | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bulk delete jobs | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Bulk delete jobs | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Local time zone conversion | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Block `UPDATE` / `DELETE` without `WHERE` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Confirm data modifications before they are executed<sup>1</sup> | ✅ | ✅ | ✅ | ✅ | ✅ |

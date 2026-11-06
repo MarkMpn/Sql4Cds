@@ -33,7 +33,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             con.QuotedIdentifiers = _sqlScriptEditorControl.QuotedIdentifiers;
             con.BlockUpdateWithoutWhere = _options.BlockUpdateWithoutWhere;
             con.BlockDeleteWithoutWhere = _options.BlockDeleteWithoutWhere;
-            con.UseBulkDelete = false;
+            con.UseBulkDelete = _options.UseBulkDelete;
             con.BatchSize = _options.BatchSize;
             con.UseTDSEndpoint = _useTds;
             con.MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism;
@@ -72,7 +72,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (count == 1)
                 _sqlScriptEditorControl.Results.AddStringToMessages($"Deleting 1 {meta.DisplayName?.UserLocalizedLabel?.Label ?? meta.LogicalName}...\r\n");
             else
-                _sqlScriptEditorControl.Results.AddStringToMessages($"Deleting {count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label ?? meta.LogicalCollectionName ?? meta.LogicalName}...\r\n");
+                _sqlScriptEditorControl.Results.AddStringToMessages($"Deleting {(count == Int32.MaxValue ? "an unknown number of" : count.ToString("N0"))} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label ?? meta.LogicalCollectionName ?? meta.LogicalName}...\r\n");
         }
 
         private void ConfirmUpdate(object sender, ConfirmDmlStatementEventArgs e)
