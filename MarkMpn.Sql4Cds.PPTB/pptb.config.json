@@ -1,15 +1,48 @@
 {
     "invocation": {
-        "version": "1.0.0",
+        "version": "1.1.0",
         "capabilities": ["fetchxml"],
         "prefill": {
             "properties": {
+                "sql": {
+                    "type": "string",
+                    "description": "SQL query to open or execute. Provide either sql or fetchXml."
+                },
                 "fetchXml": {
                     "type": "string",
                     "description": "FetchXML query to convert to SQL and open for editing without executing it."
+                },
+                "execute": {
+                    "type": "boolean",
+                    "description": "Execute the query after user approval. Defaults to false (open or convert only). Data modifications require confirmation."
+                },
+                "maxResponseBytes": {
+                    "type": "number",
+                    "description": "UTF-8 JSON response budget, from 1024 to 1048576 bytes; defaults to 65536. Returned rows adapt to column sizes; omitted rows/messages are flagged as truncated."
                 }
             }
+        },
+        "returnTopic": {
+            "properties": {
+                "status": { "type": "string", "enum": ["success", "error", "cancelled"] },
+                "sql": { "type": "array", "items": { "type": "string" } },
+                "resultSets": { "type": "array", "items": { "type": "object" } },
+                "messages": { "type": "array", "items": { "type": "object" } },
+                "truncated": { "type": "boolean" },
+                "responseLimitBytes": { "type": "number" },
+                "error": { "type": "string" }
+            }
         }
+    },
+    "agents": {
+        "version": "1.0.0",
+        "invokable": true,
+        "modes": ["one-way", "two-way"],
+        "defaultMode": "two-way",
+        "timeoutMS": 300000,
+        "headless": false,
+        "executionModes": ["windowed"],
+        "defaultExecutionMode": "windowed"
     },
     "workers": {
         "sql4cds": {

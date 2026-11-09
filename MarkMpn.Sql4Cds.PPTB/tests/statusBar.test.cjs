@@ -90,6 +90,7 @@ function setup(pinned = true) {
     const settingsApi = {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
+    const invocation = load("mcpInvocation.ts", {}, { TextEncoder });
     const window = { addEventListener() {} };
     const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: Element, Element });
     const propertiesPanels = [];
@@ -124,6 +125,7 @@ function setup(pinned = true) {
         "./executionPlan/executionPlanView": { getFetchXmlQuery: (node) =>
             node.nodeType === "FetchXmlScan" ? node.properties?.find(property => property.name === "FetchXML")?.value ?? null : null },
         "./settings": settingsApi,
+        "./mcpInvocation": invocation,
         "./session": { loadSession: async () => null, saveSession: async () => {} },
     }, {
         document, window, Node: Element, Element,
@@ -143,6 +145,7 @@ function setup(pinned = true) {
     const grids = [];
     const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
+        "../mcpInvocation": invocation,
         "../lsp/protocol": load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) }),
         "../editor/monacoSetup": {
             monaco: {
@@ -1046,6 +1049,135 @@ test("standalone launches do not convert queries or require a connection", async
     }
 });
 
+test("MCP execution connects, requires approval, and returns results only after completion", async () => {
+    for (const approved of [false, true]) {
+        const { app, client, registry, window, createTab } = setup();
+        const { tab, events } = createTab();
+        const calls = [];
+        const returned = [];
+        window.toolboxAPI = { invocation: {
+            getLaunchContext: async () => ({ sql: "SELECT name FROM account", execute: true, __pptb: { expectsResponse: true } }),
+            returnData: async result => { returned.push(result); },
+        } };
+        registry.all = [{ slot: 0 }];
+        registry.register = async () => {};
+        app.addTab = (sql, slot, connect) => {
+            assert.equal(sql, "SELECT name FROM account");
+            assert.equal(slot, 0);
+            assert.equal(connect, false);
+            return tab;
+        };
+        app.confirmInvocation = async target => { assert.equal(target, tab); return approved; };
+        app.saveSessionNow = async () => {};
+        client.executeDocumentSelection = async (...args) => {
+            calls.push(args);
+            events.message({ message: { isError: false, message: "(1 row affected)" } });
+            events.queryComplete({ batchSummaries: [] });
+        };
+        await app.openLaunchQuery();
+        assert.equal(calls.length, approved ? 1 : 0);
+        assert.equal(returned.length, 1);
+        assert.equal(returned[0].status, approved ? "success" : "cancelled");
+        if (approved) {
+            assert.equal(calls[0][3], false, "MCP captures grid rows even if text mode is selected");
+            assert.equal(calls[0][4], true, "MCP forces data modification confirmations");
+            assert.equal(returned[0].messages[0].message, "(1 row affected)");
+        }
+    }
+});
+
+test("MCP query completion collects results, propagates confirmation and blocks concurrent reruns", async () => {
+    const { client, createTab, app } = setup();
+    const { tab, events } = createTab();
+    tab.resultsMode = "text";
+    await tab.connect(0);
+    let requested;
+    client.executeDocumentSelection = async (...args) => { requested = args; };
+    client.subset = async () => ({ resultSubset: { rowCount: 1, rows: [[{ displayValue: "Contoso", isNull: false }]] } });
+    let confirmation;
+    app.confirm = params => { confirmation = params; };
+    const execution = tab.executeForInvocation(4096);
+    while (!requested) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requested[3], false);
+    assert.equal(requested[4], true);
+    await assert.rejects(tab.execute(null), /MCP invocation/);
+    events.confirmation({ ownerUri: tab.uri, msg: "Delete?" });
+    assert.equal(confirmation.msg, "Delete?");
+    events.queryComplete({ batchSummaries: [{
+        resultSetSummaries: [{ batchId: 0, id: 0, rowCount: 1, complete: true, columnInfo: [{ columnName: "name" }] }],
+    }] });
+    const result = await execution;
+    assert.equal(result.resultSets[0].rows[0][0], "Contoso");
+    assert.equal(result.status, "success");
+});
+
+test("MCP two-way conversion returns SQL without executing, while one-way execution does not return data", async () => {
+    for (const execute of [false, true]) {
+        const { app, registry, client, window } = setup();
+        registry.all = [{ slot: 0 }];
+        registry.register = async () => {};
+        const returned = [];
+        window.toolboxAPI = { invocation: {
+            getLaunchContext: async () => ({
+                fetchXml: "<fetch />", execute, __pptb: { expectsResponse: !execute },
+            }),
+            returnData: async result => returned.push(result),
+        } };
+        client.transformQuery = async () => ["SELECT name FROM account"];
+        let executed = false;
+        app.addTab = () => ({
+            connect: async () => {},
+            executeForInvocation: async () => { executed = true; return { status: "success" }; },
+        });
+        app.saveSessionNow = async () => {};
+        app.confirmInvocation = async () => true;
+        assert.equal(await app.openLaunchQuery(), true);
+        assert.equal(executed, execute);
+        assert.equal(returned.length, execute ? 0 : 1);
+        if (!execute) assert.equal(returned[0].sql[0], "SELECT name FROM account");
+    }
+});
+
+test("MCP connection failures return explicit errors without attempting execution", async () => {
+    const { app, registry, window } = setup();
+    const returned = [];
+    const notifications = [];
+    window.toolboxAPI = {
+        invocation: {
+            getLaunchContext: async () => ({ sql: "DELETE FROM account", execute: true, __pptb: { expectsResponse: true } }),
+            returnData: async result => returned.push(result),
+        },
+        utils: { showNotification: async notification => notifications.push(notification) },
+    };
+    registry.all = [{ slot: 0 }];
+    registry.register = async () => { throw new Error("Connection failed"); };
+    app.addTab = () => assert.fail("Must not open or execute on connection failure");
+    assert.equal(await app.openLaunchQuery(), false);
+    assert.equal(returned[0].status, "error");
+    assert.match(returned[0].error, /Connection failed/);
+    assert.equal(notifications.length, 1);
+});
+
+test("MCP execution resolves cancellation and rejects engine failure without hanging", async () => {
+    for (const stop of [false, true]) {
+        const { client, createTab } = setup();
+        const { tab, events } = createTab();
+        await tab.connect(0);
+        let requested = false;
+        client.executeDocumentSelection = async () => { requested = true; };
+        const execution = tab.executeForInvocation(4096);
+        while (!requested) await new Promise(resolve => setImmediate(resolve));
+        if (stop) {
+            tab.engineStopped("Worker stopped");
+            await assert.rejects(execution, /Worker stopped/);
+        } else {
+            await tab.cancel();
+            events.queryComplete({ batchSummaries: [] });
+            assert.equal((await execution).status, "cancelled");
+        }
+    }
+});
+
 test("invalid incoming FetchXML and conversion failures are surfaced without opening SQL", async () => {
     for (const failure of ["invalid-type", "empty", "no-connection", "registration", "conversion", "launch"]) {
         const { app, client, registry, window } = setup();
@@ -1065,7 +1197,7 @@ test("invalid incoming FetchXML and conversion failures are surfaced without ope
         app.addTab = () => assert.fail("Conversion must not open a tab on failure");
         assert.equal(await app.openLaunchQuery(), false);
         assert.equal(notifications.length, 1, failure);
-        assert.equal(notifications[0].title, "Unable to open FetchXML query");
+        assert.equal(notifications[0].title, "Unable to process incoming query");
     }
 });
 

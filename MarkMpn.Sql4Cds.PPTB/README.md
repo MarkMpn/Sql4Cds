@@ -92,6 +92,37 @@ await window.toolboxAPI.invocation.launchTool(
 
 Tools can also discover SQL 4 CDS through the `fetchxml` capability. Invalid FetchXML or conversion failures are shown as notifications.
 
+### MCP / AI assistant integration
+
+SQL 4 CDS is discoverable and invokable through PPTB's MCP server. Runs are **windowed**, not headless, so you can review queries and approve data modifications. Enable and connect to the MCP server in PPTB to use it from an assistant.
+
+Inputs:
+
+| Input | Description |
+|--|--|
+| `sql` | SQL to open or execute. Provide either `sql` or `fetchXml`, not both. |
+| `fetchXml` | FetchXML to convert to SQL before opening or executing it. |
+| `execute` | Defaults to `false`. Set to `true` to request execution after user approval. |
+| `maxResponseBytes` | UTF-8 JSON response budget, default 65,536 bytes; accepts 1,024 to 1,048,576 bytes. Adjust to the calling assistant's available context. |
+
+The inherited primary connection is used. Every execution first requires approval of the SQL, including stored procedure calls. During execution, data modification prompts are required even if your usual warning thresholds would suppress them. The existing "Yes to all" option applies only to that execution. DELETE/UPDATE safety settings still apply.
+
+Both one-way and two-way invocation modes are supported. One-way calls leave the query/results visible. Two-way calls return converted `sql` or execution `resultSets` and `messages`, with a `status` of `success`, `error`, or `cancelled`. PPTB closes the invoked window when results are returned. Existing tabs are saved according to your session settings.
+
+Execution responses contain column metadata and rows of displayed string values (`null` for SQL NULL). Each result set includes `rowCount`, `returnedRowCount`, and `truncated`. The number of returned rows adapts to their actual serialized size, including column count, UTF-8 characters, JSON escaping, metadata, and messages. A top-level `truncated` flag also reports omitted messages. Individual cell values are not silently shortened. Query execution is not limited by this response budget; full results remain in the tool until it closes. If metadata alone cannot fit, an explicit error is returned.
+
+For example, an assistant can invoke the tool with:
+
+```json
+{
+    "sql": "SELECT TOP 100 name, accountid FROM account",
+    "execute": true,
+    "maxResponseBytes": 65536
+}
+```
+
+The declared two-way timeout is five minutes; callers can request a longer timeout when user confirmation or a large query needs more time. An MCP timeout is not proof that a Dataverse operation was cancelled: use the tool's Cancel button and inspect the outcome before retrying a modification. Bulk delete jobs continue asynchronously once submitted.
+
 ### Query Execution
 
 Write your query in the main editor, and press `F5` or `Ctrl+E` / `Cmd+E` to run it. With no text selected, all the text in the current editor will be executed. To run only

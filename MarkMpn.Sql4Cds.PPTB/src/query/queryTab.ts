@@ -6,6 +6,8 @@ import { exportFormats, type ExportFormat } from "../lsp/protocol";
 import { ExecutionPlanView } from "../executionPlan/executionPlanView";
 import { getNodeImageUrl } from "../executionPlan/nodeImages";
 import { ResultsGrid } from "./resultsGrid";
+import { collectInvocationResults, type InvocationResult } from "../mcpInvocation";
+import type { ResultMessage } from "../lsp/protocol";
 
 export interface QueryTabHost {
     readonly client: Sql4CdsClient;
@@ -72,6 +74,10 @@ export class QueryTab {
     private readonly resultsTabButtons = new Map<ResultsView, HTMLButtonElement>();
     private readonly grids = new Map<string, ResultsGrid>();
     private readonly rowCounts = new Map<string, number>();
+    private readonly resultSummaries = new Map<string, ResultSetSummary>();
+    private readonly resultMessages: ResultMessage[] = [];
+    private invocationActive = false;
+    private invocationComplete: (() => void) | null = null;
     private textRowCount = 0;
     private readonly planResultSets = new Set<string>();
     private resultsGeneration = 0;
@@ -268,7 +274,8 @@ export class QueryTab {
      * Executes the selected text, or the entire document if nothing is selected. If `estimatedPlan` is set the query
      * is not run and the estimated execution plan is shown instead.
      */
-    async execute(selection: monaco.Selection | null, estimatedPlan = false): Promise<void> {
+    async execute(selection: monaco.Selection | null, estimatedPlan = false, invocation = false): Promise<void> {
+        if (this.invocationActive && !invocation) throw new Error("Wait for the MCP invocation to finish before executing another query.");
         if (this.engineError) throw new Error(this.engineError);
         if (this.running) return;
         if (!this.connected) throw new Error("Select a connection before running a query");
@@ -276,7 +283,7 @@ export class QueryTab {
         await this.clearResults();
         if (this.engineError) throw new Error(this.engineError);
 
-        const resultsToText = this.resultsMode === "text" && !estimatedPlan;
+        const resultsToText = !invocation && this.resultsMode === "text" && !estimatedPlan;
         this.showResultsView("messages");
         this.hasResults = true;
         this.running = true;
@@ -303,11 +310,29 @@ export class QueryTab {
             await this.host.client.executeDocumentSelection(this.uri, querySelection, {
                 includeEstimatedExecutionPlanXml: estimatedPlan,
                 includeActualExecutionPlanXml: !estimatedPlan && this.host.includeActualPlan,
-            }, resultsToText);
+            }, resultsToText, invocation);
         } catch (err) {
             if (this.engineError) return;
             this.addMessage(err instanceof Error ? err.message : String(err), true);
             this.onQueryComplete();
+        }
+    }
+
+    async executeForInvocation(responseLimitBytes: number): Promise<InvocationResult> {
+        if (this.running || this.invocationActive) throw new Error("The query tab is already executing.");
+        this.invocationActive = true;
+        const complete = new Promise<void>(resolve => { this.invocationComplete = resolve; });
+        try {
+            await this.execute(null, false, true);
+            await complete;
+            if (this.engineError) throw new Error(this.engineError);
+            const result = await collectInvocationResults(this.host.client, this.uri, [...this.resultSummaries.values()],
+                this.resultMessages, this.cancelled ? "cancelled" : this.hasErrors ? "error" : "success", responseLimitBytes);
+            if (this.engineError) throw new Error(this.engineError);
+            return result;
+        } finally {
+            this.invocationActive = false;
+            this.invocationComplete = null;
         }
     }
 
@@ -346,6 +371,7 @@ export class QueryTab {
         else if (this.grids.size > 0) this.showResultsView("results");
         else this.showResultsView("messages");
         this.host.onStateChanged(this);
+        this.invocationComplete?.();
     }
 
     engineStopped(message: string): void {
@@ -367,6 +393,7 @@ export class QueryTab {
         this.addMessage(message, true);
         this.showResultsView("messages");
         this.host.onStateChanged(this);
+        this.invocationComplete?.();
     }
 
     private isPlanResultSet(summary: ResultSetSummary): boolean {
@@ -435,6 +462,7 @@ export class QueryTab {
     }
 
     private addMessage(text: string, isError: boolean, range?: Range): void {
+        this.resultMessages.push({ message: text, isError, range });
         if (isError) {
             this.hasErrors = true;
             this.statusMessage = text;
@@ -514,6 +542,7 @@ export class QueryTab {
         if (this.isPlanResultSet(summary)) return;
 
         const key = this.resultSetKey(summary);
+        this.resultSummaries.set(key, summary);
         this.rowCounts.set(key, summary.rowCount);
         this.grids.get(key)?.setRowCount(summary.rowCount, summary.complete);
         this.host.onStatusChanged(this);
@@ -538,6 +567,8 @@ export class QueryTab {
         for (const grid of this.grids.values()) grid.dispose();
         this.grids.clear();
         this.rowCounts.clear();
+        this.resultSummaries.clear();
+        this.resultMessages.length = 0;
         this.textRowCount = 0;
         this.planResultSets.clear();
         this.planView.clear();
@@ -557,6 +588,10 @@ export class QueryTab {
     }
 
     async dispose(): Promise<void> {
+        if (this.invocationActive) {
+            this.engineError = "The query tab was closed during MCP execution.";
+            this.invocationComplete?.();
+        }
         this.resultsGeneration++;
         this.changeListener.dispose();
         for (const grid of this.grids.values()) grid.dispose();

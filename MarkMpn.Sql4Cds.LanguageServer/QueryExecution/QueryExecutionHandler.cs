@@ -243,7 +243,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             {
                 e.Cancel = false;
 
-                if ((e.Count > threshold || e.BypassCustomPluginExecution) && e.Metadata != null && !bypassWarnings)
+                if ((request.ConfirmDataModification || e.Count > threshold || e.BypassCustomPluginExecution) && e.Metadata != null && !bypassWarnings)
                 {
                     var msg = $"{operation} will affect {(e.Count == Int32.MaxValue ? "an unknown number of" : e.Count.ToString("N0"))} {GetDisplayName(e.Count, e.Metadata)} in the {e.TargetDataSource.Name} environment.";
                     if (e.BypassCustomPluginExecution)

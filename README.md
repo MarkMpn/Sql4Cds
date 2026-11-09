@@ -151,6 +151,7 @@ across all of them. The user interface features available depend on the host app
 | Restore open queries on restart | ➖ | ✅ | ✅ | 🔷 | 🔷 |
 | Run whole query or current selection, and cancel running queries | ✅ | ✅ | ✅ | ✅ | ✅ |
 | AI assistant (Copilot) | ➖ | ✅ | ❌ | ❌ | ❌ |
+| MCP invocation: open, convert, and execute queries with user confirmation | ➖ | ❌ | ✅ | ❌ | ❌ |
 
 <sup>3</sup> Exposed through the `Autocomplete` and `QueryFormatter` classes for client applications to use.
 

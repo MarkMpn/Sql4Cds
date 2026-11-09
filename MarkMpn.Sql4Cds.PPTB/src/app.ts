@@ -9,6 +9,7 @@ import { PinnablePane } from "./pinnablePane";
 import { PropertiesPanel } from "./propertiesPanel";
 import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
+import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
 import { loadSession, saveSession, type SessionState, type SessionTab } from "./session";
 
 const DEFAULT_QUERY = "";
@@ -227,31 +228,74 @@ class App implements QueryTabHost {
         this.renderConnectionList();
 
         const restored = await this.restoreSession();
+        this.sessionRestored = true;
         const receivedQuery = await this.openLaunchQuery();
         if (!restored && !receivedQuery) this.addTab(DEFAULT_QUERY);
-        this.sessionRestored = true;
         window.addEventListener("pagehide", () => { void this.saveSessionNow(); });
 
         await this.objectExplorer.setConnections(this.connections.all);
     }
 
     private async openLaunchQuery(): Promise<boolean> {
+        let expectsResponse = false;
+        let responseLimitBytes = defaultResponseLimitBytes;
         try {
             const context = await window.toolboxAPI.invocation.getLaunchContext();
-            if (!context || !("fetchXml" in context)) return false;
-            if (typeof context.fetchXml !== "string" || !context.fetchXml.trim())
-                throw new Error("The calling tool must provide a non-empty fetchXml string.");
-
+            const metadata = context?.__pptb;
+            expectsResponse = typeof metadata === "object" && metadata !== null &&
+                "expectsResponse" in metadata && metadata.expectsResponse === true;
+            const input = parseInvocation(context);
+            if (!input) {
+                if (expectsResponse) throw new Error("Provide sql or fetchXml for this invocation.");
+                return false;
+            }
+            responseLimitBytes = input.responseLimitBytes;
             const connection = this.connections.all[0];
-            if (!connection) throw new Error("Select a connection to convert the received FetchXML query.");
+            if (!connection) throw new Error("Select a connection to open the received query.");
             await this.connections.register(connection.slot);
-            const queries = await this.client.transformQuery(ConnectionRegistry.ownerUri(connection.slot), context.fetchXml, "sql");
-            for (const query of queries) this.addTab(query, connection.slot);
+            const queries = input.fetchXml
+                ? await this.client.transformQuery(ConnectionRegistry.ownerUri(connection.slot), input.query, "sql")
+                : [input.query];
+            if (input.execute) {
+                const tab = this.addTab(queries.join("\n\n"), connection.slot, false);
+                await tab.connect(connection.slot);
+                const approved = await this.confirmInvocation(tab);
+                const result = approved
+                    ? await tab.executeForInvocation(input.responseLimitBytes)
+                    : { status: "cancelled", resultSets: [], messages: [], truncated: false, responseLimitBytes: input.responseLimitBytes };
+                if (expectsResponse) {
+                    await this.saveSessionNow();
+                    await window.toolboxAPI.invocation.returnData({ ...result });
+                }
+            } else {
+                for (const query of queries) this.addTab(query, connection.slot);
+                if (expectsResponse) {
+                    const result = { status: "success", sql: queries };
+                    if (responseSize(result) > input.responseLimitBytes) throw new Error("Converted SQL exceeds maxResponseBytes.");
+                    await this.saveSessionNow();
+                    await window.toolboxAPI.invocation.returnData(result);
+                }
+            }
             return true;
         } catch (err) {
-            await notify("Unable to open FetchXML query", errorMessage(err), "error");
+            await notify("Unable to process incoming query", errorMessage(err), "error");
+            if (expectsResponse) {
+                try {
+                    await window.toolboxAPI.invocation.returnData(invocationError(errorMessage(err), responseLimitBytes));
+                } catch (returnError) {
+                    await notify("Unable to return invocation results", errorMessage(returnError), "error");
+                }
+            }
             return false;
         }
+    }
+
+    private async confirmInvocation(tab: QueryTab): Promise<boolean> {
+        const message = `An external caller requested execution in ${tab.connectionSummary?.databaseName ?? "the selected environment"}. ` +
+            "This query may modify data or execute Dataverse messages. Review the SQL below before proceeding. " +
+            "SQL 4 CDS cannot undo data modifications. Data modification confirmations will also be shown during execution.\n\n" +
+            tab.model.getValue();
+        return await showConfirmation(message) !== ConfirmationResult.No;
     }
 
     // Session persistence
@@ -409,7 +453,7 @@ class App implements QueryTabHost {
         });
     }
 
-    private addTab(text = "", connectionSlot?: number): QueryTab {
+    private addTab(text = "", connectionSlot?: number, connect = true): QueryTab {
         // Connect new tabs to the same connection as the current tab, or the first available connection
         const slot = connectionSlot ?? this.activeTab?.connectionSlot ?? this.connections.all[0]?.slot;
 
@@ -418,7 +462,7 @@ class App implements QueryTabHost {
         this.el.results.appendChild(tab.resultsElement);
         this.activateTab(tab);
 
-        if (slot !== undefined && slot !== null) void this.connectTab(tab, slot);
+        if (connect && slot !== undefined && slot !== null) void this.connectTab(tab, slot);
 
         return tab;
     }

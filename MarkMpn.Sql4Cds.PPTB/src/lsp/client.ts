@@ -630,6 +630,7 @@ export class Sql4CdsClient {
         querySelection?: SelectionData,
         executionPlanOptions: ExecutionPlanOptions = { includeActualExecutionPlanXml: false, includeEstimatedExecutionPlanXml: false },
         resultsToText = false,
+        confirmDataModification = false,
     ): Promise<unknown> {
         const executionId = this.compactQueryEvents ? String(++this.executionSequence) : undefined;
         this.initialRows.delete(ownerUri);
@@ -641,6 +642,7 @@ export class Sql4CdsClient {
             ...(querySelection === undefined ? {} : { querySelection }),
             executionPlanOptions,
             ...(resultsToText ? { resultsToText } : {}),
+            ...(confirmDataModification ? { confirmDataModification } : {}),
         });
     }
 
