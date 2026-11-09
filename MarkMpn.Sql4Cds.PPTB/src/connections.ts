@@ -53,16 +53,9 @@ export class ConnectionRegistry {
         await window.toolboxAPI.utils.openInConnectionBrowser(this.getRecordUrl(reference), entry.slot);
     }
 
-    async getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string> {
-        const entry = this.getRecordConnection(reference);
-        const metadata = await window.dataverseAPI.getEntityMetadata(reference.logicalName, true, ["PrimaryIdAttribute"], entry.slot);
-        const primaryKey = metadata.PrimaryIdAttribute;
-        if (typeof primaryKey !== "string" || !primaryKey) throw new Error(`The primary key for "${reference.logicalName}" is unavailable`);
-        const quote = (name: string) => `[${name.replace(/]/g, "]]")}]`;
-        const table = currentDataSource?.toLowerCase() === reference.dataSource.toLowerCase()
-            ? quote(reference.logicalName)
-            : `${quote(reference.dataSource)}.dbo.${quote(reference.logicalName)}`;
-        return `SELECT * FROM ${table} WHERE ${quote(primaryKey)} = '${reference.id.replace(/'/g, "''")}';`;
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
+        this.getRecordConnection(reference);
+        return this.client.recordSelectStatement(ownerUri, reference);
     }
 
     static ownerUri(slot: number): string {

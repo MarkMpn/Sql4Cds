@@ -6,6 +6,8 @@ import { exportFormats, type ExportFormat } from "../lsp/protocol";
 import { ExecutionPlanView } from "../executionPlan/executionPlanView";
 import { getNodeImageUrl } from "../executionPlan/nodeImages";
 import { ResultsGrid } from "./resultsGrid";
+import { collectInvocationResults, type InvocationResult } from "../mcpInvocation";
+import type { ResultMessage } from "../lsp/protocol";
 
 export interface QueryTabHost {
     readonly client: Sql4CdsClient;
@@ -13,6 +15,8 @@ export interface QueryTabHost {
     readonly includeActualPlan: boolean;
     /** Indicates if sequential line numbers should be shown in the Messages tab */
     readonly showMessageLineNumbers: boolean;
+    /** Indicates if new tabs should show results as text rather than in a grid */
+    readonly resultsToText: boolean;
     /** Gets the connection options to use for a PPTB connection slot */
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
@@ -25,7 +29,7 @@ export interface QueryTabHost {
     copyToClipboard(text: string): void;
     openRecord(reference: EntityReferenceValue): void;
     copyRecordUrl(reference: EntityReferenceValue): void;
-    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string>;
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string>;
     /** Activates the tab (if necessary) and selects/reveals the given range in the shared editor */
     revealRange(tab: QueryTab, range: Range): void;
 }
@@ -64,16 +68,18 @@ export class QueryTab {
     resultsMode: "grid" | "text" = "grid";
 
     private readonly resultsPane: HTMLElement;
-    private readonly textPane: HTMLElement;
     private readonly messagesPane: HTMLElement;
     private readonly planPane: HTMLElement;
     private readonly planView: ExecutionPlanView;
     private readonly resultsTabButtons = new Map<ResultsView, HTMLButtonElement>();
     private readonly grids = new Map<string, ResultsGrid>();
     private readonly rowCounts = new Map<string, number>();
+    private readonly resultSummaries = new Map<string, ResultSetSummary>();
+    private readonly resultMessages: ResultMessage[] = [];
+    private invocationActive = false;
+    private invocationComplete: (() => void) | null = null;
+    private textRowCount = 0;
     private readonly planResultSets = new Set<string>();
-    private readonly textResultSets = new Map<string, { summary: ResultSetSummary; element: HTMLElement }>();
-    private executionResultsMode: "grid" | "text" = "grid";
     private resultsGeneration = 0;
     private readonly changeListener: monaco.IDisposable;
     private savedText: string;
@@ -90,7 +96,7 @@ export class QueryTab {
     }
 
     get totalRowCount(): number {
-        return Array.from(this.rowCounts.values()).reduce((total, count) => total + count, 0);
+        return Array.from(this.rowCounts.values()).reduce((total, count) => total + count, this.textRowCount);
     }
 
     /** The execution plan node to show in the Properties panel, if the execution plan is currently visible */
@@ -113,6 +119,7 @@ export class QueryTab {
         this.title = `Query ${this.id}`;
         this.readOnly = options.readOnly ?? false;
         this.isFetchXmlPreview = options.isFetchXmlPreview ?? false;
+        this.resultsMode = host.resultsToText ? "text" : "grid";
 
         this.model = monaco.editor.createModel(initialText, options.language ?? "sql", monaco.Uri.parse(this.uri));
         // The language server splits documents on \n, so keep the model line endings consistent
@@ -136,11 +143,6 @@ export class QueryTab {
         this.resultsPane = document.createElement("div");
         this.resultsPane.className = "results-pane";
 
-        this.textPane = document.createElement("div");
-        this.textPane.className = "results-text";
-        this.textPane.tabIndex = 0;
-        this.textPane.setAttribute("aria-label", "Query results as text");
-
         this.messagesPane = document.createElement("div");
         this.messagesPane.className = "messages-pane";
         this.messagesPane.classList.toggle("show-line-numbers", host.showMessageLineNumbers);
@@ -155,14 +157,20 @@ export class QueryTab {
         this.planPane.className = "plan-pane";
         this.planPane.appendChild(this.planView.element);
 
-        this.resultsElement.append(resultsTabs, this.resultsPane, this.textPane, this.messagesPane, this.planPane);
+        this.resultsElement.append(resultsTabs, this.resultsPane, this.messagesPane, this.planPane);
         this.showResultsView("messages");
 
         if (!this.readOnly) {
             host.client.addListener(this.uri, {
                 connectionComplete: (p) => this.onConnectionComplete(p),
                 batchStart: () => {},
-                message: (p) => this.addMessage(p.message.message, p.message.isError, p.message.range),
+                message: (p) => {
+                    if (typeof p.message.rowCount === "number") {
+                        this.textRowCount += p.message.rowCount;
+                        this.host.onStatusChanged(this);
+                    }
+                    this.addMessage(p.message.message, p.message.isError, p.message.range);
+                },
                 resultSetAvailable: (p) => this.onResultSetAvailable(p),
                 resultSetUpdated: (p) => this.onResultSetUpdated(p),
                 resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
@@ -266,7 +274,8 @@ export class QueryTab {
      * Executes the selected text, or the entire document if nothing is selected. If `estimatedPlan` is set the query
      * is not run and the estimated execution plan is shown instead.
      */
-    async execute(selection: monaco.Selection | null, estimatedPlan = false): Promise<void> {
+    async execute(selection: monaco.Selection | null, estimatedPlan = false, invocation = false): Promise<void> {
+        if (this.invocationActive && !invocation) throw new Error("Wait for the MCP invocation to finish before executing another query.");
         if (this.engineError) throw new Error(this.engineError);
         if (this.running) return;
         if (!this.connected) throw new Error("Select a connection before running a query");
@@ -274,7 +283,7 @@ export class QueryTab {
         await this.clearResults();
         if (this.engineError) throw new Error(this.engineError);
 
-        this.executionResultsMode = this.resultsMode;
+        const resultsToText = !invocation && this.resultsMode === "text" && !estimatedPlan;
         this.showResultsView("messages");
         this.hasResults = true;
         this.running = true;
@@ -301,11 +310,29 @@ export class QueryTab {
             await this.host.client.executeDocumentSelection(this.uri, querySelection, {
                 includeEstimatedExecutionPlanXml: estimatedPlan,
                 includeActualExecutionPlanXml: !estimatedPlan && this.host.includeActualPlan,
-            });
+            }, resultsToText, invocation);
         } catch (err) {
             if (this.engineError) return;
             this.addMessage(err instanceof Error ? err.message : String(err), true);
             this.onQueryComplete();
+        }
+    }
+
+    async executeForInvocation(responseLimitBytes: number): Promise<InvocationResult> {
+        if (this.running || this.invocationActive) throw new Error("The query tab is already executing.");
+        this.invocationActive = true;
+        const complete = new Promise<void>(resolve => { this.invocationComplete = resolve; });
+        try {
+            await this.execute(null, false, true);
+            await complete;
+            if (this.engineError) throw new Error(this.engineError);
+            const result = await collectInvocationResults(this.host.client, this.uri, [...this.resultSummaries.values()],
+                this.resultMessages, this.cancelled ? "cancelled" : this.hasErrors ? "error" : "success", responseLimitBytes);
+            if (this.engineError) throw new Error(this.engineError);
+            return result;
+        } finally {
+            this.invocationActive = false;
+            this.invocationComplete = null;
         }
     }
 
@@ -341,10 +368,10 @@ export class QueryTab {
 
         if (this.hasErrors) this.showResultsView("messages");
         else if (this.estimatedPlan && this.planView.count > 0) this.showResultsView("plan");
-        else if (this.grids.size > 0 || this.textResultSets.size > 0) this.showResultsView("results");
+        else if (this.grids.size > 0) this.showResultsView("results");
         else this.showResultsView("messages");
-        if (this.executionResultsMode === "text") void this.renderTextResults(this.resultsGeneration);
         this.host.onStateChanged(this);
+        this.invocationComplete?.();
     }
 
     engineStopped(message: string): void {
@@ -366,6 +393,7 @@ export class QueryTab {
         this.addMessage(message, true);
         this.showResultsView("messages");
         this.host.onStateChanged(this);
+        this.invocationComplete?.();
     }
 
     private isPlanResultSet(summary: ResultSetSummary): boolean {
@@ -379,16 +407,6 @@ export class QueryTab {
         if (this.isPlanResultSet(summary)) {
             this.planResultSets.add(this.resultSetKey(summary));
             this.addPlans(params);
-            return;
-        }
-
-        if (this.executionResultsMode === "text") {
-            const element = document.createElement("pre");
-            element.textContent = `${summary.columnInfo.map((column) => column.columnName).join("\t")}\n`;
-            this.textResultSets.set(this.resultSetKey(summary), { summary, element });
-            this.textPane.appendChild(element);
-            this.updateResultSet(summary);
-            this.showResultsView("results");
             return;
         }
 
@@ -422,8 +440,7 @@ export class QueryTab {
 
     private async appendRecordSelectStatement(reference: EntityReferenceValue): Promise<void> {
         try {
-            const source = this.connectionSlot === null ? undefined : this.host.getConnectionOptions(this.connectionSlot)?.connectionName;
-            const sql = await this.host.getRecordSelectStatement(reference, source);
+            const sql = await this.host.getRecordSelectStatement(this.uri, reference);
             if (this.model.isDisposed()) return;
             if (this.readOnly) throw new Error("The query editor is read-only");
             const line = this.model.getLineCount();
@@ -445,6 +462,7 @@ export class QueryTab {
     }
 
     private addMessage(text: string, isError: boolean, range?: Range): void {
+        this.resultMessages.push({ message: text, isError, range });
         if (isError) {
             this.hasErrors = true;
             this.statusMessage = text;
@@ -452,15 +470,19 @@ export class QueryTab {
             this.host.onStatusChanged(this);
         }
 
-        const line = document.createElement("div");
-        line.className = isError ? "message error" : "message";
-        line.textContent = text;
-        if (range) {
-            line.classList.add("navigable");
-            line.title = "Double-click to go to the query";
-            line.addEventListener("dblclick", () => this.host.revealRange(this, range));
-        }
-        this.messagesPane.appendChild(line);
+        // Show each line separately so line numbers are shown correctly for multi-line messages such as text results
+        const lines = text.split(/\r?\n/).map((lineText) => {
+            const line = document.createElement("div");
+            line.className = isError ? "message error" : "message";
+            line.textContent = lineText;
+            if (range) {
+                line.classList.add("navigable");
+                line.title = "Double-click to go to the query";
+                line.addEventListener("dblclick", () => this.host.revealRange(this, range));
+            }
+            return line;
+        });
+        this.messagesPane.append(...lines);
         this.messagesPane.scrollTop = this.messagesPane.scrollHeight;
     }
 
@@ -520,40 +542,19 @@ export class QueryTab {
         if (this.isPlanResultSet(summary)) return;
 
         const key = this.resultSetKey(summary);
+        this.resultSummaries.set(key, summary);
         this.rowCounts.set(key, summary.rowCount);
         this.grids.get(key)?.setRowCount(summary.rowCount, summary.complete);
-        const textResult = this.textResultSets.get(key);
-        if (textResult) textResult.summary = summary;
         this.host.onStatusChanged(this);
-    }
-
-    private async renderTextResults(generation: number): Promise<void> {
-        try {
-            for (const { summary, element } of this.textResultSets.values()) {
-                for (let start = 0; start < summary.rowCount;) {
-                    const result = await this.host.client.subset(this.uri, summary.batchId, summary.id, start, Math.min(200, summary.rowCount - start));
-                    if (generation !== this.resultsGeneration) return;
-                    const rows = result.resultSubset.rows;
-                    if (rows.length === 0) throw new Error("The server returned no rows before the end of the result set");
-                    element.appendChild(document.createTextNode(rows.map((row) => row.map((cell) => cell.isNull ? "NULL" : cell.displayValue).join("\t")).join("\n") + "\n"));
-                    start += rows.length;
-                }
-            }
-        } catch (err) {
-            if (generation !== this.resultsGeneration) return;
-            this.addMessage(`Unable to load text results: ${err instanceof Error ? err.message : String(err)}`, true);
-            this.showResultsView("messages");
-        }
     }
 
     private showResultsView(view: ResultsView): void {
         const changed = this.view !== view;
         this.view = view;
-        this.resultsPane.hidden = view !== "results" || this.executionResultsMode !== "grid";
-        this.textPane.hidden = view !== "results" || this.executionResultsMode !== "text";
+        this.resultsPane.hidden = view !== "results";
         this.messagesPane.hidden = view !== "messages";
         this.planPane.hidden = view !== "plan";
-        this.resultsTabButtons.get("results")!.hidden = this.grids.size === 0 && this.textResultSets.size === 0;
+        this.resultsTabButtons.get("results")!.hidden = this.grids.size === 0;
         for (const [key, button] of this.resultsTabButtons) {
             button.classList.toggle("active", key === view);
             button.setAttribute("aria-pressed", String(key === view));
@@ -563,11 +564,12 @@ export class QueryTab {
 
     private async clearResults(): Promise<void> {
         this.resultsGeneration++;
-        this.textResultSets.clear();
-        this.textPane.replaceChildren();
         for (const grid of this.grids.values()) grid.dispose();
         this.grids.clear();
         this.rowCounts.clear();
+        this.resultSummaries.clear();
+        this.resultMessages.length = 0;
+        this.textRowCount = 0;
         this.planResultSets.clear();
         this.planView.clear();
         this.resultsTabButtons.get("plan")!.hidden = true;
@@ -586,6 +588,10 @@ export class QueryTab {
     }
 
     async dispose(): Promise<void> {
+        if (this.invocationActive) {
+            this.engineError = "The query tab was closed during MCP execution.";
+            this.invocationComplete?.();
+        }
         this.resultsGeneration++;
         this.changeListener.dispose();
         for (const grid of this.grids.values()) grid.dispose();

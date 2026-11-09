@@ -14,8 +14,6 @@ using Microsoft.Xrm.Tooling.Connector;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Sdk;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
-using System.Globalization;
 
 namespace MarkMpn.Sql4Cds.XTB
 {
@@ -718,11 +716,13 @@ INNER JOIN {manyToMany.Entity2LogicalName}
 
             var entity = (EntityMetadata)treeView.SelectedNode.Tag;
             var schema = (string)treeView.SelectedNode.Parent.Tag;
-            selectTop1000RowsToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(schema, entity, 1000));
-            selectToToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(schema, entity, null));
-            insertToToolStripMenuItem.Tag = (Func<string>)(() => GenerateInsertQuery(schema, entity));
-            updateToToolStripMenuItem.Tag = (Func<string>)(() => GenerateUpdateQuery(schema, entity));
-            deleteToToolStripMenuItem.Tag = (Func<string>)(() => GenerateDeleteQuery(schema, entity));
+            var connection = GetService(treeView.SelectedNode);
+            var dataSource = _dataSources[connection.ConnectionName];
+            selectTop1000RowsToolStripMenuItem.Tag = (Func<string>)(() => ScriptGenerator.GenerateSelectQuery(schema, dataSource.Metadata[entity.LogicalName], 1000, dataSource, Settings.Instance.ColumnOrdering));
+            selectToToolStripMenuItem.Tag = (Func<string>)(() => ScriptGenerator.GenerateSelectQuery(schema, dataSource.Metadata[entity.LogicalName], null, dataSource, Settings.Instance.ColumnOrdering));
+            insertToToolStripMenuItem.Tag = (Func<string>)(() => ScriptGenerator.GenerateInsertQuery(schema, dataSource.Metadata[entity.LogicalName], dataSource, Settings.Instance.ColumnOrdering));
+            updateToToolStripMenuItem.Tag = (Func<string>)(() => ScriptGenerator.GenerateUpdateQuery(schema, dataSource.Metadata[entity.LogicalName], dataSource, Settings.Instance.ColumnOrdering));
+            deleteToToolStripMenuItem.Tag = (Func<string>)(() => ScriptGenerator.GenerateDeleteQuery(schema, entity.LogicalName));
 
             switch (schema)
             {
@@ -759,7 +759,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             var connection = GetService(treeView.SelectedNode);
             var dataSource = _dataSources[connection.ConnectionName];
             
-            selectToToolStripMenuItem.Tag = (Func<string>)(() => GenerateSelectQuery(tvf, dataSource));
+            selectToToolStripMenuItem.Tag = (Func<string>)(() => ScriptGenerator.GenerateSelectQuery(tvf, dataSource, Settings.Instance.ColumnOrdering));
 
             selectToToolStripMenuItem.Enabled = true;
             insertToToolStripMenuItem.Enabled = false;
@@ -774,386 +774,13 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             var connection = GetService(treeView.SelectedNode);
             var dataSource = _dataSources[connection.ConnectionName];
 
-            executeToToolStripMenuItem.Tag = (Func<string>)(() => GenerateExecuteQuery(sproc, dataSource));
+            executeToToolStripMenuItem.Tag = (Func<string>)(() => ScriptGenerator.GenerateExecuteQuery(sproc, dataSource, Settings.Instance.ColumnOrdering));
 
             selectToToolStripMenuItem.Enabled = false;
             insertToToolStripMenuItem.Enabled = false;
             updateToToolStripMenuItem.Enabled = false;
             deleteToToolStripMenuItem.Enabled = false;
             executeToToolStripMenuItem.Enabled = true;
-        }
-
-        private string GenerateSelectQuery(Engine.Message tvf, DataSource dataSource)
-        {
-            var querySpec = new QuerySpecification();
-            querySpec.SelectElements.Add(new SelectScalarExpression { Expression = new ColumnReferenceExpression { ColumnType = ColumnType.Wildcard } });
-            var tvfReference = new SchemaObjectFunctionTableReference
-            {
-                SchemaObject = new SchemaObjectName
-                {
-                    Identifiers =
-                    {
-                        new Identifier { Value = tvf.Name }
-                    }
-                }
-            };
-            querySpec.FromClause = new FromClause
-            {
-                TableReferences = { tvfReference }
-            };
-
-            var parameters = tvf.InputParameters
-                .Where(p => p.Type != typeof(PagingInfo));
-
-            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Alphabetical)
-                parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
-            else
-                parameters = parameters.OrderBy(p => p.Position);
-
-            foreach (var param in parameters)
-            {
-                tvfReference.Parameters.Add(new VariableReference
-                {
-                    Name = $"<@{param.Name}, {param.GetSqlDataType(dataSource).ToSql()}>"
-                });
-            }
-
-            var select = new SelectStatement
-            {
-                QueryExpression = querySpec
-            };
-
-            return querySpec.ToSql();
-        }
-
-        private string GenerateExecuteQuery(Engine.Message sproc, DataSource dataSource)
-        {
-            var batch = new TSqlBatch();
-            var declare = new DeclareVariableStatement();
-            batch.Statements.Add(declare);
-
-            declare.Declarations.Add(new DeclareVariableElement
-            {
-                VariableName = new Identifier { Value = "@RC" },
-                DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int }
-            });
-
-            var parameters = sproc.InputParameters
-                .Where(p => p.Type != typeof(PagingInfo));
-
-            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Alphabetical)
-                parameters = parameters.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
-            else
-                parameters = parameters.OrderBy(p => p.Position);
-
-            foreach (var param in parameters.Concat(sproc.OutputParameters))
-            {
-                declare.Declarations.Add(new DeclareVariableElement
-                {
-                    VariableName = new Identifier { Value = $"@{param.Name}" },
-                    DataType = param.GetSqlDataType(dataSource)
-                });
-            }
-
-            var exec = new ExecuteStatement
-            {
-                ExecuteSpecification = new ExecuteSpecification
-                {
-                    Variable = new VariableReference { Name = "@RC" },
-                    ExecutableEntity = new ExecutableProcedureReference
-                    {
-                        ProcedureReference = new ProcedureReferenceName
-                        {
-                            ProcedureReference = new ProcedureReference
-                            {
-                                Name = new SchemaObjectName
-                                {
-                                    Identifiers =
-                                    {
-                                        new Identifier { Value = "dbo" },
-                                        new Identifier { Value = sproc.Name }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-
-            foreach (var param in parameters)
-            {
-                exec.ExecuteSpecification.ExecutableEntity.Parameters.Add(new ExecuteParameter
-                {
-                    Variable = new VariableReference { Name = $"@{param.Name}" },
-                    ParameterValue = new VariableReference { Name = $"@{param.Name}" }
-                });
-            }
-
-            foreach (var param in sproc.OutputParameters)
-            {
-                exec.ExecuteSpecification.ExecutableEntity.Parameters.Add(new ExecuteParameter
-                {
-                    Variable = new VariableReference { Name = $"@{param.Name}" },
-                    ParameterValue = new VariableReference { Name = $"@{param.Name}" },
-                    IsOutput = true
-                });
-            }
-
-            batch.Statements.Add(exec);
-
-            return batch.ToSql();
-        }
-
-        private string GenerateSelectQuery(string schema, EntityMetadata metadata, int? top)
-        {
-            var connection = GetService(treeView.SelectedNode);
-            var dataSource = _dataSources[connection.ConnectionName];
-            metadata = dataSource.Metadata[metadata.LogicalName];
-
-            var attrs = metadata.Attributes
-                .Where(a => a.IsValidForRead != false && a.AttributeOf == null);
-
-            IOrderedEnumerable<AttributeMetadata> sortedAttrs;
-
-            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Strict)
-                sortedAttrs = attrs.OrderBy(a => a.ColumnNumber);
-            else
-                sortedAttrs = attrs.OrderBy(a => a.LogicalName);
-
-            var columnNames = sortedAttrs
-                .SelectMany(a =>
-                {
-                    var names = new List<string>();
-                    names.Add(a.LogicalName);
-
-                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, false))
-                        names.Add(a.LogicalName + virtualAttr.Suffix);
-
-                    return names;
-                });
-
-            var querySpec = new QuerySpecification();
-
-            if (top != null)
-                querySpec.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = top.Value.ToString(CultureInfo.InvariantCulture) } };
-
-            foreach (var col in columnNames)
-                querySpec.SelectElements.Add(new SelectScalarExpression
-                {
-                    Expression = new ColumnReferenceExpression
-                    {
-                        MultiPartIdentifier = new MultiPartIdentifier
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = col }
-                            }
-                        }
-                    }
-                });
-
-            querySpec.FromClause = new FromClause
-            {
-                TableReferences =
-                {
-                    new NamedTableReference
-                    {
-                        SchemaObject = new SchemaObjectName
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = schema },
-                                new Identifier { Value = metadata.LogicalName }
-                            }
-                        }
-                    }
-                }
-            };
-
-            var select = new SelectStatement
-            {
-                QueryExpression = querySpec
-            };
-
-            return querySpec.ToSql();
-        }
-
-        private string GenerateInsertQuery(string schema, EntityMetadata metadata)
-        {
-            var connection = GetService(treeView.SelectedNode);
-            var dataSource = _dataSources[connection.ConnectionName];
-            metadata = dataSource.Metadata[metadata.LogicalName];
-
-            var attrs = metadata.Attributes
-                .Where(a => a.IsValidForCreate != false && a.AttributeOf == null);
-
-            IOrderedEnumerable<AttributeMetadata> sortedAttrs;
-
-            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Strict)
-                sortedAttrs = attrs.OrderBy(a => a.ColumnNumber);
-            else
-                sortedAttrs = attrs.OrderBy(a => a.LogicalName);
-
-            var columnNames = sortedAttrs
-                .SelectMany(a =>
-                {
-                    var names = new List<KeyValuePair<string,DataTypeReference>>();
-                    var type = a.GetAttributeSqlType(dataSource, true);
-
-                    if (type is UserDataTypeReference userType && userType.Name.BaseIdentifier.Value == "EntityReference")
-                        type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
-
-                    names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
-
-                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
-                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType()));
-
-                    return names;
-                })
-                .ToArray();
-
-            var insert = new InsertStatement
-            {
-                InsertSpecification = new InsertSpecification
-                {
-                    Target = new NamedTableReference
-                    {
-                        SchemaObject = new SchemaObjectName
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = schema },
-                                new Identifier { Value = metadata.LogicalName }
-                            }
-                        }
-                    }
-                }
-            };
-
-            var values = new ValuesInsertSource();
-            insert.InsertSpecification.InsertSource = values;
-            var rowValues = new RowValue();
-            values.RowValues.Add(rowValues);
-
-            foreach (var col in columnNames)
-            {
-                insert.InsertSpecification.Columns.Add(new ColumnReferenceExpression
-                {
-                    MultiPartIdentifier = new MultiPartIdentifier
-                    {
-                        Identifiers =
-                        {
-                            new Identifier { Value = col.Key }
-                        }
-                    }
-                });
-
-                rowValues.ColumnValues.Add(new ColumnReferenceExpression
-                {
-                    MultiPartIdentifier = new MultiPartIdentifier
-                    {
-                        Identifiers =
-                        {
-                            new Identifier { Value = $"<{col.Key}, {col.Value.ToSql()}>" }
-                        }
-                    }
-                });
-            }
-
-            var script = insert.ToSql();
-
-            // Remove the double space that the script generator adds after INSERT
-            if (script.StartsWith("INSERT  "))
-                script = script.Remove(7, 1);
-
-            return script;
-        }
-
-        private string GenerateUpdateQuery(string schema, EntityMetadata metadata)
-        {
-            var connection = GetService(treeView.SelectedNode);
-            var dataSource = _dataSources[connection.ConnectionName];
-            metadata = dataSource.Metadata[metadata.LogicalName];
-
-            var attrs = metadata.Attributes
-                .Where(a => a.IsValidForUpdate != false && a.AttributeOf == null);
-
-            IOrderedEnumerable<AttributeMetadata> sortedAttrs;
-
-            if (Settings.Instance.ColumnOrdering == ColumnOrdering.Strict)
-                sortedAttrs = attrs.OrderBy(a => a.ColumnNumber);
-            else
-                sortedAttrs = attrs.OrderBy(a => a.LogicalName);
-
-            var columnNames = sortedAttrs
-                .SelectMany(a =>
-                {
-                    var names = new List<KeyValuePair<string, DataTypeReference>>();
-                    var type = a.GetAttributeSqlType(dataSource, true);
-
-                    if (type is UserDataTypeReference userType && userType.Name.BaseIdentifier.Value == "EntityReference")
-                        type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
-
-                    names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName, type));
-
-                    foreach (var virtualAttr in a.GetVirtualAttributes(dataSource, true))
-                        names.Add(new KeyValuePair<string, DataTypeReference>(a.LogicalName + virtualAttr.Suffix, virtualAttr.DataType()));
-
-                    return names;
-                })
-                .ToArray();
-
-            var update = new UpdateStatement
-            {
-                UpdateSpecification = new UpdateSpecification
-                {
-                    Target = new NamedTableReference
-                    {
-                        SchemaObject = new SchemaObjectName
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = schema },
-                                new Identifier { Value = metadata.LogicalName }
-                            }
-                        }
-                    }
-                }
-            };
-
-            foreach (var col in columnNames)
-            {
-                update.UpdateSpecification.SetClauses.Add(new AssignmentSetClause
-                {
-                    Column = new ColumnReferenceExpression
-                    {
-                        MultiPartIdentifier = new MultiPartIdentifier
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = col.Key }
-                            }
-                        }
-                    },
-                    NewValue = new ColumnReferenceExpression
-                    {
-                        MultiPartIdentifier = new MultiPartIdentifier
-                        {
-                            Identifiers =
-                            {
-                                new Identifier { Value = $"<{col.Key}, {col.Value.ToSql()}>" }
-                            }
-                        }
-                    }
-                });
-            }
-
-            return update.ToSql() + "\r\nWHERE <Search Conditions>";
-        }
-
-        private string GenerateDeleteQuery(string schema, EntityMetadata metadata)
-        {
-            return $"DELETE FROM {schema}.{metadata.LogicalName}\r\nWHERE <Search Conditions>";
         }
 
         private void scriptTableAsTargetsContextMenuStripOpening(object sender, EventArgs e)

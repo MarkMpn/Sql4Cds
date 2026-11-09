@@ -30,6 +30,9 @@ interface TreeNode {
     error?: string;
 }
 
+type ScriptAction = "SELECT" | "SELECT_TOP_1000" | "INSERT" | "UPDATE" | "DELETE" | "EXECUTE";
+type ScriptDestination = "editor" | "file" | "clipboard";
+
 export class ObjectExplorer {
     private readonly connections = new Map<number, ExplorerConnection>();
     // A session-created notification can arrive before the createsession response.
@@ -45,6 +48,7 @@ export class ObjectExplorer {
         private readonly tree: HTMLElement,
         private readonly reportError: (message: string) => void,
         private readonly insertName: (text: string) => void,
+        private readonly newQuery: (connection: ConnectionSlot, query: string) => void
     ) {
         tree.setAttribute("role", "tree");
         tree.setAttribute("aria-label", "Object Explorer");
@@ -262,6 +266,45 @@ export class ObjectExplorer {
         return Array.from(this.connections.values()).flatMap((entry) => collect(entry.root));
     }
 
+    private addScriptDestinations(parent: HTMLElement, node: TreeNode, action: ScriptAction, disabled = false): void {
+        const submenu = createSubmenu(parent, `${action} To`, disabled);
+        if (disabled) return;
+
+        for (const [destination, label] of [
+            ["editor", "New Query Editor Window"],
+            ["file", "File..."],
+            ["clipboard", "Clipboard"],
+        ] as const) {
+            const option = document.createElement("button");
+            option.setAttribute("role", "menuitem");
+            option.textContent = label;
+            option.addEventListener("click", () => {
+                this.closeContextMenu?.();
+                this.select(node);
+                void this.outputScript(node, action, destination);
+            });
+            submenu.appendChild(option);
+        }
+    }
+
+    private async outputScript(node: TreeNode, action: ScriptAction, destination: ScriptDestination): Promise<void> {
+        try {
+            const sessionId = this.connections.get(node.connection.slot)?.sessionId;
+            if (!sessionId) throw new Error("The Object Explorer session is no longer available.");
+            const query = await this.client.generateObjectExplorerScript(sessionId, node.info.nodePath, action);
+            if (destination === "editor") {
+                this.newQuery(node.connection, query);
+            } else if (destination === "file") {
+                const fileName = `${(node.info.metadata?.name ?? node.info.label).replace(/[<>:"/\\|?*]/g, "_")}.sql`;
+                await window.toolboxAPI.fileSystem.saveFile(fileName, query, [{ name: "SQL queries", extensions: ["sql"] }]);
+            } else {
+                await window.toolboxAPI.utils.copyToClipboard(query);
+            }
+        } catch (error) {
+            this.reportError(`Unable to script ${objectTypeLabel(node.info.nodeType)}: ${errorMessage(error)}`);
+        }
+    }
+
     private select(node: TreeNode): void {
         this.selected = node;
         for (const [candidate, item] of this.items) {
@@ -279,16 +322,64 @@ export class ObjectExplorer {
         menu.className = "explorer-context-menu";
         menu.setAttribute("role", "menu");
         menu.setAttribute("aria-label", node.info.label);
+        const dismiss = () => this.closeContextMenu?.();
+
+        if (node.info.nodeType === "Server") {
+            // Only show a New Query item for connection nodes
+            const newQuery = document.createElement("button");
+            newQuery.setAttribute("role", "menuitem");
+            newQuery.textContent = "New Query";
+            newQuery.title = "New Query (Ctrl+N)";
+            menu.appendChild(newQuery);
+            newQuery.addEventListener("click", () => {
+                dismiss();
+                this.select(node);
+                this.newQuery(node.connection, "");
+            });
+
+            menu.appendChild(document.createElement("hr"));
+        }
+
+        if (node.info.nodeType === "Table") {
+            const selectTop = document.createElement("button");
+            selectTop.setAttribute("role", "menuitem");
+            selectTop.textContent = "Select Top 1000 Rows";
+            selectTop.addEventListener("click", () => {
+                dismiss();
+                void this.outputScript(node, "SELECT_TOP_1000", "editor");
+            });
+            menu.appendChild(selectTop);
+        }
+
+        const type = node.info.nodeType;
+        if (type === "Table" || type === "TableValuedFunction" || type === "StoredProcedure") {
+            const script = createSubmenu(menu, `Script ${objectTypeLabel(type)} as`);
+            if (type === "StoredProcedure") {
+                createSubmenu(script, "SELECT To", true);
+            } else {
+                this.addScriptDestinations(script, node, "SELECT");
+            }
+            this.addScriptDestinations(script, node, "INSERT", type !== "Table");
+            this.addScriptDestinations(script, node, "UPDATE", type !== "Table");
+            this.addScriptDestinations(script, node, "DELETE", type !== "Table");
+            this.addScriptDestinations(script, node, "EXECUTE", type !== "StoredProcedure");
+        }
+
         const refresh = document.createElement("button");
         refresh.setAttribute("role", "menuitem");
         refresh.textContent = "Refresh";
         refresh.title = "Refresh (F5)";
+        refresh.addEventListener("click", () => {
+            dismiss();
+            this.select(node);
+            this.refresh();
+        });
         menu.appendChild(refresh);
+
         document.body.appendChild(menu);
         const bounds = menu.getBoundingClientRect();
         menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - bounds.width))}px`;
         menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - bounds.height))}px`;
-        const dismiss = () => this.closeContextMenu?.();
         const outside = (event: Event) => {
             if (event.target instanceof Node && !menu.contains(event.target)) dismiss();
         };
@@ -306,23 +397,47 @@ export class ObjectExplorer {
         window.addEventListener("resize", dismiss);
         window.addEventListener("blur", dismiss);
         this.tree.addEventListener("scroll", dismiss);
-        refresh.addEventListener("click", () => {
-            dismiss();
-            this.select(node);
-            this.refresh();
-        });
         menu.addEventListener("keydown", (event) => {
             if (event.key === "Escape" || event.key === "Tab") {
                 dismiss();
                 this.select(node);
                 if (event.key === "Escape") event.preventDefault();
+            } else if (event.key === "ArrowRight") {
+                const active = document.activeElement as HTMLElement;
+                const submenu = active.parentElement?.querySelector<HTMLElement>(":scope > .explorer-context-submenu");
+                if (submenu && !active.hasAttribute("disabled")) {
+                    submenu.hidden = false;
+                    active.setAttribute("aria-expanded", "true");
+                    submenu.querySelector<HTMLButtonElement>("button:enabled")?.focus();
+                    event.preventDefault();
+                }
+            } else if (event.key === "ArrowLeft") {
+                const active = document.activeElement as HTMLElement;
+                const wrapper = active.closest<HTMLElement>(".explorer-context-submenu");
+                const trigger = wrapper?.parentElement?.querySelector<HTMLButtonElement>(":scope > button");
+                if (trigger) {
+                    wrapper!.hidden = true;
+                    trigger.setAttribute("aria-expanded", "false");
+                    trigger.focus();
+                    event.preventDefault();
+                }
             } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
                 event.preventDefault();
-                refresh.focus();
+                const buttons = Array.from(menu.querySelectorAll<HTMLButtonElement>("button:enabled"))
+                    .filter((button) => !button.closest<HTMLElement>(".explorer-context-submenu[hidden]"));
+                let index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+                if (index < 0) index = 0;
+                if (event.key === "ArrowDown") index = (index + 1) % buttons.length;
+                else if (event.key === "ArrowUp") index = (index - 1 + buttons.length) % buttons.length;
+                else if (event.key === "Home") index = 0;
+                else if (event.key === "End") index = buttons.length - 1;
+                buttons[index].focus();
             }
             event.stopPropagation();
         });
-        refresh.focus();
+        // Focus the first available button
+        const firstBtn = menu.querySelector<HTMLButtonElement>("button:enabled");
+        if (firstBtn) firstBtn.focus();
     }
 
     private onKeyDown(event: KeyboardEvent): void {
@@ -401,6 +516,20 @@ export class ObjectExplorer {
             const label = document.createElement("span");
             label.textContent = node.info.label;
             row.append(expander, icon, label);
+            if (node.info.nodeType === "Table") {
+                const selectTop = document.createElement("button");
+                selectTop.className = "explorer-select-top";
+                selectTop.type = "button";
+                selectTop.setAttribute("aria-label", "Select Top 1000 Rows");
+                selectTop.title = "Select Top 1000 Rows";
+                selectTop.textContent = "\u25B6";
+                selectTop.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    this.select(node);
+                    void this.outputScript(node, "SELECT_TOP_1000", "editor");
+                });
+                row.appendChild(selectTop);
+            }
             row.addEventListener("click", () => this.select(node));
             row.addEventListener("contextmenu", (event) => {
                 event.preventDefault();
@@ -452,4 +581,51 @@ export class ObjectExplorer {
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+function objectTypeLabel(type: string): string {
+    switch (type) {
+        case "Table": return "Table";
+        case "TableValuedFunction": return "Table-Valued Function";
+        case "StoredProcedure": return "Stored Procedure";
+        default: return type;
+    }
+}
+
+function createSubmenu(parent: HTMLElement, label: string, disabled = false): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className = "explorer-context-menu-item";
+    const trigger = document.createElement("button");
+    trigger.setAttribute("role", "menuitem");
+    trigger.setAttribute("aria-haspopup", "menu");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.textContent = label;
+    trigger.disabled = disabled;
+    const submenu = document.createElement("div");
+    submenu.className = "explorer-context-submenu";
+    submenu.setAttribute("role", "menu");
+    submenu.setAttribute("aria-label", label);
+    submenu.hidden = true;
+    const open = () => {
+        if (disabled) return;
+        for (const sibling of Array.from(parent.children)) {
+            if (sibling === wrapper) continue;
+            const siblingMenu = sibling.querySelector<HTMLElement>(":scope > .explorer-context-submenu");
+            if (!siblingMenu) continue;
+            siblingMenu.hidden = true;
+            sibling.querySelector<HTMLButtonElement>(":scope > button")?.setAttribute("aria-expanded", "false");
+        }
+        submenu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+    };
+    trigger.addEventListener("pointerenter", open);
+    trigger.addEventListener("focus", open);
+    trigger.addEventListener("click", () => {
+        if (disabled) return;
+        submenu.hidden = !submenu.hidden;
+        trigger.setAttribute("aria-expanded", String(!submenu.hidden));
+    });
+    wrapper.append(trigger, submenu);
+    parent.appendChild(wrapper);
+    return submenu;
 }

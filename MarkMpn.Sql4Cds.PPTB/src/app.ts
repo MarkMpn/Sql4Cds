@@ -9,6 +9,8 @@ import { PinnablePane } from "./pinnablePane";
 import { PropertiesPanel } from "./propertiesPanel";
 import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
+import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
+import { loadSession, saveSession, type SessionState, type SessionTab } from "./session";
 
 const DEFAULT_QUERY = "";
 
@@ -27,6 +29,8 @@ class App implements QueryTabHost {
     private closePreventionApplied = false;
     private closePreventionQueue: Promise<void> = Promise.resolve();
     private connectionChangeQueue: Promise<void> = Promise.resolve();
+    private sessionRestored = false;
+    private sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private explorerPane: PinnablePane | null = null;
     private propertiesPane: PinnablePane | null = null;
     private propertiesPanel: PropertiesPanel | null = null;
@@ -114,7 +118,8 @@ class App implements QueryTabHost {
         this.connections = new ConnectionRegistry(this.client);
         this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
             (message) => { void notify("Object Explorer", message, "error"); },
-            (text) => this.insertObjectName(text));
+            (text) => this.insertObjectName(text),
+            (connection, query) => this.addTab(query, connection.slot));
     }
 
     private async openQuery(): Promise<void> {
@@ -162,7 +167,9 @@ class App implements QueryTabHost {
 
     private syncClosePrevention(): void {
         this.closePreventionQueue = this.closePreventionQueue.then(async () => {
-            const shouldPreventClose = this.tabs.some((tab) => tab.isDirty);
+            // When the session is remembered any unsaved changes are restored on the next start,
+            // so there is no need to prevent the tool from closing
+            const shouldPreventClose = !this.settings.rememberSession && this.tabs.some((tab) => tab.isDirty);
             if (shouldPreventClose === this.closePreventionApplied) return;
 
             try {
@@ -219,8 +226,168 @@ class App implements QueryTabHost {
             ),
         );
         this.renderConnectionList();
-        this.addTab(DEFAULT_QUERY);
+
+        const restored = await this.restoreSession();
+        this.sessionRestored = true;
+        const receivedQuery = await this.openLaunchQuery();
+        if (!restored && !receivedQuery) this.addTab(DEFAULT_QUERY);
+        window.addEventListener("pagehide", () => { void this.saveSessionNow(); });
+
         await this.objectExplorer.setConnections(this.connections.all);
+    }
+
+    private async openLaunchQuery(): Promise<boolean> {
+        let expectsResponse = false;
+        let responseLimitBytes = defaultResponseLimitBytes;
+        try {
+            const context = await window.toolboxAPI.invocation.getLaunchContext();
+            const metadata = context?.__pptb;
+            expectsResponse = typeof metadata === "object" && metadata !== null &&
+                "expectsResponse" in metadata && metadata.expectsResponse === true;
+            const input = parseInvocation(context);
+            if (!input) {
+                if (expectsResponse) throw new Error("Provide sql or fetchXml for this invocation.");
+                return false;
+            }
+            responseLimitBytes = input.responseLimitBytes;
+            const connection = this.connections.all[0];
+            if (!connection) throw new Error("Select a connection to open the received query.");
+            await this.connections.register(connection.slot);
+            const queries = input.fetchXml
+                ? await this.client.transformQuery(ConnectionRegistry.ownerUri(connection.slot), input.query, "sql")
+                : [input.query];
+            if (input.execute) {
+                const tab = this.addTab(queries.join("\n\n"), connection.slot, false);
+                await tab.connect(connection.slot);
+                const approved = await this.confirmInvocation(tab);
+                const result = approved
+                    ? await tab.executeForInvocation(input.responseLimitBytes)
+                    : { status: "cancelled", resultSets: [], messages: [], truncated: false, responseLimitBytes: input.responseLimitBytes };
+                if (expectsResponse) {
+                    await this.saveSessionNow();
+                    await window.toolboxAPI.invocation.returnData({ ...result });
+                }
+            } else {
+                for (const query of queries) this.addTab(query, connection.slot);
+                if (expectsResponse) {
+                    const result = { status: "success", sql: queries };
+                    if (responseSize(result) > input.responseLimitBytes) throw new Error("Converted SQL exceeds maxResponseBytes.");
+                    await this.saveSessionNow();
+                    await window.toolboxAPI.invocation.returnData(result);
+                }
+            }
+            return true;
+        } catch (err) {
+            await notify("Unable to process incoming query", errorMessage(err), "error");
+            if (expectsResponse) {
+                try {
+                    await window.toolboxAPI.invocation.returnData(invocationError(errorMessage(err), responseLimitBytes));
+                } catch (returnError) {
+                    await notify("Unable to return invocation results", errorMessage(returnError), "error");
+                }
+            }
+            return false;
+        }
+    }
+
+    private async confirmInvocation(tab: QueryTab): Promise<boolean> {
+        const message = `An external caller requested execution in ${tab.connectionSummary?.databaseName ?? "the selected environment"}. ` +
+            "This query may modify data or execute Dataverse messages. Review the SQL below before proceeding. " +
+            "SQL 4 CDS cannot undo data modifications. Data modification confirmations will also be shown during execution.\n\n" +
+            tab.model.getValue();
+        return await showConfirmation(message) !== ConfirmationResult.No;
+    }
+
+    // Session persistence
+
+    /** Reopens the query tabs from the previous session. Returns false if there was no session to restore. */
+    private async restoreSession(): Promise<boolean> {
+        if (!this.settings.rememberSession) return false;
+
+        const session = await loadSession();
+        if (!session) return false;
+
+        const restored: Array<QueryTab | null> = [];
+        for (const saved of session.tabs) {
+            try {
+                restored.push(await this.restoreTab(saved));
+            } catch (err) {
+                restored.push(null);
+                await notify("Unable to restore query", errorMessage(err), "warning");
+            }
+        }
+
+        const tabs = restored.filter((tab): tab is QueryTab => tab !== null);
+        if (tabs.length === 0) return false;
+
+        this.activateTab(restored[session.activeTab] ?? tabs[tabs.length - 1]);
+        return true;
+    }
+
+    private async restoreTab(saved: SessionTab): Promise<QueryTab> {
+        let filename = saved.filename;
+        let fileText: string | null = null;
+
+        if (filename !== null) {
+            try {
+                fileText = await window.toolboxAPI.fileSystem.readText(filename);
+            } catch (err) {
+                // The file is no longer accessible - restore any unsaved content as a new unsaved tab
+                if (saved.query === null) throw new Error(`Unable to open ${filename}: ${errorMessage(err)}`);
+                filename = null;
+            }
+        }
+
+        const slot = saved.connectionId !== null
+            ? this.connections.all.find((entry) => entry.connection.id === saved.connectionId)?.slot
+            : undefined;
+        const tab = this.addTab(saved.query ?? fileText ?? "", slot);
+
+        if (filename !== null && fileText !== null) {
+            tab.setFile(filename);
+            // The editor normalises line endings to LF, so match that when comparing against the file content
+            tab.markSaved(saved.query === null ? undefined : fileText.split(/\r\n|\r|\n/).join("\n"));
+        } else if (saved.dirty) {
+            tab.markSaved("");
+        }
+
+        return tab;
+    }
+
+    private captureSession(): SessionState {
+        const tabs = this.tabs.filter((tab) => !tab.readOnly);
+        return {
+            tabs: tabs.map((tab) => ({
+                filename: tab.filePath,
+                // Only persist the query text where it isn't already saved in the file
+                query: tab.isDirty || !tab.filePath ? tab.model.getValue() : null,
+                dirty: tab.isDirty,
+                connectionId: this.settings.rememberSessionConnections && tab.connectionSlot !== null
+                    ? this.connections.get(tab.connectionSlot)?.connection.id ?? null
+                    : null,
+            })),
+            activeTab: this.activeTab ? tabs.indexOf(this.activeTab) : -1,
+        };
+    }
+
+    private scheduleSessionSave(): void {
+        if (!this.sessionRestored || !this.settings.rememberSession) return;
+        if (this.sessionSaveTimer !== null) clearTimeout(this.sessionSaveTimer);
+        this.sessionSaveTimer = setTimeout(() => void this.saveSessionNow(), 500);
+    }
+
+    private async saveSessionNow(): Promise<void> {
+        if (this.sessionSaveTimer !== null) {
+            clearTimeout(this.sessionSaveTimer);
+            this.sessionSaveTimer = null;
+        }
+        if (!this.sessionRestored || !this.settings.rememberSession) return;
+
+        try {
+            await saveSession(this.captureSession());
+        } catch {
+            // Session persistence is best-effort
+        }
     }
 
     // Editor & tabs
@@ -286,16 +453,16 @@ class App implements QueryTabHost {
         });
     }
 
-    private addTab(text = ""): QueryTab {
+    private addTab(text = "", connectionSlot?: number, connect = true): QueryTab {
         // Connect new tabs to the same connection as the current tab, or the first available connection
-        const slot = this.activeTab?.connectionSlot ?? this.connections.all[0]?.slot;
+        const slot = connectionSlot ?? this.activeTab?.connectionSlot ?? this.connections.all[0]?.slot;
 
         const tab = new QueryTab(this, text);
         this.tabs.push(tab);
         this.el.results.appendChild(tab.resultsElement);
         this.activateTab(tab);
 
-        if (slot !== undefined && slot !== null) void this.connectTab(tab, slot);
+        if (connect && slot !== undefined && slot !== null) void this.connectTab(tab, slot);
 
         return tab;
     }
@@ -341,6 +508,7 @@ class App implements QueryTabHost {
         this.renderConnectionList();
         this.updateToolbar();
         this.updateProperties();
+        this.scheduleSessionSave();
     }
 
     private async closeTab(tab: QueryTab): Promise<void> {
@@ -365,6 +533,7 @@ class App implements QueryTabHost {
         }
 
         this.renderTabs();
+        this.scheduleSessionSave();
         await tab.dispose();
     }
 
@@ -506,6 +675,10 @@ class App implements QueryTabHost {
         return this.settings.showMessageLineNumbers;
     }
 
+    get resultsToText(): boolean {
+        return this.settings.resultsToText;
+    }
+
     private async toggleActualPlan(): Promise<void> {
         const save = this.saveSetting("includeActualPlan", !this.settings.includeActualPlan);
         this.updateToolbar();
@@ -535,13 +708,14 @@ class App implements QueryTabHost {
         })().catch((err) => notify("Unable to copy record URL", errorMessage(err), "error"));
     }
 
-    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string> {
-        return this.connections.getRecordSelectStatement(reference, currentDataSource);
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
+        return this.connections.getRecordSelectStatement(ownerUri, reference);
     }
 
     onStateChanged(tab: QueryTab): void {
         this.renderTabs();
         this.syncClosePrevention();
+        this.scheduleSessionSave();
         if (tab === this.activeTab) {
             this.updateResultsVisibility();
             this.renderConnectionList();
@@ -705,6 +879,8 @@ class App implements QueryTabHost {
         if (!this.activeTab || this.activeTab.readOnly) return;
         this.activeTab.resultsMode = mode;
         this.updateToolbar();
+        // Remember the most recent choice for new tabs and future sessions
+        if (this.settings.resultsToText !== (mode === "text")) void this.saveSetting("resultsToText", mode === "text");
     }
 
     private async transformQuery(operation: "format" | "convert", addDisplayNames = false): Promise<void> {
@@ -795,7 +971,7 @@ class App implements QueryTabHost {
         }
     }
 
-    private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan", value: boolean): Promise<void> {
+    private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan" | "resultsToText", value: boolean): Promise<void> {
         this.settings = { ...this.settings, [setting]: value };
         try {
             await saveSettings(this.settings);
@@ -919,6 +1095,14 @@ class App implements QueryTabHost {
             if (this.ready) await this.client.changeConfiguration({ ...updated });
         } catch (err) {
             await notify("Unable to save settings", errorMessage(err), "error");
+        }
+
+        this.syncClosePrevention();
+        if (updated.rememberSession) {
+            await this.saveSessionNow();
+        } else {
+            // Discard any previously persisted session, matching the XrmToolBox behaviour
+            await saveSession(null).catch(() => {});
         }
     }
 

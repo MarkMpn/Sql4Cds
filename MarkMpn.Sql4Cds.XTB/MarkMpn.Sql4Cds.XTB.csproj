@@ -73,7 +73,6 @@
     <Compile Include="AsyncEnumerableExtensions.cs" />
     <Compile Include="Autocomplete\IAutocompleteItemSource.cs" />
     <Compile Include="CopilotScriptObject.cs" />
-    <Compile Include="Formatter.cs" />
     <Compile Include="IconColorizer.cs" />
     <Compile Include="IResultOutput.cs" />
     <Compile Include="MarkdownExtensions.cs" />
@@ -83,7 +82,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="Autocomplete.cs" />
+    <Compile Include="SqlAutocompleteMenuItem.cs" />
     <Compile Include="Autocomplete\AutocompleteItem.cs" />
     <Compile Include="Autocomplete\AutocompleteItems.cs" />
     <Compile Include="Autocomplete\AutocompleteListView.cs">
@@ -159,7 +158,6 @@
     <Compile Include="FindReplace.Designer.cs">
       <DependentUpon>FindReplace.cs</DependentUpon>
     </Compile>
-    <Compile Include="FunctionMetadata.cs" />
     <Compile Include="IDocumentWindow.cs" />
     <Compile Include="MQueryControl.cs">
       <SubType>Form</SubType>

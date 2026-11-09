@@ -1,0 +1,231 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.Xrm.Sdk;
+
+namespace MarkMpn.Sql4Cds.Engine
+{
+    public static class FunctionMetadata
+    {
+        [AttributeUsage(AttributeTargets.Method)]
+        public class AggregateAttribute : Attribute
+        {
+        }
+
+        [AttributeUsage(AttributeTargets.Method)]
+        public class ParameterlessCallAttribute : Attribute
+        {
+        }
+
+        public abstract class SqlFunctions
+        {
+            [Aggregate]
+            [Description("Finds the minimum value of the given expression")]
+            public abstract double min(double value);
+
+            [Aggregate]
+            [Description("Finds the maximum value of the given expression")]
+            public abstract double max(double value);
+
+            [Aggregate]
+            [Description("Finds the total value of the given expression")]
+            public abstract double sum(double value);
+
+            [Aggregate]
+            [Description("Finds the average value of the given expression")]
+            public abstract double avg(double value);
+
+            [Aggregate]
+            [Description("Finds the number of non-null values")]
+            public abstract int count(object value);
+
+            [Aggregate]
+            [Description("Concatenates the values of string expressions and places separator values between them")]
+            public abstract string string_agg(string value, string separator);
+
+            [Description("Creates a lookup value to reference a record")]
+            public abstract EntityReference createlookup(string logicalName, Guid id);
+
+            [Description("Creates a lookup value to reference a record in an elastic table")]
+            public abstract EntityReference createelasticlookup(string logicalName, Guid id, string partitionId);
+
+            [Description("Finds the difference between two date values")]
+            public abstract int datediff(string datepart, DateTime startdate, DateTime enddate);
+
+            [Description("Adds a number value to a date value")]
+            public abstract DateTime dateadd(string datepart, int number, DateTime date);
+
+            [Description("Truncates a date value")]
+            public abstract DateTime datetrunc(string datepart, DateTime date);
+
+            [Description("Extracts a scalar value from a JSON string")]
+            public abstract string json_value(string json, string path);
+
+            [Description("Extracts an object or an array from a JSON string")]
+            public abstract string json_query(string json, string path);
+
+            [Description("Tests whether a string contains valid JSON")]
+            public abstract string isjson(string json, string type);
+
+            [Description("Tests whether a specified SQL/JSON path exists in the input JSON string")]
+            public abstract bool json_path_exists(string json, string path);
+
+            [Description("Replaces one string value with another")]
+            public abstract string replace(string input, string find, string replace);
+
+            [Description("Gets the length of the specified string expression")]
+            public abstract int len(string value);
+
+            [Description("Gets the number of bytes used to represent any expression")]
+            public abstract int datalength(object value);
+
+            [Description("Returns the character with the specified integer code")]
+            public abstract string @char(int value);
+
+            [Description("Returns the ASCII code value of the leftmost character of a character expression")]
+            public abstract int ascii(string value);
+
+            [Description("Returns the character with the specified integer code")]
+            public abstract string nchar(int value);
+
+            [Description("Returns the integer Unicode value of the first character of the input expression")]
+            public abstract int unicode(string value);
+
+            [Description("Extracts a portion of the specified string expression")]
+            public abstract string substring(string value, int start, int length);
+
+            [Description("Removes any leading or trailing spaces from the specified string expression")]
+            public abstract string trim(string value);
+
+            [Description("Removes any leading spaces from the specified string expression")]
+            public abstract string ltrim(string value);
+
+            [Description("Removes any trailing spaces from the specified string expression")]
+            public abstract string rtrim(string value);
+
+            [Description("Returns the specified number of characters from the start of the string expression")]
+            public abstract string left(string value, int length);
+
+            [Description("Returns the specified number of characters from the end of the string expression")]
+            public abstract string right(string value, int length);
+
+            [Description("Extracts the year number from a date value")]
+            public abstract int year(DateTime date);
+
+            [Description("Extracts the month number from a date value")]
+            public abstract int month(DateTime date);
+
+            [Description("Extracts the day number from a date value")]
+            public abstract int day(DateTime date);
+
+            [Description("Gets the current date & time")]
+            public abstract DateTime getdate();
+
+            [ParameterlessCall]
+            [Description("Gets the current date & time")]
+            public abstract DateTime current_timestamp();
+
+            [Description("Gets the current date & time")]
+            public abstract DateTime sysdatetime();
+
+            [Description("Gets the current date & time")]
+            public abstract DateTime sysdatetimeoffset();
+
+            [Description("Gets the current date & time in UTC timezone")]
+            public abstract DateTime getutcdate();
+
+            [Description("Gets the current date & time in UTC timezone")]
+            public abstract DateTime sysutcdatetime();
+
+            [Description("Extracts the requested part of a date value")]
+            public abstract int datepart(string datepart, DateTime date);
+
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid user_name();
+
+            [ParameterlessCall]
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid current_user();
+
+            [ParameterlessCall]
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid session_user();
+
+            [ParameterlessCall]
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid system_user();
+
+            [Description("Replaces NULL with the specified replacement value")]
+            public abstract object isnull(object check, object replacement);
+
+            [Description("Returns a value formatted with the specified format and optional culture")]
+            public abstract object format(object value, string format, string culture);
+
+            [Description("Returns the starting position of the first occurrence of a pattern in a specified expression, or zero if the pattern is not found")]
+            public abstract string patindex(string pattern, string expression);
+
+            [Description("Converts a string to uppercase")]
+            public abstract string upper(string value);
+
+            [Description("Converts a string to lowercase")]
+            public abstract string lower(string value);
+
+            [Description("Returns the requested property of a specified collation")]
+            public abstract int collationproperty(string collation_name, string property);
+
+            [Description("Deletes a specified length of characters in the first string at the start position and then inserts the second string into the first string at the start position")]
+            public abstract string stuff(string character_expression, int start, int length, string replace_with_expression);
+
+            [Description("Returns property information about the server instance")]
+            public abstract object serverproperty(string propertyname);
+
+            [Description("Returns the base data type and other information about a sql_variant value")]
+            public abstract object sql_variant_property(object expression, string property);
+
+            [Description("Returns the severity value of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_severity();
+
+            [Description("Returns the state number of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_state();
+
+            [Description("Returns the error number of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_number();
+
+            [Description("Returns the message text of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract string error_message();
+
+            [Description("Returns the line number of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract int error_line();
+
+            [Description("Returns the name of the stored procedure of an error that caused the CATCH block of a TRY...CATCH construct to execute")]
+            public abstract string error_procedure();
+
+            [Description("Constructs a message from a provided string")]
+            public abstract string formatmessage(string message, object[] parameters);
+
+            [Description("Generates an error message and initiates error processing for the session")]
+            public abstract void raiserror(string msg_str, int severity, int state, object[] parameters);
+
+            [Description("Creates a unique value of type uniqueidentifier")]
+            public abstract Guid newid();
+
+            [Description("Returns the absolute (positive) value of the specified numeric expression")]
+            public abstract double abs(double expression);
+
+            [Description("Returns the positive (+1), zero (0), or negative (-1) sign of the specified numeric expression")]
+            public abstract double sign(double expression);
+
+            [Description("Returns the smallest integer greater than, or equal to, the specified numeric expression")]
+            public abstract double ceiling(double expression);
+
+            [Description("Returns the largest integer less than or equal to the specified numeric expression")]
+            public abstract double floor(double expression);
+
+            [Description("Returns a numeric value, rounded to the specified length or precision")]
+            public abstract double round(double expression, int length, int function = 0);
+        }
+    }
+}

@@ -134,9 +134,34 @@
         "toggled": "sql4cds.actualPlan"
       },
       {
+        "command": "sql4cds.resultsToText",
+        "title": "SQL 4 CDS: Results to Text",
+        "toggled": "sql4cds.resultsToText"
+      },
+      {
+        "command": "sql4cds.resultsToGrid",
+        "title": "SQL 4 CDS: Results to Grid",
+        "toggled": "!sql4cds.resultsToText"
+      },
+      {
         "command": "sql4cds.cancelQuery",
         "title": "SQL 4 CDS: Cancel Query",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "sql4cds.convertToPowerBi",
+        "title": "SQL 4 CDS: Convert SQL to Power BI (M)",
+        "enablement": "editorLangId == sql4cds && !sql4cds.queryRunning"
+      },
+      {
+        "command": "sql4cds.convertToFetchXml",
+        "title": "SQL 4 CDS: Convert SQL to FetchXML",
+        "enablement": "editorLangId == sql4cds && !sql4cds.queryRunning"
+      },
+      {
+        "command": "sql4cds.addDisplayNames",
+        "title": "SQL 4 CDS: Format Query and Add Display Names",
+        "enablement": "editorLangId == sql4cds && sql4cds.connected && !sql4cds.queryRunning"
       },
       {
         "command": "sql4cds.refreshObjectExplorer",
@@ -155,8 +180,83 @@
       },
       {
         "command": "sql4cds.selectTop",
-        "title": "Select Top 1000",
+        "title": "Select Top 1000 Rows",
         "icon": "$(run)"
+      },
+      {
+        "command": "sql4cds.scriptSELECTToEditor",
+        "title": "New Query Editor Window",
+        "enablement": "viewItem != sql4cds.storedprocedure"
+      },
+      {
+        "command": "sql4cds.scriptSELECTToFile",
+        "title": "File...",
+        "enablement": "viewItem != sql4cds.storedprocedure"
+      },
+      {
+        "command": "sql4cds.scriptSELECTToClipboard",
+        "title": "Clipboard",
+        "enablement": "viewItem != sql4cds.storedprocedure"
+      },
+      {
+        "command": "sql4cds.scriptINSERTToEditor",
+        "title": "New Query Editor Window",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptINSERTToFile",
+        "title": "File...",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptINSERTToClipboard",
+        "title": "Clipboard",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptUPDATEToEditor",
+        "title": "New Query Editor Window",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptUPDATEToFile",
+        "title": "File...",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptUPDATEToClipboard",
+        "title": "Clipboard",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptDELETEToEditor",
+        "title": "New Query Editor Window",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptDELETEToFile",
+        "title": "File...",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptDELETEToClipboard",
+        "title": "Clipboard",
+        "enablement": "viewItem == sql4cds.table"
+      },
+      {
+        "command": "sql4cds.scriptEXECUTEToEditor",
+        "title": "New Query Editor Window",
+        "enablement": "viewItem == sql4cds.storedprocedure"
+      },
+      {
+        "command": "sql4cds.scriptEXECUTEToFile",
+        "title": "File...",
+        "enablement": "viewItem == sql4cds.storedprocedure"
+      },
+      {
+        "command": "sql4cds.scriptEXECUTEToClipboard",
+        "title": "Clipboard",
+        "enablement": "viewItem == sql4cds.storedprocedure"
       },
       {
         "command": "sql4cds.copyName",
@@ -167,6 +267,40 @@
         "command": "sql4cds.insertName",
         "title": "Insert SQL Name",
         "icon": "$(insert)"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "sql4cds.scriptTableAs",
+        "label": "Script Table as"
+      },
+      {
+        "id": "sql4cds.scriptTableValuedFunctionAs",
+        "label": "Script Table-Valued Function as"
+      },
+      {
+        "id": "sql4cds.scriptStoredProcedureAs",
+        "label": "Script Stored Procedure as"
+      },
+      {
+        "id": "sql4cds.selectTo",
+        "label": "SELECT To"
+      },
+      {
+        "id": "sql4cds.insertTo",
+        "label": "INSERT To"
+      },
+      {
+        "id": "sql4cds.updateTo",
+        "label": "UPDATE To"
+      },
+      {
+        "id": "sql4cds.deleteTo",
+        "label": "DELETE To"
+      },
+      {
+        "id": "sql4cds.executeTo",
+        "label": "EXECUTE To"
       }
     ],
     "viewsContainers": {
@@ -242,6 +376,26 @@
           "group": "inline@1"
         },
         {
+          "command": "sql4cds.selectTop",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.table",
+          "group": "object@1"
+        },
+        {
+          "submenu": "sql4cds.scriptTableAs",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.table",
+          "group": "object@2"
+        },
+        {
+          "submenu": "sql4cds.scriptTableValuedFunctionAs",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.tablevaluedfunction",
+          "group": "object@2"
+        },
+        {
+          "submenu": "sql4cds.scriptStoredProcedureAs",
+          "when": "view == sql4cds.objectExplorer && viewItem == sql4cds.storedprocedure",
+          "group": "object@2"
+        },
+        {
           "command": "sql4cds.insertName",
           "when": "view == sql4cds.objectExplorer && viewItem =~ /sql4cds\\.(table|column|function|storedprocedure)/",
           "group": "query@1"
@@ -282,7 +436,80 @@
           "group": "management@5"
         }
       ],
+      "sql4cds.scriptTableAs": [
+        { "submenu": "sql4cds.selectTo" },
+        { "submenu": "sql4cds.insertTo" },
+        { "submenu": "sql4cds.updateTo" },
+        { "submenu": "sql4cds.deleteTo" },
+        { "submenu": "sql4cds.executeTo" }
+      ],
+      "sql4cds.scriptTableValuedFunctionAs": [
+        { "submenu": "sql4cds.selectTo" },
+        { "submenu": "sql4cds.insertTo" },
+        { "submenu": "sql4cds.updateTo" },
+        { "submenu": "sql4cds.deleteTo" },
+        { "submenu": "sql4cds.executeTo" }
+      ],
+      "sql4cds.scriptStoredProcedureAs": [
+        { "submenu": "sql4cds.selectTo" },
+        { "submenu": "sql4cds.insertTo" },
+        { "submenu": "sql4cds.updateTo" },
+        { "submenu": "sql4cds.deleteTo" },
+        { "submenu": "sql4cds.executeTo" }
+      ],
+      "sql4cds.selectTo": [
+        { "command": "sql4cds.scriptSELECTToEditor" },
+        { "command": "sql4cds.scriptSELECTToFile" },
+        { "command": "sql4cds.scriptSELECTToClipboard" }
+      ],
+      "sql4cds.insertTo": [
+        { "command": "sql4cds.scriptINSERTToEditor" },
+        { "command": "sql4cds.scriptINSERTToFile" },
+        { "command": "sql4cds.scriptINSERTToClipboard" }
+      ],
+      "sql4cds.updateTo": [
+        { "command": "sql4cds.scriptUPDATEToEditor" },
+        { "command": "sql4cds.scriptUPDATEToFile" },
+        { "command": "sql4cds.scriptUPDATEToClipboard" }
+      ],
+      "sql4cds.deleteTo": [
+        { "command": "sql4cds.scriptDELETEToEditor" },
+        { "command": "sql4cds.scriptDELETEToFile" },
+        { "command": "sql4cds.scriptDELETEToClipboard" }
+      ],
+      "sql4cds.executeTo": [
+        { "command": "sql4cds.scriptEXECUTEToEditor" },
+        { "command": "sql4cds.scriptEXECUTEToFile" },
+        { "command": "sql4cds.scriptEXECUTEToClipboard" }
+      ],
+      "editor/context": [
+        {
+          "command": "sql4cds.convertToPowerBi",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@2"
+        },
+        {
+          "command": "sql4cds.convertToFetchXml",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@1"
+        },
+        {
+          "command": "sql4cds.addDisplayNames",
+          "when": "editorLangId == sql4cds && sql4cds.connected",
+          "group": "1_modification@9"
+        }
+      ],
       "editor/title": [
+        {
+          "command": "sql4cds.convertToPowerBi",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@6"
+        },
+        {
+          "command": "sql4cds.convertToFetchXml",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@5"
+        },
         {
           "command": "sql4cds.estimatedPlan",
           "when": "editorLangId == sql4cds && !sql4cds.queryRunning",
@@ -292,6 +519,16 @@
           "command": "sql4cds.actualPlan",
           "when": "editorLangId == sql4cds",
           "group": "sql4cds@2"
+        },
+        {
+          "command": "sql4cds.resultsToGrid",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@3"
+        },
+        {
+          "command": "sql4cds.resultsToText",
+          "when": "editorLangId == sql4cds",
+          "group": "sql4cds@4"
         },
         {
           "command": "sql4cds.runQuery",
@@ -332,6 +569,18 @@
         "key": "ctrl+shift+e",
         "mac": "cmd+shift+e",
         "when": "editorLangId == sql4cds && !sql4cds.queryRunning"
+      },
+      {
+        "command": "sql4cds.resultsToText",
+        "key": "ctrl+t",
+        "mac": "cmd+t",
+        "when": "editorTextFocus && editorLangId == sql4cds"
+      },
+      {
+        "command": "sql4cds.resultsToGrid",
+        "key": "ctrl+d",
+        "mac": "cmd+d",
+        "when": "editorTextFocus && editorLangId == sql4cds"
       }
     ],
     "configuration": {

@@ -90,12 +90,16 @@ function setup(pinned = true) {
     const settingsApi = {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
+    const invocation = load("mcpInvocation.ts", {}, { TextEncoder });
     const window = { addEventListener() {} };
     const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: Element, Element });
     const propertiesPanels = [];
     const { App } = load("app.ts", {
         "./styles.css": {},
-        "./connections": { ConnectionRegistry: class { constructor() { return registry; } } },
+        "./connections": { ConnectionRegistry: class {
+            constructor() { return registry; }
+            static ownerUri(slot) { return `pptb://connection/${slot}`; }
+        } },
         "./editor/monacoSetup": {
             toMonacoRange: (range) => ({
                 startLineNumber: range.start.line + 1, startColumn: range.start.character + 1,
@@ -121,6 +125,8 @@ function setup(pinned = true) {
         "./executionPlan/executionPlanView": { getFetchXmlQuery: (node) =>
             node.nodeType === "FetchXmlScan" ? node.properties?.find(property => property.name === "FetchXML")?.value ?? null : null },
         "./settings": settingsApi,
+        "./mcpInvocation": invocation,
+        "./session": { loadSession: async () => null, saveSession: async () => {} },
     }, {
         document, window, Node: Element, Element,
         console: {
@@ -139,6 +145,7 @@ function setup(pinned = true) {
     const grids = [];
     const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
+        "../mcpInvocation": invocation,
         "../lsp/protocol": load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) }),
         "../editor/monacoSetup": {
             monaco: {
@@ -374,7 +381,7 @@ test("record menu wiring copies the shared URL and appends SELECT SQL at the lat
     window.toolboxAPI = { utils: { copyToClipboard: async text => copied.push(text) } };
     registry.getRecordUrl = ref => { assert.equal(ref, reference); return "https://org/main.aspx?id=123"; };
     let resolveSql;
-    registry.getRecordSelectStatement = (ref, source) => {
+    registry.getRecordSelectStatement = (source, ref) => {
         requests.push([ref, source]);
         return new Promise(resolve => { resolveSql = resolve; });
     };
@@ -397,7 +404,7 @@ test("record menu wiring copies the shared URL and appends SELECT SQL at the lat
     resolveSql(sql);
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(requests[0][0], reference);
-    assert.equal(requests[0][1], "contoso_2");
+    assert.equal(requests[0][1], tab.uri);
     assert.equal(undoStops, 2);
     assert.equal(edits.length, 1);
     assert.equal(edits[0].range.startLineNumber, 2);
@@ -1011,6 +1018,189 @@ test("split menus support keyboard navigation, Escape and outside dismissal", ()
     assert.equal(toggle.attributes["aria-expanded"], "false");
 });
 
+test("received FetchXML uses the inherited connection and opens editable SQL without executing it", async () => {
+    const { app, client, registry, window, executions, createTab } = setup();
+    const { tab } = createTab();
+    const fetchXml = '<fetch><entity name="account"><attribute name="name" /></entity></fetch>';
+    window.toolboxAPI = { invocation: { getLaunchContext: async () => ({ fetchXml }) } };
+    registry.all = [{ slot: 0 }, { slot: 1 }];
+    const calls = [];
+    registry.register = async (slot) => { calls.push(["register", slot]); };
+    client.transformQuery = async (...args) => {
+        calls.push(["transform", ...args]);
+        return ["SELECT name FROM account"];
+    };
+    app.addTab = (...args) => { calls.push(["addTab", ...args]); };
+    assert.equal(await app.openLaunchQuery(), true);
+    assert.deepEqual(calls, [
+        ["register", 0],
+        ["transform", "pptb://connection/0", fetchXml, "sql"],
+        ["addTab", "SELECT name FROM account", 0],
+    ]);
+    assert.equal(app.activeTab, tab, "Existing tabs are not modified by conversion");
+    assert.equal(executions.length, 0);
+});
+
+test("standalone launches do not convert queries or require a connection", async () => {
+    for (const context of [null, {}, { unrelated: "data" }]) {
+        const { app, window } = setup();
+        window.toolboxAPI = { invocation: { getLaunchContext: async () => context } };
+        assert.equal(await app.openLaunchQuery(), false);
+    }
+});
+
+test("MCP execution connects, requires approval, and returns results only after completion", async () => {
+    for (const approved of [false, true]) {
+        const { app, client, registry, window, createTab } = setup();
+        const { tab, events } = createTab();
+        const calls = [];
+        const returned = [];
+        window.toolboxAPI = { invocation: {
+            getLaunchContext: async () => ({ sql: "SELECT name FROM account", execute: true, __pptb: { expectsResponse: true } }),
+            returnData: async result => { returned.push(result); },
+        } };
+        registry.all = [{ slot: 0 }];
+        registry.register = async () => {};
+        app.addTab = (sql, slot, connect) => {
+            assert.equal(sql, "SELECT name FROM account");
+            assert.equal(slot, 0);
+            assert.equal(connect, false);
+            return tab;
+        };
+        app.confirmInvocation = async target => { assert.equal(target, tab); return approved; };
+        app.saveSessionNow = async () => {};
+        client.executeDocumentSelection = async (...args) => {
+            calls.push(args);
+            events.message({ message: { isError: false, message: "(1 row affected)" } });
+            events.queryComplete({ batchSummaries: [] });
+        };
+        await app.openLaunchQuery();
+        assert.equal(calls.length, approved ? 1 : 0);
+        assert.equal(returned.length, 1);
+        assert.equal(returned[0].status, approved ? "success" : "cancelled");
+        if (approved) {
+            assert.equal(calls[0][3], false, "MCP captures grid rows even if text mode is selected");
+            assert.equal(calls[0][4], true, "MCP forces data modification confirmations");
+            assert.equal(returned[0].messages[0].message, "(1 row affected)");
+        }
+    }
+});
+
+test("MCP query completion collects results, propagates confirmation and blocks concurrent reruns", async () => {
+    const { client, createTab, app } = setup();
+    const { tab, events } = createTab();
+    tab.resultsMode = "text";
+    await tab.connect(0);
+    let requested;
+    client.executeDocumentSelection = async (...args) => { requested = args; };
+    client.subset = async () => ({ resultSubset: { rowCount: 1, rows: [[{ displayValue: "Contoso", isNull: false }]] } });
+    let confirmation;
+    app.confirm = params => { confirmation = params; };
+    const execution = tab.executeForInvocation(4096);
+    while (!requested) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requested[3], false);
+    assert.equal(requested[4], true);
+    await assert.rejects(tab.execute(null), /MCP invocation/);
+    events.confirmation({ ownerUri: tab.uri, msg: "Delete?" });
+    assert.equal(confirmation.msg, "Delete?");
+    events.queryComplete({ batchSummaries: [{
+        resultSetSummaries: [{ batchId: 0, id: 0, rowCount: 1, complete: true, columnInfo: [{ columnName: "name" }] }],
+    }] });
+    const result = await execution;
+    assert.equal(result.resultSets[0].rows[0][0], "Contoso");
+    assert.equal(result.status, "success");
+});
+
+test("MCP two-way conversion returns SQL without executing, while one-way execution does not return data", async () => {
+    for (const execute of [false, true]) {
+        const { app, registry, client, window } = setup();
+        registry.all = [{ slot: 0 }];
+        registry.register = async () => {};
+        const returned = [];
+        window.toolboxAPI = { invocation: {
+            getLaunchContext: async () => ({
+                fetchXml: "<fetch />", execute, __pptb: { expectsResponse: !execute },
+            }),
+            returnData: async result => returned.push(result),
+        } };
+        client.transformQuery = async () => ["SELECT name FROM account"];
+        let executed = false;
+        app.addTab = () => ({
+            connect: async () => {},
+            executeForInvocation: async () => { executed = true; return { status: "success" }; },
+        });
+        app.saveSessionNow = async () => {};
+        app.confirmInvocation = async () => true;
+        assert.equal(await app.openLaunchQuery(), true);
+        assert.equal(executed, execute);
+        assert.equal(returned.length, execute ? 0 : 1);
+        if (!execute) assert.equal(returned[0].sql[0], "SELECT name FROM account");
+    }
+});
+
+test("MCP connection failures return explicit errors without attempting execution", async () => {
+    const { app, registry, window } = setup();
+    const returned = [];
+    const notifications = [];
+    window.toolboxAPI = {
+        invocation: {
+            getLaunchContext: async () => ({ sql: "DELETE FROM account", execute: true, __pptb: { expectsResponse: true } }),
+            returnData: async result => returned.push(result),
+        },
+        utils: { showNotification: async notification => notifications.push(notification) },
+    };
+    registry.all = [{ slot: 0 }];
+    registry.register = async () => { throw new Error("Connection failed"); };
+    app.addTab = () => assert.fail("Must not open or execute on connection failure");
+    assert.equal(await app.openLaunchQuery(), false);
+    assert.equal(returned[0].status, "error");
+    assert.match(returned[0].error, /Connection failed/);
+    assert.equal(notifications.length, 1);
+});
+
+test("MCP execution resolves cancellation and rejects engine failure without hanging", async () => {
+    for (const stop of [false, true]) {
+        const { client, createTab } = setup();
+        const { tab, events } = createTab();
+        await tab.connect(0);
+        let requested = false;
+        client.executeDocumentSelection = async () => { requested = true; };
+        const execution = tab.executeForInvocation(4096);
+        while (!requested) await new Promise(resolve => setImmediate(resolve));
+        if (stop) {
+            tab.engineStopped("Worker stopped");
+            await assert.rejects(execution, /Worker stopped/);
+        } else {
+            await tab.cancel();
+            events.queryComplete({ batchSummaries: [] });
+            assert.equal((await execution).status, "cancelled");
+        }
+    }
+});
+
+test("invalid incoming FetchXML and conversion failures are surfaced without opening SQL", async () => {
+    for (const failure of ["invalid-type", "empty", "no-connection", "registration", "conversion", "launch"]) {
+        const { app, client, registry, window } = setup();
+        const notifications = [];
+        window.toolboxAPI = {
+            invocation: { getLaunchContext: async () => {
+                if (failure === "launch") throw new Error("Cannot read launch context");
+                return { fetchXml: failure === "invalid-type" ? 42 : failure === "empty" ? " " : "<fetch />" };
+            } },
+            utils: { showNotification: async (notification) => notifications.push(notification) },
+        };
+        registry.all = failure === "no-connection" ? [] : [{ slot: 0 }];
+        registry.register = async () => {
+            if (failure === "registration") throw new Error("Connection failed");
+        };
+        client.transformQuery = async () => { throw new Error("Invalid FetchXML"); };
+        app.addTab = () => assert.fail("Conversion must not open a tab on failure");
+        assert.equal(await app.openLaunchQuery(), false);
+        assert.equal(notifications.length, 1, failure);
+        assert.equal(notifications[0].title, "Unable to process incoming query");
+    }
+});
+
 test("Save and Save As retain their distinct handlers", () => {
     const { app, createTab, elements } = setup();
     const { tab } = createTab();
@@ -1094,54 +1284,50 @@ test("Power BI previews do not register SQL documents", () => {
     assert.equal(listeners.size, 0);
 });
 
-test("Results to Text is per-tab and snapshots the mode at execution with paged rows and NULLs", async () => {
-    const { app, client, createTab, grids, elements } = setup();
+test("Results to Text is per-tab, remembered for new tabs and asks the language server for text results when the query is executed", async () => {
+    const { app, client, createTab, grids, elements, savedSettings } = setup();
+    const requests = [];
+    client.executeDocumentSelection = async (_uri, _selection, _planOptions, resultsToText) => { requests.push(resultsToText); };
     const { tab, events } = createTab();
     app.setResultsMode("text");
     assert.equal(elements.get("btn-results-text").attributes["aria-pressed"], "true");
     await tab.connect(0);
     await tab.execute(null);
-    app.setResultsMode("grid");
-    const result = { ...summary(0, 0, 201), complete: true, columnInfo: [{ columnName: "Name" }, { columnName: "Value" }] };
-    const pages = [];
-    client.subset = async (_uri, _batch, _result, start, count) => {
-        pages.push({ start, count });
-        return { resultSubset: { rows: Array.from({ length: count }, () => [
-            { displayValue: "Contoso", isNull: false }, { displayValue: "", isNull: true },
-        ]) } };
-    };
-    events.resultSetAvailable({ resultSetSummary: result });
-    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [result] }] });
-    await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(pages, [{ start: 0, count: 200 }, { start: 200, count: 1 }]);
+    events.message({ message: { message: "Name    Value\n------- -----\nContoso NULL ", isError: false, rowCount: 1 } });
+    events.message({ message: { message: "Fabrikam 1   \nNorthwind 2  ", isError: false, rowCount: 2 } });
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [] }] });
     assert.equal(grids.length, 0);
-    assert.equal(tab.textPane.hidden, false);
-    assert.equal(tab.resultsPane.hidden, true);
-    assert.equal(tab.textPane.children[0].textContent, "Name\tValue\n");
-    assert.match(tab.textPane.children[0].children[0].textContent, /^Contoso\tNULL\n/);
+    assert.equal(tab.messagesPane.hidden, false);
+    assert.equal(JSON.stringify(tab.messagesPane.children.map((line) => line.textContent)),
+        JSON.stringify(["Name    Value", "------- -----", "Contoso NULL ", "Fabrikam 1   ", "Northwind 2  "]),
+        "Each line is shown separately so line numbers are correct");
+    assert.equal(tab.totalRowCount, 3, "Rows sent as text count towards the row count");
+    await tab.execute(null, true);
+    assert.equal(tab.totalRowCount, 0);
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [] }] });
+    assert.equal(savedSettings.at(-1).resultsToText, true, "The selected mode is saved in user settings");
+    const textTab = createTab().tab;
+    assert.equal(textTab.resultsMode, "text", "New tabs use the most recently selected mode");
+    app.activeTab = tab;
+    app.setResultsMode("grid");
+    assert.equal(savedSettings.at(-1).resultsToText, false);
+    assert.equal(textTab.resultsMode, "text", "Changing the mode only affects the active tab");
+    await tab.execute(null);
+    assert.deepEqual(requests, [true, false, false], "Estimated plans and grid mode never request text results");
     const second = createTab().tab;
     assert.equal(second.resultsMode, "grid");
 });
 
-test("text result loading errors are visible and stale responses do not append to a new execution", async () => {
-    const { client, createTab } = setup();
-    const { tab, events } = createTab();
-    tab.resultsMode = "text";
-    await tab.connect(0);
-    await tab.execute(null);
-    const result = { ...summary(0, 0, 1), complete: true, columnInfo: [{ columnName: "Name" }] };
-    events.resultSetAvailable({ resultSetSummary: result });
-    client.subset = async () => ({ resultSubset: { rows: [] } });
-    await tab.renderTextResults(tab.resultsGeneration);
-    assert.equal(tab.messagesPane.hidden, false);
-    assert.match(tab.messagesPane.children.at(-1).textContent, /Unable to load text results/);
-    let respond;
-    client.subset = () => new Promise(resolve => { respond = resolve; });
-    const pending = tab.renderTextResults(tab.resultsGeneration);
-    await tab.clearResults();
-    respond({ resultSubset: { rows: [[{ displayValue: "stale", isNull: false }]] } });
-    await pending;
-    assert.equal(tab.textPane.children.length, 0);
+test("the Results to Text preference defaults to off", async () => {
+    let stored;
+    const { loadSettings } = load("settings.ts", {}, {
+        window: { toolboxAPI: { settings: { get: async () => stored, set: async () => {} } } },
+    });
+    assert.equal((await loadSettings()).resultsToText, false);
+    stored = { resultsToText: true };
+    assert.equal((await loadSettings()).resultsToText, true);
+    stored = { resultsToText: "yes" };
+    assert.equal((await loadSettings()).resultsToText, false);
 });
 
 test("each completed grid exports its own entire result set through the native Save As dialog", async () => {

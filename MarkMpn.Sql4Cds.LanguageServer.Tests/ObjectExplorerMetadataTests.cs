@@ -28,6 +28,26 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
         }
 
         [TestMethod]
+        public void RecordSelectQueryQualifiesCrossInstanceReferencesAndEscapesIdentifiers()
+        {
+            var id = new Guid("00000000-0000-0000-0000-000000000123");
+            var entity = new EntityMetadata { LogicalName = "email" };
+            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryIdAttribute)).SetValue(entity, "activityid");
+
+            Assert.AreEqual($"SELECT * FROM email WHERE activityid = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery("Other Source", "OTHER SOURCE", entity, id));
+            Assert.AreEqual($"SELECT * FROM [Other Source].dbo.email WHERE activityid = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery("First", "Other Source", entity, id));
+            Assert.AreEqual($"SELECT * FROM [Other Source].dbo.email WHERE activityid = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery(null, "Other Source", entity, id));
+
+            entity.LogicalName = "table]name";
+            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryIdAttribute)).SetValue(entity, "key]name");
+            Assert.AreEqual($"SELECT * FROM [table]]name] WHERE [key]]name] = '{id}'",
+                ScriptGenerator.GenerateRecordSelectQuery("First", "First", entity, id));
+        }
+
+        [TestMethod]
         public void TablesUseCachedEntityListAndArchiveFlagsWithoutLoadingFullMetadata()
         {
             var cache = new MetadataCache(
@@ -90,6 +110,115 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Tests
             }
             Assert.AreEqual(2, cache.EntityLookups);
             Assert.AreEqual(0, cache.ListLookups);
+        }
+
+        [DataTestMethod]
+        [DataRow(ColumnOrdering.Strict)]
+        [DataRow(ColumnOrdering.Alphabetical)]
+        public void TableScriptsUseReadableAndWritableColumnsAndTypedPlaceholders(ColumnOrdering ordering)
+        {
+            var entity = new EntityMetadata { LogicalName = "account" };
+            var attributes = new AttributeMetadata[]
+            {
+                new IntegerAttributeMetadata
+                {
+                    LogicalName = "accountid"
+                },
+                new IntegerAttributeMetadata
+                {
+                    LogicalName = "number"
+                },
+                new IntegerAttributeMetadata
+                {
+                    LogicalName = "hidden"
+                },
+                new BooleanAttributeMetadata
+                {
+                    LogicalName = "active"
+                }
+            };
+            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(entity, attributes);
+            for (var index = 0; index < attributes.Length; index++)
+            {
+                var attribute = attributes[index];
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.ColumnNumber)).SetValue(attribute, index + 1);
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.EntityLogicalName)).SetValue(attribute, "dbo.account");
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForRead)).SetValue(attribute, attribute.LogicalName != "hidden");
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForCreate)).SetValue(attribute, attribute.LogicalName != "hidden");
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForUpdate)).SetValue(attribute, attribute.LogicalName == "number");
+            }
+            var cache = new MetadataCache(entity);
+            var dataSource = new DataSource { Metadata = cache };
+
+            var select = ObjectExplorerScriptGenerator.Generate(dataSource, ordering, "Table", "dbo", "account", "SELECT");
+            var top = ObjectExplorerScriptGenerator.Generate(dataSource, ordering, "Table", "dbo", "account", "SELECT_TOP_1000");
+            var insert = ObjectExplorerScriptGenerator.Generate(dataSource, ordering, "Table", "dbo", "account", "INSERT");
+            var update = ObjectExplorerScriptGenerator.Generate(dataSource, ordering, "Table", "dbo", "account", "UPDATE");
+            var delete = ObjectExplorerScriptGenerator.Generate(dataSource, ordering, "Table", "dbo", "account", "DELETE");
+
+            Assert.AreEqual(ScriptGenerator.GenerateSelectQuery("dbo", entity, null, dataSource, ordering), select);
+            Assert.AreEqual(ScriptGenerator.GenerateSelectQuery("dbo", entity, 1000, dataSource, ordering), top);
+            Assert.AreEqual(ScriptGenerator.GenerateInsertQuery("dbo", entity, dataSource, ordering), insert);
+            Assert.AreEqual(ScriptGenerator.GenerateUpdateQuery("dbo", entity, dataSource, ordering), update);
+            Assert.AreEqual(ScriptGenerator.GenerateDeleteQuery("dbo", "account"), delete);
+            Assert.AreEqual(ordering == ColumnOrdering.Alphabetical,
+                select.IndexOf("active", StringComparison.Ordinal) < select.IndexOf("number", StringComparison.Ordinal));
+
+            StringAssert.Contains(select, "accountid");
+            StringAssert.Contains(select, "number");
+            StringAssert.Contains(select, "activename");
+            Assert.IsFalse(select.Contains("hidden", StringComparison.Ordinal));
+            StringAssert.Contains(top, "1000");
+            StringAssert.Contains(insert, "accountid");
+            StringAssert.Contains(insert, "number");
+            StringAssert.Contains(insert, "<number, INT>");
+            Assert.IsFalse(insert.Contains("hidden", StringComparison.Ordinal));
+            StringAssert.Contains(update, "number");
+            StringAssert.Contains(update, "<number, INT>");
+            Assert.IsFalse(update.Contains("accountid", StringComparison.Ordinal));
+            Assert.IsFalse(update.Contains("hidden", StringComparison.Ordinal));
+            StringAssert.Contains(delete, "DELETE FROM dbo.account");
+            StringAssert.Contains(delete, "<Search Conditions>");
+        }
+
+        [DataTestMethod]
+        [DataRow(ColumnOrdering.Strict)]
+        [DataRow(ColumnOrdering.Alphabetical)]
+        public void SharedMessageScriptsPreserveParameterOrderingTypesAndOutputVariables(ColumnOrdering ordering)
+        {
+            var message = new Message
+            {
+                Name = "Example",
+                InputParameters = new[]
+                {
+                    new MessageParameter { Name = "Zeta", Type = typeof(int), Position = 0 },
+                    new MessageParameter { Name = "Alpha", Type = typeof(Guid), Position = 1 },
+                    new MessageParameter { Name = "PagingInfo", Type = typeof(Microsoft.Xrm.Sdk.Query.PagingInfo), Position = 2 }
+                },
+                OutputParameters = new[]
+                {
+                    new MessageParameter { Name = "Result", Type = typeof(int), Position = 0 }
+                }
+            };
+            var dataSource = new DataSource();
+            var select = ScriptGenerator.GenerateSelectQuery(message, dataSource, ordering);
+            var execute = ScriptGenerator.GenerateExecuteQuery(message, dataSource, ordering);
+
+            StringAssert.Contains(select, "<@Zeta, INT>");
+            StringAssert.Contains(select, "<@Alpha, UNIQUEIDENTIFIER>");
+            StringAssert.Contains(select, "FROM Example(");
+            StringAssert.Contains(execute, "@RC AS INT");
+            StringAssert.Contains(execute, "@Zeta AS INT");
+            StringAssert.Contains(execute, "@Alpha AS UNIQUEIDENTIFIER");
+            StringAssert.Contains(execute, "@Result AS INT");
+            StringAssert.Contains(execute, "dbo.Example");
+            StringAssert.Contains(execute, "@Result = @Result OUTPUT");
+            foreach (var script in new[] { select, execute })
+            {
+                Assert.IsFalse(script.Contains("PagingInfo", StringComparison.Ordinal));
+                Assert.AreEqual(ordering == ColumnOrdering.Alphabetical,
+                    script.IndexOf("@Alpha", StringComparison.Ordinal) < script.IndexOf("@Zeta", StringComparison.Ordinal));
+            }
         }
 
         private sealed class MetadataCache : IAttributeMetadataCache

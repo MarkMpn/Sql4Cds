@@ -219,21 +219,6 @@ input[type="number"] {
     max-width: 300px;
 }
 
-.results-text {
-    flex: 1;
-    min-height: 0;
-    margin: 0;
-    padding: 8px;
-    overflow: auto;
-    user-select: text;
-    tab-size: 20;
-    font: 13px Consolas, "Courier New", monospace;
-}
-
-.results-text[hidden] {
-    display: none;
-}
-
 /* Side panes (Object Explorer & Properties) */
 
 .tool-content {
@@ -346,7 +331,30 @@ input[type="number"] {
     box-shadow: 0 2px 8px #0004;
 }
 
+.explorer-context-menu-item {
+    position: relative;
+}
+
+.explorer-context-menu-item > button[aria-haspopup="menu"]::after {
+    content: "\203A";
+    float: right;
+    margin-left: 16px;
+}
+
+.explorer-context-submenu {
+    position: absolute;
+    z-index: 1001;
+    top: -5px;
+    left: 100%;
+    min-width: 190px;
+    padding: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px #0004;
+}
+
 .explorer-context-menu button,
+.explorer-context-submenu button,
 .grid-context-menu button {
     display: block;
     width: 100%;
@@ -357,6 +365,8 @@ input[type="number"] {
 
 .explorer-context-menu button:hover,
 .explorer-context-menu button:focus,
+.explorer-context-submenu button:hover,
+.explorer-context-submenu button:focus,
 .grid-context-menu button:hover:not(:disabled),
 .grid-context-menu button:focus {
     background: var(--selection);
@@ -389,6 +399,26 @@ input[type="number"] {
 
 .explorer-row:hover {
     background: var(--bg-hover);
+}
+
+.explorer-select-top {
+    flex: 0 0 20px;
+    margin-left: auto;
+    padding: 0;
+    color: var(--fg-muted);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.explorer-row:hover .explorer-select-top,
+.explorer-row:focus-within .explorer-select-top {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.explorer-select-top:hover,
+.explorer-select-top:focus {
+    color: var(--accent);
 }
 
 .explorer-node[aria-selected="true"] > .explorer-row {
@@ -777,7 +807,12 @@ button.toggle[aria-pressed="true"] {
     overflow: auto;
     padding: 6px 10px;
     font-family: Consolas, "Courier New", monospace;
-    white-space: pre-wrap;
+    white-space: pre;
+}
+
+/* Keep blank lines at full height */
+.messages-pane .message:empty::after {
+    content: "\200b";
 }
 
 .messages-pane.show-line-numbers {

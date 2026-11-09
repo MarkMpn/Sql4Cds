@@ -70,6 +70,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 yield break;
 
             var entity = dataSource.Metadata[attrMetadata.EntityLogicalName];
+            foreach (var virtualAttribute in attrMetadata.GetVirtualAttributes(entity, dataSource, writeable))
+                yield return virtualAttribute;
+        }
+
+        public static IEnumerable<VirtualAttribute> GetVirtualAttributes(this AttributeMetadata attrMetadata, EntityMetadata entity, DataSource dataSource, bool writeable)
+        {
             var suffixesInUse = entity.Attributes
                 .Where(a => a.LogicalName != attrMetadata.LogicalName && a.LogicalName.StartsWith(attrMetadata.LogicalName) && a.AttributeOf == null)
                 .Select(a => a.LogicalName.Substring(attrMetadata.LogicalName.Length).ToLowerInvariant())
