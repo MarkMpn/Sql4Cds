@@ -449,9 +449,17 @@ class App implements QueryTabHost {
         this.editor.addAction({
             id: "sql4cds.newTab",
             label: "New Query",
-            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyN],
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyN],
             run: () => {
                 this.addTab();
+            },
+        });
+        this.editor.addAction({
+            id: "sql4cds.closeTab",
+            label: "Close Query",
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW],
+            run: () => {
+                if (this.activeTab) this.closeTab(this.activeTab);
             },
         });
         this.editor.addAction({
