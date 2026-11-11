@@ -6,6 +6,8 @@ All standard table data is available to query using `SELECT` statements. Data ca
 and `DELETE` statements. Most Dataverse messages can also be invoked using either stored procedure or table-valued function
 syntax.
 
+![Screenshot](screenshot.png)
+
 ## Examples
 
 ```sql
