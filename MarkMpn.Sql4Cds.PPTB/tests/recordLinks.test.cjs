@@ -17,7 +17,7 @@ function loadModule(relativePath, globals = {}) {
         vm.runInNewContext(code, {
             module,
             exports: module.exports,
-            require: (name) => load(path.resolve(path.dirname(filename), `${name}.ts`)),
+            require: (name) => name.startsWith(".") ? load(path.resolve(path.dirname(filename), `${name}.ts`)) : require(name),
             URL,
             ...globals,
         }, { filename });

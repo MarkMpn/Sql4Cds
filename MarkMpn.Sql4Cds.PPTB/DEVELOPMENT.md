@@ -25,12 +25,17 @@
 ### Client UI modules
 
 - [app.ts](./src/app.ts) owns startup and coordinates the editor, query-tab lifecycle, connections, settings, and session persistence.
+- [connections.ts](./src/connections.ts) exposes a MobX-observable connection list and observable registration status/error on each slot. Connection options and host connection objects retain their identity rather than being deeply observed.
+- [objectExplorer.ts](./src/objectExplorer.ts) owns observable tree nodes, selection, and session/RPC lifecycle. Nodes track `unloaded`, `loading`, `loaded`, and `error` states independently of expansion, so collapsing a pending request does not discard its result. A MobX reaction reconciles connection membership and closes removed sessions.
+- [objectExplorerView.tsx](./src/objectExplorerView.tsx) renders the tree with React and per-node `observer` components. Connection, loading, error, and children changes update the view without explicit render notifications. Existing context-menu commands remain in the controller.
 - [tabStrip.ts](./src/tabStrip.ts) renders tabs and owns tab scrolling and the open-query menu, including focus and dismissal handling. It requests tab activation and closing through callbacks; `App` retains ownership of the tabs.
 - [statusBar.ts](./src/statusBar.ts) renders query and connection status and owns the elapsed-time refresh timer. Each refresh reads the current application state through a callback.
 - [dialogs.ts](./src/dialogs.ts) provides execution-confirmation and unsaved-query dialogs. Confirmation sequencing remains in `App`.
 - [toolbarMenu.ts](./src/toolbarMenu.ts) binds split-button menu opening, dismissal, and keyboard navigation. Toolbar commands and enablement remain in `App`.
 
-These modules use the existing DOM and CSS without a UI framework. Run `npm test` for client regression tests and `npm run build` for type checking and the PPTB-compatible production bundle.
+React is mounted only inside the Object Explorer tree; the rest of the client retains its existing DOM and CSS. The connection dropdown bridges to the observable registry with `autorun`. Reactions and the React root are disposed when the tool unloads.
+
+Run `npm test` for client regression tests and `npm run build` for type checking and the PPTB-compatible single-IIFE production bundle. Object Explorer tests use jsdom and real React DOM events; other client tests retain their existing lightweight fixtures.
 
 ### Compact query notifications
 

@@ -15,6 +15,7 @@ import { showConfirmation, showUnsavedChangesDialog } from "./dialogs";
 import { StatusBar } from "./statusBar";
 import { TabStrip } from "./tabStrip";
 import { bindToolbarMenu } from "./toolbarMenu";
+import { autorun } from "mobx";
 
 const DEFAULT_QUERY = "";
 
@@ -129,14 +130,13 @@ class App implements QueryTabHost {
                 void notify("SQL 4 CDS engine failed", message, "error");
             },
         });
-        this.connections = new ConnectionRegistry(this.client, () => {
-            this.renderConnectionList();
-            this.objectExplorer.updateConnectionStates();
-        });
+        this.connections = new ConnectionRegistry(this.client);
         this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
             (message) => { void notify("Object Explorer", message, "error"); },
             (text) => this.insertObjectName(text),
-            (connection, query) => this.addTab(query, connection.slot));
+            (connection, query) => this.addTab(query, connection.slot), this.connections);
+        const stopConnectionList = autorun(() => this.renderConnectionList());
+        window.addEventListener("pagehide", stopConnectionList);
     }
 
     private async openQuery(): Promise<void> {
@@ -224,8 +224,6 @@ class App implements QueryTabHost {
 
         this.setStatus("Starting SQL 4 CDS engine…");
         await this.connections.refresh();
-        this.renderConnectionList();
-        await this.objectExplorer.setConnections(this.connections.all);
         try {
             await this.client.start({ ...this.settings });
         } catch (err) {
@@ -239,8 +237,6 @@ class App implements QueryTabHost {
         this.setStatus("Ready", "success");
 
         await this.connections.refresh();
-        this.renderConnectionList();
-        await this.objectExplorer.setConnections(this.connections.all);
 
         // Register every connection so they can all be used in cross-instance queries
         await Promise.all(
@@ -248,15 +244,12 @@ class App implements QueryTabHost {
                 this.connections.register(c.slot).catch((err) => notify(`Unable to connect to ${c.options.connectionName}`, errorMessage(err), "error")),
             ),
         );
-        this.renderConnectionList();
 
         const restored = await this.restoreSession();
         this.sessionRestored = true;
         const receivedQuery = await this.openLaunchQuery();
         if (!restored && !receivedQuery) this.addTab(DEFAULT_QUERY);
         window.addEventListener("pagehide", () => { void this.saveSessionNow(); });
-
-        await this.objectExplorer.setConnections(this.connections.all);
     }
 
     private async openLaunchQuery(): Promise<boolean> {
@@ -614,8 +607,6 @@ class App implements QueryTabHost {
         if (!this.ready) return;
 
         const changed = await this.connections.refresh();
-        this.renderConnectionList();
-        await this.objectExplorer.setConnections(this.connections.all);
         if (changed.length === 0) {
             return;
         }
@@ -632,10 +623,8 @@ class App implements QueryTabHost {
             }
         }
 
-        this.renderConnectionList();
         this.renderTabs();
         this.updateToolbar();
-        await this.objectExplorer.setConnections(this.connections.all);
     }
 
     // Query execution

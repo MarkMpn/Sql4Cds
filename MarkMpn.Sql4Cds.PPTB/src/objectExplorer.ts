@@ -1,15 +1,8 @@
-import type { ConnectionSlot } from "./connections";
+import type { ConnectionRegistry, ConnectionSlot } from "./connections";
 import type { Sql4CdsClient } from "./lsp/client";
 import type { ObjectExplorerExpandComplete, ObjectExplorerNode, ObjectExplorerSessionCreated, ObjectExplorerSessionDisconnected } from "./lsp/protocol";
-
-const NODE_ICONS: Readonly<Record<string, string>> = {
-    Server: "\u25A4",
-    Folder: "\u25B0",
-    Table: "\u25A6",
-    Column: "\u25A5",
-    TableValuedFunction: "\u0192",
-    StoredProcedure: "\u2699",
-};
+import { action, computed, makeObservable, observable, reaction, runInAction, type IReactionDisposer } from "mobx";
+import { mountObjectExplorer } from "./objectExplorerView";
 
 interface ExplorerConnection {
     connection: ConnectionSlot;
@@ -19,15 +12,26 @@ interface ExplorerConnection {
     ready: boolean;
 }
 
-interface TreeNode {
-    info: ObjectExplorerNode;
-    connection: ConnectionSlot;
-    parent?: TreeNode;
-    children: TreeNode[];
-    expanded: boolean;
-    loaded: boolean;
-    loading: boolean;
-    error?: string;
+export class TreeNode {
+    children: TreeNode[] = [];
+    expanded = false;
+    state: "unloaded" | "loading" | "loaded" | "error" = "unloaded";
+    error: string | undefined = undefined;
+
+    constructor(public info: ObjectExplorerNode, readonly connection: ConnectionSlot, readonly parent?: TreeNode) {
+        makeObservable(this, {
+            info: observable.ref,
+            children: observable.shallow,
+            expanded: observable,
+            state: observable,
+            error: observable,
+            loaded: computed,
+            loading: computed,
+        });
+    }
+
+    get loaded(): boolean { return this.state === "loaded"; }
+    get loading(): boolean { return this.state === "loading"; }
 }
 
 type ScriptAction = "SELECT" | "SELECT_TOP_1000" | "INSERT" | "UPDATE" | "DELETE" | "EXECUTE";
@@ -39,8 +43,12 @@ export class ObjectExplorer {
     private readonly earlySessions = new Map<string, ObjectExplorerSessionCreated>();
     private creatingSessions = 0;
     private readonly items = new Map<TreeNode, HTMLElement>();
-    private selected: TreeNode | null = null;
-    private available = true;
+    private selection: TreeNode | null = null;
+    available = true;
+    focusRequest = 0;
+    private readonly unmount: () => void;
+    private readonly stopConnections: IReactionDisposer;
+    private disposed = false;
     private closeContextMenu: (() => void) | null = null;
 
     constructor(
@@ -48,15 +56,49 @@ export class ObjectExplorer {
         private readonly tree: HTMLElement,
         private readonly reportError: (message: string) => void,
         private readonly insertName: (text: string) => void,
-        private readonly newQuery: (connection: ConnectionSlot, query: string) => void
+        private readonly newQuery: (connection: ConnectionSlot, query: string) => void,
+        registry: ConnectionRegistry,
     ) {
+        makeObservable<this, "connections" | "selection" | "onKeyDown">(this, {
+            connections: observable.shallow,
+            selection: observable.ref,
+            available: observable,
+            focusRequest: observable,
+            selected: computed,
+            roots: computed,
+            setConnections: action,
+            removeConnection: action,
+            engineStopped: action,
+            sessionCreated: action,
+            expandComplete: action,
+            sessionDisconnected: action,
+            refresh: action,
+            select: action,
+            toggle: action,
+            onKeyDown: action,
+        });
         tree.setAttribute("role", "tree");
         tree.setAttribute("aria-label", "Object Explorer");
-        tree.addEventListener("keydown", (event) => this.onKeyDown(event));
-        this.render();
+        tree.addEventListener("keydown", this.handleKeyDown);
+        this.unmount = mountObjectExplorer(tree, this);
+        this.stopConnections = reaction(
+            () => registry.all,
+            (connections) => { void this.setConnections(connections).catch((error) => this.reportError(errorMessage(error))); },
+            { fireImmediately: true },
+        );
     }
 
+    get roots(): TreeNode[] { return Array.from(this.connections.values(), (entry) => entry.root); }
+
+    get selected(): TreeNode | null {
+        const nodes = this.visibleNodes();
+        return this.selection && nodes.includes(this.selection) ? this.selection : nodes[0] ?? null;
+    }
+
+    private readonly handleKeyDown = (event: KeyboardEvent) => this.onKeyDown(event);
+
     async setConnections(connections: ConnectionSlot[]): Promise<void> {
+        if (this.disposed || !this.available) return;
         const incoming = new Map(connections.map((connection) => [connection.slot, connection]));
         const removals: Promise<void>[] = [];
         for (const [slot, entry] of this.connections) {
@@ -66,37 +108,31 @@ export class ObjectExplorer {
             const existing = this.connections.get(connection.slot);
             if (existing) {
                 existing.connection = connection;
-                existing.root.info.label = connection.options.connectionName;
+                existing.root.info = { ...existing.root.info, label: connection.options.connectionName };
                 continue;
             }
-            const entry: ExplorerConnection = {
+            const entry = observable.object<ExplorerConnection>({
                 connection,
                 ready: false,
-                root: {
-                    info: { nodePath: `connection:${connection.slot}`, nodeType: "Server", label: connection.options.connectionName, isLeaf: false },
-                    connection,
-                    children: [],
-                    expanded: false,
-                    loaded: false,
-                    loading: false,
-                },
-            };
+                sessionId: undefined,
+                creating: undefined,
+                root: new TreeNode({
+                    nodePath: `connection:${connection.slot}`, nodeType: "Server",
+                    label: connection.options.connectionName, isLeaf: false,
+                }, connection),
+            }, { connection: observable.ref, root: observable.ref, creating: false }, { deep: false });
             this.connections.set(connection.slot, entry);
         }
-        this.render();
         await Promise.all(removals);
-    }
-
-    updateConnectionStates(): void {
-        this.render();
     }
 
     async removeConnection(slot: number): Promise<void> {
         const entry = this.connections.get(slot);
         if (!entry) return;
+        if (this.selected?.connection.slot === slot && this.tree.contains(document.activeElement)) this.focusRequest++;
         this.connections.delete(slot);
-        if (this.selected?.connection.slot === slot) this.selected = null;
-        this.render();
+        if (this.selection?.connection.slot === slot) this.selection = null;
+        this.closeContextMenu?.();
         await entry.creating;
         if (!entry.sessionId || !this.client.isRunning) return;
         await this.closeSession(entry.sessionId);
@@ -112,6 +148,11 @@ export class ObjectExplorer {
     }
 
     async dispose(): Promise<void> {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.stopConnections();
+        this.tree.removeEventListener("keydown", this.handleKeyDown);
+        this.unmount();
         this.closeContextMenu?.();
         await Promise.all(Array.from(this.connections.keys(), (slot) => this.removeConnection(slot)));
         this.earlySessions.clear();
@@ -121,8 +162,8 @@ export class ObjectExplorer {
         this.available = false;
         this.connections.clear();
         this.earlySessions.clear();
-        this.selected = null;
-        this.render();
+        this.selection = null;
+        this.closeContextMenu?.();
     }
 
     sessionCreated(params: ObjectExplorerSessionCreated): void {
@@ -135,17 +176,15 @@ export class ObjectExplorer {
         }
         if (!params.success || !params.rootNode) {
             entry.ready = false;
-            entry.root.loading = false;
+            entry.root.state = "error";
             entry.root.error = params.errorMessage || "Unable to create the Object Explorer session";
             this.reportError(entry.root.error);
-            this.render();
             return;
         }
         entry.ready = true;
         entry.root.info = { ...params.rootNode, label: entry.connection.options.connectionName };
-        entry.root.loading = false;
+        entry.root.state = "unloaded";
         if (entry.root.expanded) void this.load(entry.root, false);
-        else this.render();
     }
 
     expandComplete(params: ObjectExplorerExpandComplete): void {
@@ -153,18 +192,18 @@ export class ObjectExplorer {
         if (!entry) return;
         const node = this.allNodes(entry.root).find((candidate) => candidate.info.nodePath === params.nodePath);
         if (!node?.loading) return;
-        node.loading = false;
+        node.state = params.errorMessage ? "error" : "loaded";
         node.error = params.errorMessage || undefined;
         if (node.error) {
             this.reportError(node.error);
         } else {
-            if (this.selected && this.selected !== node && this.allNodes(node).includes(this.selected)) this.selected = node;
-            node.children = (params.nodes ?? []).map((info) => ({
-                info, connection: entry.connection, parent: node, children: [], expanded: false, loaded: false, loading: false,
-            }));
-            node.loaded = true;
+            if (this.selected && this.selected !== node && this.allNodes(node).includes(this.selected)) {
+                this.selection = node;
+                if (this.tree.contains(document.activeElement)) this.focusRequest++;
+            }
+            node.children = (params.nodes ?? []).map((info) => new TreeNode(info, entry.connection, node));
         }
-        this.render();
+        this.closeContextMenu?.();
     }
 
     sessionDisconnected(params: ObjectExplorerSessionDisconnected): void {
@@ -172,13 +211,12 @@ export class ObjectExplorer {
         if (!entry) return;
         entry.sessionId = undefined;
         entry.ready = false;
-        entry.root.loading = false;
-        entry.root.loaded = false;
+        entry.root.state = "error";
         entry.root.children = [];
         entry.root.error = params.errorMessage || "Object Explorer disconnected. Refresh to reconnect.";
-        this.selected = entry.root;
+        this.selection = entry.root;
         this.reportError(entry.root.error);
-        this.render();
+        this.closeContextMenu?.();
     }
 
     refresh(): void {
@@ -194,23 +232,26 @@ export class ObjectExplorer {
     }
 
     private isCurrent(entry: ExplorerConnection): boolean {
-        return this.available && this.connections.get(entry.connection.slot) === entry;
+        return !this.disposed && this.available && this.connections.get(entry.connection.slot) === entry;
     }
 
     private async createSession(entry: ExplorerConnection): Promise<void> {
         this.creatingSessions++;
         try {
             const response = await this.client.createObjectExplorerSession(entry.connection.options);
-            entry.sessionId = response.sessionId;
-            const early = this.earlySessions.get(response.sessionId);
-            this.earlySessions.delete(response.sessionId);
-            if (early && this.isCurrent(entry)) this.sessionCreated(early);
+            runInAction(() => {
+                entry.sessionId = response.sessionId;
+                const early = this.earlySessions.get(response.sessionId);
+                this.earlySessions.delete(response.sessionId);
+                if (early && this.isCurrent(entry)) this.sessionCreated(early);
+            });
         } catch (error) {
             if (!this.isCurrent(entry)) return;
-            entry.root.loading = false;
-            entry.root.error = errorMessage(error);
-            this.reportError(entry.root.error);
-            this.render();
+            runInAction(() => {
+                entry.root.state = "error";
+                entry.root.error = errorMessage(error);
+            });
+            this.reportError(errorMessage(error));
         } finally {
             entry.creating = undefined;
             if (--this.creatingSessions === 0) this.earlySessions.clear();
@@ -221,16 +262,15 @@ export class ObjectExplorer {
         const entry = this.connections.get(node.connection.slot);
         if (node.info.isLeaf || node.loading || !entry || !this.isCurrent(entry) || node.connection.status === "connecting") return;
         const retrySession = !entry.ready && !!entry.root.error;
-        node.loading = true;
-        node.error = undefined;
-        this.render();
+        runInAction(() => {
+            node.state = "loading";
+            node.error = undefined;
+        });
         if (retrySession && entry.sessionId) {
             const sessionId = entry.sessionId;
-            entry.sessionId = undefined;
+            runInAction(() => { entry.sessionId = undefined; });
             await this.closeSession(sessionId);
             if (!this.isCurrent(entry)) return;
-            node.loading = true;
-            node.error = undefined;
         }
         if (!entry.sessionId) {
             entry.creating = this.createSession(entry);
@@ -243,24 +283,27 @@ export class ObjectExplorer {
                 ? await this.client.refreshObjectExplorerNode(entry.sessionId, node.info.nodePath)
                 : await this.client.expandObjectExplorerNode(entry.sessionId, node.info.nodePath);
             if (!accepted) {
-                entry.sessionId = undefined;
-                entry.ready = false;
+                runInAction(() => {
+                    entry.sessionId = undefined;
+                    entry.ready = false;
+                });
                 throw new Error("The Object Explorer request was rejected. Refresh the connection to retry.");
             }
         } catch (error) {
             if (!this.isCurrent(entry)) return;
-            node.loading = false;
-            node.error = errorMessage(error);
-            this.reportError(node.error);
-            this.render();
+            runInAction(() => {
+                node.state = "error";
+                node.error = errorMessage(error);
+            });
+            this.reportError(errorMessage(error));
         }
     }
 
-    private toggle(node: TreeNode): void {
+    toggle(node: TreeNode): void {
         if (node.info.isLeaf || node.connection.status === "connecting") return;
         node.expanded = !node.expanded;
         if (node.expanded && (!node.loaded || node.error)) void this.load(node, false);
-        else this.render();
+        this.closeContextMenu?.();
     }
 
     private allNodes(root: TreeNode): TreeNode[] {
@@ -311,16 +354,16 @@ export class ObjectExplorer {
         }
     }
 
-    private select(node: TreeNode): void {
-        this.selected = node;
-        for (const [candidate, item] of this.items) {
-            item.setAttribute("aria-selected", String(candidate === node));
-            item.tabIndex = candidate === node ? 0 : -1;
+    select(node: TreeNode, focus = true): void {
+        this.selection = node;
+        if (focus) {
+            const item = this.items.get(node);
+            if (item) item.focus();
+            else this.focusRequest++;
         }
-        this.items.get(node)?.focus();
     }
 
-    private showContextMenu(node: TreeNode, x: number, y: number): void {
+    showContextMenu(node: TreeNode, x: number, y: number): void {
         this.closeContextMenu?.();
         if (!this.available || node.connection.status === "connecting") return;
         this.select(node);
@@ -389,8 +432,13 @@ export class ObjectExplorer {
         const outside = (event: Event) => {
             if (event.target instanceof Node && !menu.contains(event.target)) dismiss();
         };
+        const stopWatchingConnection = reaction(
+            () => node.connection.status,
+            () => dismiss(),
+        );
         this.closeContextMenu = () => {
             this.closeContextMenu = null;
+            stopWatchingConnection();
             document.removeEventListener("pointerdown", outside, true);
             document.removeEventListener("focusin", outside);
             window.removeEventListener("resize", dismiss);
@@ -478,119 +526,29 @@ export class ObjectExplorer {
         }
         event.preventDefault();
         event.stopPropagation();
-        this.selected = next ?? node;
-        this.render(true);
+        this.select(next ?? node);
     }
 
-    private render(focus = false): void {
-        this.closeContextMenu?.();
-        const hadFocus = this.tree.contains(document.activeElement);
-        const visible = this.visibleNodes();
-        if (!this.selected || !visible.includes(this.selected)) this.selected = visible[0] ?? null;
-        const fragment = document.createDocumentFragment();
-        this.items.clear();
-        const append = (node: TreeNode, parent: HTMLElement | DocumentFragment, level: number): void => {
-            const item = document.createElement("div");
-            const connecting = node.connection.status === "connecting";
-            item.className = "explorer-node";
-            item.setAttribute("role", "treeitem");
-            item.setAttribute("aria-level", String(level));
-            item.setAttribute("aria-selected", String(this.selected === node));
-            if (!node.info.isLeaf) item.setAttribute("aria-expanded", String(node.expanded));
-            item.setAttribute("aria-busy", String(node.loading || connecting));
-            item.setAttribute("aria-disabled", String(connecting));
-            item.tabIndex = this.selected === node ? 0 : -1;
-            item.dataset.path = node.info.nodePath;
-            this.items.set(node, item);
-            const row = document.createElement("div");
-            row.className = "explorer-row";
-            row.style.paddingLeft = `${(level - 1) * 16 + 4}px`;
-            row.title = node.connection.error || node.error || node.info.errorMessage || node.info.label;
-            const expander = document.createElement("span");
-            expander.className = "explorer-expander";
-            expander.setAttribute("aria-hidden", "true");
-            expander.textContent = node.info.isLeaf || connecting ? "" : node.expanded ? "\u25BE" : "\u25B8";
-            expander.addEventListener("click", (event) => {
-                event.stopPropagation();
-                this.selected = node;
-                this.toggle(node);
-                this.render(true);
-            });
-            expander.addEventListener("dblclick", (event) => event.stopPropagation());
-            const icon = document.createElement("span");
-            icon.className = `explorer-icon explorer-icon-${node.info.nodeType.toLowerCase()}`;
-            icon.setAttribute("aria-hidden", "true");
-            icon.textContent = NODE_ICONS[node.info.nodeType] ?? NODE_ICONS.Table;
-            const label = document.createElement("span");
-            label.textContent = node.info.label;
-            row.append(expander, icon, label);
-            if (connecting || node.connection.error) {
-                const status = document.createElement("span");
-                status.className = connecting ? "explorer-connection-status" : "explorer-connection-status error";
-                status.textContent = connecting ? "(Connecting\u2026)" : "(Connection failed)";
-                status.setAttribute("role", connecting ? "status" : "alert");
-                row.appendChild(status);
-            }
-            if (node.info.nodeType === "Table") {
-                const selectTop = document.createElement("button");
-                selectTop.className = "explorer-select-top";
-                selectTop.type = "button";
-                selectTop.setAttribute("aria-label", "Select Top 1000 Rows");
-                selectTop.title = "Select Top 1000 Rows";
-                selectTop.textContent = "\u25B6";
-                selectTop.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    this.select(node);
-                    void this.outputScript(node, "SELECT_TOP_1000", "editor");
-                });
-                row.appendChild(selectTop);
-            }
-            row.addEventListener("click", () => this.select(node));
-            row.addEventListener("contextmenu", (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                this.showContextMenu(node, event.clientX, event.clientY);
-            });
-            row.addEventListener("dblclick", () => {
-                this.selected = node;
-                if (["Table", "Column", "TableValuedFunction", "StoredProcedure"].includes(node.info.nodeType)) {
-                    const name = node.info.nodeType === "Column" ? node.info.label : node.info.metadata?.name ?? node.info.label;
-                    const schema = node.info.nodeType === "Column" ? undefined : node.info.metadata?.schema;
-                    this.insertName(schema ? `${schema}.${name}` : name);
-                } else {
-                    this.toggle(node);
-                    this.render(true);
-                }
-            });
-            item.addEventListener("focus", (event) => {
-                if (event.target === item) this.selected = node;
-            });
-            item.appendChild(row);
-            if (node.expanded) {
-                const group = document.createElement("div");
-                group.setAttribute("role", "group");
-                if (node.loading || node.error || (node.loaded && node.children.length === 0)) {
-                    const message = document.createElement("div");
-                    message.className = node.error ? "explorer-message error" : "explorer-message";
-                    message.style.paddingLeft = `${level * 16 + 24}px`;
-                    message.textContent = node.error ? `${node.error} (Refresh to retry)` : node.loading ? "Loading…" : "No objects";
-                    message.setAttribute("role", node.error ? "alert" : "status");
-                    group.appendChild(message);
-                }
-                for (const child of node.children) append(child, group, level + 1);
-                item.appendChild(group);
-            }
-            parent.appendChild(item);
-        };
-        for (const entry of this.connections.values()) append(entry.root, fragment, 1);
-        if (this.connections.size === 0) {
-            const empty = document.createElement("div");
-            empty.className = "explorer-message";
-            empty.textContent = this.available ? "No connections available" : "SQL 4 CDS engine stopped";
-            fragment.appendChild(empty);
+    bindItem(node: TreeNode, item: HTMLElement | null): void {
+        if (item) this.items.set(node, item);
+        else this.items.delete(node);
+    }
+
+    activate(node: TreeNode): void {
+        this.select(node);
+        if (node.connection.status === "connecting") return;
+        if (["Table", "Column", "TableValuedFunction", "StoredProcedure"].includes(node.info.nodeType)) {
+            const name = node.info.nodeType === "Column" ? node.info.label : node.info.metadata?.name ?? node.info.label;
+            const schema = node.info.nodeType === "Column" ? undefined : node.info.metadata?.schema;
+            this.insertName(schema ? `${schema}.${name}` : name);
+        } else {
+            this.toggle(node);
         }
-        this.tree.replaceChildren(fragment);
-        if (focus || hadFocus) this.tree.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
+    }
+
+    selectTop(node: TreeNode): void {
+        this.select(node);
+        void this.outputScript(node, "SELECT_TOP_1000", "editor");
     }
 }
 

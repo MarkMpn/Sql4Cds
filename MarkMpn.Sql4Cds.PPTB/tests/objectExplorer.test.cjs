@@ -2,76 +2,67 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { test } = require("node:test");
+const { test, afterEach } = require("node:test");
 const ts = require("typescript");
+const { JSDOM } = require("jsdom");
+const { observable, runInAction } = require("mobx");
+const dom = new JSDOM("<!doctype html><html><body></body></html>");
+global.window = dom.window;
+global.document = dom.window.document;
+global.Node = dom.window.Node;
+const { flushSync } = require("react-dom");
+const explorers = [];
+afterEach(async () => {
+    for (const explorer of explorers.splice(0)) {
+        let disposed;
+        flushSync(() => { disposed = explorer.dispose(); });
+        await disposed;
+    }
+    document.body.replaceChildren();
+    document.querySelectorAll("main").forEach(host => host.remove());
+});
 
 function load(relativePath, globals) {
     const filename = path.resolve(__dirname, "..", "src", relativePath);
     const module = { exports: {} };
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
-    vm.runInNewContext(code, { module, exports: module.exports, console, Error, ...globals }, { filename });
+    vm.runInNewContext(code, {
+        module, exports: module.exports, console, Error, window, document, Node, ...globals,
+        require: (name) => name.startsWith(".")
+            ? load(`${path.join(path.dirname(relativePath), name)}${name === "./objectExplorerView" ? ".tsx" : ".ts"}`, globals)
+            : require(name),
+    }, { filename });
     return module.exports;
 }
 
 function walk(element) {
-    return [element, ...element.children.flatMap(walk)];
+    return [element, ...Array.from(element.children).flatMap(walk)];
 }
 
 function findButton(element, text) {
     return walk(element).find((candidate) => candidate.tagName === "BUTTON" && candidate.textContent === text);
 }
 
+// Exercise the real React DOM event path while keeping event invocations concise.
+Object.defineProperty(window.EventTarget.prototype, "events", { get() {
+    return new Proxy({}, { get: (_target, name) => (init = {}) => {
+        const target = init.target ?? this;
+        const Event = name === "keydown" ? window.KeyboardEvent : window.MouseEvent;
+        const event = new Event(name, { bubbles: true, cancelable: true, ...init });
+        for (const method of ["preventDefault", "stopPropagation"]) {
+            const original = event[method].bind(event);
+            event[method] = () => { init[method]?.(); original(); };
+        }
+        flushSync(() => target.dispatchEvent(event));
+    } });
+} });
+window.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 10, top: 20, width: 140, height: 32 });
+
 function setup() {
-    const document = { activeElement: null };
-    class Element {
-        constructor(tagName = "div") {
-            this.tagName = tagName.toUpperCase();
-            this.children = [];
-            this.attributes = {};
-            this.events = {};
-            this.style = {};
-            this.dataset = {};
-        }
-        setAttribute(name, value) { this.attributes[name] = value; }
-        addEventListener(name, callback) { this.events[name] = callback; }
-        removeEventListener(name) { delete this.events[name]; }
-        appendChild(child) { this.children.push(child); child.parent = this; }
-        append(...children) { for (const child of children) this.appendChild(child); }
-        replaceChildren(...children) { this.children = children.flatMap((child) => child.fragment ? child.children : [child]); }
-        contains(element) { return walk(this).includes(element); }
-        focus() { document.activeElement = this; this.events.focus?.({ target: this }); }
-        hasAttribute(name) { return Object.hasOwn(this.attributes, name); }
-        querySelector(selector) {
-            if (selector === "button:enabled") return walk(this).find((element) => element.tagName === "BUTTON" && !element.disabled);
-            if (selector === ":scope > .explorer-context-submenu") return this.children.find((element) => element.className === "explorer-context-submenu");
-            if (selector === ":scope > button") return this.children.find((element) => element.tagName === "BUTTON");
-            return walk(this).find((element) => element.tabIndex === 0);
-        }
-        querySelectorAll(selector) {
-            if (selector === "button:enabled") return walk(this).filter((element) => element.tagName === "BUTTON" && !element.disabled);
-            return [];
-        }
-        closest(selector) {
-            for (let element = this; element; element = element.parent) {
-                if (selector === ".explorer-context-submenu" && element.className === "explorer-context-submenu") return element;
-                if (selector === ".explorer-context-submenu[hidden]" && element.className === "explorer-context-submenu" && element.hidden) return element;
-            }
-            return null;
-        }
-        getBoundingClientRect() { return { left: 10, top: 20, width: 140, height: 32 }; }
-        remove() { this.parent.children = this.parent.children.filter((child) => child !== this); }
-    }
-    document.body = new Element();
-    document.events = {};
-    document.addEventListener = (name, callback) => { document.events[name] = callback; };
-    document.removeEventListener = (name) => { delete document.events[name]; };
-    const window = new Element();
     window.innerWidth = 800;
     window.innerHeight = 600;
-    document.createElement = (tagName) => new Element(tagName);
-    document.createDocumentFragment = () => Object.assign(new Element(), { fragment: true });
     const calls = [];
     const errors = [];
     const inserted = [];
@@ -95,10 +86,30 @@ function setup() {
         },
         closeObjectExplorerSession: async (sessionId) => { calls.push(["close", sessionId]); return { sessionId, success: true }; },
     };
-    const tree = new Element();
-    const { ObjectExplorer } = load("objectExplorer.ts", { document, window, Node: Element });
-    const explorer = new ObjectExplorer(client, tree, (message) => errors.push(message), (text) => inserted.push(text),
-        (connection, query) => newQueries.push({ connection, query }));
+    const tree = document.createElement("div");
+    const host = document.createElement("main");
+    document.documentElement.appendChild(host);
+    host.appendChild(tree);
+    const { ObjectExplorer } = load("objectExplorer.ts", {});
+    const registry = observable({ all: [] }, { all: observable.shallow });
+    let explorer;
+    flushSync(() => {
+        explorer = new ObjectExplorer(client, tree, (message) => errors.push(message), (text) => inserted.push(text),
+            (connection, query) => newQueries.push({ connection, query }), registry);
+    });
+    // RPC notifications are external events; flush React commits before inspecting their DOM.
+    const methods = new Set(["setConnections", "sessionCreated", "expandComplete", "sessionDisconnected",
+        "toggle", "refresh", "removeConnection", "engineStopped", "dispose"]);
+    explorer = new Proxy(explorer, { get(target, name) {
+        const value = Reflect.get(target, name, target);
+        if (!methods.has(name)) return value;
+        return (...args) => {
+            let result;
+            flushSync(() => { result = value.apply(target, args); });
+            return result;
+        };
+    } });
+    explorers.push(explorer);
     function session(sessionId = "s1") {
         explorer.sessionCreated({ sessionId, success: true, rootNode: node(`objectexplorer://${sessionId}`, "SERVERNODE", "Server") });
     }
@@ -111,16 +122,16 @@ function setup() {
         tree.events.keydown({ key, shiftKey, preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
         return { prevented, stopped };
     }
-    return { explorer, client, tree, calls, errors, inserted, newQueries, session, complete, key, document, window };
+    return { explorer, registry, client, tree, calls, errors, inserted, newQueries, session, complete, key, document, window };
 }
 
 function connection(slot = 0) {
-    return {
+    return observable.object({
         slot,
         status: "connected",
         connection: { name: `Contoso ${slot}`, id: `c${slot}`, url: "https://contoso.crm.dynamics.com" },
         options: { authenticationType: "PPTB", connectionName: `Contoso ${slot}`, connectionId: `c${slot}`, connectionTarget: slot, url: "https://contoso.crm.dynamics.com" },
-    };
+    }, { options: observable.ref, connection: observable.ref }, { deep: false });
 }
 
 function node(nodePath, label, nodeType = "Folder", isLeaf = false) {
@@ -128,7 +139,8 @@ function node(nodePath, label, nodeType = "Folder", isLeaf = false) {
 }
 
 async function settle() {
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    flushSync(() => {});
 }
 
 test("connecting names are visible but expansion, refresh and context actions wait for registration", async () => {
@@ -137,8 +149,8 @@ test("connecting names are visible but expansion, refresh and context actions wa
     slot.status = "connecting";
     await explorer.setConnections([slot]);
     const root = tree.children[0];
-    assert.equal(root.attributes["aria-busy"], "true");
-    assert.equal(root.attributes["aria-disabled"], "true");
+    assert.equal(root.getAttribute("aria-busy"), "true");
+    assert.equal(root.getAttribute("aria-disabled"), "true");
     assert.ok(walk(root).some(element => element.textContent === "Contoso 0"));
     assert.ok(walk(root).some(element => element.textContent === "(Connecting\u2026)"));
     for (const action of ["ArrowRight", "Enter", " ", "F5", "ContextMenu"]) key(action);
@@ -152,10 +164,9 @@ test("connecting names are visible but expansion, refresh and context actions wa
     assert.equal(document.body.children.length, 0);
     assert.equal(explorer.selected.expanded, false);
 
-    slot.status = "connected";
-    explorer.updateConnectionStates();
-    assert.equal(tree.children[0].attributes["aria-disabled"], "false");
-    assert.equal(tree.children[0].attributes["aria-busy"], "false");
+    flushSync(() => runInAction(() => { slot.status = "connected"; }));
+    assert.equal(tree.children[0].getAttribute("aria-disabled"), "false");
+    assert.equal(tree.children[0].getAttribute("aria-busy"), "false");
     assert.ok(!walk(tree).some(element => element.textContent === "(Connecting\u2026)"));
     key("ArrowRight");
     await settle();
@@ -182,16 +193,16 @@ test("new connections appear before an old explorer session finishes closing", a
 });
 
 test("registry completion updates each explorer connection independently and failures leave no connecting indicator", async () => {
-    const { explorer, client, tree, window, errors } = setup();
+    const { explorer, registry: source, client, tree, window, errors } = setup();
     const listeners = new Map();
     client.addListener = (uri, listener) => listeners.set(uri, listener);
     client.removeListener = (uri) => listeners.delete(uri);
     client.connect = async () => true;
     window.toolboxAPI = { connections: { getConnections: async () => [connection(0).connection, connection(1).connection] } };
     const { ConnectionRegistry } = load("connections.ts", { window });
-    const registry = new ConnectionRegistry(client, () => explorer.updateConnectionStates());
+    const registry = new ConnectionRegistry(client);
     await registry.refresh();
-    await explorer.setConnections(registry.all);
+    flushSync(() => runInAction(() => { source.all = registry.all; }));
     assert.equal(registry.get(0).status, "connecting");
     const first = registry.register(0);
     const duplicate = registry.register(0);
@@ -202,25 +213,148 @@ test("registry completion updates each explorer connection independently and fai
     assert.equal(listeners.size, 2);
     listeners.get("pptb://connection/1").connectionComplete({ errorMessage: "Access denied" });
     await failed;
+    await settle();
     assert.equal(registry.get(1).status, "error");
-    assert.equal(tree.children[1].attributes["aria-busy"], "false");
+    assert.equal(tree.children[1].getAttribute("aria-busy"), "false");
     assert.ok(walk(tree.children[1]).some(element => element.textContent === "(Connection failed)"));
     assert.equal(tree.children[1].children[0].title, "Access denied");
-    assert.equal(tree.children[0].attributes["aria-disabled"], "true", "The slower connection stays disabled");
+    assert.equal(tree.children[0].getAttribute("aria-disabled"), "true", "The slower connection stays disabled");
     listeners.get("pptb://connection/0").connectionComplete({});
     await first;
+    await settle();
     assert.equal(registry.get(0).status, "connected");
-    assert.equal(tree.children[0].attributes["aria-disabled"], "false");
-    const retry = registry.register(1);
+    assert.equal(tree.children[0].getAttribute("aria-disabled"), "false");
+    let retry;
+    flushSync(() => { retry = registry.register(1); });
     assert.equal(registry.get(1).status, "connecting");
     assert.equal(registry.get(1).error, undefined);
-    assert.equal(tree.children[1].attributes["aria-disabled"], "true");
+    assert.equal(tree.children[1].getAttribute("aria-disabled"), "true");
     listeners.get("pptb://connection/1").connectionComplete({});
     await retry;
+    await settle();
     assert.equal(registry.get(1).status, "connected");
-    assert.equal(tree.children[1].attributes["aria-disabled"], "false");
+    assert.equal(tree.children[1].getAttribute("aria-disabled"), "false");
     assert.equal(listeners.size, 0);
     assert.deepEqual(errors, []);
+});
+
+test("observable connection membership updates the tree without setConnections or change notifications", async () => {
+    const { registry, tree, explorer, key, session, calls } = setup();
+    assert.equal(tree.textContent, "No connections available");
+    const first = connection();
+    flushSync(() => runInAction(() => { registry.all = [first]; }));
+    assert.equal(tree.querySelectorAll('[role="treeitem"]').length, 1);
+    key("ArrowRight");
+    await settle();
+    session();
+    const originalRoot = explorer.roots[0];
+    const originalElement = tree.children[0];
+    flushSync(() => runInAction(() => { registry.all = [first, connection(1)]; }));
+    assert.equal(explorer.roots[0], originalRoot);
+    assert.equal(tree.children[0], originalElement, "Adding a connection does not remount existing nodes");
+    flushSync(() => runInAction(() => { registry.all = [registry.all[1]]; }));
+    await settle();
+    assert.equal(tree.querySelectorAll('[role="treeitem"]').length, 1);
+    assert.ok(tree.textContent.includes("Contoso 1"));
+    assert.ok(calls.some(call => call[0] === "close" && call[1] === "s1"));
+});
+
+test("nested node loading, children and errors update automatically without replacing focused rows", async () => {
+    const { registry, explorer, tree, key, session, complete } = setup();
+    flushSync(() => runInAction(() => { registry.all = [connection()]; }));
+    key("ArrowRight");
+    await settle();
+    session();
+    complete("objectexplorer://s1", [node("objectexplorer://s1/Tables", "Tables")]);
+    key("ArrowRight");
+    const folder = tree.querySelector('[data-path="objectexplorer://s1/Tables"]');
+    assert.equal(document.activeElement, folder);
+    key("ArrowRight");
+    assert.equal(explorer.selected.state, "loading");
+    assert.equal(folder.getAttribute("aria-busy"), "true");
+    assert.ok(folder.textContent.includes("Loading\u2026"));
+    await settle();
+    complete("objectexplorer://s1/Tables", [node("objectexplorer://s1/Tables/account", "account", "Table", true)]);
+    assert.equal(explorer.selected.state, "loaded");
+    assert.equal(tree.querySelector('[data-path="objectexplorer://s1/Tables"]'), folder);
+    assert.equal(document.activeElement, folder);
+    assert.equal(folder.getAttribute("aria-busy"), "false");
+    assert.ok(folder.textContent.includes("account"));
+    explorer.refresh();
+    await settle();
+    complete("objectexplorer://s1/Tables", undefined, "Metadata unavailable");
+    assert.equal(explorer.selected.state, "error");
+    assert.ok(folder.querySelector('[role="alert"]').textContent.includes("Metadata unavailable"));
+    assert.equal(document.activeElement, folder);
+});
+
+test("collapsing a pending node keeps the completed children cached without reopening it", async () => {
+    const { explorer, registry, tree, key, session, complete, calls } = setup();
+    flushSync(() => runInAction(() => { registry.all = [connection()]; }));
+    key("ArrowRight");
+    await settle();
+    session();
+    complete("objectexplorer://s1", [node("objectexplorer://s1/Tables", "Tables")]);
+    key("ArrowRight");
+    key("ArrowRight");
+    await settle();
+    key("ArrowLeft");
+    assert.equal(explorer.selected.expanded, false);
+    complete("objectexplorer://s1/Tables", [node("objectexplorer://s1/Tables/account", "account", "Table")]);
+    assert.equal(explorer.selected.state, "loaded");
+    assert.equal(explorer.selected.expanded, false);
+    assert.equal(tree.querySelector('[data-path="objectexplorer://s1/Tables/account"]'), null);
+    const requests = calls.length;
+    key("ArrowRight");
+    assert.ok(tree.querySelector('[data-path="objectexplorer://s1/Tables/account"]'));
+    assert.equal(calls.length, requests);
+});
+
+test("observable background changes do not steal focus from an editor or an open context menu", async () => {
+    const { registry, tree, key, document } = setup();
+    const first = connection();
+    const second = connection(1);
+    flushSync(() => runInAction(() => { registry.all = [first, second]; }));
+    key("ArrowDown");
+    key("ContextMenu");
+    const menuButton = document.activeElement;
+    flushSync(() => runInAction(() => { first.status = "connecting"; }));
+    assert.equal(document.activeElement, menuButton);
+    assert.ok(document.querySelector(".explorer-context-menu"));
+    document.events.pointerdown({ target: tree });
+    const editor = document.createElement("textarea");
+    document.body.appendChild(editor);
+    editor.focus();
+    flushSync(() => runInAction(() => { registry.all = [first]; }));
+    assert.equal(document.activeElement, editor);
+});
+
+test("a context menu closes automatically if its own connection starts reconnecting", () => {
+    const { registry, key, document } = setup();
+    const slot = connection();
+    flushSync(() => runInAction(() => { registry.all = [slot]; }));
+    key("ContextMenu");
+    assert.ok(document.querySelector(".explorer-context-menu"));
+    flushSync(() => runInAction(() => { slot.status = "connecting"; }));
+    assert.equal(document.querySelector(".explorer-context-menu"), null);
+});
+
+test("disposal unmounts React and stops connection reconciliation and stale notifications", async () => {
+    const { explorer, registry, tree, key, session, calls } = setup();
+    flushSync(() => runInAction(() => { registry.all = [connection()]; }));
+    key("ArrowRight");
+    await settle();
+    session();
+    await explorer.dispose();
+    assert.equal(tree.childElementCount, 0);
+    const before = calls.length;
+    flushSync(() => runInAction(() => { registry.all = [connection(1)]; }));
+    explorer.expandComplete({ sessionId: "s1", nodePath: "objectexplorer://s1", nodes: [node("stale", "stale")] });
+    key("ArrowRight");
+    await settle();
+    assert.equal(tree.childElementCount, 0);
+    assert.equal(explorer.roots.length, 0);
+    assert.equal(calls.length, before);
 });
 
 test("columns, table-valued functions and stored procedures have distinct icons while existing icons are preserved", async () => {
@@ -235,7 +369,7 @@ test("columns, table-valued functions and stored procedures have distinct icons 
     assert.deepEqual(icons.map((icon) => icon.textContent),
         ["\u25A4", "\u25B0", "\u25A6", "\u25A5", "\u0192", "\u2699", "\u25A6"]);
     assert.equal(new Set(icons.slice(2, 6).map((icon) => icon.textContent)).size, 4);
-    assert.ok(icons.every((icon) => icon.attributes["aria-hidden"] === "true"));
+    assert.ok(icons.every((icon) => icon.getAttribute("aria-hidden") === "true"));
 });
 
 test("root labels use the exact registered connection name, including duplicate suffixes and session notifications", async () => {
@@ -276,7 +410,7 @@ test("double-click inserts object names without expanding them, while arrows sti
     assert.deepEqual(inserted, ["dbo.account", "name", "dbo.SomeFunction", "dbo.SomeProcedure", "other"]);
     assert.equal(calls.length, before);
     const table = walk(tree).find((element) => element.dataset.path === objects[0].nodePath);
-    assert.equal(table.attributes["aria-expanded"], "false");
+    assert.equal(table.getAttribute("aria-expanded"), "false");
     table.children[0].children[0].events.click({ stopPropagation() {} });
     await settle();
     assert.deepEqual(calls.at(-1), ["expand", "s1", objects[0].nodePath]);
@@ -286,9 +420,9 @@ test("connections render immediately but sessions and children are lazy, cached 
     const { explorer, tree, calls, session, complete, key } = setup();
     const slot = connection();
     await explorer.setConnections([slot]);
-    assert.equal(tree.attributes.role, "tree");
+    assert.equal(tree.getAttribute("role"), "tree");
     assert.equal(calls.length, 0);
-    assert.equal(walk(tree).filter((item) => item.attributes.role === "treeitem").length, 1);
+    assert.equal(walk(tree).filter((item) => item.getAttribute("role") === "treeitem").length, 1);
     assert.deepEqual(key("ArrowRight"), { prevented: true, stopped: true });
     await settle();
     assert.equal(calls[0][0], "create");
@@ -309,8 +443,8 @@ test("connections render immediately but sessions and children are lazy, cached 
     key("ArrowRight");
     await settle();
     assert.equal(calls.length, before, "Reopening a loaded node uses cached children");
-    assert.equal(walk(tree).filter((item) => item.attributes.role === "treeitem").length, 3);
-    assert.equal(walk(tree).filter((item) => item.tabIndex === 0).length, 1);
+    assert.equal(walk(tree).filter((item) => item.getAttribute("role") === "treeitem").length, 3);
+    assert.equal(tree.querySelectorAll('[role="treeitem"][tabindex="0"]').length, 1);
     assert.equal(explorer.connections.get(0).root.info.label, "Contoso 0", "Do not show the server's placeholder label");
 });
 
@@ -389,7 +523,7 @@ test("right-click selects the clicked node and Refresh targets its session, with
         assert.ok(prevented && stopped);
         assert.equal(explorer.selected.info.nodePath, path);
         const menu = document.body.children[0];
-        assert.equal(menu.attributes.role, "menu");
+        assert.equal(menu.getAttribute("role"), "menu");
         assert.equal(menu.style.left, "660px");
         assert.equal(menu.style.top, "568px");
         return menu;
@@ -421,7 +555,7 @@ test("object scripts expose type-gated actions and editor, file and clipboard de
     complete("objectexplorer://s1", objects);
 
     const table = walk(tree).find((element) => element.dataset.path === objects[0].nodePath);
-    const play = table.children[0].children.find((element) => element.className === "explorer-select-top");
+    const play = table.querySelector(".explorer-select-top");
     assert.ok(play);
     play.events.click({ stopPropagation() {} });
     await settle();
@@ -504,8 +638,9 @@ test("context menus support keyboard access, Escape, outside clicks, scrolling a
     key("ContextMenu");
     await explorer.removeConnection(0);
     assert.equal(document.body.children.length, 0);
-    assert.equal(Object.keys(document.events).length, 0);
-    assert.equal(Object.keys(window.events).length, 0);
+    document.events.pointerdown({ target: tree });
+    window.events.resize();
+    assert.equal(document.body.children.length, 0, "Dismissal listeners are removed with the menu");
 });
 
 test("RPC and expand errors are visible and refresh retries instead of leaving a loading node", async () => {
@@ -517,7 +652,7 @@ test("RPC and expand errors are visible and refresh retries instead of leaving a
     assert.equal(errors.at(-1), "Authentication failed");
     const root = explorer.connections.get(0).root;
     assert.equal(root.loading, false);
-    assert.ok(walk(tree).some((element) => element.attributes.role === "alert"));
+    assert.ok(walk(tree).some((element) => element.getAttribute("role") === "alert"));
     client.createObjectExplorerSession = async () => ({ sessionId: "s1" });
     explorer.refresh();
     await settle();
