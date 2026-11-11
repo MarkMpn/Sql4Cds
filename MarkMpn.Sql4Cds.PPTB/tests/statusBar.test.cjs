@@ -94,6 +94,17 @@ function setup(pinned = true) {
     const window = { addEventListener() {} };
     const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: Element, Element });
     const propertiesPanels = [];
+    const globals = {
+        document, window, Node: Element, Element,
+        console: {
+            error: (message) => logs.push({ type: "error", message }),
+            warn: (message) => logs.push({ type: "warning", message }),
+            log: (message) => logs.push({ type: "info", message }),
+        },
+        setInterval: (callback) => { timers.set(++nextTimer, callback); return nextTimer; },
+        clearInterval: (id) => timers.delete(id),
+    };
+    const protocol = load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) });
     const { App } = load("app.ts", {
         "./styles.css": {},
         "./connections": { ConnectionRegistry: class {
@@ -114,7 +125,11 @@ function setup(pinned = true) {
             }
         },
         "./lsp/client": { Sql4CdsClient: class { constructor(events) { clientEvents = events; return client; } } },
-        "./lsp/protocol": {},
+        "./lsp/protocol": protocol,
+        "./dialogs": load("dialogs.ts", { "./lsp/protocol": protocol }, globals),
+        "./statusBar": load("statusBar.ts", {}, globals),
+        "./tabStrip": load("tabStrip.ts", {}, globals),
+        "./toolbarMenu": load("toolbarMenu.ts", {}, globals),
         "./query/queryTab": {},
         "./objectExplorer": { ObjectExplorer: class { engineStopped() { this.stopped = true; } } },
         "./pinnablePane": pinnablePane,
@@ -127,16 +142,7 @@ function setup(pinned = true) {
         "./settings": settingsApi,
         "./mcpInvocation": invocation,
         "./session": { loadSession: async () => null, saveSession: async () => {} },
-    }, {
-        document, window, Node: Element, Element,
-        console: {
-            error: (message) => logs.push({ type: "error", message }),
-            warn: (message) => logs.push({ type: "warning", message }),
-            log: (message) => logs.push({ type: "info", message }),
-        },
-        setInterval: (callback) => { timers.set(++nextTimer, callback); return nextTimer; },
-        clearInterval: (id) => timers.delete(id),
-    }, "\nexports.App = App;");
+    }, globals, "\nexports.App = App;");
     const app = new App();
     app.settings = { objectExplorerPinned: pinned, batchSize: 100, includeActualPlan: false };
     app.ready = true;
@@ -1004,7 +1010,8 @@ test("split menus support keyboard navigation, Escape and outside dismissal", ()
     const saveAs = elements.get("btn-save-as");
     menu.appendChild(saveAs);
     menu.hidden = true;
-    app.bindToolbarMenu(toggle, menu);
+    const { bindToolbarMenu } = load("toolbarMenu.ts", {}, { document, Node: Element, Element });
+    bindToolbarMenu(toggle, menu);
     toggle.events.keydown({ key: "ArrowDown", preventDefault() {} });
     assert.equal(menu.hidden, false);
     assert.equal(toggle.attributes["aria-expanded"], "true");

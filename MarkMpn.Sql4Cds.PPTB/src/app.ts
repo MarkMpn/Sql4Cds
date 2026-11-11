@@ -11,6 +11,10 @@ import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
 import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
 import { loadSession, saveSession, type SessionState, type SessionTab } from "./session";
+import { showConfirmation, showUnsavedChangesDialog } from "./dialogs";
+import { StatusBar } from "./statusBar";
+import { TabStrip } from "./tabStrip";
+import { bindToolbarMenu } from "./toolbarMenu";
 
 const DEFAULT_QUERY = "";
 
@@ -24,7 +28,6 @@ class App implements QueryTabHost {
     private settings!: Sql4CdsSettings;
     private ready = false;
     private confirmationQueue: Promise<void> = Promise.resolve();
-    private statusTimer: ReturnType<typeof setInterval> | null = null;
     private progressMessage = "";
     private closePreventionApplied = false;
     private closePreventionQueue: Promise<void> = Promise.resolve();
@@ -34,7 +37,6 @@ class App implements QueryTabHost {
     private explorerPane: PinnablePane | null = null;
     private propertiesPane: PinnablePane | null = null;
     private propertiesPanel: PropertiesPanel | null = null;
-    private closeTabList: (() => void) | null = null;
     private convertTarget: "fetchxml" | "m" = "fetchxml";
     private transforming = false;
 
@@ -89,6 +91,16 @@ class App implements QueryTabHost {
         elapsed: byId("status-elapsed"),
         rows: byId("status-rows"),
     };
+
+    private readonly statusBar = new StatusBar(this.el, () => this.updateStatusBar());
+    private readonly tabStrip = new TabStrip(this.el.tabStrip, this.el.tabList, {
+        getTabs: () => this.tabs,
+        getActiveTab: () => this.activeTab,
+        getConnectionName: (slot) => this.connections.get(slot)?.options.connectionName,
+        activateTab: (tab) => this.activateTab(tab),
+        closeTab: (tab) => this.closeTab(tab),
+        focusEditor: () => this.editor.focus(),
+    });
 
     constructor() {
         this.client = new Sql4CdsClient({
@@ -191,7 +203,7 @@ class App implements QueryTabHost {
         await this.applyTheme();
         this.createEditor();
         this.bindToolbar();
-        this.bindTabStrip();
+        this.tabStrip.bind();
         this.bindSplitter();
         this.bindObjectExplorer();
         this.bindProperties();
@@ -541,168 +553,7 @@ class App implements QueryTabHost {
     }
 
     private renderTabs(): void {
-        const fragment = document.createDocumentFragment();
-
-        for (const tab of this.tabs) {
-            const el = document.createElement("div");
-            el.className = "tab";
-            el.classList.toggle("active", tab === this.activeTab);
-            el.classList.toggle("running", tab.running);
-            el.classList.toggle("modified", tab.isDirty);
-            el.title = tab.connectionSlot !== null ? `${tab.title} - ${this.connections.get(tab.connectionSlot)?.options.connectionName ?? ""}` : tab.title;
-            if (tab.isDirty) el.title += " (unsaved changes)";
-            el.addEventListener("click", () => this.activateTab(tab));
-            el.addEventListener("auxclick", (e) => {
-                if (e.button === 1) void this.closeTab(tab);
-            });
-
-            const indicator = document.createElement("span");
-            indicator.className = "tab-indicator";
-            indicator.classList.toggle("connected", tab.connected);
-            indicator.classList.toggle("connecting", tab.connecting);
-
-            const label = document.createElement("span");
-            label.className = "tab-label";
-            label.textContent = tab.title;
-            label.title = tab.isDirty ? "Unsaved changes" : tab.title;
-
-            const close = document.createElement("button");
-            close.className = "tab-close";
-            close.title = "Close";
-            close.textContent = "×";
-            close.addEventListener("click", (e) => {
-                e.stopPropagation();
-                void this.closeTab(tab);
-            });
-
-            el.append(indicator, label, close);
-            fragment.appendChild(el);
-        }
-
-        this.el.tabStrip.replaceChildren(fragment);
-        this.scrollActiveTabIntoView();
-    }
-
-    private scrollActiveTabIntoView(): void {
-        const index = this.activeTab ? this.tabs.indexOf(this.activeTab) : -1;
-        const el = index >= 0 ? this.el.tabStrip.children[index] as HTMLElement | undefined : undefined;
-        if (!el) return;
-
-        const strip = this.el.tabStrip;
-        if (el.offsetLeft < strip.scrollLeft)
-            strip.scrollLeft = el.offsetLeft;
-        else if (el.offsetLeft + el.offsetWidth > strip.scrollLeft + strip.clientWidth)
-            strip.scrollLeft = el.offsetLeft + el.offsetWidth - strip.clientWidth;
-    }
-
-    private bindTabStrip(): void {
-        // Tabs are kept to a single line with no scroll bar, but can still be scrolled with the mouse wheel
-        this.el.tabStrip.addEventListener("wheel", (e) => {
-            const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-            if (!delta) return;
-            this.el.tabStrip.scrollLeft += delta;
-            e.preventDefault();
-        }, { passive: false });
-
-        new ResizeObserver(() => this.scrollActiveTabIntoView()).observe(this.el.tabStrip);
-
-        this.el.tabList.addEventListener("click", () => {
-            if (this.closeTabList) this.closeTabList();
-            else this.showTabList();
-        });
-        this.el.tabList.addEventListener("keydown", (e) => {
-            if (e.key === "ArrowDown" && !this.closeTabList) {
-                e.preventDefault();
-                this.showTabList();
-            }
-        });
-    }
-
-    private showTabList(): void {
-        this.closeTabList?.();
-
-        const menu = document.createElement("div");
-        menu.className = "tab-list-menu";
-        menu.setAttribute("role", "menu");
-        menu.setAttribute("aria-label", "Open queries");
-        menu.tabIndex = -1;
-
-        const buttons: HTMLButtonElement[] = [];
-        for (const tab of this.tabs) {
-            const button = document.createElement("button");
-            button.setAttribute("role", "menuitem");
-            button.classList.toggle("active", tab === this.activeTab);
-            button.classList.toggle("modified", tab.isDirty);
-            const connectionName = tab.connectionSlot !== null ? this.connections.get(tab.connectionSlot)?.options.connectionName : undefined;
-            button.title = connectionName ? `${tab.title} - ${connectionName}` : tab.title;
-            if (tab.isDirty) button.title += " (unsaved changes)";
-
-            const indicator = document.createElement("span");
-            indicator.className = "tab-indicator";
-            indicator.classList.toggle("connected", tab.connected);
-            indicator.classList.toggle("connecting", tab.connecting);
-
-            const label = document.createElement("span");
-            label.className = "tab-label";
-            label.textContent = tab.title;
-
-            button.append(indicator, label);
-            button.addEventListener("click", () => {
-                this.closeTabList?.();
-                this.activateTab(tab);
-                this.editor.focus();
-            });
-            buttons.push(button);
-            menu.appendChild(button);
-        }
-
-        document.body.appendChild(menu);
-        const anchor = this.el.tabList.getBoundingClientRect();
-        const bounds = menu.getBoundingClientRect();
-        menu.style.left = `${Math.max(0, Math.min(anchor.right - bounds.width, window.innerWidth - bounds.width))}px`;
-        menu.style.top = `${Math.max(0, Math.min(anchor.bottom, window.innerHeight - bounds.height))}px`;
-        this.el.tabList.setAttribute("aria-expanded", "true");
-
-        const dismiss = () => this.closeTabList?.();
-        const outside = (event: Event) => {
-            if (event.target instanceof Node && !menu.contains(event.target) && !this.el.tabList.contains(event.target)) dismiss();
-        };
-        const scrolled = (event: Event) => {
-            if (event.target instanceof Node && !menu.contains(event.target)) dismiss();
-        };
-        this.closeTabList = () => {
-            this.closeTabList = null;
-            document.removeEventListener("pointerdown", outside, true);
-            document.removeEventListener("focusin", outside);
-            document.removeEventListener("scroll", scrolled, true);
-            window.removeEventListener("resize", dismiss);
-            window.removeEventListener("blur", dismiss);
-            this.el.tabList.setAttribute("aria-expanded", "false");
-            menu.remove();
-        };
-        document.addEventListener("pointerdown", outside, true);
-        document.addEventListener("focusin", outside);
-        document.addEventListener("scroll", scrolled, true);
-        window.addEventListener("resize", dismiss);
-        window.addEventListener("blur", dismiss);
-
-        menu.addEventListener("keydown", (event) => {
-            if (event.key === "Escape" || event.key === "Tab") {
-                dismiss();
-                this.el.tabList.focus();
-                if (event.key === "Escape") event.preventDefault();
-            } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-                event.preventDefault();
-                const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-                const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-                    : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
-                buttons[next]?.focus();
-            }
-        });
-
-        const active = buttons.find((b) => b.classList.contains("active")) ?? buttons[0];
-        active?.scrollIntoView({ block: "nearest" });
-        (active ?? menu).focus();
+        this.tabStrip.render();
     }
 
     // Connections
@@ -883,9 +734,9 @@ class App implements QueryTabHost {
     // Toolbar & layout
 
     private bindToolbar(): void {
-        this.bindToolbarMenu(this.el.saveMenu, byId("save-menu"));
-        this.bindToolbarMenu(this.el.convertMenu, byId("convert-menu"));
-        this.bindToolbarMenu(this.el.formatMenu, byId("format-menu"));
+        bindToolbarMenu(this.el.saveMenu, byId("save-menu"));
+        bindToolbarMenu(this.el.convertMenu, byId("convert-menu"));
+        bindToolbarMenu(this.el.formatMenu, byId("format-menu"));
         this.el.newTab.addEventListener("click", () => this.addTab());
         this.el.open.addEventListener("click", () => void this.openQuery());
         this.el.save.addEventListener("click", () => { if (this.activeTab) void this.saveTab(this.activeTab); });
@@ -948,50 +799,6 @@ class App implements QueryTabHost {
                 e.preventDefault();
                 void this.toggleActualPlan();
             }
-        });
-    }
-
-    private bindToolbarMenu(toggle: HTMLButtonElement, menu: HTMLElement): void {
-        const items = () => Array.from(menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
-        const close = (restoreFocus = false) => {
-            menu.hidden = true;
-            toggle.setAttribute("aria-expanded", "false");
-            if (restoreFocus) toggle.focus();
-        };
-        const open = () => {
-            if (toggle.disabled) return;
-            menu.hidden = false;
-            toggle.setAttribute("aria-expanded", "true");
-            items()[0]?.focus();
-        };
-        toggle.addEventListener("click", () => menu.hidden ? open() : close());
-        toggle.addEventListener("keydown", (event) => {
-            if (event.key === "ArrowDown") {
-                event.preventDefault();
-                open();
-            }
-        });
-        menu.addEventListener("click", (event) => {
-            if (event.target instanceof Element && event.target.closest("button")) close(true);
-        });
-        menu.addEventListener("keydown", (event) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                close(true);
-            } else if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
-                event.preventDefault();
-                const buttons = items();
-                const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-                const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-                    : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
-                buttons[next]?.focus();
-            }
-        });
-        document.addEventListener("pointerdown", (event) => {
-            if (event.target instanceof Node && !menu.parentElement?.contains(event.target)) close();
-        });
-        document.addEventListener("focusin", (event) => {
-            if (event.target instanceof Node && !menu.parentElement?.contains(event.target)) close();
         });
     }
 
@@ -1140,36 +947,8 @@ class App implements QueryTabHost {
 
     private updateStatusBar(): void {
         const tab = this.activeTab;
-        if (this.statusTimer !== null && (!this.ready || !tab?.running)) {
-            clearInterval(this.statusTimer);
-            this.statusTimer = null;
-        } else if (this.ready && tab?.running && this.statusTimer === null) {
-            this.statusTimer = setInterval(() => this.updateStatusBar(), 100);
-        }
-
-        if (this.ready) {
-            this.setStatus(tab?.gridStatusIsError ? tab.gridStatus : tab?.statusMessage ?? "Ready",
-                tab?.gridStatusIsError ? "error" : tab?.statusKind ?? "success");
-        }
-        this.el.progress.textContent = [tab?.gridStatusIsError ? "" : tab?.gridStatus, tab?.running ? this.progressMessage : ""]
-            .filter(Boolean).join(" | ");
-
         const entry = tab?.connected && tab.connectionSlot !== null ? this.connections.get(tab.connectionSlot) : null;
-        const summary = tab?.connectionSummary;
-        this.el.domain.textContent = entry ? summary?.serverName ?? new URL(entry.options.url.includes("://") ? entry.options.url : `https://${entry.options.url}`).hostname : "";
-        const secure = entry !== null && (!entry.options.url.includes("://") || new URL(entry.options.url).protocol === "https:");
-        this.el.lock.textContent = entry ? secure ? "\uD83D\uDD12" : "\uD83D\uDD13" : "";
-        this.el.server.title = entry ? `${secure ? "Secure connection" : "Unencrypted connection"}: ${entry.options.url}` : "Not connected";
-        this.el.user.textContent = entry ? summary?.userName ?? "" : "";
-        this.el.user.title = `Connected user: ${this.el.user.textContent}`;
-        this.el.database.textContent = entry ? summary?.databaseName ?? entry.options.connectionName : "";
-        this.el.database.title = `Current database: ${this.el.database.textContent}`;
-
-        const seconds = Math.floor((tab?.elapsedMilliseconds ?? 0) / 1000);
-        this.el.elapsed.textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
-            .map((part) => String(part).padStart(2, "0")).join(":");
-        const rows = tab?.totalRowCount ?? 0;
-        this.el.rows.textContent = `${rows.toLocaleString()} row${rows === 1 ? "" : "s"}`;
+        this.statusBar.update(tab, this.ready, this.progressMessage, entry);
     }
 
     private bindSplitter(): void {
@@ -1233,96 +1012,8 @@ class App implements QueryTabHost {
     }
 
     private setStatus(text: string, kind: QueryTab["statusKind"] = "busy"): void {
-        this.el.status.textContent = text;
-        this.el.statusMessage.title = text;
-        this.el.statusIcon.textContent = { success: "\u2713", error: "\u2757", warning: "\u26A0", busy: "\u25F7" }[kind];
-        this.el.statusIcon.className = `status-icon ${kind}`;
+        this.statusBar.setStatus(text, kind);
     }
-}
-
-function showConfirmation(message: string): Promise<ConfirmationResult> {
-    return new Promise((resolve) => {
-        const dialog = document.createElement("dialog");
-        dialog.className = "confirm-dialog";
-
-        const form = document.createElement("form");
-        form.method = "dialog";
-
-        const title = document.createElement("h2");
-        title.textContent = "Confirm";
-
-        const text = document.createElement("p");
-        text.textContent = message;
-
-        const buttons = document.createElement("div");
-        buttons.className = "dialog-buttons";
-
-        for (const [label, value, primary] of [
-            ["Yes", ConfirmationResult.Yes, true],
-            ["Yes to all", ConfirmationResult.All, false],
-            ["No", ConfirmationResult.No, false],
-        ] as const) {
-            const button = document.createElement("button");
-            button.value = String(value);
-            button.textContent = label;
-            if (primary) button.className = "primary";
-            buttons.appendChild(button);
-        }
-
-        form.append(title, text, buttons);
-        dialog.appendChild(form);
-        document.body.appendChild(dialog);
-
-        dialog.addEventListener("close", () => {
-            dialog.remove();
-            const value = Number.parseInt(dialog.returnValue, 10);
-            resolve(value === ConfirmationResult.Yes || value === ConfirmationResult.All ? value : ConfirmationResult.No);
-        });
-
-        dialog.showModal();
-    });
-}
-
-function showUnsavedChangesDialog(title: string): Promise<"save" | "discard" | "cancel"> {
-    return new Promise((resolve) => {
-        const dialog = document.createElement("dialog");
-        dialog.className = "unsaved-dialog";
-
-        const form = document.createElement("form");
-        form.method = "dialog";
-
-        const heading = document.createElement("h2");
-        heading.textContent = "Unsaved changes";
-
-        const message = document.createElement("p");
-        message.textContent = `Save changes to ${title} before closing?`;
-
-        const buttons = document.createElement("div");
-        buttons.className = "dialog-buttons";
-        for (const [value, label, primary] of [
-            ["save", "Save", true],
-            ["discard", "Discard", false],
-            ["cancel", "Cancel", false],
-        ] as const) {
-            const button = document.createElement("button");
-            button.value = value;
-            button.textContent = label;
-            if (primary) button.className = "primary";
-            buttons.appendChild(button);
-        }
-
-        form.append(heading, message, buttons);
-        dialog.appendChild(form);
-        document.body.appendChild(dialog);
-
-        dialog.addEventListener("close", () => {
-            dialog.remove();
-            const value = dialog.returnValue;
-            resolve(value === "save" || value === "discard" ? value : "cancel");
-        });
-
-        dialog.showModal();
-    });
 }
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {

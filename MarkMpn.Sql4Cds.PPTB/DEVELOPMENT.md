@@ -21,6 +21,16 @@
 - PPTB never exposes access tokens, so the worker can't talk to Dataverse directly. Instead the connection uses the `PPTB` authentication type, which creates a `PptbOrganizationService`. This `IOrganizationService` converts SDK requests (FetchXML queries, CRUD, metadata, `ExecuteMultiple`, etc.) into Dataverse Web API requests. The tool passes the flat request list straight to `dataverseAPI.executeBatch` for the connection slot, with transaction members grouped by `changesetId`, and returns the responses. The client advertises PPTB's 32 MiB message limit during LSP initialization. Each request and response independently uses a `dataverse/executeBatch/message` notification containing `{ id, data }`, with the payload kept as a JSON object, if the complete serialized notification fits the UTF-8 byte limit. Only oversized payloads use `dataverse/executeBatch/chunk` notifications containing `{ id, sequence, complete, data }`, reassembled by correlation ID and sequence number. Direction is implicit: JavaScript receives requests and the worker receives responses. This avoids escaping and splitting ordinary payloads and allows a small request to receive a chunked response, or vice versa. Clients without a negotiated message limit retain the legacy `dataverse/executeBatch` request/response path.
 - JavaScript RPC console logs include a UTC ISO 8601 timestamp with milliseconds for each request, response, notification, chunk, and error, for example `[SQL 4 CDS RPC] [2026-10-25T17:01:06.088Z] -> query/subset request`, to help correlate activity and identify delays.
 
+### Client UI modules
+
+- [app.ts](./src/app.ts) owns startup and coordinates the editor, query-tab lifecycle, connections, settings, and session persistence.
+- [tabStrip.ts](./src/tabStrip.ts) renders tabs and owns tab scrolling and the open-query menu, including focus and dismissal handling. It requests tab activation and closing through callbacks; `App` retains ownership of the tabs.
+- [statusBar.ts](./src/statusBar.ts) renders query and connection status and owns the elapsed-time refresh timer. Each refresh reads the current application state through a callback.
+- [dialogs.ts](./src/dialogs.ts) provides execution-confirmation and unsaved-query dialogs. Confirmation sequencing remains in `App`.
+- [toolbarMenu.ts](./src/toolbarMenu.ts) binds split-button menu opening, dismissal, and keyboard navigation. Toolbar commands and enablement remain in `App`.
+
+These modules use the existing DOM and CSS without a UI framework. Run `npm test` for client regression tests and `npm run build` for type checking and the PPTB-compatible production bundle.
+
 ### Compact query notifications
 
 The PPTB client opts into version 1 with
