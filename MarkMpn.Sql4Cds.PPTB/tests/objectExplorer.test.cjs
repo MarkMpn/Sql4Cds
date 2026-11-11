@@ -117,6 +117,7 @@ function setup() {
 function connection(slot = 0) {
     return {
         slot,
+        status: "connected",
         connection: { name: `Contoso ${slot}`, id: `c${slot}`, url: "https://contoso.crm.dynamics.com" },
         options: { authenticationType: "PPTB", connectionName: `Contoso ${slot}`, connectionId: `c${slot}`, connectionTarget: slot, url: "https://contoso.crm.dynamics.com" },
     };
@@ -129,6 +130,98 @@ function node(nodePath, label, nodeType = "Folder", isLeaf = false) {
 async function settle() {
     await new Promise((resolve) => setImmediate(resolve));
 }
+
+test("connecting names are visible but expansion, refresh and context actions wait for registration", async () => {
+    const { explorer, tree, calls, key, newQueries, document } = setup();
+    const slot = connection();
+    slot.status = "connecting";
+    await explorer.setConnections([slot]);
+    const root = tree.children[0];
+    assert.equal(root.attributes["aria-busy"], "true");
+    assert.equal(root.attributes["aria-disabled"], "true");
+    assert.ok(walk(root).some(element => element.textContent === "Contoso 0"));
+    assert.ok(walk(root).some(element => element.textContent === "(Connecting\u2026)"));
+    for (const action of ["ArrowRight", "Enter", " ", "F5", "ContextMenu"]) key(action);
+    const row = tree.children[0].children[0];
+    row.events.dblclick();
+    row.children[0].events.click({ stopPropagation() {} });
+    row.events.contextmenu({ preventDefault() {}, stopPropagation() {}, clientX: 0, clientY: 0 });
+    await settle();
+    assert.deepEqual(calls, []);
+    assert.deepEqual(newQueries, []);
+    assert.equal(document.body.children.length, 0);
+    assert.equal(explorer.selected.expanded, false);
+
+    slot.status = "connected";
+    explorer.updateConnectionStates();
+    assert.equal(tree.children[0].attributes["aria-disabled"], "false");
+    assert.equal(tree.children[0].attributes["aria-busy"], "false");
+    assert.ok(!walk(tree).some(element => element.textContent === "(Connecting\u2026)"));
+    key("ArrowRight");
+    await settle();
+    assert.equal(calls[0][0], "create");
+});
+
+test("new connections appear before an old explorer session finishes closing", async () => {
+    const { explorer, client, tree, key, session } = setup();
+    await explorer.setConnections([connection()]);
+    key("ArrowRight");
+    await settle();
+    session();
+    let finishClose;
+    client.closeObjectExplorerSession = () => new Promise(resolve => { finishClose = resolve; });
+    const replacement = connection();
+    replacement.options.connectionName = "Replacement";
+    replacement.status = "connecting";
+    const updating = explorer.setConnections([replacement]);
+    assert.ok(walk(tree).some(element => element.textContent === "Replacement"));
+    assert.ok(walk(tree).some(element => element.textContent === "(Connecting\u2026)"));
+    await settle();
+    finishClose({ success: true });
+    await updating;
+});
+
+test("registry completion updates each explorer connection independently and failures leave no connecting indicator", async () => {
+    const { explorer, client, tree, window, errors } = setup();
+    const listeners = new Map();
+    client.addListener = (uri, listener) => listeners.set(uri, listener);
+    client.removeListener = (uri) => listeners.delete(uri);
+    client.connect = async () => true;
+    window.toolboxAPI = { connections: { getConnections: async () => [connection(0).connection, connection(1).connection] } };
+    const { ConnectionRegistry } = load("connections.ts", { window });
+    const registry = new ConnectionRegistry(client, () => explorer.updateConnectionStates());
+    await registry.refresh();
+    await explorer.setConnections(registry.all);
+    assert.equal(registry.get(0).status, "connecting");
+    const first = registry.register(0);
+    const duplicate = registry.register(0);
+    assert.equal(first, duplicate, "Concurrent registration shares the same attempt");
+    const second = registry.register(1);
+    const failed = assert.rejects(second, /Access denied/);
+    await settle();
+    assert.equal(listeners.size, 2);
+    listeners.get("pptb://connection/1").connectionComplete({ errorMessage: "Access denied" });
+    await failed;
+    assert.equal(registry.get(1).status, "error");
+    assert.equal(tree.children[1].attributes["aria-busy"], "false");
+    assert.ok(walk(tree.children[1]).some(element => element.textContent === "(Connection failed)"));
+    assert.equal(tree.children[1].children[0].title, "Access denied");
+    assert.equal(tree.children[0].attributes["aria-disabled"], "true", "The slower connection stays disabled");
+    listeners.get("pptb://connection/0").connectionComplete({});
+    await first;
+    assert.equal(registry.get(0).status, "connected");
+    assert.equal(tree.children[0].attributes["aria-disabled"], "false");
+    const retry = registry.register(1);
+    assert.equal(registry.get(1).status, "connecting");
+    assert.equal(registry.get(1).error, undefined);
+    assert.equal(tree.children[1].attributes["aria-disabled"], "true");
+    listeners.get("pptb://connection/1").connectionComplete({});
+    await retry;
+    assert.equal(registry.get(1).status, "connected");
+    assert.equal(tree.children[1].attributes["aria-disabled"], "false");
+    assert.equal(listeners.size, 0);
+    assert.deepEqual(errors, []);
+});
 
 test("columns, table-valued functions and stored procedures have distinct icons while existing icons are preserved", async () => {
     const { explorer, tree, session, complete, key } = setup();

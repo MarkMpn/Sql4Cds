@@ -108,10 +108,11 @@ function setup(pinned = true) {
     const { App } = load("app.ts", {
         "./styles.css": {},
         "./connections": { ConnectionRegistry: class {
-            constructor() { return registry; }
+            constructor(_client, onStateChanged) { registry.onStateChanged = onStateChanged; return registry; }
             static ownerUri(slot) { return `pptb://connection/${slot}`; }
         } },
         "./editor/monacoSetup": {
+            configureMonaco() {},
             toMonacoRange: (range) => ({
                 startLineNumber: range.start.line + 1, startColumn: range.start.character + 1,
                 endLineNumber: range.end.line + 1, endColumn: range.end.character + 1,
@@ -131,7 +132,12 @@ function setup(pinned = true) {
         "./tabStrip": load("tabStrip.ts", {}, globals),
         "./toolbarMenu": load("toolbarMenu.ts", {}, globals),
         "./query/queryTab": {},
-        "./objectExplorer": { ObjectExplorer: class { engineStopped() { this.stopped = true; } } },
+        "./objectExplorer": { ObjectExplorer: class {
+            snapshots = [];
+            engineStopped() { this.stopped = true; }
+            async setConnections(connections) { this.snapshots.push(connections.map(entry => ({ slot: entry.slot, status: entry.status }))); }
+            updateConnectionStates() { this.stateUpdates = (this.stateUpdates ?? 0) + 1; }
+        } },
         "./pinnablePane": pinnablePane,
         "./propertiesPanel": { PropertiesPanel: class {
             constructor() { this.shown = []; propertiesPanels.push(this); }
@@ -481,6 +487,74 @@ test("connection dropdown shows only the registered Object Explorer name", () =>
     assert.equal(options[1].textContent, "Contoso Dev");
     assert.equal(options[2].textContent, "Contoso Dev_2 ⚠");
     assert.equal(options[2].title, "Connection failed");
+});
+
+test("connection dropdown disables connecting names and enables them on registry completion", () => {
+    const { app, registry, elements } = setup();
+    app.renderConnectionList = Object.getPrototypeOf(app).renderConnectionList.bind(app);
+    registry.all = [
+        { slot: 0, connection: { url: "https://org.crm.dynamics.com" }, options: { connectionName: "Dev" }, status: "connecting" },
+    ];
+    registry.onStateChanged();
+    let option = elements.get("connection-select").children[1];
+    assert.equal(option.textContent, "Dev (Connecting\u2026)");
+    assert.equal(option.disabled, true);
+    registry.all[0].status = "connected";
+    registry.onStateChanged();
+    option = elements.get("connection-select").children[1];
+    assert.equal(option.textContent, "Dev");
+    assert.equal(option.disabled, false);
+    assert.equal(app.objectExplorer.stateUpdates, 2);
+});
+
+test("startup publishes connecting names before engine startup and registration finish", async () => {
+    const { app, client, registry, settingsApi, window } = setup();
+    app.ready = false;
+    window.toolboxAPI = { events: { on() {} } };
+    settingsApi.loadSettings = async () => app.settings;
+    app.applyTheme = async () => {};
+    for (const method of ["createEditor", "bindToolbar", "bindSplitter", "bindObjectExplorer", "bindProperties"])
+        app[method] = () => {};
+    app.tabStrip.bind = () => {};
+    app.restoreSession = async () => false;
+    app.openLaunchQuery = async () => false;
+    app.addTab = () => {};
+    registry.all = [];
+    registry.refresh = async () => {
+        if (!registry.all.length) registry.all.push({ slot: 0, status: "connecting" });
+        return [];
+    };
+    let finishStart;
+    client.start = () => new Promise(resolve => { finishStart = resolve; });
+    let finishRegistration;
+    registry.register = () => new Promise(resolve => { finishRegistration = resolve; });
+    const starting = app.start();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.objectExplorer.snapshots[0][0].status, "connecting");
+    assert.equal(finishRegistration, undefined, "Names appear even before the engine is ready");
+    finishStart();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof finishRegistration, "function");
+    assert.equal(app.objectExplorer.snapshots.at(-1)[0].status, "connecting");
+    finishRegistration();
+    await starting;
+});
+
+test("adding a connection publishes its name before waiting for registration", async () => {
+    const { app, registry } = setup();
+    registry.all = [];
+    registry.refresh = async () => {
+        registry.all = [{ slot: 0, status: "connecting" }];
+        return [0];
+    };
+    let finishRegistration;
+    registry.register = () => new Promise(resolve => { finishRegistration = resolve; });
+    const updating = app.onConnectionsChanged();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.objectExplorer.snapshots[0][0].status, "connecting");
+    assert.equal(typeof finishRegistration, "function");
+    finishRegistration();
+    await updating;
 });
 
 test("Object Explorer pin collapses to a side tab, opens as a flyout and pins back without losing width or tree", async () => {

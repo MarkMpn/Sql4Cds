@@ -58,8 +58,9 @@ export class ObjectExplorer {
 
     async setConnections(connections: ConnectionSlot[]): Promise<void> {
         const incoming = new Map(connections.map((connection) => [connection.slot, connection]));
+        const removals: Promise<void>[] = [];
         for (const [slot, entry] of this.connections) {
-            if (incoming.get(slot)?.options !== entry.connection.options) await this.removeConnection(slot);
+            if (incoming.get(slot)?.options !== entry.connection.options) removals.push(this.removeConnection(slot));
         }
         for (const connection of connections) {
             const existing = this.connections.get(connection.slot);
@@ -82,6 +83,11 @@ export class ObjectExplorer {
             };
             this.connections.set(connection.slot, entry);
         }
+        this.render();
+        await Promise.all(removals);
+    }
+
+    updateConnectionStates(): void {
         this.render();
     }
 
@@ -177,7 +183,7 @@ export class ObjectExplorer {
 
     refresh(): void {
         const node = this.selected ?? this.connections.values().next().value?.root;
-        if (!node || !this.available) return;
+        if (!node || !this.available || node.connection.status === "connecting") return;
         const target = node.info.isLeaf ? node.parent ?? node : node;
         target.expanded = true;
         void this.load(target, true);
@@ -213,7 +219,7 @@ export class ObjectExplorer {
 
     private async load(node: TreeNode, refresh: boolean): Promise<void> {
         const entry = this.connections.get(node.connection.slot);
-        if (node.info.isLeaf || node.loading || !entry || !this.isCurrent(entry)) return;
+        if (node.info.isLeaf || node.loading || !entry || !this.isCurrent(entry) || node.connection.status === "connecting") return;
         const retrySession = !entry.ready && !!entry.root.error;
         node.loading = true;
         node.error = undefined;
@@ -251,7 +257,7 @@ export class ObjectExplorer {
     }
 
     private toggle(node: TreeNode): void {
-        if (node.info.isLeaf) return;
+        if (node.info.isLeaf || node.connection.status === "connecting") return;
         node.expanded = !node.expanded;
         if (node.expanded && (!node.loaded || node.error)) void this.load(node, false);
         else this.render();
@@ -316,7 +322,7 @@ export class ObjectExplorer {
 
     private showContextMenu(node: TreeNode, x: number, y: number): void {
         this.closeContextMenu?.();
-        if (!this.available) return;
+        if (!this.available || node.connection.status === "connecting") return;
         this.select(node);
         const menu = document.createElement("div");
         menu.className = "explorer-context-menu";
@@ -485,23 +491,25 @@ export class ObjectExplorer {
         this.items.clear();
         const append = (node: TreeNode, parent: HTMLElement | DocumentFragment, level: number): void => {
             const item = document.createElement("div");
+            const connecting = node.connection.status === "connecting";
             item.className = "explorer-node";
             item.setAttribute("role", "treeitem");
             item.setAttribute("aria-level", String(level));
             item.setAttribute("aria-selected", String(this.selected === node));
             if (!node.info.isLeaf) item.setAttribute("aria-expanded", String(node.expanded));
-            item.setAttribute("aria-busy", String(node.loading));
+            item.setAttribute("aria-busy", String(node.loading || connecting));
+            item.setAttribute("aria-disabled", String(connecting));
             item.tabIndex = this.selected === node ? 0 : -1;
             item.dataset.path = node.info.nodePath;
             this.items.set(node, item);
             const row = document.createElement("div");
             row.className = "explorer-row";
             row.style.paddingLeft = `${(level - 1) * 16 + 4}px`;
-            row.title = node.error || node.info.errorMessage || node.info.label;
+            row.title = node.connection.error || node.error || node.info.errorMessage || node.info.label;
             const expander = document.createElement("span");
             expander.className = "explorer-expander";
             expander.setAttribute("aria-hidden", "true");
-            expander.textContent = node.info.isLeaf ? "" : node.expanded ? "\u25BE" : "\u25B8";
+            expander.textContent = node.info.isLeaf || connecting ? "" : node.expanded ? "\u25BE" : "\u25B8";
             expander.addEventListener("click", (event) => {
                 event.stopPropagation();
                 this.selected = node;
@@ -516,6 +524,13 @@ export class ObjectExplorer {
             const label = document.createElement("span");
             label.textContent = node.info.label;
             row.append(expander, icon, label);
+            if (connecting || node.connection.error) {
+                const status = document.createElement("span");
+                status.className = connecting ? "explorer-connection-status" : "explorer-connection-status error";
+                status.textContent = connecting ? "(Connecting\u2026)" : "(Connection failed)";
+                status.setAttribute("role", connecting ? "status" : "alert");
+                row.appendChild(status);
+            }
             if (node.info.nodeType === "Table") {
                 const selectTop = document.createElement("button");
                 selectTop.className = "explorer-select-top";

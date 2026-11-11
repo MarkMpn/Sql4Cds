@@ -458,6 +458,19 @@ input[type="number"] {
     overflow-wrap: anywhere;
 }
 
+.explorer-connection-status,
+.explorer-node[aria-disabled="true"] > .explorer-row {
+    color: var(--fg-muted);
+}
+
+.explorer-node[aria-disabled="true"] > .explorer-row .explorer-expander {
+    cursor: default;
+}
+
+.explorer-connection-status.error {
+    color: var(--error);
+}
+
 .pane-splitter {
     flex: 0 0 5px;
     cursor: col-resize;

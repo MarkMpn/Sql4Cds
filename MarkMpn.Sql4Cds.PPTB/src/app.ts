@@ -129,7 +129,10 @@ class App implements QueryTabHost {
                 void notify("SQL 4 CDS engine failed", message, "error");
             },
         });
-        this.connections = new ConnectionRegistry(this.client);
+        this.connections = new ConnectionRegistry(this.client, () => {
+            this.renderConnectionList();
+            this.objectExplorer.updateConnectionStates();
+        });
         this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
             (message) => { void notify("Object Explorer", message, "error"); },
             (text) => this.insertObjectName(text),
@@ -220,9 +223,13 @@ class App implements QueryTabHost {
         });
 
         this.setStatus("Starting SQL 4 CDS engine…");
+        await this.connections.refresh();
+        this.renderConnectionList();
+        await this.objectExplorer.setConnections(this.connections.all);
         try {
             await this.client.start({ ...this.settings });
         } catch (err) {
+            this.objectExplorer.engineStopped();
             this.setStatus(`Unable to start the SQL 4 CDS engine: ${errorMessage(err)}`, "error");
             await notify("Unable to start SQL 4 CDS", errorMessage(err), "error");
             return;
@@ -233,6 +240,7 @@ class App implements QueryTabHost {
 
         await this.connections.refresh();
         this.renderConnectionList();
+        await this.objectExplorer.setConnections(this.connections.all);
 
         // Register every connection so they can all be used in cross-instance queries
         await Promise.all(
@@ -579,7 +587,8 @@ class App implements QueryTabHost {
         for (const entry of this.connections.all) {
             const option = document.createElement("option");
             option.value = String(entry.slot);
-            option.textContent = `${entry.options.connectionName}${entry.error ? " ⚠" : ""}`;
+            option.textContent = `${entry.options.connectionName}${entry.status === "connecting" ? " (Connecting…)" : entry.error ? " ⚠" : ""}`;
+            option.disabled = entry.status === "connecting";
             option.title = entry.error ?? entry.connection.url;
             select.appendChild(option);
         }
@@ -605,12 +614,12 @@ class App implements QueryTabHost {
         if (!this.ready) return;
 
         const changed = await this.connections.refresh();
+        this.renderConnectionList();
+        await this.objectExplorer.setConnections(this.connections.all);
         if (changed.length === 0) {
-            await this.objectExplorer.setConnections(this.connections.all);
             return;
         }
 
-        await Promise.all(changed.map((slot) => this.objectExplorer.removeConnection(slot)));
         for (const slot of changed) {
             const tabs = this.tabs.filter((t) => t.connectionSlot === slot);
             await Promise.all(tabs.map((t) => t.disconnect()));

@@ -5,6 +5,7 @@ export interface ConnectionSlot {
     slot: number;
     connection: ToolBoxAPI.Connection;
     options: PptbConnectionOptions;
+    status: "connecting" | "connected" | "error";
     /** Set once the slot has been registered with the language server */
     error?: string;
     registration?: Promise<void>;
@@ -18,7 +19,7 @@ export interface ConnectionSlot {
 export class ConnectionRegistry {
     private slots: Array<ConnectionSlot | null> = [];
 
-    constructor(private readonly client: Sql4CdsClient) {}
+    constructor(private readonly client: Sql4CdsClient, private readonly onStateChanged: () => void = () => {}) {}
 
     get all(): ConnectionSlot[] {
         return this.slots.filter((s): s is ConnectionSlot => s !== null);
@@ -75,6 +76,7 @@ export class ConnectionRegistry {
             return {
                 slot,
                 connection,
+                status: "connecting",
                 options: {
                     authenticationType: "PPTB",
                     url: connection.url,
@@ -122,6 +124,9 @@ export class ConnectionRegistry {
     }
 
     private async registerEntry(entry: ConnectionSlot): Promise<void> {
+        entry.status = "connecting";
+        entry.error = undefined;
+        this.onStateChanged();
         const ownerUri = ConnectionRegistry.ownerUri(entry.slot);
         const complete = new Promise<ConnectionCompleteParams>((resolve) => {
             this.client.addListener(ownerUri, { connectionComplete: resolve });
@@ -136,6 +141,8 @@ export class ConnectionRegistry {
             entry.error = err instanceof Error ? err.message : String(err);
         } finally {
             this.client.removeListener(ownerUri);
+            entry.status = entry.error ? "error" : "connected";
+            this.onStateChanged();
         }
 
         if (entry.error) throw new Error(entry.error);
