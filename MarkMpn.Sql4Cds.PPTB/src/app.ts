@@ -12,10 +12,10 @@ import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } 
 import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
 import { loadSession, saveSession, type SessionState, type SessionTab } from "./session";
 import { showConfirmation, showUnsavedChangesDialog } from "./dialogs";
-import { StatusBar } from "./statusBar";
+import { StatusBar, StatusBarState } from "./statusBar";
 import { TabStrip } from "./tabStrip";
 import { bindToolbarMenu } from "./toolbarMenu";
-import { autorun } from "mobx";
+import { action, autorun, runInAction } from "mobx";
 
 const DEFAULT_QUERY = "";
 
@@ -24,12 +24,16 @@ class App implements QueryTabHost {
     private readonly connections: ConnectionRegistry;
     private readonly objectExplorer: ObjectExplorer;
     private readonly tabs: QueryTab[] = [];
-    private activeTab: QueryTab | null = null;
+    private readonly statusState = new StatusBarState();
+    private get activeTab(): QueryTab | null { return this.statusState.activeTab; }
+    private set activeTab(tab: QueryTab | null) { runInAction(() => { this.statusState.activeTab = tab; }); }
     private editor!: monaco.editor.IStandaloneCodeEditor;
     private settings!: Sql4CdsSettings;
-    private ready = false;
+    private get ready(): boolean { return this.statusState.ready; }
+    private set ready(ready: boolean) { runInAction(() => { this.statusState.ready = ready; }); }
     private confirmationQueue: Promise<void> = Promise.resolve();
-    private progressMessage = "";
+    private get progressMessage(): string { return this.statusState.progressMessage; }
+    private set progressMessage(message: string) { runInAction(() => { this.statusState.progressMessage = message; }); }
     private closePreventionApplied = false;
     private closePreventionQueue: Promise<void> = Promise.resolve();
     private connectionChangeQueue: Promise<void> = Promise.resolve();
@@ -80,20 +84,10 @@ class App implements QueryTabHost {
         displayNames: byId<HTMLButtonElement>("btn-display-names"),
         settings: byId<HTMLButtonElement>("btn-settings"),
         connection: byId<HTMLSelectElement>("connection-select"),
-        status: byId("status-text"),
-        statusMessage: byId("status-message"),
-        statusIcon: byId("status-icon"),
-        progress: byId("status-progress"),
-        server: byId("status-server"),
-        lock: byId("status-lock"),
-        domain: byId("status-domain"),
-        user: byId("status-user"),
-        database: byId("status-database"),
-        elapsed: byId("status-elapsed"),
-        rows: byId("status-rows"),
+        statusBar: byId("status-bar"),
     };
 
-    private readonly statusBar = new StatusBar(this.el, () => this.updateStatusBar());
+    private readonly statusBar: StatusBar;
     private readonly tabStrip = new TabStrip(this.el.tabStrip, this.el.tabList, {
         getTabs: () => this.tabs,
         getActiveTab: () => this.activeTab,
@@ -110,7 +104,6 @@ class App implements QueryTabHost {
             objectExplorerSessionDisconnected: (params) => this.objectExplorer.sessionDisconnected(params),
             progress: (message) => {
                 this.progressMessage = message;
-                this.updateStatusBar();
             },
             log: (params) => {
                 if (params.type === 1) console.error(params.message);
@@ -119,18 +112,19 @@ class App implements QueryTabHost {
                 if (params.type === 1 || params.type === 2)
                     void notify("SQL 4 CDS", params.message, params.type === 1 ? "error" : "warning");
             },
-            failed: (message) => {
+            failed: action((message) => {
                 this.ready = false;
                 this.progressMessage = "";
                 this.objectExplorer.engineStopped();
                 for (const tab of this.tabs) tab.engineStopped(message);
                 this.updateToolbar();
-                this.updateStatusBar();
                 this.setStatus(message, "error");
                 void notify("SQL 4 CDS engine failed", message, "error");
-            },
+            }),
         });
         this.connections = new ConnectionRegistry(this.client);
+        this.statusBar = new StatusBar(this.el.statusBar, this.statusState, this.connections);
+        window.addEventListener("pagehide", () => this.statusBar.dispose());
         this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
             (message) => { void notify("Object Explorer", message, "error"); },
             (text) => this.insertObjectName(text),
@@ -596,8 +590,10 @@ class App implements QueryTabHost {
             await tab.connect(slot);
         } catch (err) {
             if (!this.ready) return;
-            tab.statusMessage = `Connection failed: ${errorMessage(err)}`;
-            tab.statusKind = "error";
+            runInAction(() => {
+                tab.statusMessage = `Connection failed: ${errorMessage(err)}`;
+                tab.statusKind = "error";
+            });
             this.onStateChanged(tab);
             await notify("Connection failed", errorMessage(err), "error");
         }
@@ -619,7 +615,7 @@ class App implements QueryTabHost {
                 await this.connections.register(slot).catch((err) => notify("Connection failed", errorMessage(err), "error"));
                 await Promise.all(tabs.map((t) => this.connectTab(t, slot)));
             } else {
-                for (const t of tabs) t.connectionSlot = null;
+                runInAction(() => { for (const t of tabs) t.connectionSlot = null; });
             }
         }
 
@@ -710,10 +706,6 @@ class App implements QueryTabHost {
         const visible = this.activeTab?.hasResults === true;
         this.el.splitter.hidden = !visible;
         this.el.results.hidden = !visible;
-    }
-
-    onStatusChanged(tab: QueryTab): void {
-        if (tab === this.activeTab) this.updateStatusBar();
     }
 
     onSelectedPlanNodeChanged(tab: QueryTab): void {
@@ -894,8 +886,6 @@ class App implements QueryTabHost {
                 toggle.setAttribute("aria-expanded", "false");
             }
         }
-
-        this.updateStatusBar();
     }
 
     private async launchFetchXmlStudio(fetchXml: string): Promise<void> {
@@ -949,12 +939,6 @@ class App implements QueryTabHost {
             savePinned: (pinned) => this.saveSetting("propertiesPinned", pinned),
         });
         this.updateProperties();
-    }
-
-    private updateStatusBar(): void {
-        const tab = this.activeTab;
-        const entry = tab?.connected && tab.connectionSlot !== null ? this.connections.get(tab.connectionSlot) : null;
-        this.statusBar.update(tab, this.ready, this.progressMessage, entry);
     }
 
     private bindSplitter(): void {
@@ -1018,7 +1002,7 @@ class App implements QueryTabHost {
     }
 
     private setStatus(text: string, kind: QueryTab["statusKind"] = "busy"): void {
-        this.statusBar.setStatus(text, kind);
+        this.statusState.setStatus(text, kind);
     }
 }
 

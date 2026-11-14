@@ -29,13 +29,14 @@
 - [objectExplorer.ts](./src/objectExplorer.ts) owns observable tree nodes, selection, and session/RPC lifecycle. Nodes track `unloaded`, `loading`, `loaded`, and `error` states independently of expansion, so collapsing a pending request does not discard its result. A MobX reaction reconciles connection membership and closes removed sessions.
 - [objectExplorerView.tsx](./src/objectExplorerView.tsx) renders the tree with React and per-node `observer` components. Connection, loading, error, and children changes update the view without explicit render notifications. Existing context-menu commands remain in the controller.
 - [tabStrip.ts](./src/tabStrip.ts) renders tabs and owns tab scrolling and the open-query menu, including focus and dismissal handling. It requests tab activation and closing through callbacks; `App` retains ownership of the tabs.
-- [statusBar.ts](./src/statusBar.ts) renders query and connection status and owns the elapsed-time refresh timer. Each refresh reads the current application state through a callback.
+- [statusBar.ts](./src/statusBar.ts) exposes observable application status (active query, engine readiness, startup/failure messages, and progress). Its computed display reads observable query status, connection details, and row counts directly; query notifications do not need a separate status-change callback. A clock ticks only while the foreground query is running and is disposed on unload.
+- [statusBarView.tsx](./src/statusBarView.tsx) renders the status bar with a React `observer`, retaining the existing layout, IDs, icons, tooltips, and accessible status message. Query timestamps and result counts remain owned by [queryTab.ts](./src/query/queryTab.ts); elapsed time is derived from those timestamps rather than accumulated timer ticks.
 - [dialogs.ts](./src/dialogs.ts) provides execution-confirmation and unsaved-query dialogs. Confirmation sequencing remains in `App`.
 - [toolbarMenu.ts](./src/toolbarMenu.ts) binds split-button menu opening, dismissal, and keyboard navigation. Toolbar commands and enablement remain in `App`.
 
-React is mounted only inside the Object Explorer tree; the rest of the client retains its existing DOM and CSS. The connection dropdown bridges to the observable registry with `autorun`. Reactions and the React root are disposed when the tool unloads.
+React is mounted inside Object Explorer and the status bar; the rest of the client retains its existing DOM and CSS. The connection dropdown bridges to the observable registry with `autorun`. Reactions and React roots are disposed when the tool unloads.
 
-Run `npm test` for client regression tests and `npm run build` for type checking and the PPTB-compatible single-IIFE production bundle. Object Explorer tests use jsdom and real React DOM events; other client tests retain their existing lightweight fixtures.
+Run `npm test` for client regression tests and `npm run build` for type checking and the PPTB-compatible single-IIFE production bundle. Object Explorer and status-bar view tests use jsdom and real React DOM rendering; other client tests retain their existing lightweight fixtures.
 
 ### Compact query notifications
 

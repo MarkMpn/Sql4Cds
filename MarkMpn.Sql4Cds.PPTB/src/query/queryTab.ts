@@ -8,6 +8,7 @@ import { getNodeImageUrl } from "../executionPlan/nodeImages";
 import { ResultsGrid } from "./resultsGrid";
 import { collectInvocationResults, type InvocationResult } from "../mcpInvocation";
 import type { ResultMessage } from "../lsp/protocol";
+import { action, computed, makeObservable, observable, runInAction } from "mobx";
 
 export interface QueryTabHost {
     readonly client: Sql4CdsClient;
@@ -21,7 +22,6 @@ export interface QueryTabHost {
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
     onStateChanged(tab: QueryTab): void;
-    onStatusChanged(tab: QueryTab): void;
     /** Called when the execution plan node to show in the Properties panel changes */
     onSelectedPlanNodeChanged(tab: QueryTab): void;
     /** Opens a read-only tab with the FetchXML from a plan node */
@@ -60,7 +60,7 @@ export class QueryTab {
     /** Results stay hidden until a query has been started or the engine reports a failure */
     hasResults = false;
     startTime = 0;
-    connectionSummary: ConnectionCompleteParams["connectionSummary"];
+    connectionSummary: ConnectionCompleteParams["connectionSummary"] = undefined;
     statusMessage = "Not connected";
     statusKind: "success" | "error" | "warning" | "busy" = "warning";
     gridStatus = "";
@@ -114,6 +114,29 @@ export class QueryTab {
         initialText = "",
         options: { language?: string; readOnly?: boolean; isFetchXmlPreview?: boolean } = {},
     ) {
+        makeObservable<this, "rowCounts" | "textRowCount" | "endTime" | "onQueryComplete" | "updateResultSet" | "addMessage" | "clearResults">(this, {
+            connectionSlot: observable,
+            connected: observable,
+            connecting: observable,
+            running: observable,
+            startTime: observable,
+            endTime: observable,
+            connectionSummary: observable.ref,
+            statusMessage: observable,
+            statusKind: observable,
+            gridStatus: observable,
+            gridStatusIsError: observable,
+            rowCounts: observable.shallow,
+            textRowCount: observable,
+            totalRowCount: computed,
+            disconnect: action,
+            cancel: action,
+            engineStopped: action,
+            onQueryComplete: action,
+            updateResultSet: action,
+            addMessage: action,
+            clearResults: action,
+        });
         this.id = nextTabId++;
         this.uri = `pptb://query/${this.id}`;
         this.title = `Query ${this.id}`;
@@ -164,13 +187,12 @@ export class QueryTab {
             host.client.addListener(this.uri, {
                 connectionComplete: (p) => this.onConnectionComplete(p),
                 batchStart: () => {},
-                message: (p) => {
+                message: action((p) => {
                     if (typeof p.message.rowCount === "number") {
                         this.textRowCount += p.message.rowCount;
-                        this.host.onStatusChanged(this);
                     }
                     this.addMessage(p.message.message, p.message.isError, p.message.range);
-                },
+                }),
                 resultSetAvailable: (p) => this.onResultSetAvailable(p),
                 resultSetUpdated: (p) => this.onResultSetUpdated(p),
                 resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
@@ -221,11 +243,13 @@ export class QueryTab {
 
         if (this.connected) await this.disconnect();
 
-        this.connectionSlot = slot;
-        this.connectionSummary = undefined;
-        this.connecting = true;
-        this.statusMessage = "Connecting…";
-        this.statusKind = "busy";
+        runInAction(() => {
+            this.connectionSlot = slot;
+            this.connectionSummary = undefined;
+            this.connecting = true;
+            this.statusMessage = "Connecting…";
+            this.statusKind = "busy";
+        });
         this.host.onStateChanged(this);
 
         try {
@@ -237,17 +261,21 @@ export class QueryTab {
             if (this.engineError) throw new Error(this.engineError);
             if (result.errorMessage) throw new Error(result.errorMessage);
 
-            this.connected = true;
-            this.connectionSummary = result.connectionSummary;
-            this.statusMessage = "Connected";
-            this.statusKind = "success";
+            runInAction(() => {
+                this.connected = true;
+                this.connectionSummary = result.connectionSummary;
+                this.statusMessage = "Connected";
+                this.statusKind = "success";
+            });
         } catch (err) {
-            this.statusMessage = this.engineError ?? `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
-            this.statusKind = "error";
+            runInAction(() => {
+                this.statusMessage = this.engineError ?? `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
+                this.statusKind = "error";
+            });
             throw err;
         } finally {
             this.pendingConnect = null;
-            this.connecting = false;
+            runInAction(() => { this.connecting = false; });
             this.host.onStateChanged(this);
         }
     }
@@ -286,14 +314,16 @@ export class QueryTab {
         const resultsToText = !invocation && this.resultsMode === "text" && !estimatedPlan;
         this.showResultsView("messages");
         this.hasResults = true;
-        this.running = true;
+        runInAction(() => {
+            this.running = true;
+            this.startTime = Date.now();
+            this.endTime = 0;
+            this.statusMessage = estimatedPlan ? "Generating estimated execution plan…" : "Executing query…";
+            this.statusKind = "busy";
+        });
         this.hasErrors = false;
         this.cancelled = false;
         this.estimatedPlan = estimatedPlan;
-        this.startTime = Date.now();
-        this.endTime = 0;
-        this.statusMessage = estimatedPlan ? "Generating estimated execution plan…" : "Executing query…";
-        this.statusKind = "busy";
         this.host.onStateChanged(this);
 
         let querySelection: SelectionData | undefined;
@@ -340,7 +370,6 @@ export class QueryTab {
         if (!this.running) return;
         this.cancelled = true;
         this.statusMessage = "Cancelling query…";
-        this.host.onStatusChanged(this);
         try {
             const result = await this.host.client.cancelQuery(this.uri);
             if (result?.messages) {
@@ -419,11 +448,10 @@ export class QueryTab {
             },
             (text) => this.host.copyToClipboard(text),
             (reference) => this.host.openRecord(reference),
-            (text, isError) => {
+            action((text, isError) => {
                 this.gridStatus = text;
                 this.gridStatusIsError = isError;
-                this.host.onStatusChanged(this);
-            },
+            }),
             (format) => this.exportResults(summary, generation, format),
             {
                 copyUrl: (reference) => this.host.copyRecordUrl(reference),
@@ -454,9 +482,10 @@ export class QueryTab {
             }], () => null);
             this.model.pushStackElement();
         } catch (err) {
-            this.gridStatus = `Unable to create SELECT statement: ${err instanceof Error ? err.message : String(err)}`;
-            this.gridStatusIsError = true;
-            this.host.onStatusChanged(this);
+            runInAction(() => {
+                this.gridStatus = `Unable to create SELECT statement: ${err instanceof Error ? err.message : String(err)}`;
+                this.gridStatusIsError = true;
+            });
             await window.toolboxAPI.utils.showNotification({ title: "Unable to create SELECT statement", body: this.gridStatus, type: "error" });
         }
     }
@@ -467,7 +496,6 @@ export class QueryTab {
             this.hasErrors = true;
             this.statusMessage = text;
             this.statusKind = "error";
-            this.host.onStatusChanged(this);
         }
 
         // Show each line separately so line numbers are shown correctly for multi-line messages such as text results
@@ -499,19 +527,20 @@ export class QueryTab {
             );
             if (!path) return;
             if (generation !== this.resultsGeneration || this.running) throw new Error("The query results changed while choosing the export filename. Please export again.");
-            this.gridStatus = `Exporting ${exportFormat.label} results...`;
-            this.gridStatusIsError = false;
-            this.host.onStatusChanged(this);
+            runInAction(() => {
+                this.gridStatus = `Exporting ${exportFormat.label} results...`;
+                this.gridStatusIsError = false;
+            });
             await this.host.client.saveResults(this.uri, summary.batchId, summary.id, path, format);
             if (generation !== this.resultsGeneration) return;
-            this.gridStatus = `Results exported to ${path}`;
-            this.host.onStatusChanged(this);
+            runInAction(() => { this.gridStatus = `Results exported to ${path}`; });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             if (generation === this.resultsGeneration) {
-                this.gridStatus = `Unable to export results: ${message}`;
-                this.gridStatusIsError = true;
-                this.host.onStatusChanged(this);
+                runInAction(() => {
+                    this.gridStatus = `Unable to export results: ${message}`;
+                    this.gridStatusIsError = true;
+                });
             }
             await window.toolboxAPI.utils.showNotification({ title: "Unable to export results", body: message, type: "error" });
         }
@@ -545,7 +574,6 @@ export class QueryTab {
         this.resultSummaries.set(key, summary);
         this.rowCounts.set(key, summary.rowCount);
         this.grids.get(key)?.setRowCount(summary.rowCount, summary.complete);
-        this.host.onStatusChanged(this);
     }
 
     private showResultsView(view: ResultsView): void {

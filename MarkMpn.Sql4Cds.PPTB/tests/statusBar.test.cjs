@@ -131,7 +131,21 @@ function setup(pinned = true, renderConnections = false) {
         "./lsp/client": { Sql4CdsClient: class { constructor(events) { clientEvents = events; return client; } } },
         "./lsp/protocol": protocol,
         "./dialogs": load("dialogs.ts", { "./lsp/protocol": protocol }, globals),
-        "./statusBar": load("statusBar.ts", {}, globals),
+        "./statusBar": load("statusBar.ts", {
+            "mobx": require("mobx"),
+            "./statusBarView": { mountStatusBar: (_element, statusBar) => autorun(() => {
+                const display = statusBar.display;
+                for (const [id, value] of Object.entries({
+                    "status-text": display.text, "status-progress": display.progress,
+                    "status-domain": display.domain, "status-lock": display.lock,
+                    "status-user": display.user, "status-database": display.database,
+                    "status-elapsed": display.elapsed, "status-rows": display.rows, "status-icon": display.icon,
+                })) document.getElementById(id).textContent = value;
+                document.getElementById("status-message").title = display.text;
+                document.getElementById("status-icon").className = `status-icon ${display.kind}`;
+                document.getElementById("status-server").title = display.serverTitle;
+            }) },
+        }, globals),
         "./tabStrip": load("tabStrip.ts", {}, globals),
         "./toolbarMenu": load("toolbarMenu.ts", {}, globals),
         "./query/queryTab": {},
@@ -161,6 +175,7 @@ function setup(pinned = true, renderConnections = false) {
     const grids = [];
     const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
+        "mobx": require("mobx"),
         "../mcpInvocation": invocation,
         "../lsp/protocol": load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) }),
         "../editor/monacoSetup": {
@@ -314,7 +329,7 @@ test("results area stays hidden for new tabs until the active tab runs a query",
     app.activateTab(first.tab);
     assert.equal(elements.get("results-host").hidden, true);
     assert.equal(elements.get("splitter").hidden, true);
-    first.tab.connected = true;
+    runInAction(() => { first.tab.connected = true; });
     await first.tab.execute(null);
     assert.equal(elements.get("results-host").hidden, false);
     assert.equal(elements.get("splitter").hidden, false);
@@ -337,13 +352,12 @@ test("fatal worker failure stops all tabs, preserves editors and shows a restart
     const idle = createTab();
     app.tabs.push(first.tab, second.tab, idle.tab);
     for (const { tab, events } of [first, second]) {
-        tab.connected = true;
+        runInAction(() => { tab.connected = true; });
         tab.model.setValue("SELECT 1; -- unsaved");
         await tab.execute(null);
         events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
     }
     app.activeTab = first.tab;
-    app.updateStatusBar();
     assert.equal(timers.size, 1);
     app.progressMessage = "Retrieving...";
     setNow(2500);
@@ -402,7 +416,7 @@ test("record menu wiring copies the shared URL and appends SELECT SQL at the lat
         return new Promise(resolve => { resolveSql = resolve; });
     };
     const { tab, events } = createTab();
-    tab.connectionSlot = 0;
+    runInAction(() => { tab.connectionSlot = 0; });
     events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
     grids[0].recordActions.copyUrl(reference);
     await new Promise(resolve => setImmediate(resolve));
@@ -713,7 +727,6 @@ test("one global status bar shows connection details and accurately ticks elapse
     assert.equal(tab.messagesPane.children.length, 0, "Completion status is shown in the status bar rather than as a message");
     assert.equal(timers.size, 0);
     setNow(90000);
-    app.updateStatusBar();
     assert.equal(elements.get("status-elapsed").textContent, "00:01:04", "Elapsed time freezes on completion");
 
     await tab.execute(null);
@@ -744,7 +757,7 @@ test("query errors, execution failures, cancellation and connection failures hav
     assert.equal(elements.get("status-text").textContent, "Query cancelled");
     assert.equal(elements.get("status-icon").className, "status-icon warning");
 
-    tab.connected = false;
+    runInAction(() => { tab.connected = false; });
     client.associateConnection = async () => { throw new Error("Connection rejected"); };
     await assert.rejects(tab.connect(0), /Connection rejected/);
     assert.match(elements.get("status-text").textContent, /Connection failed/);
@@ -1049,11 +1062,11 @@ test("toolbar enables transformations only for suitable tabs and keeps FetchXML 
     assert.equal(elements.get("btn-display-names").disabled, true);
     assert.equal(elements.get("btn-edit-fetchxml").disabled, true);
     assert.notEqual(elements.get("btn-edit-fetchxml").hidden, true);
-    tab.connected = true;
+    runInAction(() => { tab.connected = true; });
     app.updateToolbar();
     assert.equal(elements.get("btn-convert").disabled, false);
     assert.equal(elements.get("btn-display-names").disabled, false);
-    tab.running = true;
+    runInAction(() => { tab.running = true; });
     app.updateToolbar();
     assert.equal(elements.get("btn-convert").disabled, true);
     assert.equal(elements.get("btn-format").disabled, true);
@@ -1322,7 +1335,7 @@ test("format requests document formatting options, applies LSP edits with undo s
     assert.equal(edits[0][0].range.startColumn, 1);
     assert.equal(edits[0][0].range.endColumn, 9);
     assert.equal(edits[0][0].text, "SELECT 1;");
-    tab.connected = true;
+    runInAction(() => { tab.connected = true; });
     await app.transformQuery("format", true);
     assert.equal(calls[1][1].addDisplayNames, true);
 
@@ -1344,7 +1357,7 @@ test("format requests document formatting options, applies LSP edits with undo s
 test("conversion remembers the selected target and opens read-only preview content", async () => {
     const { app, client, createTab, elements } = setup();
     const { tab } = createTab();
-    tab.connected = true;
+    runInAction(() => { tab.connected = true; });
     app.editor = { getSelection: () => null };
     const previews = [];
     app.openPreview = (...args) => previews.push(args);
