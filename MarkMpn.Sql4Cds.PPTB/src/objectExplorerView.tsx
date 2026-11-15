@@ -70,7 +70,7 @@ const ExplorerNode = observer(function ExplorerNodeView({ explorer, node, level 
     </div>;
 });
 
-const ExplorerTree = observer(function ExplorerTree({ explorer, tree }: { explorer: ObjectExplorer; tree: HTMLElement }) {
+export const ExplorerTree = observer(function ExplorerTree({ explorer, tree }: { explorer: ObjectExplorer; tree: HTMLElement }) {
     const focusRequest = explorer.focusRequest;
     useLayoutEffect(() => {
         if (focusRequest > 0) tree.querySelector<HTMLElement>('[tabindex="0"]')?.focus();

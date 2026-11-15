@@ -36,7 +36,7 @@ export class StatusBar {
     private readonly unmount: () => void;
     private disposed = false;
 
-    constructor(element: HTMLElement, readonly state: StatusBarState, private readonly connections: ConnectionRegistry) {
+    constructor(element: HTMLElement, readonly state: StatusBarState, private readonly connections: ConnectionRegistry, mount = true) {
         makeObservable<this, "tick">(this, {
             tick: observable,
             display: computed,
@@ -52,7 +52,7 @@ export class StatusBar {
             },
             { fireImmediately: true },
         );
-        this.unmount = mountStatusBar(element, this);
+        this.unmount = mount ? mountStatusBar(element, this) : () => {};
     }
 
     get display() {

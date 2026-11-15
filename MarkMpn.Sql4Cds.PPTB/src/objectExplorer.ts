@@ -58,6 +58,7 @@ export class ObjectExplorer {
         private readonly insertName: (text: string) => void,
         private readonly newQuery: (connection: ConnectionSlot, query: string) => void,
         registry: ConnectionRegistry,
+        mount = true,
     ) {
         makeObservable<this, "connections" | "selection" | "onKeyDown">(this, {
             connections: observable.shallow,
@@ -80,7 +81,7 @@ export class ObjectExplorer {
         tree.setAttribute("role", "tree");
         tree.setAttribute("aria-label", "Object Explorer");
         tree.addEventListener("keydown", this.handleKeyDown);
-        this.unmount = mountObjectExplorer(tree, this);
+        this.unmount = mount ? mountObjectExplorer(tree, this) : () => {};
         this.stopConnections = reaction(
             () => registry.all,
             (connections) => { void this.setConnections(connections).catch((error) => this.reportError(errorMessage(error))); },

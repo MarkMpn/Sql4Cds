@@ -21,9 +21,7 @@ export interface QueryTabHost {
     /** Gets the connection options to use for a PPTB connection slot */
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
-    onStateChanged(tab: QueryTab): void;
     /** Called when the execution plan node to show in the Properties panel changes */
-    onSelectedPlanNodeChanged(tab: QueryTab): void;
     /** Opens a read-only tab with the FetchXML from a plan node */
     openFetchXml(fetchXml: string): void;
     copyToClipboard(text: string): void;
@@ -48,7 +46,7 @@ export class QueryTab {
     readonly model: monaco.editor.ITextModel;
     readonly resultsElement: HTMLElement;
 
-    title: string;
+    title = "";
     readonly readOnly: boolean;
     readonly isFetchXmlPreview: boolean;
     filePath: string | null = null;
@@ -82,7 +80,9 @@ export class QueryTab {
     private readonly planResultSets = new Set<string>();
     private resultsGeneration = 0;
     private readonly changeListener: monaco.IDisposable;
-    private savedText: string;
+    private savedText = "";
+    private text = "";
+    private planSelection: ExecutionPlanNode | null = null;
     private pendingConnect: ((params: ConnectionCompleteParams) => void) | null = null;
     private hasErrors = false;
     private cancelled = false;
@@ -101,7 +101,7 @@ export class QueryTab {
 
     /** The execution plan node to show in the Properties panel, if the execution plan is currently visible */
     get selectedPlanNode(): ExecutionPlanNode | null {
-        return this.view === "plan" ? this.planView.selectedNode : null;
+        return this.view === "plan" ? this.planSelection : null;
     }
 
     /** Indicates if the execution plan is currently being shown */
@@ -114,7 +114,21 @@ export class QueryTab {
         initialText = "",
         options: { language?: string; readOnly?: boolean; isFetchXmlPreview?: boolean } = {},
     ) {
-        makeObservable<this, "rowCounts" | "textRowCount" | "endTime" | "onQueryComplete" | "updateResultSet" | "addMessage" | "clearResults">(this, {
+        makeObservable<this, "rowCounts" | "textRowCount" | "endTime" | "onQueryComplete" | "updateResultSet" | "addMessage" | "clearResults" | "text" | "savedText" | "view" | "planSelection" | "showResultsView">(this, {
+            title: observable,
+            filePath: observable,
+            text: observable,
+            savedText: observable,
+            hasResults: observable,
+            resultsMode: observable,
+            view: observable,
+            planSelection: observable.ref,
+            isDirty: computed,
+            selectedPlanNode: computed,
+            showingPlan: computed,
+            setFile: action,
+            markSaved: action,
+            showResultsView: action,
             connectionSlot: observable,
             connected: observable,
             connecting: observable,
@@ -148,6 +162,7 @@ export class QueryTab {
         // The language server splits documents on \n, so keep the model line endings consistent
         this.model.setEOL(monaco.editor.EndOfLineSequence.LF);
         this.savedText = this.model.getValue();
+        this.text = this.savedText;
 
         this.resultsElement = document.createElement("div");
         this.resultsElement.className = "query-results";
@@ -172,7 +187,7 @@ export class QueryTab {
 
         this.planView = new ExecutionPlanView(
             getNodeImageUrl,
-            () => host.onSelectedPlanNodeChanged(this),
+            action(() => { this.planSelection = this.planView.selectedNode; }),
             undefined,
             (fetchXml) => host.openFetchXml(fetchXml),
         );
@@ -211,28 +226,28 @@ export class QueryTab {
             });
 
             void host.client.openDocument(this.uri, this.model.getValue());
-            this.changeListener = this.model.onDidChangeContent(() => {
+            this.changeListener = this.model.onDidChangeContent(action(() => {
+                this.text = this.model.getValue();
                 void host.client.changeDocument(this.uri, this.model.getValue()).catch(() => {});
-                host.onStateChanged(this);
-            });
+            }));
         } else {
             this.changeListener = { dispose() {} };
         }
     }
 
     get isDirty(): boolean {
-        return this.model.getValue() !== this.savedText;
+        return this.text !== this.savedText;
     }
+
+    get content(): string { return this.text; }
 
     setFile(path: string): void {
         this.filePath = path;
         this.title = path.split(/[\\/]/).pop() || path;
-        this.host.onStateChanged(this);
     }
 
     markSaved(savedText = this.model.getValue()): void {
         this.savedText = savedText;
-        this.host.onStateChanged(this);
     }
 
     /** Connects this tab to one of the PPTB connection slots */
@@ -250,7 +265,6 @@ export class QueryTab {
             this.statusMessage = "Connecting…";
             this.statusKind = "busy";
         });
-        this.host.onStateChanged(this);
 
         try {
             const complete = new Promise<ConnectionCompleteParams>((resolve) => (this.pendingConnect = resolve));
@@ -276,7 +290,6 @@ export class QueryTab {
         } finally {
             this.pendingConnect = null;
             runInAction(() => { this.connecting = false; });
-            this.host.onStateChanged(this);
         }
     }
 
@@ -286,7 +299,6 @@ export class QueryTab {
         this.connectionSummary = undefined;
         this.statusMessage = "Not connected";
         this.statusKind = "warning";
-        this.host.onStateChanged(this);
         try {
             await this.host.client.disconnect(this.uri);
         } catch {
@@ -313,8 +325,8 @@ export class QueryTab {
 
         const resultsToText = !invocation && this.resultsMode === "text" && !estimatedPlan;
         this.showResultsView("messages");
-        this.hasResults = true;
         runInAction(() => {
+            this.hasResults = true;
             this.running = true;
             this.startTime = Date.now();
             this.endTime = 0;
@@ -324,7 +336,6 @@ export class QueryTab {
         this.hasErrors = false;
         this.cancelled = false;
         this.estimatedPlan = estimatedPlan;
-        this.host.onStateChanged(this);
 
         let querySelection: SelectionData | undefined;
         if (selection && !selection.isEmpty()) {
@@ -399,7 +410,6 @@ export class QueryTab {
         else if (this.estimatedPlan && this.planView.count > 0) this.showResultsView("plan");
         else if (this.grids.size > 0) this.showResultsView("results");
         else this.showResultsView("messages");
-        this.host.onStateChanged(this);
         this.invocationComplete?.();
     }
 
@@ -421,7 +431,6 @@ export class QueryTab {
         this.pendingConnect = null;
         this.addMessage(message, true);
         this.showResultsView("messages");
-        this.host.onStateChanged(this);
         this.invocationComplete?.();
     }
 
@@ -577,7 +586,6 @@ export class QueryTab {
     }
 
     private showResultsView(view: ResultsView): void {
-        const changed = this.view !== view;
         this.view = view;
         this.resultsPane.hidden = view !== "results";
         this.messagesPane.hidden = view !== "messages";
@@ -587,7 +595,6 @@ export class QueryTab {
             button.classList.toggle("active", key === view);
             button.setAttribute("aria-pressed", String(key === view));
         }
-        if (changed) this.host.onSelectedPlanNodeChanged(this);
     }
 
     private async clearResults(): Promise<void> {
@@ -600,6 +607,7 @@ export class QueryTab {
         this.textRowCount = 0;
         this.planResultSets.clear();
         this.planView.clear();
+        this.planSelection = null;
         this.resultsTabButtons.get("plan")!.hidden = true;
         this.showResultsView("messages");
         this.gridStatus = "";

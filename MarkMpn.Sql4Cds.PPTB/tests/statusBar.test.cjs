@@ -2,67 +2,93 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { test } = require("node:test");
+const { test, afterEach } = require("node:test");
 const ts = require("typescript");
 const { observable, autorun, runInAction } = require("mobx");
+const { JSDOM } = require("jsdom");
+const dom = new JSDOM("<!doctype html><html><body></body></html>");
+global.window = dom.window;
+global.document = dom.window.document;
+global.Node = dom.window.Node;
+global.Element = dom.window.Element;
+const { flushSync } = require("react-dom");
+require("mobx-react-lite").observerBatching(callback => flushSync(callback));
+const cleanups = [];
+afterEach(() => {
+    flushSync(() => { for (const cleanup of cleanups.splice(0)) cleanup(); });
+    document.body.replaceChildren();
+    delete window.toolboxAPI;
+});
+
+Object.defineProperty(dom.window.Element.prototype, "classes", { get() { return new Set(this.classList); } });
+Object.defineProperty(dom.window.Element.prototype, "events", { get() {
+    return new Proxy({}, { get: (_, name) => (options = {}) => {
+        const event = new dom.window.Event(name, { bubbles: true, cancelable: true });
+        for (const [key, value] of Object.entries(options)) Object.defineProperty(event, key, { value });
+        flushSync(() => this.dispatchEvent(event));
+        return new Promise(resolve => setImmediate(resolve));
+    } });
+} });
+dom.window.HTMLElement.prototype.scrollIntoView = function() {};
+dom.window.HTMLDialogElement.prototype.showModal = function() { this.open = true; };
+dom.window.HTMLCollection.prototype.find = Array.prototype.find;
+dom.window.HTMLCollection.prototype.map = Array.prototype.map;
+dom.window.HTMLCollection.prototype.filter = Array.prototype.filter;
 
 class Element {
     constructor() {
-        this.children = [];
-        this.dataset = {};
-        this.textContent = "";
-        this.attributes = {};
-        this.events = {};
-        this.classes = new Set();
-        this.classList = {
-            toggle: (name, value) => value ? this.classes.add(name) : this.classes.delete(name),
-            add: (name) => this.classes.add(name),
-            remove: (name) => this.classes.delete(name),
-        };
+        return document.createElement("div");
     }
-    append(...children) { this.children.push(...children); }
-    appendChild(child) { this.children.push(child); }
-    setAttribute(name, value) { this.attributes[name] = value; }
-    contains() { return false; }
-    replaceChildren(...children) { this.children = children; }
-    addEventListener(name, handler) { this.events[name] = handler; }
-    focus() { this.focused = true; }
-    querySelector() { return this.children[0]; }
-    querySelectorAll() { return this.children.filter(child => !child.disabled); }
-    closest() { return null; }
-    remove() {}
 }
 
 function load(relativePath, dependencies, globals = {}, extra = "") {
     const filename = path.resolve(__dirname, "..", "src", relativePath);
     const module = { exports: {} };
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
     vm.runInNewContext(code + extra, {
         module, exports: module.exports, require: (name) => {
-            assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
-            return dependencies[name];
+            if (name in dependencies) return dependencies[name];
+            if (!name.startsWith(".")) return require(name);
+            assert.fail(`Unexpected dependency: ${name}`);
         },
         URL, Error, console, ...globals,
     }, { filename });
     return module.exports;
 }
 
-function setup(pinned = true, renderConnections = false) {
+function setup(pinned = true) {
+    flushSync(() => { for (const cleanup of cleanups.splice(0)) cleanup(); });
     const logs = [];
     let now = 1000;
-    const elements = new Map();
-    const document = {
-        events: {},
-        addEventListener(name, handler) { this.events[name] = handler; },
-        createElement: () => new Element(),
-        createTextNode: (text) => ({ textContent: text }),
-        getElementById: (id) => {
-            if (!elements.has(id)) elements.set(id, new Element());
-            return elements.get(id);
-        },
-    };
+    const document = dom.window.document;
+    const window = dom.window;
+    document.body.replaceChildren();
+    delete window.toolboxAPI;
+    for (const target of [window, document]) {
+        const add = target.addEventListener;
+        target.addEventListener = function(name, callback, options) {
+            add.call(this, name, callback, options);
+            cleanups.push(() => {
+                if (name === "pagehide" && options?.once) {
+                    if (app.editor) app.editor.dispose ??= () => {};
+                    callback(new window.Event("pagehide"));
+                }
+                this.removeEventListener(name, callback, options);
+            });
+        };
+        cleanups.push(() => { target.addEventListener = add; });
+    }
+    document.events = new Proxy({}, { get: (_, name) => (options = {}) => {
+        const event = new window.Event(name, { bubbles: true, cancelable: true });
+        for (const [key, value] of Object.entries(options)) Object.defineProperty(event, key, { value });
+        flushSync(() => document.dispatchEvent(event));
+    } });
+    const element = document.createElement("div");
+    element.id = "app";
+    document.body.appendChild(element);
+    const elements = { get: (id) => document.getElementById(id) };
     const listeners = new Map();
     const executions = [];
     let clientEvents;
@@ -93,11 +119,12 @@ function setup(pinned = true, renderConnections = false) {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
     const invocation = load("mcpInvocation.ts", {}, { TextEncoder });
-    const window = { addEventListener() {} };
-    const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: Element, Element });
+    const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: dom.window.Node, Element: dom.window.Element });
     const propertiesPanels = [];
     const globals = {
-        document, window, Node: Element, Element,
+        document, window, Node: dom.window.Node, Element: dom.window.Element,
+        ResizeObserver: class { observe() {} disconnect() {} },
+        setTimeout, clearTimeout,
         console: {
             error: (message) => logs.push({ type: "error", message }),
             warn: (message) => logs.push({ type: "warning", message }),
@@ -133,21 +160,22 @@ function setup(pinned = true, renderConnections = false) {
         "./dialogs": load("dialogs.ts", { "./lsp/protocol": protocol }, globals),
         "./statusBar": load("statusBar.ts", {
             "mobx": require("mobx"),
-            "./statusBarView": { mountStatusBar: (_element, statusBar) => autorun(() => {
-                const display = statusBar.display;
-                for (const [id, value] of Object.entries({
-                    "status-text": display.text, "status-progress": display.progress,
-                    "status-domain": display.domain, "status-lock": display.lock,
-                    "status-user": display.user, "status-database": display.database,
-                    "status-elapsed": display.elapsed, "status-rows": display.rows, "status-icon": display.icon,
-                })) document.getElementById(id).textContent = value;
-                document.getElementById("status-message").title = display.text;
-                document.getElementById("status-icon").className = `status-icon ${display.kind}`;
-                document.getElementById("status-server").title = display.serverTitle;
-            }) },
+            "./statusBarView": load("statusBarView.tsx", {}, globals),
         }, globals),
-        "./tabStrip": load("tabStrip.ts", {}, globals),
-        "./toolbarMenu": load("toolbarMenu.ts", {}, globals),
+        "./appView": {
+            mountApp: (element, app) => {
+                const unmountRoot = load("appView.tsx", {
+                    "./toolbar": load("toolbar.tsx", {}, globals),
+                    "./tabStripView": load("tabStripView.tsx", {}, globals),
+                    "./objectExplorerView": { ExplorerTree: () => null },
+                    "./statusBarView": load("statusBarView.tsx", {}, globals),
+                }, globals).mountApp(element, app);
+                let mounted = true;
+                const unmount = () => { if (mounted) { mounted = false; unmountRoot(); } };
+                cleanups.push(unmount);
+                return unmount;
+            },
+        },
         "./query/queryTab": {},
         "./objectExplorer": { ObjectExplorer: class {
             snapshots = [];
@@ -155,6 +183,7 @@ function setup(pinned = true, renderConnections = false) {
                 autorun(() => this.snapshots.push(registry.all.map(entry => ({ slot: entry.slot, status: entry.status }))));
             }
             engineStopped() { this.stopped = true; }
+            async dispose() {}
         } },
         "./pinnablePane": pinnablePane,
         "./propertiesPanel": { PropertiesPanel: class {
@@ -167,11 +196,15 @@ function setup(pinned = true, renderConnections = false) {
         "./mcpInvocation": invocation,
         "./session": { loadSession: async () => null, saveSession: async () => {} },
     }, globals, "\nexports.App = App;");
-    const app = new App();
-    app.settings = { objectExplorerPinned: pinned, batchSize: 100, includeActualPlan: false };
-    app.ready = true;
-    app.renderTabs = () => {};
-    if (!renderConnections) app.renderConnectionList = () => {};
+    let app;
+    flushSync(() => {
+        app = new App();
+        runInAction(() => {
+            app.settings = { objectExplorerPinned: pinned, batchSize: 100, includeActualPlan: false };
+            app.ready = true;
+            app.editorReady = true;
+        });
+    });
     const grids = [];
     const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
@@ -249,6 +282,169 @@ function setup(pinned = true, renderConnections = false) {
     return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, setNow: (value) => { now = value; } };
 }
 
+test("the React shell follows the active query's connection and execution state without refresh calls", () => {
+    const { app, registry, createTab, elements } = setup();
+    const first = createTab().tab;
+    const second = createTab().tab;
+    runInAction(() => {
+        registry.all = [
+            { slot: 0, connection: { url: "https://dev.example" }, options: { connectionName: "Dev" }, status: "connected" },
+            { slot: 1, connection: { url: "https://test.example" }, options: { connectionName: "Test" }, status: "connected" },
+        ];
+        first.connectionSlot = 0;
+        first.connected = true;
+        second.connectionSlot = 1;
+        second.connected = true;
+        second.resultsMode = "text";
+        app.tabs.push(first, second);
+        app.activeTab = first;
+    });
+    const firstTabElement = elements.get("tab-strip").children[0];
+    assert.equal(elements.get("connection-select").value, "0");
+    assert.equal(elements.get("btn-run").disabled, false);
+    assert.equal(elements.get("btn-results-grid").getAttribute("aria-pressed"), "true");
+    runInAction(() => { first.running = true; });
+    assert.equal(elements.get("btn-run").disabled, true);
+    assert.equal(elements.get("btn-cancel").disabled, false);
+    assert.equal(elements.get("connection-select").disabled, true);
+    assert.equal(firstTabElement.classList.contains("running"), true);
+    runInAction(() => { app.activeTab = second; });
+    assert.equal(elements.get("connection-select").value, "1");
+    assert.equal(elements.get("btn-run").disabled, false);
+    assert.equal(elements.get("btn-cancel").disabled, true);
+    assert.equal(elements.get("btn-results-text").getAttribute("aria-pressed"), "true");
+    runInAction(() => { first.running = false; });
+    assert.equal(elements.get("connection-select").value, "1");
+    assert.equal(elements.get("tab-strip").children[0], firstTabElement);
+    assert.equal("onStateChanged" in app, false);
+    assert.equal("updateToolbar" in app, false);
+    assert.equal("renderConnectionList" in app, false);
+});
+
+test("dirty tabs, Save enablement and close protection react to edits, undo and asynchronous saves", async () => {
+    const { app, createTab, elements, window } = setup();
+    const protection = [];
+    window.toolboxAPI = {
+        preventClose: async () => protection.push("prevent"),
+        releasePreventClose: async () => protection.push("release"),
+        utils: { showNotification: async () => {} },
+    };
+    const { tab } = createTab();
+    tab.setFile("C:\\queries\\saved.sql");
+    runInAction(() => { app.settings = { ...app.settings, rememberSession: false }; app.tabs.push(tab); });
+    const tabElement = elements.get("tab-strip").children[0];
+    assert.equal(elements.get("btn-save").disabled, true);
+    tab.model.setValue("SELECT 1");
+    await app.closePreventionQueue;
+    assert.equal(tabElement.classList.contains("modified"), true);
+    assert.equal(elements.get("btn-save").disabled, false);
+    assert.deepEqual(protection, ["prevent"]);
+    tab.model.setValue("");
+    await app.closePreventionQueue;
+    assert.equal(tabElement.classList.contains("modified"), false);
+    assert.equal(elements.get("btn-save").disabled, true);
+    assert.deepEqual(protection, ["prevent", "release"]);
+    tab.model.setValue("SELECT 1");
+    let finishWrite;
+    const writes = [];
+    window.toolboxAPI.fileSystem = {
+        writeText: async (path, text) => {
+            writes.push([path, text]);
+            await new Promise(resolve => { finishWrite = resolve; });
+        },
+    };
+    const saving = app.saveTab(tab);
+    tab.model.setValue("SELECT 2");
+    finishWrite();
+    assert.equal(await saving, true);
+    assert.deepEqual(writes, [["C:\\queries\\saved.sql", "SELECT 1"]]);
+    assert.equal(tab.isDirty, true, "Saving an older snapshot must not mark newer edits saved");
+    assert.equal(elements.get("btn-save").disabled, false);
+    tab.model.setValue("SELECT 1");
+    assert.equal(tab.isDirty, false);
+    assert.equal(tabElement.classList.contains("modified"), false);
+    assert.equal(elements.get("btn-save").disabled, true);
+    tab.setFile("C:\\queries\\renamed.sql");
+    assert.equal(tabElement.querySelector(".tab-label").textContent, "renamed.sql");
+});
+
+test("React host wrappers preserve editor and per-tab result widgets across updates and tab switches", () => {
+    const { app, createTab, elements, document } = setup();
+    const first = createTab().tab;
+    const second = createTab().tab;
+    const editorElement = elements.get("editor");
+    const editorWidget = document.createElement("textarea");
+    const gridWidget = document.createElement("table");
+    editorElement.appendChild(editorWidget);
+    first.resultsElement.appendChild(gridWidget);
+    runInAction(() => {
+        app.tabs.push(first, second);
+        app.activeTab = first;
+        first.hasResults = true;
+    });
+    const firstHost = first.resultsElement.parentElement;
+    const secondHost = second.resultsElement.parentElement;
+    assert.equal(firstHost.hidden, false);
+    assert.equal(secondHost.hidden, true);
+    assert.equal(elements.get("results-host").hidden, false);
+    runInAction(() => { first.title = "Renamed"; first.running = true; app.activeTab = second; });
+    assert.equal(first.resultsElement.parentElement, firstHost);
+    assert.equal(firstHost.hidden, true);
+    assert.equal(secondHost.hidden, false);
+    assert.equal(elements.get("results-host").hidden, true);
+    assert.equal(gridWidget.parentElement, first.resultsElement);
+    assert.equal(editorElement, elements.get("editor"));
+    assert.equal(editorElement.firstChild, editorWidget);
+    runInAction(() => { app.activeTab = first; app.tabs.splice(1, 1); });
+    assert.equal(first.resultsElement.parentElement, firstHost);
+    assert.equal(firstHost.hidden, false);
+    assert.equal(second.resultsElement.parentElement, null);
+});
+
+test("split menus react to disabled state, retain keyboard navigation and do not reopen after execution", () => {
+    const { createTab, elements, document } = setup();
+    const { tab } = createTab();
+    runInAction(() => { tab.connected = true; });
+    const toggle = elements.get("btn-convert-menu");
+    const menu = elements.get("convert-menu");
+    toggle.events.keydown({ key: "ArrowDown" });
+    assert.equal(menu.hidden, false);
+    assert.equal(document.activeElement, elements.get("btn-convert-fetchxml"));
+    menu.events.keydown({ key: "End" });
+    assert.equal(document.activeElement, elements.get("btn-convert-m"));
+    menu.events.keydown({ key: "ArrowDown" });
+    assert.equal(document.activeElement, elements.get("btn-convert-fetchxml"));
+    runInAction(() => { tab.running = true; });
+    assert.equal(menu.hidden, true);
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    runInAction(() => { tab.running = false; });
+    assert.equal(menu.hidden, true);
+    toggle.events.click();
+    assert.equal(menu.hidden, false);
+    menu.events.keydown({ key: "Escape" });
+    assert.equal(menu.hidden, true);
+    assert.equal(document.activeElement, toggle);
+});
+
+test("unloading the React shell removes menus, stops the clock and disposes the editor and reactions", () => {
+    const { app, createTab, elements, timers, window, document } = setup();
+    const { tab } = createTab();
+    let disposed = 0;
+    app.editor = { dispose: () => disposed++ };
+    runInAction(() => { app.tabs.push(tab); tab.running = true; });
+    elements.get("btn-tab-list").events.click();
+    assert.ok(document.querySelector(".tab-list-menu"));
+    assert.equal(timers.size, 1);
+    flushSync(() => window.dispatchEvent(new window.Event("pagehide")));
+    assert.equal(disposed, 1);
+    assert.equal(document.querySelector(".tab-list-menu"), null);
+    assert.equal(elements.get("app").childElementCount, 0);
+    assert.equal(timers.size, 0);
+    runInAction(() => { tab.running = false; tab.title = "Closed"; tab.running = true; });
+    assert.equal(timers.size, 0);
+    assert.equal(elements.get("app").childElementCount, 0);
+});
+
 test("server warnings and errors are logged and shown as PPTB notifications", async () => {
     const { clientEvents, window, logs } = setup();
     const notifications = [];
@@ -275,7 +471,7 @@ test("Messages tab line numbers follow the showMessageLineNumbers preference and
 
     app.settings.showMessageLineNumbers = true;
     const { tab: tabOn } = createTab();
-    const paneOn = tabOn.resultsElement.children.find(child => child.className === "messages-pane");
+    const paneOn = tabOn.resultsElement.querySelector(".messages-pane");
     assert.equal(paneOn.classes.has("show-line-numbers"), true);
 });
 
@@ -500,7 +696,6 @@ test("connection dropdown shows only the registered Object Explorer name", () =>
         { slot: 0, connection: { name: "Old alternate", url: "https://org.crm.dynamics.com" }, options: { connectionName: "Contoso Dev" } },
         { slot: 1, connection: { name: "Old alternate", url: "https://org2.crm.dynamics.com" }, options: { connectionName: "Contoso Dev_2" }, error: "Connection failed" },
     ];
-    Object.getPrototypeOf(app).renderConnectionList.call(app);
     const options = elements.get("connection-select").children;
     assert.equal(options[1].textContent, "Contoso Dev");
     assert.equal(options[2].textContent, "Contoso Dev_2 ⚠");
@@ -509,11 +704,9 @@ test("connection dropdown shows only the registered Object Explorer name", () =>
 
 test("connection dropdown disables connecting names and enables them on registry completion", () => {
     const { app, registry, elements } = setup(true, true);
-    app.renderConnectionList = Object.getPrototypeOf(app).renderConnectionList.bind(app);
     runInAction(() => { registry.all = [
         { slot: 0, connection: { url: "https://org.crm.dynamics.com" }, options: { connectionName: "Dev" }, status: "connecting" },
     ].map(entry => observable(entry)); });
-    app.renderConnectionList();
     let option = elements.get("connection-select").children[1];
     assert.equal(option.textContent, "Dev (Connecting\u2026)");
     assert.equal(option.disabled, true);
@@ -531,7 +724,6 @@ test("startup publishes connecting names before engine startup and registration 
     app.applyTheme = async () => {};
     for (const method of ["createEditor", "bindToolbar", "bindSplitter", "bindObjectExplorer", "bindProperties"])
         app[method] = () => {};
-    app.tabStrip.bind = () => {};
     app.restoreSession = async () => false;
     app.openLaunchQuery = async () => false;
     app.addTab = () => {};
@@ -583,19 +775,20 @@ test("Object Explorer pin collapses to a side tab, opens as a flyout and pins ba
     const tree = elements.get("explorer-tree");
     const item = new Element();
     tree.appendChild(item);
-    pane.style = { width: "320px" };
+    pane.style.width = "320px";
+    item.tabIndex = 0;
     await pin.events.click();
     assert.equal(pane.hidden, true);
     assert.equal(splitter.hidden, true);
     assert.equal(tab.hidden, false);
-    assert.equal(tab.focused, true);
-    assert.equal(pin.attributes["aria-label"], "Pin Object Explorer");
+    assert.equal(document.activeElement, tab);
+    assert.equal(pin.getAttribute("aria-label"), "Pin Object Explorer");
     tab.events.click();
     assert.equal(pane.hidden, false);
     assert.equal(pane.classes.has("auto-hide"), true);
     assert.equal(tab.hidden, false, "The side tab keeps its layout space while the flyout covers it");
-    assert.equal(tab.attributes["aria-expanded"], "true");
-    assert.equal(item.focused, true);
+    assert.equal(tab.getAttribute("aria-expanded"), "true");
+    assert.equal(document.activeElement, item);
     const menuItem = new Element();
     menuItem.closest = () => new Element();
     document.events.focusin({ target: menuItem });
@@ -616,7 +809,7 @@ test("Object Explorer pin collapses to a side tab, opens as a flyout and pins ba
     assert.equal(pane.classes.has("auto-hide"), false);
     assert.equal(splitter.hidden, false);
     assert.equal(tab.hidden, true);
-    assert.equal(pin.attributes["aria-label"], "Unpin Object Explorer");
+    assert.equal(pin.getAttribute("aria-label"), "Unpin Object Explorer");
     document.events.pointerdown({ target: new Element() });
     assert.equal(pane.hidden, false, "Pinned pane remains docked");
     assert.equal(pane.style.width, "320px");
@@ -779,7 +972,6 @@ test("background tabs do not overwrite the active tab and switching restores its
     assert.equal(timers.size, 0);
 
     app.activeTab = first.tab;
-    app.updateToolbar();
     setNow(4000);
     timers.values().next().value();
     assert.equal(elements.get("status-rows").textContent, "42 rows");
@@ -811,8 +1003,8 @@ test("insecure connections are not shown as secure and disconnect clears connect
 test("grid elements no longer contain their own status bars", () => {
     const source = fs.readFileSync(path.resolve(__dirname, "..", "src", "query", "resultsGrid.ts"), "utf8");
     assert.doesNotMatch(source, /grid-status|statusBar/);
-    const html = fs.readFileSync(path.resolve(__dirname, "..", "src", "index.html"), "utf8");
-    assert.equal((html.match(/class="status-bar"/g) ?? []).length, 1);
+    setup();
+    assert.equal(document.querySelectorAll(".status-bar").length, 1);
 });
 
 function planSummary(id, rowCount = 0) {
@@ -841,7 +1033,7 @@ test("estimated plans are requested without running the query and are shown in t
     assert.deepEqual(planViews[0].plans, [samplePlan]);
     assert.equal(planButton.hidden, false);
     assert.equal(tab.showingPlan, true);
-    assert.equal(planButton.attributes["aria-pressed"], "true");
+    assert.equal(planButton.getAttribute("aria-pressed"), "true");
     assert.equal(elements.get("status-text").textContent, "Estimated execution plan generated");
 
     await tab.execute(null, true);
@@ -954,7 +1146,7 @@ test("Properties pane pins like Object Explorer and saves its own setting", asyn
     await pin.events.click();
     assert.equal(pane.classes.has("auto-hide"), false);
     assert.deepEqual(savedSettings[0], { objectExplorerPinned: true, batchSize: 100, includeActualPlan: false, propertiesPinned: true });
-    assert.equal(pin.attributes["aria-label"], "Unpin Properties");
+    assert.equal(pin.getAttribute("aria-label"), "Unpin Properties");
 });
 
 test("the Properties pin preference defaults to unpinned", async () => {
@@ -973,11 +1165,10 @@ test("Include Actual Plan is saved in user settings and applies to every query t
     const { app, createTab, elements, executions, savedSettings } = setup();
     app.bindToolbar();
     const button = elements.get("btn-actual-plan");
-    app.updateToolbar();
-    assert.equal(button.attributes["aria-pressed"], "false");
+    assert.equal(button.getAttribute("aria-pressed"), "false");
 
     await button.events.click();
-    assert.equal(button.attributes["aria-pressed"], "true");
+    assert.equal(button.getAttribute("aria-pressed"), "true");
     assert.deepEqual(savedSettings.at(-1), { objectExplorerPinned: true, batchSize: 100, includeActualPlan: true });
 
     const { tab } = createTab();
@@ -986,13 +1177,12 @@ test("Include Actual Plan is saved in user settings and applies to every query t
     assert.equal(executions.at(-1).includeActualExecutionPlanXml, true);
 
     await button.events.click();
-    assert.equal(button.attributes["aria-pressed"], "false");
+    assert.equal(button.getAttribute("aria-pressed"), "false");
     assert.equal(savedSettings.at(-1).includeActualPlan, false);
 });
 
 test("query tabs track dirty state, saved content, undo-to-saved text, and file names", () => {
     const { app, createTab } = setup();
-    app.onStateChanged = () => {};
     const { tab } = createTab();
 
     assert.equal(tab.isDirty, false);
@@ -1034,44 +1224,41 @@ test("the Include Actual Plan preference defaults to off", async () => {
 });
 
 test("toolbar commands have the requested order, accessible icon buttons, split menus and credit link", () => {
-    const html = fs.readFileSync(path.resolve(__dirname, "..", "src", "index.html"), "utf8");
-    const toolbar = html.slice(html.indexOf('<div class="toolbar"'), html.indexOf('<div class="tool-content"'));
+    setup();
+    const toolbar = document.querySelector(".toolbar");
     const commands = ["connection-select", "btn-new", "btn-open", "btn-save", "btn-run", "btn-cancel",
         "btn-estimated-plan", "btn-edit-fetchxml", "btn-convert", "btn-actual-plan", "btn-results-text",
         "btn-results-grid", "btn-format", "btn-settings"];
-    const actual = [...toolbar.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]).filter(id => commands.includes(id));
+    const actual = Array.from(toolbar.querySelectorAll("[id]"), element => element.id).filter(id => commands.includes(id));
     assert.deepEqual(actual, commands);
     for (const id of ["btn-open", "btn-save", "btn-cancel", "btn-estimated-plan", "btn-edit-fetchxml",
         "btn-actual-plan", "btn-results-text", "btn-results-grid"]) {
-        const button = new RegExp(`<button id="${id}"([^>]*)>([\\s\\S]*?)<\\/button>`).exec(toolbar);
-        assert.match(button[1], /aria-label="/);
-        assert.match(button[1], /icon-only/);
-        assert.equal(button[2].replace(/<svg[\s\S]*?<\/svg>/, "").trim(), "");
+        const button = toolbar.querySelector(`#${id}`);
+        assert.ok(button.getAttribute("aria-label"));
+        assert.ok(button.classList.contains("icon-only"));
+        assert.equal(button.textContent.trim(), "");
     }
     for (const id of ["save-menu", "convert-menu", "format-menu"])
-        assert.match(toolbar, new RegExp(`id="${id}"[^>]*role="menu"[^>]*hidden`));
-    assert.match(toolbar, /href="https:\/\/markcarrington.dev\/sql-4-cds\/"[^>]*>SQL 4 CDS by Mark Carrington<\/a>/);
+        assert.equal(toolbar.querySelector(`#${id}[role="menu"]`).hidden, true);
+    assert.equal(toolbar.querySelector("a").href, "https://markcarrington.dev/sql-4-cds/");
+    assert.equal(toolbar.querySelector("a").textContent, "SQL 4 CDS by Mark Carrington");
 });
 
 test("toolbar enables transformations only for suitable tabs and keeps FetchXML Studio in place", () => {
     const { app, createTab, elements } = setup();
     const { tab } = createTab();
-    app.updateToolbar();
     assert.equal(elements.get("btn-format").disabled, false);
     assert.equal(elements.get("btn-convert").disabled, true);
     assert.equal(elements.get("btn-display-names").disabled, true);
     assert.equal(elements.get("btn-edit-fetchxml").disabled, true);
     assert.notEqual(elements.get("btn-edit-fetchxml").hidden, true);
     runInAction(() => { tab.connected = true; });
-    app.updateToolbar();
     assert.equal(elements.get("btn-convert").disabled, false);
     assert.equal(elements.get("btn-display-names").disabled, false);
     runInAction(() => { tab.running = true; });
-    app.updateToolbar();
     assert.equal(elements.get("btn-convert").disabled, true);
     assert.equal(elements.get("btn-format").disabled, true);
     createTab({ language: "xml", readOnly: true, isFetchXmlPreview: true });
-    app.updateToolbar();
     assert.equal(elements.get("btn-edit-fetchxml").disabled, false);
     assert.equal(elements.get("btn-results-text").disabled, true);
     assert.equal(elements.get("btn-format").disabled, true);
@@ -1082,36 +1269,31 @@ test("FetchXML Studio can edit the selected FetchXML plan node", () => {
     const { app, createTab, elements, planViews } = setup();
     createTab();
     const fetchXml = '<fetch><entity name="account" /></fetch>';
-    planViews[0].selectedNode = { name: "FetchXML Scan", nodeType: "FetchXmlScan", properties: [{ name: "FetchXML", value: fetchXml }] };
-    app.activeTab.view = "plan";
-    app.updateProperties();
+    planViews[0].select({ name: "FetchXML Scan", nodeType: "FetchXmlScan", properties: [{ name: "FetchXML", value: fetchXml }] });
+    runInAction(() => { app.activeTab.view = "plan"; });
     assert.equal(app.fetchXmlForEditing, fetchXml);
     assert.equal(elements.get("btn-edit-fetchxml").disabled, false);
-    planViews[0].selectedNode = { name: "Sort", nodeType: "Sort" };
-    app.updateProperties();
+    planViews[0].select({ name: "Sort", nodeType: "Sort" });
     assert.equal(elements.get("btn-edit-fetchxml").disabled, true);
 });
 
 test("split menus support keyboard navigation, Escape and outside dismissal", () => {
-    const { app, elements, document } = setup();
+    const { createTab, elements, document } = setup();
+    createTab();
     const toggle = elements.get("btn-save-menu");
     const menu = document.getElementById("save-menu");
     const saveAs = elements.get("btn-save-as");
-    menu.appendChild(saveAs);
-    menu.hidden = true;
-    const { bindToolbarMenu } = load("toolbarMenu.ts", {}, { document, Node: Element, Element });
-    bindToolbarMenu(toggle, menu);
     toggle.events.keydown({ key: "ArrowDown", preventDefault() {} });
     assert.equal(menu.hidden, false);
-    assert.equal(toggle.attributes["aria-expanded"], "true");
-    assert.equal(saveAs.focused, true);
+    assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(document.activeElement, saveAs);
     menu.events.keydown({ key: "Escape", preventDefault() {} });
     assert.equal(menu.hidden, true);
-    assert.equal(toggle.focused, true);
+    assert.equal(document.activeElement, toggle);
     toggle.events.click();
     document.events.pointerdown({ target: new Element() });
     assert.equal(menu.hidden, true);
-    assert.equal(toggle.attributes["aria-expanded"], "false");
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
 });
 
 test("received FetchXML uses the inherited connection and opens editable SQL without executing it", async () => {
@@ -1364,11 +1546,10 @@ test("conversion remembers the selected target and opens read-only preview conte
     const calls = [];
     client.transformQuery = async (...args) => { calls.push(args); return ["let Source = 1 in Source"]; };
     app.convertTarget = "m";
-    app.updateToolbar();
     await app.transformQuery("convert");
     assert.equal(calls[0][2], "m");
     assert.deepEqual(previews[0], ["let Source = 1 in Source", "powerquery", "Power BI (M)"]);
-    assert.equal(elements.get("btn-convert-m").attributes["aria-checked"], "true");
+    assert.equal(elements.get("btn-convert-m").getAttribute("aria-checked"), "true");
     assert.equal(elements.get("btn-convert").title, "Convert to Power BI (M)");
 });
 
@@ -1386,7 +1567,7 @@ test("Results to Text is per-tab, remembered for new tabs and asks the language 
     client.executeDocumentSelection = async (_uri, _selection, _planOptions, resultsToText) => { requests.push(resultsToText); };
     const { tab, events } = createTab();
     app.setResultsMode("text");
-    assert.equal(elements.get("btn-results-text").attributes["aria-pressed"], "true");
+    assert.equal(elements.get("btn-results-text").getAttribute("aria-pressed"), "true");
     await tab.connect(0);
     await tab.execute(null);
     events.message({ message: { message: "Name    Value\n------- -----\nContoso NULL ", isError: false, rowCount: 1 } });

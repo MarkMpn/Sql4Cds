@@ -730,6 +730,14 @@ body.resizing-pane {
     display: none;
 }
 
+.query-result-host {
+    display: contents;
+}
+
+.query-result-host[hidden] {
+    display: none;
+}
+
 .query-results {
     flex: 1;
     display: flex;

@@ -24,19 +24,21 @@
 
 ### Client UI modules
 
-- [app.ts](./src/app.ts) owns startup and coordinates the editor, query-tab lifecycle, connections, settings, and session persistence.
+- [app.ts](./src/app.ts) owns startup and coordinates the editor, query-tab lifecycle, connections, settings, and session persistence. Tab membership, the active query, settings, and transformation state are observable; command enablement is computed. Reactions handle persistence, close protection, and plan properties instead of query-to-application change notifications.
+- [appView.tsx](./src/appView.tsx) mounts a single React root and renders the application shell. Stable, keyed host wrappers preserve Monaco, per-query results, and imperative pane/widget instances across observable updates and tab switches. Object Explorer and the status bar render directly in this root, not as nested React roots.
+- [queryTab.ts](./src/query/queryTab.ts) owns observable query metadata, connection/execution state, result mode/visibility, and plan selection. Monaco content events update an observable text reference; dirty state compares it with the saved snapshot, including undo-to-saved and edits made during an asynchronous save. Monaco models, result grids, and execution-plan widgets are not deeply observed.
 - [connections.ts](./src/connections.ts) exposes a MobX-observable connection list and observable registration status/error on each slot. Connection options and host connection objects retain their identity rather than being deeply observed.
 - [objectExplorer.ts](./src/objectExplorer.ts) owns observable tree nodes, selection, and session/RPC lifecycle. Nodes track `unloaded`, `loading`, `loaded`, and `error` states independently of expansion, so collapsing a pending request does not discard its result. A MobX reaction reconciles connection membership and closes removed sessions.
 - [objectExplorerView.tsx](./src/objectExplorerView.tsx) renders the tree with React and per-node `observer` components. Connection, loading, error, and children changes update the view without explicit render notifications. Existing context-menu commands remain in the controller.
-- [tabStrip.ts](./src/tabStrip.ts) renders tabs and owns tab scrolling and the open-query menu, including focus and dismissal handling. It requests tab activation and closing through callbacks; `App` retains ownership of the tabs.
+- [tabStripView.tsx](./src/tabStripView.tsx) observes tabs directly and owns tab scrolling and the open-query menu, including focus and dismissal handling. Stable keys preserve tab DOM identity. Its resize observer and menu listeners are removed on unmount.
 - [statusBar.ts](./src/statusBar.ts) exposes observable application status (active query, engine readiness, startup/failure messages, and progress). Its computed display reads observable query status, connection details, and row counts directly; query notifications do not need a separate status-change callback. A clock ticks only while the foreground query is running and is disposed on unload.
 - [statusBarView.tsx](./src/statusBarView.tsx) renders the status bar with a React `observer`, retaining the existing layout, IDs, icons, tooltips, and accessible status message. Query timestamps and result counts remain owned by [queryTab.ts](./src/query/queryTab.ts); elapsed time is derived from those timestamps rather than accumulated timer ticks.
 - [dialogs.ts](./src/dialogs.ts) provides execution-confirmation and unsaved-query dialogs. Confirmation sequencing remains in `App`.
-- [toolbarMenu.ts](./src/toolbarMenu.ts) binds split-button menu opening, dismissal, and keyboard navigation. Toolbar commands and enablement remain in `App`.
+- [toolbar.tsx](./src/toolbar.tsx) observes the active query, connection registry, settings, and computed command enablement. The connection dropdown is controlled by the active query's slot; buttons and split-menu choices update without explicit toolbar refresh calls. Menu opening, keyboard navigation, and dismissal are local React state.
 
-React is mounted inside Object Explorer and the status bar; the rest of the client retains its existing DOM and CSS. The connection dropdown bridges to the observable registry with `autorun`. Reactions and React roots are disposed when the tool unloads.
+React owns the shell, toolbar, tabs, Object Explorer, and status bar. Monaco, results grids, messages, execution plans, properties, and pin/resize adapters retain their imperative implementations behind stable host elements. App reactions, pane listeners, keyboard handlers, resize observers, the status clock, and the React root are disposed when the tool unloads.
 
-Run `npm test` for client regression tests and `npm run build` for type checking and the PPTB-compatible single-IIFE production bundle. Object Explorer and status-bar view tests use jsdom and real React DOM rendering; other client tests retain their existing lightweight fixtures.
+Run `npm test` for client regression tests and `npm run build` for type checking and the PPTB-compatible single-IIFE production bundle. Application, tab-strip, Object Explorer, and status-bar view tests use jsdom and real React DOM rendering; other client tests retain their existing lightweight fixtures.
 
 ### Compact query notifications
 

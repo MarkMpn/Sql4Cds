@@ -8,27 +8,28 @@ import { ObjectExplorer } from "./objectExplorer";
 import { PinnablePane } from "./pinnablePane";
 import { PropertiesPanel } from "./propertiesPanel";
 import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
-import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
+import { defaultSettings, loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
 import { loadSession, saveSession, type SessionState, type SessionTab } from "./session";
 import { showConfirmation, showUnsavedChangesDialog } from "./dialogs";
 import { StatusBar, StatusBarState } from "./statusBar";
-import { TabStrip } from "./tabStrip";
-import { bindToolbarMenu } from "./toolbarMenu";
-import { action, autorun, runInAction } from "mobx";
+import { mountApp } from "./appView";
+import { action, computed, makeObservable, observable, reaction, runInAction } from "mobx";
 
 const DEFAULT_QUERY = "";
 
-class App implements QueryTabHost {
+export class App implements QueryTabHost {
     readonly client: Sql4CdsClient;
-    private readonly connections: ConnectionRegistry;
-    private readonly objectExplorer: ObjectExplorer;
-    private readonly tabs: QueryTab[] = [];
+    readonly connections: ConnectionRegistry;
+    readonly objectExplorer: ObjectExplorer;
+    readonly tabs: QueryTab[] = [];
+    viewReady = false;
+    editorReady = false;
     private readonly statusState = new StatusBarState();
-    private get activeTab(): QueryTab | null { return this.statusState.activeTab; }
-    private set activeTab(tab: QueryTab | null) { runInAction(() => { this.statusState.activeTab = tab; }); }
+    get activeTab(): QueryTab | null { return this.statusState.activeTab; }
+    set activeTab(tab: QueryTab | null) { runInAction(() => { this.statusState.activeTab = tab; }); }
     private editor!: monaco.editor.IStandaloneCodeEditor;
-    private settings!: Sql4CdsSettings;
+    private settings: Sql4CdsSettings = { ...defaultSettings };
     private get ready(): boolean { return this.statusState.ready; }
     private set ready(ready: boolean) { runInAction(() => { this.statusState.ready = ready; }); }
     private confirmationQueue: Promise<void> = Promise.resolve();
@@ -42,69 +43,53 @@ class App implements QueryTabHost {
     private explorerPane: PinnablePane | null = null;
     private propertiesPane: PinnablePane | null = null;
     private propertiesPanel: PropertiesPanel | null = null;
-    private convertTarget: "fetchxml" | "m" = "fetchxml";
+    convertTarget: "fetchxml" | "m" = "fetchxml";
     private transforming = false;
+    private readonly disposables: Array<() => void> = [];
 
-    private readonly el = {
-        tabStrip: byId("tab-strip"),
-        tabList: byId<HTMLButtonElement>("btn-tab-list"),
-        editor: byId("editor"),
-        results: byId("results-host"),
-        splitter: byId("splitter"),
-        workspace: byId("workspace"),
-        explorer: byId("object-explorer"),
-        explorerTree: byId("explorer-tree"),
-        explorerSplitter: byId("explorer-splitter"),
-        explorerPin: byId<HTMLButtonElement>("explorer-pin"),
-        explorerTab: byId<HTMLButtonElement>("explorer-tab"),
-        properties: byId("properties"),
-        propertiesTitle: byId("properties-title"),
-        propertiesGrid: byId("properties-grid"),
-        propertiesSplitter: byId("properties-splitter"),
-        propertiesPin: byId<HTMLButtonElement>("properties-pin"),
-        propertiesTab: byId<HTMLButtonElement>("properties-tab"),
-        newTab: byId<HTMLButtonElement>("btn-new"),
-        open: byId<HTMLButtonElement>("btn-open"),
-        save: byId<HTMLButtonElement>("btn-save"),
-        saveAs: byId<HTMLButtonElement>("btn-save-as"),
-        run: byId<HTMLButtonElement>("btn-run"),
-        cancel: byId<HTMLButtonElement>("btn-cancel"),
-        estimatedPlan: byId<HTMLButtonElement>("btn-estimated-plan"),
-        actualPlan: byId<HTMLButtonElement>("btn-actual-plan"),
-        editFetchXml: byId<HTMLButtonElement>("btn-edit-fetchxml"),
-        saveMenu: byId<HTMLButtonElement>("btn-save-menu"),
-        convert: byId<HTMLButtonElement>("btn-convert"),
-        convertMenu: byId<HTMLButtonElement>("btn-convert-menu"),
-        convertFetchXml: byId<HTMLButtonElement>("btn-convert-fetchxml"),
-        convertM: byId<HTMLButtonElement>("btn-convert-m"),
-        resultsText: byId<HTMLButtonElement>("btn-results-text"),
-        resultsGrid: byId<HTMLButtonElement>("btn-results-grid"),
-        format: byId<HTMLButtonElement>("btn-format"),
-        formatMenu: byId<HTMLButtonElement>("btn-format-menu"),
-        displayNames: byId<HTMLButtonElement>("btn-display-names"),
-        settings: byId<HTMLButtonElement>("btn-settings"),
-        connection: byId<HTMLSelectElement>("connection-select"),
-        statusBar: byId("status-bar"),
-    };
+    private readonly el: ReturnType<typeof getElements>;
 
-    private readonly statusBar: StatusBar;
-    private readonly tabStrip = new TabStrip(this.el.tabStrip, this.el.tabList, {
-        getTabs: () => this.tabs,
-        getActiveTab: () => this.activeTab,
-        getConnectionName: (slot) => this.connections.get(slot)?.options.connectionName,
-        activateTab: (tab) => this.activateTab(tab),
-        closeTab: (tab) => this.closeTab(tab),
-        focusEditor: () => this.editor.focus(),
-    });
+    readonly statusBar: StatusBar;
+
+    get explorerTree(): HTMLElement { return this.el.explorerTree; }
+
+    get toolbarState() {
+        const tab = this.activeTab;
+        const resultsDisabled = !tab || tab.readOnly;
+        const formatDisabled = !this.ready || resultsDisabled || !!tab?.running || this.transforming;
+        return {
+            runDisabled: !this.ready || !tab?.connected || tab.readOnly || tab.running,
+            cancelDisabled: !this.ready || !tab?.running,
+            connectionDisabled: !this.ready || resultsDisabled || !!tab?.running || !!tab?.connecting,
+            saveDisabled: resultsDisabled || (!tab?.isDirty && !!tab?.filePath),
+            saveAsDisabled: resultsDisabled,
+            formatDisabled,
+            convertDisabled: formatDisabled || !tab?.connected,
+            resultsDisabled,
+        };
+    }
 
     constructor() {
+        makeObservable<this, "settings" | "transforming">(this, {
+            tabs: observable.shallow,
+            viewReady: observable,
+            editorReady: observable,
+            settings: observable.ref,
+            convertTarget: observable,
+            transforming: observable,
+            toolbarState: computed,
+            fetchXmlForEditing: computed,
+            addTab: action,
+            openPreview: action,
+            activateTab: action,
+            selectConversion: action,
+            setResultsMode: action,
+        });
         this.client = new Sql4CdsClient({
             objectExplorerSessionCreated: (params) => this.objectExplorer.sessionCreated(params),
             objectExplorerExpandComplete: (params) => this.objectExplorer.expandComplete(params),
             objectExplorerSessionDisconnected: (params) => this.objectExplorer.sessionDisconnected(params),
-            progress: (message) => {
-                this.progressMessage = message;
-            },
+            progress: (message) => { this.progressMessage = message; },
             log: (params) => {
                 if (params.type === 1) console.error(params.message);
                 else if (params.type === 2) console.warn(params.message);
@@ -117,23 +102,40 @@ class App implements QueryTabHost {
                 this.progressMessage = "";
                 this.objectExplorer.engineStopped();
                 for (const tab of this.tabs) tab.engineStopped(message);
-                this.updateToolbar();
                 this.setStatus(message, "error");
                 void notify("SQL 4 CDS engine failed", message, "error");
             }),
         });
         this.connections = new ConnectionRegistry(this.client);
-        this.statusBar = new StatusBar(this.el.statusBar, this.statusState, this.connections);
-        window.addEventListener("pagehide", () => this.statusBar.dispose());
+        const unmount = mountApp(byId("app"), this);
+        this.el = getElements();
+        this.statusBar = new StatusBar(this.el.statusBar, this.statusState, this.connections, false);
         this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
             (message) => { void notify("Object Explorer", message, "error"); },
             (text) => this.insertObjectName(text),
-            (connection, query) => this.addTab(query, connection.slot), this.connections);
-        const stopConnectionList = autorun(() => this.renderConnectionList());
-        window.addEventListener("pagehide", stopConnectionList);
+            (connection, query) => this.addTab(query, connection.slot), this.connections, false);
+        runInAction(() => { this.viewReady = true; });
+        const stopPersistence = reaction(
+            () => [this.settings, ...this.tabs.map(tab => [tab.title, tab.filePath, tab.isDirty, tab.content, tab.connectionSlot]), this.activeTab],
+            () => { this.syncClosePrevention(); this.scheduleSessionSave(); },
+        );
+        const stopProperties = reaction(() => this.activeTab?.selectedPlanNode, () => this.updateProperties());
+        window.addEventListener("pagehide", () => {
+            stopPersistence();
+            stopProperties();
+            this.statusBar.dispose();
+            void this.objectExplorer.dispose();
+            this.explorerPane?.dispose();
+            this.propertiesPane?.dispose();
+            for (const dispose of this.disposables) dispose();
+            this.editor?.dispose();
+            unmount();
+        }, { once: true });
     }
 
-    private async openQuery(): Promise<void> {
+    focusEditor(): void { this.editor.focus(); }
+
+    async openQuery(): Promise<void> {
         try {
             const path = await window.toolboxAPI.fileSystem.selectPath({
                 type: "file",
@@ -152,7 +154,7 @@ class App implements QueryTabHost {
         }
     }
 
-    private async saveTab(tab: QueryTab, saveAs = false): Promise<boolean> {
+    async saveTab(tab: QueryTab, saveAs = false): Promise<boolean> {
         try {
             const content = tab.model.getValue();
             if (tab.filePath && !saveAs) {
@@ -196,11 +198,11 @@ class App implements QueryTabHost {
     }
 
     async start(): Promise<void> {
-        this.settings = await loadSettings();
+        const settings = await loadSettings();
+        runInAction(() => { this.settings = settings; });
         await this.applyTheme();
         this.createEditor();
         this.bindToolbar();
-        this.tabStrip.bind();
         this.bindSplitter();
         this.bindObjectExplorer();
         this.bindProperties();
@@ -469,15 +471,15 @@ class App implements QueryTabHost {
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD],
             run: () => this.setResultsMode("grid"),
         });
+        runInAction(() => { this.editorReady = true; });
     }
 
-    private addTab(text = "", connectionSlot?: number, connect = true): QueryTab {
+    addTab(text = "", connectionSlot?: number, connect = true): QueryTab {
         // Connect new tabs to the same connection as the current tab, or the first available connection
         const slot = connectionSlot ?? this.activeTab?.connectionSlot ?? this.connections.all[0]?.slot;
 
         const tab = new QueryTab(this, text);
         this.tabs.push(tab);
-        this.el.results.appendChild(tab.resultsElement);
         this.activateTab(tab);
 
         if (connect && slot !== undefined && slot !== null) void this.connectTab(tab, slot);
@@ -497,7 +499,7 @@ class App implements QueryTabHost {
         this.editor.focus();
     }
 
-    private openPreview(text: string, language: string, title: string): void {
+    openPreview(text: string, language: string, title: string): void {
         const tab = new QueryTab(this, text, {
             language,
             readOnly: true,
@@ -505,11 +507,10 @@ class App implements QueryTabHost {
         });
         tab.title = title;
         this.tabs.push(tab);
-        this.el.results.appendChild(tab.resultsElement);
         this.activateTab(tab);
     }
 
-    private activateTab(tab: QueryTab): void {
+    activateTab(tab: QueryTab): void {
         if (this.activeTab === tab) return;
 
         if (this.activeTab) this.activeTab.viewState = this.editor.saveViewState();
@@ -520,16 +521,9 @@ class App implements QueryTabHost {
         if (tab.viewState) this.editor.restoreViewState(tab.viewState);
         this.editor.focus();
 
-        for (const t of this.tabs) t.resultsElement.hidden = t !== tab;
-        this.updateResultsVisibility();
-        this.renderTabs();
-        this.renderConnectionList();
-        this.updateToolbar();
-        this.updateProperties();
-        this.scheduleSessionSave();
     }
 
-    private async closeTab(tab: QueryTab): Promise<void> {
+    async closeTab(tab: QueryTab): Promise<void> {
         const index = this.tabs.indexOf(tab);
         if (index < 0) return;
 
@@ -539,52 +533,24 @@ class App implements QueryTabHost {
             if (choice === "save" && (!(await this.saveTab(tab)) || tab.isDirty)) return;
         }
 
-        this.tabs.splice(index, 1);
-        this.syncClosePrevention();
+        const currentIndex = this.tabs.indexOf(tab);
+        if (currentIndex < 0) return;
+        runInAction(() => { this.tabs.splice(currentIndex, 1); });
         if (this.activeTab === tab) {
             this.activeTab = null;
             if (this.tabs.length === 0) {
                 this.addTab();
             } else {
-                this.activateTab(this.tabs[Math.min(index, this.tabs.length - 1)]);
+                this.activateTab(this.tabs[Math.min(currentIndex, this.tabs.length - 1)]);
             }
         }
 
-        this.renderTabs();
-        this.scheduleSessionSave();
         await tab.dispose();
-    }
-
-    private renderTabs(): void {
-        this.tabStrip.render();
     }
 
     // Connections
 
-    private renderConnectionList(): void {
-        const select = this.el.connection;
-        select.replaceChildren();
-
-        const placeholder = document.createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = this.connections.all.length ? "Select a connection…" : "No connections available";
-        placeholder.disabled = true;
-        select.appendChild(placeholder);
-
-        for (const entry of this.connections.all) {
-            const option = document.createElement("option");
-            option.value = String(entry.slot);
-            option.textContent = `${entry.options.connectionName}${entry.status === "connecting" ? " (Connecting…)" : entry.error ? " ⚠" : ""}`;
-            option.disabled = entry.status === "connecting";
-            option.title = entry.error ?? entry.connection.url;
-            select.appendChild(option);
-        }
-
-        const slot = this.activeTab?.connectionSlot;
-        select.value = slot !== null && slot !== undefined && this.connections.get(slot) ? String(slot) : "";
-    }
-
-    private async connectTab(tab: QueryTab, slot: number): Promise<void> {
+    async connectTab(tab: QueryTab, slot: number): Promise<void> {
         try {
             await this.connections.register(slot);
             await tab.connect(slot);
@@ -594,7 +560,6 @@ class App implements QueryTabHost {
                 tab.statusMessage = `Connection failed: ${errorMessage(err)}`;
                 tab.statusKind = "error";
             });
-            this.onStateChanged(tab);
             await notify("Connection failed", errorMessage(err), "error");
         }
     }
@@ -618,9 +583,6 @@ class App implements QueryTabHost {
                 runInAction(() => { for (const t of tabs) t.connectionSlot = null; });
             }
         }
-
-        this.renderTabs();
-        this.updateToolbar();
     }
 
     // Query execution
@@ -634,7 +596,7 @@ class App implements QueryTabHost {
         this.editor.focus();
     }
 
-    private async runQuery(estimatedPlan = false): Promise<void> {
+    async runQuery(estimatedPlan = false): Promise<void> {
         const tab = this.activeTab;
         if (!tab || tab.readOnly || tab.running || !this.ready) return;
 
@@ -658,9 +620,8 @@ class App implements QueryTabHost {
         return this.settings.resultsToText;
     }
 
-    private async toggleActualPlan(): Promise<void> {
+    async toggleActualPlan(): Promise<void> {
         const save = this.saveSetting("includeActualPlan", !this.settings.includeActualPlan);
-        this.updateToolbar();
         await save;
     }
 
@@ -691,34 +652,12 @@ class App implements QueryTabHost {
         return this.connections.getRecordSelectStatement(ownerUri, reference);
     }
 
-    onStateChanged(tab: QueryTab): void {
-        this.renderTabs();
-        this.syncClosePrevention();
-        this.scheduleSessionSave();
-        if (tab === this.activeTab) {
-            this.updateResultsVisibility();
-            this.renderConnectionList();
-            this.updateToolbar();
-        }
-    }
-
-    private updateResultsVisibility(): void {
-        const visible = this.activeTab?.hasResults === true;
-        this.el.splitter.hidden = !visible;
-        this.el.results.hidden = !visible;
-    }
-
-    onSelectedPlanNodeChanged(tab: QueryTab): void {
-        if (tab === this.activeTab) this.updateProperties();
-    }
-
     private updateProperties(): void {
         const node = this.activeTab?.selectedPlanNode ?? null;
         this.propertiesPanel?.show(node ? node.name.split(/\r?\n/)[0] : null, node ? node.properties ?? [] : null);
-        this.el.editFetchXml.disabled = this.fetchXmlForEditing === null;
     }
 
-    private get fetchXmlForEditing(): string | null {
+    get fetchXmlForEditing(): string | null {
         const tab = this.activeTab;
         if (tab?.isFetchXmlPreview) return tab.model.getValue();
         const node = tab?.selectedPlanNode;
@@ -732,36 +671,7 @@ class App implements QueryTabHost {
     // Toolbar & layout
 
     private bindToolbar(): void {
-        bindToolbarMenu(this.el.saveMenu, byId("save-menu"));
-        bindToolbarMenu(this.el.convertMenu, byId("convert-menu"));
-        bindToolbarMenu(this.el.formatMenu, byId("format-menu"));
-        this.el.newTab.addEventListener("click", () => this.addTab());
-        this.el.open.addEventListener("click", () => void this.openQuery());
-        this.el.save.addEventListener("click", () => { if (this.activeTab) void this.saveTab(this.activeTab); });
-        this.el.saveAs.addEventListener("click", () => { if (this.activeTab) void this.saveTab(this.activeTab, true); });
-        this.el.run.addEventListener("click", () => void this.runQuery());
-        this.el.cancel.addEventListener("click", () => void this.activeTab?.cancel());
-        this.el.estimatedPlan.addEventListener("click", () => void this.runQuery(true));
-        this.el.actualPlan.addEventListener("click", () => void this.toggleActualPlan());
-        this.el.editFetchXml.addEventListener("click", () => {
-            const fetchXml = this.fetchXmlForEditing;
-            if (fetchXml !== null) void this.launchFetchXmlStudio(fetchXml);
-        });
-        this.el.convert.addEventListener("click", () => void this.transformQuery("convert"));
-        this.el.convertFetchXml.addEventListener("click", () => this.selectConversion("fetchxml"));
-        this.el.convertM.addEventListener("click", () => this.selectConversion("m"));
-        this.el.format.addEventListener("click", () => void this.transformQuery("format"));
-        this.el.displayNames.addEventListener("click", () => void this.transformQuery("format", true));
-        this.el.resultsText.addEventListener("click", () => this.setResultsMode("text"));
-        this.el.resultsGrid.addEventListener("click", () => this.setResultsMode("grid"));
-        this.el.settings.addEventListener("click", () => void this.editSettings());
-        this.el.connection.addEventListener("change", () => {
-            const tab = this.activeTab;
-            const slot = Number.parseInt(this.el.connection.value, 10);
-            if (tab && Number.isFinite(slot)) void this.connectTab(tab, slot);
-        });
-
-        window.addEventListener("keydown", (e) => {
+        const keydown = (e: KeyboardEvent) => {
             if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e")) {
                 e.preventDefault();
                 void this.runQuery();
@@ -797,24 +707,24 @@ class App implements QueryTabHost {
                 e.preventDefault();
                 void this.toggleActualPlan();
             }
-        });
+        };
+        window.addEventListener("keydown", keydown);
+        this.disposables.push(() => window.removeEventListener("keydown", keydown));
     }
 
-    private selectConversion(target: "fetchxml" | "m"): void {
+    selectConversion(target: "fetchxml" | "m"): void {
         this.convertTarget = target;
-        this.updateToolbar();
         void this.transformQuery("convert");
     }
 
-    private setResultsMode(mode: "text" | "grid"): void {
+    setResultsMode(mode: "text" | "grid"): void {
         if (!this.activeTab || this.activeTab.readOnly) return;
         this.activeTab.resultsMode = mode;
-        this.updateToolbar();
         // Remember the most recent choice for new tabs and future sessions
         if (this.settings.resultsToText !== (mode === "text")) void this.saveSetting("resultsToText", mode === "text");
     }
 
-    private async transformQuery(operation: "format" | "convert", addDisplayNames = false): Promise<void> {
+    async transformQuery(operation: "format" | "convert", addDisplayNames = false): Promise<void> {
         const tab = this.activeTab;
         if (!this.ready || !tab || tab.readOnly || tab.running || this.transforming) return;
         if ((operation === "convert" || addDisplayNames) && !tab.connected) return;
@@ -823,8 +733,7 @@ class App implements QueryTabHost {
         const version = tab.model.getVersionId();
         const query = tab.model.getValueInRange(range);
         const target = this.convertTarget;
-        this.transforming = true;
-        this.updateToolbar();
+        runInAction(() => { this.transforming = true; });
         try {
             if (operation === "format") {
                 const options = tab.model.getOptions();
@@ -850,45 +759,11 @@ class App implements QueryTabHost {
         } catch (err) {
             await notify(operation === "format" ? "Unable to format query" : "Unable to convert query", errorMessage(err), "error");
         } finally {
-            this.transforming = false;
-            this.updateToolbar();
+            runInAction(() => { this.transforming = false; });
         }
     }
 
-    private updateToolbar(): void {
-        const tab = this.activeTab;
-        this.el.run.disabled = !this.ready || !tab?.connected || tab.readOnly || tab.running;
-        this.el.estimatedPlan.disabled = this.el.run.disabled;
-        this.el.cancel.disabled = !this.ready || !tab?.running;
-        this.el.actualPlan.setAttribute("aria-pressed", String(this.settings.includeActualPlan));
-        this.el.connection.disabled = !this.ready || !tab || tab.readOnly || tab.running || tab.connecting;
-        this.el.editFetchXml.disabled = this.fetchXmlForEditing === null;
-        this.el.save.disabled = !tab || tab.readOnly || (!tab.isDirty && !!tab.filePath);
-        this.el.saveAs.disabled = !tab || tab.readOnly;
-        this.el.saveMenu.disabled = this.el.saveAs.disabled;
-        this.el.format.disabled = !this.ready || !tab || tab.readOnly || tab.running || this.transforming;
-        this.el.formatMenu.disabled = this.el.format.disabled || !tab?.connected;
-        this.el.displayNames.disabled = this.el.formatMenu.disabled;
-        this.el.convert.disabled = this.el.format.disabled || !tab?.connected;
-        this.el.convertMenu.disabled = this.el.convert.disabled;
-        this.el.convertFetchXml.disabled = this.el.convert.disabled;
-        this.el.convertM.disabled = this.el.convert.disabled;
-        this.el.convert.title = `Convert to ${this.convertTarget === "fetchxml" ? "FetchXML" : "Power BI (M)"}`;
-        this.el.convertFetchXml.setAttribute("aria-checked", String(this.convertTarget === "fetchxml"));
-        this.el.convertM.setAttribute("aria-checked", String(this.convertTarget === "m"));
-        this.el.resultsText.disabled = !tab || tab.readOnly;
-        this.el.resultsGrid.disabled = this.el.resultsText.disabled;
-        this.el.resultsText.setAttribute("aria-pressed", String(tab?.resultsMode === "text"));
-        this.el.resultsGrid.setAttribute("aria-pressed", String(!!tab && tab.resultsMode !== "text"));
-        for (const [toggle, menuId] of [[this.el.saveMenu, "save-menu"], [this.el.convertMenu, "convert-menu"], [this.el.formatMenu, "format-menu"]] as const) {
-            if (toggle.disabled) {
-                byId(menuId).hidden = true;
-                toggle.setAttribute("aria-expanded", "false");
-            }
-        }
-    }
-
-    private async launchFetchXmlStudio(fetchXml: string): Promise<void> {
+    async launchFetchXmlStudio(fetchXml: string): Promise<void> {
         try {
             await window.toolboxAPI.invocation.launchTool(
                 "@mohsinonxrm/pptb-fetchxml-studio",
@@ -901,7 +776,7 @@ class App implements QueryTabHost {
     }
 
     private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan" | "resultsToText", value: boolean): Promise<void> {
-        this.settings = { ...this.settings, [setting]: value };
+        runInAction(() => { this.settings = { ...this.settings, [setting]: value }; });
         try {
             await saveSettings(this.settings);
         } catch (err) {
@@ -922,7 +797,6 @@ class App implements QueryTabHost {
             savePinned: (pinned) => this.saveSetting("objectExplorerPinned", pinned),
             isPartOfPane: (target) => target.closest(".explorer-context-menu") !== null,
         });
-        window.addEventListener("pagehide", () => { void this.objectExplorer.dispose(); });
     }
 
     private bindProperties(): void {
@@ -955,6 +829,7 @@ class App implements QueryTabHost {
             window.removeEventListener("mousemove", move);
             window.removeEventListener("mouseup", up);
         };
+        this.disposables.push(up);
 
         this.el.splitter.addEventListener("mousedown", (e) => {
             e.preventDefault();
@@ -978,13 +853,13 @@ class App implements QueryTabHost {
         monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
     }
 
-    private async editSettings(): Promise<void> {
+    async editSettings(): Promise<void> {
         const updated = await showSettingsDialog(this.settings);
         if (!updated) return;
 
         updated.objectExplorerPinned = this.explorerPane?.pinned ?? this.settings.objectExplorerPinned;
         updated.propertiesPinned = this.propertiesPane?.pinned ?? this.settings.propertiesPinned;
-        this.settings = updated;
+        runInAction(() => { this.settings = updated; });
         try {
             await saveSettings(updated);
             if (this.ready) await this.client.changeConfiguration({ ...updated });
@@ -992,7 +867,6 @@ class App implements QueryTabHost {
             await notify("Unable to save settings", errorMessage(err), "error");
         }
 
-        this.syncClosePrevention();
         if (updated.rememberSession) {
             await this.saveSessionNow();
         } else {
@@ -1004,6 +878,27 @@ class App implements QueryTabHost {
     private setStatus(text: string, kind: QueryTab["statusKind"] = "busy"): void {
         this.statusState.setStatus(text, kind);
     }
+}
+
+function getElements() {
+    return {
+        editor: byId("editor"),
+        results: byId("results-host"),
+        splitter: byId("splitter"),
+        workspace: byId("workspace"),
+        explorer: byId("object-explorer"),
+        explorerTree: byId("explorer-tree"),
+        explorerSplitter: byId("explorer-splitter"),
+        explorerPin: byId<HTMLButtonElement>("explorer-pin"),
+        explorerTab: byId<HTMLButtonElement>("explorer-tab"),
+        properties: byId("properties"),
+        propertiesTitle: byId("properties-title"),
+        propertiesGrid: byId("properties-grid"),
+        propertiesSplitter: byId("properties-splitter"),
+        propertiesPin: byId<HTMLButtonElement>("properties-pin"),
+        propertiesTab: byId<HTMLButtonElement>("properties-tab"),
+        statusBar: byId("status-bar"),
+    };
 }
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -1030,5 +925,5 @@ if (window.toolboxAPI) {
         void notify("SQL 4 CDS", errorMessage(err), "error");
     });
 } else {
-    document.getElementById("status-text")!.textContent = "SQL 4 CDS must be run inside Power Platform ToolBox";
+    document.getElementById("app")!.textContent = "SQL 4 CDS must be run inside Power Platform ToolBox";
 }

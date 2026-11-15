@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import { observer } from "mobx-react-lite";
 import type { StatusBar } from "./statusBar";
 
-const StatusBarView = observer(function StatusBarView({ statusBar }: { statusBar: StatusBar }) {
+export const StatusBarView = observer(function StatusBarView({ statusBar }: { statusBar: StatusBar }) {
     const display = statusBar.display;
     return <>
         <span id="status-message" role="status" title={display.text}>

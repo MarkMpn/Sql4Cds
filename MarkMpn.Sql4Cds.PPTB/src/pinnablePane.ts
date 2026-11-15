@@ -26,6 +26,8 @@ const MIN_WIDTH = 160;
 export class PinnablePane {
     private pinnedState: boolean;
     private openState: boolean;
+    private readonly disposables: Array<() => void> = [];
+    private stopResize: (() => void) | null = null;
 
     constructor(private readonly options: PinnablePaneOptions) {
         this.pinnedState = options.pinned;
@@ -40,6 +42,11 @@ export class PinnablePane {
 
     get open(): boolean {
         return this.openState;
+    }
+
+    dispose(): void {
+        this.stopResize?.();
+        for (const dispose of this.disposables) dispose();
     }
 
     private update(): void {
@@ -88,11 +95,17 @@ export class PinnablePane {
         };
         document.addEventListener("pointerdown", collapseOutside);
         document.addEventListener("focusin", collapseOutside);
-        document.addEventListener("keydown", (event) => {
+        const keydown = (event: KeyboardEvent) => {
             if (event.key !== "Escape" || this.pinnedState || !this.openState) return;
             event.preventDefault();
             this.collapse();
             tab.focus();
+        };
+        document.addEventListener("keydown", keydown);
+        this.disposables.push(() => {
+            document.removeEventListener("pointerdown", collapseOutside);
+            document.removeEventListener("focusin", collapseOutside);
+            document.removeEventListener("keydown", keydown);
         });
         splitter.addEventListener("mousedown", (event) => {
             event.preventDefault();
@@ -108,7 +121,10 @@ export class PinnablePane {
                 document.body.classList.remove("resizing-pane");
                 window.removeEventListener("mousemove", move);
                 window.removeEventListener("mouseup", up);
+                this.stopResize = null;
             };
+            this.stopResize?.();
+            this.stopResize = up;
             document.body.classList.add("resizing-pane");
             window.addEventListener("mousemove", move);
             window.addEventListener("mouseup", up);
