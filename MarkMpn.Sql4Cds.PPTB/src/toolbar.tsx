@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { observer } from "mobx-react-lite";
-import type { App } from "./app";
+import { useApp } from "./appContext";
 
 function Icon({ path, className = "" }: { path: string; className?: string }) {
     return <svg className={`icon ${className}`} viewBox="0 0 16 16" aria-hidden="true"><path d={path} /></svg>;
@@ -53,7 +53,8 @@ function SplitMenu({ id, label, disabled, command, children }: { id: string; lab
     </div>;
 }
 
-export const Toolbar = observer(function Toolbar({ app }: { app: App }) {
+export const Toolbar = observer(function Toolbar() {
+    const app = useApp();
     const tab = app.activeTab;
     const state = app.toolbarState;
     const slot = tab?.connectionSlot;

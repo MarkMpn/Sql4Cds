@@ -4,9 +4,7 @@ import { ConnectionRegistry } from "./connections";
 import { Sql4CdsClient } from "./lsp/client";
 import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue, type Range } from "./lsp/protocol";
 import { QueryTab, type QueryTabHost } from "./query/queryTab";
-import { ObjectExplorer } from "./objectExplorer";
-import { PinnablePane } from "./pinnablePane";
-import { PropertiesPanel } from "./propertiesPanel";
+import type { ObjectExplorer } from "./objectExplorer";
 import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
 import { defaultSettings, loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
@@ -21,7 +19,7 @@ const DEFAULT_QUERY = "";
 export class App implements QueryTabHost {
     readonly client: Sql4CdsClient;
     readonly connections: ConnectionRegistry;
-    readonly objectExplorer: ObjectExplorer;
+    objectExplorer: ObjectExplorer | null = null;
     readonly tabs: QueryTab[] = [];
     viewReady = false;
     editorReady = false;
@@ -29,7 +27,8 @@ export class App implements QueryTabHost {
     get activeTab(): QueryTab | null { return this.statusState.activeTab; }
     set activeTab(tab: QueryTab | null) { runInAction(() => { this.statusState.activeTab = tab; }); }
     private editor!: monaco.editor.IStandaloneCodeEditor;
-    private settings: Sql4CdsSettings = { ...defaultSettings };
+    settings: Sql4CdsSettings = { ...defaultSettings };
+    settingsReady = false;
     private get ready(): boolean { return this.statusState.ready; }
     private set ready(ready: boolean) { runInAction(() => { this.statusState.ready = ready; }); }
     private confirmationQueue: Promise<void> = Promise.resolve();
@@ -40,9 +39,6 @@ export class App implements QueryTabHost {
     private connectionChangeQueue: Promise<void> = Promise.resolve();
     private sessionRestored = false;
     private sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
-    private explorerPane: PinnablePane | null = null;
-    private propertiesPane: PinnablePane | null = null;
-    private propertiesPanel: PropertiesPanel | null = null;
     convertTarget: "fetchxml" | "m" = "fetchxml";
     private transforming = false;
     private readonly disposables: Array<() => void> = [];
@@ -50,8 +46,6 @@ export class App implements QueryTabHost {
     private readonly el: ReturnType<typeof getElements>;
 
     readonly statusBar: StatusBar;
-
-    get explorerTree(): HTMLElement { return this.el.explorerTree; }
 
     get toolbarState() {
         const tab = this.activeTab;
@@ -70,11 +64,14 @@ export class App implements QueryTabHost {
     }
 
     constructor() {
-        makeObservable<this, "settings" | "transforming">(this, {
+        makeObservable<this, "transforming">(this, {
             tabs: observable.shallow,
             viewReady: observable,
             editorReady: observable,
             settings: observable.ref,
+            settingsReady: observable,
+            objectExplorer: observable.ref,
+            setObjectExplorer: action,
             convertTarget: observable,
             transforming: observable,
             toolbarState: computed,
@@ -86,9 +83,9 @@ export class App implements QueryTabHost {
             setResultsMode: action,
         });
         this.client = new Sql4CdsClient({
-            objectExplorerSessionCreated: (params) => this.objectExplorer.sessionCreated(params),
-            objectExplorerExpandComplete: (params) => this.objectExplorer.expandComplete(params),
-            objectExplorerSessionDisconnected: (params) => this.objectExplorer.sessionDisconnected(params),
+            objectExplorerSessionCreated: (params) => this.objectExplorer?.sessionCreated(params),
+            objectExplorerExpandComplete: (params) => this.objectExplorer?.expandComplete(params),
+            objectExplorerSessionDisconnected: (params) => this.objectExplorer?.sessionDisconnected(params),
             progress: (message) => { this.progressMessage = message; },
             log: (params) => {
                 if (params.type === 1) console.error(params.message);
@@ -100,7 +97,7 @@ export class App implements QueryTabHost {
             failed: action((message) => {
                 this.ready = false;
                 this.progressMessage = "";
-                this.objectExplorer.engineStopped();
+                this.objectExplorer?.engineStopped();
                 for (const tab of this.tabs) tab.engineStopped(message);
                 this.setStatus(message, "error");
                 void notify("SQL 4 CDS engine failed", message, "error");
@@ -110,23 +107,14 @@ export class App implements QueryTabHost {
         const unmount = mountApp(byId("app"), this);
         this.el = getElements();
         this.statusBar = new StatusBar(this.el.statusBar, this.statusState, this.connections, false);
-        this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
-            (message) => { void notify("Object Explorer", message, "error"); },
-            (text) => this.insertObjectName(text),
-            (connection, query) => this.addTab(query, connection.slot), this.connections, false);
         runInAction(() => { this.viewReady = true; });
         const stopPersistence = reaction(
             () => [this.settings, ...this.tabs.map(tab => [tab.title, tab.filePath, tab.isDirty, tab.content, tab.connectionSlot]), this.activeTab],
             () => { this.syncClosePrevention(); this.scheduleSessionSave(); },
         );
-        const stopProperties = reaction(() => this.activeTab?.selectedPlanNode, () => this.updateProperties());
         window.addEventListener("pagehide", () => {
             stopPersistence();
-            stopProperties();
             this.statusBar.dispose();
-            void this.objectExplorer.dispose();
-            this.explorerPane?.dispose();
-            this.propertiesPane?.dispose();
             for (const dispose of this.disposables) dispose();
             this.editor?.dispose();
             unmount();
@@ -134,6 +122,12 @@ export class App implements QueryTabHost {
     }
 
     focusEditor(): void { this.editor.focus(); }
+
+    setObjectExplorer(explorer: ObjectExplorer | null): void { this.objectExplorer = explorer; }
+
+    reportError(title: string, error: unknown): Promise<void> {
+        return notify(title, errorMessage(error), "error");
+    }
 
     async openQuery(): Promise<void> {
         try {
@@ -199,13 +193,11 @@ export class App implements QueryTabHost {
 
     async start(): Promise<void> {
         const settings = await loadSettings();
-        runInAction(() => { this.settings = settings; });
+        runInAction(() => { this.settings = settings; this.settingsReady = true; });
         await this.applyTheme();
         this.createEditor();
         this.bindToolbar();
         this.bindSplitter();
-        this.bindObjectExplorer();
-        this.bindProperties();
 
         configureMonaco(this.client, (uri) => this.tabs.some((t) => t.uri === uri && t.connected));
 
@@ -223,7 +215,7 @@ export class App implements QueryTabHost {
         try {
             await this.client.start({ ...this.settings });
         } catch (err) {
-            this.objectExplorer.engineStopped();
+            this.objectExplorer?.engineStopped();
             this.setStatus(`Unable to start the SQL 4 CDS engine: ${errorMessage(err)}`, "error");
             await notify("Unable to start SQL 4 CDS", errorMessage(err), "error");
             return;
@@ -587,7 +579,7 @@ export class App implements QueryTabHost {
 
     // Query execution
 
-    private insertObjectName(text: string): void {
+    insertObjectName(text: string): void {
         const selection = this.editor.getSelection();
         if (!this.activeTab || !selection) return;
         this.editor.pushUndoStop();
@@ -650,11 +642,6 @@ export class App implements QueryTabHost {
 
     getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
         return this.connections.getRecordSelectStatement(ownerUri, reference);
-    }
-
-    private updateProperties(): void {
-        const node = this.activeTab?.selectedPlanNode ?? null;
-        this.propertiesPanel?.show(node ? node.name.split(/\r?\n/)[0] : null, node ? node.properties ?? [] : null);
     }
 
     get fetchXmlForEditing(): string | null {
@@ -775,44 +762,13 @@ export class App implements QueryTabHost {
         }
     }
 
-    private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan" | "resultsToText", value: boolean): Promise<void> {
+    async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan" | "resultsToText", value: boolean): Promise<void> {
         runInAction(() => { this.settings = { ...this.settings, [setting]: value }; });
         try {
             await saveSettings(this.settings);
         } catch (err) {
             await notify("Unable to save settings", errorMessage(err), "error");
         }
-    }
-
-    private bindObjectExplorer(): void {
-        this.explorerPane = new PinnablePane({
-            name: "Object Explorer",
-            pane: this.el.explorer,
-            pin: this.el.explorerPin,
-            tab: this.el.explorerTab,
-            splitter: this.el.explorerSplitter,
-            content: this.el.explorerTree,
-            side: "left",
-            pinned: this.settings.objectExplorerPinned,
-            savePinned: (pinned) => this.saveSetting("objectExplorerPinned", pinned),
-            isPartOfPane: (target) => target.closest(".explorer-context-menu") !== null,
-        });
-    }
-
-    private bindProperties(): void {
-        this.propertiesPanel = new PropertiesPanel(this.el.propertiesGrid, this.el.propertiesTitle);
-        this.propertiesPane = new PinnablePane({
-            name: "Properties",
-            pane: this.el.properties,
-            pin: this.el.propertiesPin,
-            tab: this.el.propertiesTab,
-            splitter: this.el.propertiesSplitter,
-            content: this.el.propertiesGrid,
-            side: "right",
-            pinned: this.settings.propertiesPinned,
-            savePinned: (pinned) => this.saveSetting("propertiesPinned", pinned),
-        });
-        this.updateProperties();
     }
 
     private bindSplitter(): void {
@@ -857,8 +813,8 @@ export class App implements QueryTabHost {
         const updated = await showSettingsDialog(this.settings);
         if (!updated) return;
 
-        updated.objectExplorerPinned = this.explorerPane?.pinned ?? this.settings.objectExplorerPinned;
-        updated.propertiesPinned = this.propertiesPane?.pinned ?? this.settings.propertiesPinned;
+        updated.objectExplorerPinned = this.settings.objectExplorerPinned;
+        updated.propertiesPinned = this.settings.propertiesPinned;
         runInAction(() => { this.settings = updated; });
         try {
             await saveSettings(updated);
@@ -886,17 +842,6 @@ function getElements() {
         results: byId("results-host"),
         splitter: byId("splitter"),
         workspace: byId("workspace"),
-        explorer: byId("object-explorer"),
-        explorerTree: byId("explorer-tree"),
-        explorerSplitter: byId("explorer-splitter"),
-        explorerPin: byId<HTMLButtonElement>("explorer-pin"),
-        explorerTab: byId<HTMLButtonElement>("explorer-tab"),
-        properties: byId("properties"),
-        propertiesTitle: byId("properties-title"),
-        propertiesGrid: byId("properties-grid"),
-        propertiesSplitter: byId("properties-splitter"),
-        propertiesPin: byId<HTMLButtonElement>("properties-pin"),
-        propertiesTab: byId<HTMLButtonElement>("properties-tab"),
         statusBar: byId("status-bar"),
     };
 }

@@ -119,7 +119,6 @@ function setup(pinned = true) {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
     const invocation = load("mcpInvocation.ts", {}, { TextEncoder });
-    const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: dom.window.Node, Element: dom.window.Element });
     const propertiesPanels = [];
     const globals = {
         document, window, Node: dom.window.Node, Element: dom.window.Element,
@@ -134,6 +133,20 @@ function setup(pinned = true) {
         clearInterval: (id) => timers.delete(id),
     };
     const protocol = load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) });
+    const appContext = load("appContext.tsx", {}, globals);
+    const explorerController = { ObjectExplorer: class {
+        snapshots = [];
+        constructor(_client, _tree, _error, _insert, _newQuery, registry) {
+            this.stop = autorun(() => this.snapshots.push(registry.all.map(entry => ({ slot: entry.slot, status: entry.status }))));
+        }
+        engineStopped() { this.stopped = true; }
+        async dispose() { this.stop(); }
+    } };
+    const propertiesController = { PropertiesPanel: class {
+        constructor() { this.shown = []; propertiesPanels.push(this); }
+        show(name, properties) { this.shown.push({ name, properties }); }
+        dispose() { this.disposed = true; }
+    } };
     const { App } = load("app.ts", {
         "mobx": require("mobx"),
         "./styles.css": {},
@@ -165,9 +178,16 @@ function setup(pinned = true) {
         "./appView": {
             mountApp: (element, app) => {
                 const unmountRoot = load("appView.tsx", {
-                    "./toolbar": load("toolbar.tsx", {}, globals),
-                    "./tabStripView": load("tabStripView.tsx", {}, globals),
-                    "./objectExplorerView": { ExplorerTree: () => null },
+                    "./appContext": appContext,
+                    "./toolbar": load("toolbar.tsx", { "./appContext": appContext }, globals),
+                    "./tabStripView": load("tabStripView.tsx", { "./appContext": appContext }, globals),
+                    "./pinnablePaneView": load("pinnablePaneView.tsx", { "./appContext": appContext }, globals),
+                    "./paneViews": load("paneViews.tsx", {
+                        "./appContext": appContext,
+                        "./objectExplorer": explorerController,
+                        "./objectExplorerView": { ExplorerTree: () => null },
+                        "./propertiesPanel": propertiesController,
+                    }, globals),
                     "./statusBarView": load("statusBarView.tsx", {}, globals),
                 }, globals).mountApp(element, app);
                 let mounted = true;
@@ -177,19 +197,6 @@ function setup(pinned = true) {
             },
         },
         "./query/queryTab": {},
-        "./objectExplorer": { ObjectExplorer: class {
-            snapshots = [];
-            constructor(_client, _tree, _error, _insert, _newQuery, registry) {
-                autorun(() => this.snapshots.push(registry.all.map(entry => ({ slot: entry.slot, status: entry.status }))));
-            }
-            engineStopped() { this.stopped = true; }
-            async dispose() {}
-        } },
-        "./pinnablePane": pinnablePane,
-        "./propertiesPanel": { PropertiesPanel: class {
-            constructor() { this.shown = []; propertiesPanels.push(this); }
-            show(name, properties) { this.shown.push({ name, properties }); }
-        } },
         "./executionPlan/executionPlanView": { getFetchXmlQuery: (node) =>
             node.nodeType === "FetchXmlScan" ? node.properties?.find(property => property.name === "FetchXML")?.value ?? null : null },
         "./settings": settingsApi,
@@ -203,6 +210,7 @@ function setup(pinned = true) {
             app.settings = { objectExplorerPinned: pinned, batchSize: 100, includeActualPlan: false };
             app.ready = true;
             app.editorReady = true;
+            app.settingsReady = true;
         });
     });
     const grids = [];
@@ -722,14 +730,16 @@ test("startup publishes connecting names before engine startup and registration 
     window.toolboxAPI = { events: { on() {} } };
     settingsApi.loadSettings = async () => app.settings;
     app.applyTheme = async () => {};
-    for (const method of ["createEditor", "bindToolbar", "bindSplitter", "bindObjectExplorer", "bindProperties"])
+    for (const method of ["createEditor", "bindToolbar", "bindSplitter"])
         app[method] = () => {};
     app.restoreSession = async () => false;
     app.openLaunchQuery = async () => false;
     app.addTab = () => {};
     registry.all = [];
     registry.refresh = async () => {
-        if (!registry.all.length) runInAction(() => { registry.all.push({ slot: 0, status: "connecting" }); });
+        if (!registry.all.length) runInAction(() => { registry.all.push({
+            slot: 0, status: "connecting", connection: { url: "https://dev.example" }, options: { connectionName: "Dev" },
+        }); });
         return [];
     };
     let finishStart;
@@ -752,7 +762,9 @@ test("adding a connection publishes its name before waiting for registration", a
     const { app, registry } = setup();
     registry.all = [];
     registry.refresh = async () => {
-        runInAction(() => { registry.all = [{ slot: 0, status: "connecting" }]; });
+        runInAction(() => { registry.all = [{
+            slot: 0, status: "connecting", connection: { url: "https://dev.example" }, options: { connectionName: "Dev" },
+        }]; });
         return [0];
     };
     let finishRegistration;
@@ -767,7 +779,6 @@ test("adding a connection publishes its name before waiting for registration", a
 
 test("Object Explorer pin collapses to a side tab, opens as a flyout and pins back without losing width or tree", async () => {
     const { app, elements, document } = setup();
-    app.bindObjectExplorer();
     const pane = elements.get("object-explorer");
     const pin = elements.get("explorer-pin");
     const tab = elements.get("explorer-tab");
@@ -818,7 +829,6 @@ test("Object Explorer pin collapses to a side tab, opens as a flyout and pins ba
 
 test("pin state is saved with other user settings and an unpinned launch stays collapsed until opened", async () => {
     const { app, elements, savedSettings } = setup(false);
-    app.bindObjectExplorer();
     const pane = elements.get("object-explorer");
     const tab = elements.get("explorer-tab");
     const pin = elements.get("explorer-pin");
@@ -839,7 +849,6 @@ test("pin setting save errors are notified and the pin is re-enabled", async () 
     const notifications = [];
     window.toolboxAPI = { utils: { showNotification: async (message) => notifications.push(message) } };
     settingsApi.saveSettings = async () => { throw new Error("Settings storage unavailable"); };
-    app.bindObjectExplorer();
     await elements.get("explorer-pin").events.click();
     assert.equal(notifications[0].title, "Unable to save settings");
     assert.equal(notifications[0].body, "Settings storage unavailable");
@@ -1105,7 +1114,6 @@ for (const mode of ["grid", "text"]) {
 
 test("the selected plan node is shown in the Properties panel only while the active tab shows its plan", async () => {
     const { app, createTab, planViews, propertiesPanels } = setup();
-    app.bindProperties();
     const panel = propertiesPanels[0];
     assert.deepEqual(panel.shown.at(-1), { name: null, properties: null });
 
@@ -1134,7 +1142,6 @@ test("the selected plan node is shown in the Properties panel only while the act
 test("Properties pane pins like Object Explorer and saves its own setting", async () => {
     const { app, elements, savedSettings } = setup();
     app.settings = { ...app.settings, propertiesPinned: false };
-    app.bindProperties();
     const pane = elements.get("properties");
     const tab = elements.get("properties-tab");
     const pin = elements.get("properties-pin");
@@ -1147,6 +1154,88 @@ test("Properties pane pins like Object Explorer and saves its own setting", asyn
     assert.equal(pane.classes.has("auto-hide"), false);
     assert.deepEqual(savedSettings[0], { objectExplorerPinned: true, batchSize: 100, includeActualPlan: false, propertiesPinned: true });
     assert.equal(pin.getAttribute("aria-label"), "Unpin Properties");
+});
+
+test("context settings update declarative panes without recreating their contents or losing widths", () => {
+    const { app, elements, propertiesPanels, savedSettings } = setup(false);
+    const explorer = app.objectExplorer;
+    const panel = propertiesPanels[0];
+    const pane = elements.get("object-explorer");
+    const tree = elements.get("explorer-tree");
+    pane.style.width = "320px";
+    const item = document.createElement("div");
+    item.tabIndex = 0;
+    tree.appendChild(item);
+    elements.get("explorer-tab").events.click();
+    assert.equal(pane.hidden, false);
+    assert.equal(document.activeElement, item);
+    runInAction(() => { app.settings = { ...app.settings, includeActualPlan: true }; });
+    assert.equal(pane.hidden, false, "Unrelated settings must not collapse a flyout");
+    runInAction(() => { app.settings = { ...app.settings, objectExplorerPinned: true, propertiesPinned: true }; });
+    assert.equal(pane.classList.contains("auto-hide"), false);
+    assert.equal(elements.get("explorer-tab").hidden, true);
+    assert.equal(elements.get("properties").hidden, false);
+    runInAction(() => { app.settings = { ...app.settings, objectExplorerPinned: false }; });
+    assert.equal(pane.hidden, true);
+    assert.equal(pane.style.width, "320px");
+    assert.equal(elements.get("explorer-tree"), tree);
+    assert.equal(tree.firstChild, item);
+    assert.equal(app.objectExplorer, explorer);
+    assert.equal(propertiesPanels.length, 1);
+    assert.equal(propertiesPanels[0], panel);
+    assert.equal(savedSettings.length, 0, "Rendering and applying settings must not persist them again");
+    assert.equal("explorerPane" in app, false);
+    assert.equal("propertiesPanel" in app, false);
+});
+
+test("declarative pane resize directions, limits and unmount cleanup preserve their controllers", () => {
+    const { app, elements, window, document, propertiesPanels } = setup();
+    const explorer = app.objectExplorer;
+    const pane = elements.get("object-explorer");
+    const properties = elements.get("properties");
+    pane.getBoundingClientRect = properties.getBoundingClientRect = () => ({ width: 320 });
+    Object.defineProperty(document.body, "clientWidth", { value: 1000, configurable: true });
+    const move = x => flushSync(() => window.dispatchEvent(new window.MouseEvent("mousemove", { clientX: x })));
+    const up = () => flushSync(() => window.dispatchEvent(new window.MouseEvent("mouseup")));
+    elements.get("explorer-splitter").events.mousedown({ clientX: 100 });
+    move(150);
+    assert.equal(pane.style.width, "370px");
+    move(-500);
+    assert.equal(pane.style.width, "160px");
+    move(1500);
+    assert.equal(pane.style.width, "700px");
+    up();
+    move(0);
+    assert.equal(pane.style.width, "700px");
+    elements.get("properties-splitter").events.mousedown({ clientX: 100 });
+    move(150);
+    assert.equal(properties.style.width, "270px", "Right pane resizes in the opposite direction");
+    assert.equal(document.body.classList.contains("resizing-pane"), true);
+    flushSync(() => window.dispatchEvent(new window.Event("pagehide")));
+    assert.equal(document.body.classList.contains("resizing-pane"), false);
+    move(300);
+    assert.equal(properties.style.width, "270px", "Unmount removes the pending mousemove handler");
+    assert.equal(app.objectExplorer, null);
+    assert.equal(propertiesPanels[0].disposed, true);
+    const snapshots = explorer.snapshots.length;
+    runInAction(() => { app.connections.all = []; });
+    assert.equal(explorer.snapshots.length, snapshots, "Unmount disposes explorer connection observation");
+});
+
+test("pane controls wait for settings to load and observe the loaded pin preferences", () => {
+    const { app, elements, savedSettings } = setup();
+    runInAction(() => { app.settingsReady = false; });
+    assert.equal(elements.get("explorer-pin").disabled, true);
+    assert.equal(elements.get("properties-tab").disabled, true);
+    runInAction(() => {
+        app.settings = { ...app.settings, objectExplorerPinned: false, propertiesPinned: true };
+        app.settingsReady = true;
+    });
+    assert.equal(elements.get("explorer-pin").disabled, false);
+    assert.equal(elements.get("object-explorer").hidden, true);
+    assert.equal(elements.get("explorer-tab").hidden, false);
+    assert.equal(elements.get("properties").hidden, false);
+    assert.equal(savedSettings.length, 0);
 });
 
 test("the Properties pin preference defaults to unpinned", async () => {

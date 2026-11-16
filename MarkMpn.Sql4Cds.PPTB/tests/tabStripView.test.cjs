@@ -24,11 +24,15 @@ function fixture() {
     const observers = [];
     const filename = path.resolve(__dirname, "..", "src", "tabStripView.tsx");
     const module = { exports: {} };
+    const contextModule = { exports: {} };
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.resolve(__dirname, "..", "src", "appContext.tsx"), "utf8"), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+    }).outputText, { module: contextModule, exports: contextModule.exports, require });
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
     vm.runInNewContext(code, {
-        module, exports: module.exports, require, document, window, Node,
+        module, exports: module.exports, require: name => name === "./appContext" ? contextModule.exports : require(name), document, window, Node,
         ResizeObserver: class {
             constructor(callback) { observers.push(this); this.callback = callback; }
             observe() {}
@@ -54,7 +58,8 @@ function fixture() {
     const root = createRoot(container);
     cleanup?.();
     cleanup = () => root.unmount();
-    flushSync(() => root.render(React.createElement(module.exports.TabStripView, { app })));
+    flushSync(() => root.render(React.createElement(contextModule.exports.AppContext.Provider, { value: app },
+        React.createElement(module.exports.TabStripView))));
     const change = callback => flushSync(() => runInAction(callback));
     const event = (element, name, options = {}) => {
         const type = name.startsWith("key") ? dom.window.KeyboardEvent : name === "wheel" ? dom.window.WheelEvent : dom.window.MouseEvent;

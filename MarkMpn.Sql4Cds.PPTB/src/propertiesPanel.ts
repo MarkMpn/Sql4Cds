@@ -5,6 +5,7 @@ import type { ExecutionPlanGraphProperty } from "./resultsProtocol";
  * child properties, in the same way as the WinForms PropertyGrid used by the SSMS / XrmToolBox versions.
  */
 export class PropertiesPanel {
+    private readonly handleKeyDown = (event: KeyboardEvent) => this.onKeyDown(event);
     private readonly expanded = new Set<string>();
     private properties: ExecutionPlanGraphProperty[] | null = null;
 
@@ -13,8 +14,12 @@ export class PropertiesPanel {
         private readonly title: HTMLElement,
     ) {
         element.setAttribute("role", "tree");
-        element.addEventListener("keydown", (e) => this.onKeyDown(e));
+        element.addEventListener("keydown", this.handleKeyDown);
         this.render();
+    }
+
+    dispose(): void {
+        this.element.removeEventListener("keydown", this.handleKeyDown);
     }
 
     /** Shows the properties of an object, or a placeholder if nothing is selected */

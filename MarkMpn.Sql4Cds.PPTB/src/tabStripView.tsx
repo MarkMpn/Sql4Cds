@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react-lite";
-import type { App } from "./app";
+import { useApp } from "./appContext";
 import type { QueryTab } from "./query/queryTab";
 
 const TabLabel = observer(function TabLabel({ tab }: { tab: QueryTab }) {
@@ -11,7 +11,8 @@ const TabLabel = observer(function TabLabel({ tab }: { tab: QueryTab }) {
     </>;
 });
 
-export const TabStripView = observer(function TabStripView({ app }: { app: App }) {
+export const TabStripView = observer(function TabStripView() {
+    const app = useApp();
     const strip = useRef<HTMLDivElement>(null);
     const list = useRef<HTMLButtonElement>(null);
     const menu = useRef<HTMLDivElement>(null);
