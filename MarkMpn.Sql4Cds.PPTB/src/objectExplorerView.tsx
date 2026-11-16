@@ -24,23 +24,24 @@ const ExplorerNode = observer(function ExplorerNodeView({ node, level }: {
         aria-selected={selected} aria-expanded={node.info.isLeaf ? undefined : node.expanded}
         aria-busy={node.loading || connecting} aria-disabled={connecting}
         tabIndex={selected ? 0 : -1} data-path={node.info.nodePath}
-        onFocus={(event) => { if (event.target === event.currentTarget) explorer.select(node, false); }}>
+        onFocus={(event) => { if (event.target === event.currentTarget) explorer.select(node, false); }}
+        onClick={(event) => {
+            event.stopPropagation();
+            explorer.select(node);
+            if ((event.target as Element).closest(".explorer-expander")) explorer.toggle(node);
+        }}
+        onDoubleClick={(event) => {
+            event.stopPropagation();
+            if (!(event.target as Element).closest(".explorer-expander")) explorer.activate(node);
+        }}
+        onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            explorer.showContextMenu(node, event.clientX, event.clientY);
+        }}>
         <div className="explorer-row" style={{ paddingLeft: (level - 1) * 16 + 4 }}
-            title={node.connection.error || node.error || node.info.errorMessage || node.info.label}
-            onClick={() => explorer.select(node)}
-            onDoubleClick={() => explorer.activate(node)}
-            onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                explorer.showContextMenu(node, event.clientX, event.clientY);
-            }}>
-            <span className="explorer-expander" aria-hidden="true"
-                onClick={(event) => {
-                    event.stopPropagation();
-                    explorer.select(node);
-                    explorer.toggle(node);
-                }}
-                onDoubleClick={(event) => event.stopPropagation()}>
+            title={node.connection.error || node.error || node.info.errorMessage || node.info.label}>
+            <span className="explorer-expander" aria-hidden="true">
                 {node.info.isLeaf || connecting ? "" : node.expanded ? "\u25BE" : "\u25B8"}
             </span>
             <span className={`explorer-icon explorer-icon-${node.info.nodeType.toLowerCase()}`} aria-hidden="true">
@@ -82,6 +83,7 @@ export const ExplorerTree = observer(function ExplorerTree() {
         if (focusRequest > 0) tree.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
     }, [explorer, focusRequest]);
     return <div ref={bindTree} id="explorer-tree" className="explorer-tree" role="tree" aria-label="Object Explorer"
+        tabIndex={explorer.roots.length === 0 ? 0 : -1}
         onKeyDown={event => explorer.onKeyDown(event.nativeEvent)}>
         {explorer.roots.map((node) => <ExplorerNode key={node.connection.slot} node={node} level={1} />)}
         {explorer.roots.length === 0 && <div className="explorer-message">

@@ -153,6 +153,44 @@ function connection(slot = 0) {
     }, { options: observable.ref, connection: observable.ref }, { deep: false });
 }
 
+test("the explorer tree is focusable when empty and uses one roving tab stop when populated", async () => {
+    const { registry, tree } = setup();
+    assert.equal(tree.tabIndex, 0);
+    flushSync(() => tree.focus());
+    assert.equal(document.activeElement, tree);
+    flushSync(() => runInAction(() => { registry.all = [connection()]; }));
+    assert.equal(tree.tabIndex, -1);
+    assert.equal(tree.querySelectorAll('[role="treeitem"][tabindex="0"]').length, 1);
+    flushSync(() => runInAction(() => { registry.all = []; }));
+    assert.equal(tree.tabIndex, 0);
+});
+
+test("nested explorer row actions select only their own treeitem and expander double clicks do not activate", async () => {
+    const { explorer, tree, key, session, complete, calls } = setup();
+    await explorer.setConnections([connection()]);
+    key("ArrowRight");
+    await settle();
+    session();
+    complete("objectexplorer://s1", [node("objectexplorer://s1/tables", "Tables")]);
+    const child = tree.querySelector('[data-path="objectexplorer://s1/tables"]');
+    child.querySelector(".explorer-row").events.click();
+    assert.equal(explorer.selected.info.label, "Tables");
+    assert.equal(child.getAttribute("aria-selected"), "true");
+    assert.equal(tree.children[0].getAttribute("aria-selected"), "false");
+    const expander = child.querySelector(".explorer-expander");
+    expander.events.click();
+    await settle();
+    assert.equal(explorer.selected.expanded, true);
+    const count = calls.length;
+    expander.events.dblclick();
+    await settle();
+    assert.equal(explorer.selected.expanded, true);
+    assert.equal(calls.length, count);
+    child.querySelector(".explorer-row").events.contextmenu();
+    assert.equal(document.querySelector(".explorer-context-menu").getAttribute("aria-label"), "Tables");
+    assert.equal(explorer.selected.info.label, "Tables");
+});
+
 function node(nodePath, label, nodeType = "Folder", isLeaf = false) {
     return { nodePath, label, nodeType, isLeaf };
 }

@@ -37,7 +37,7 @@ function SplitMenu({ id, label, disabled, command, children }: { id: string; lab
             onKeyDown={(event) => {
                 if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); }
             }}>{"\u25BE"}</button>
-        <div ref={menu} id={`${id}-menu`} className="toolbar-menu" role="menu" hidden={!visible}
+        <div ref={menu} id={`${id}-menu`} className="toolbar-menu" role="menu" tabIndex={-1} hidden={!visible}
             onClick={(event) => { if (event.target instanceof Element && event.target.closest("button")) close(); }}
             onKeyDown={(event) => {
                 if (event.key === "Escape") { event.preventDefault(); close(); }

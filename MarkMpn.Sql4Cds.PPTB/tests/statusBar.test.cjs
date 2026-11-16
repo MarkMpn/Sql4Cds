@@ -115,6 +115,7 @@ function setup(pinned = true) {
     let nextTimer = 0;
     const modelLanguages = [];
     const savedSettings = [];
+    const editorActions = new Map();
     const settingsApi = {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
@@ -155,6 +156,9 @@ function setup(pinned = true) {
                 endLineNumber: range.end.line + 1, endColumn: range.end.character + 1,
             }),
             monaco: {
+                editor: { create: () => ({ addAction: action => editorActions.set(action.id, action), dispose() {} }) },
+                KeyCode: {},
+                KeyMod: { CtrlCmd: 1 },
                 Range: class {
                     constructor(startLineNumber, startColumn, endLineNumber, endColumn) {
                         Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
@@ -279,8 +283,22 @@ function setup(pinned = true) {
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, setNow: (value) => { now = value; } };
+    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, editorActions, setNow: (value) => { now = value; } };
 }
+
+test("the Monaco close-query action returns its promise including rejections to the editor", async () => {
+    const { app, editorActions, createTab } = setup();
+    app.createEditor();
+    const { tab } = createTab();
+    let rejectClose;
+    const closing = new Promise((_resolve, reject) => { rejectClose = reject; });
+    app.closeTab = target => { assert.equal(target, tab); return closing; };
+    const result = editorActions.get("sql4cds.closeTab").run();
+    assert.equal(result, closing);
+    const rejected = assert.rejects(result, /Close failed/);
+    rejectClose(new Error("Close failed"));
+    await rejected;
+});
 
 test("the status bar is rendered in the global root and observes the context's shared StatusBarState", () => {
     const { app, elements, document } = setup();
@@ -1379,11 +1397,14 @@ test("split menus support keyboard navigation, Escape and outside dismissal", ()
     createTab();
     const toggle = elements.get("btn-save-menu");
     const menu = document.getElementById("save-menu");
+    assert.equal(menu.tabIndex, -1, "Menus must be programmatically focusable without adding a tab stop");
     const saveAs = elements.get("btn-save-as");
     toggle.events.keydown({ key: "ArrowDown", preventDefault() {} });
     assert.equal(menu.hidden, false);
     assert.equal(toggle.getAttribute("aria-expanded"), "true");
     assert.equal(document.activeElement, saveAs);
+    flushSync(() => menu.focus());
+    assert.equal(document.activeElement, menu);
     menu.events.keydown({ key: "Escape", preventDefault() {} });
     assert.equal(menu.hidden, true);
     assert.equal(document.activeElement, toggle);

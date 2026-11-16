@@ -71,6 +71,10 @@ const properties = () => [
 test("PropertiesPanel reads context, renders placeholders and safely sorts/displays plan properties", () => {
     const { element, show, rows } = fixture();
     assert.match(element.textContent, /Select an execution plan node/);
+    const tree = element.querySelector('[role="tree"]');
+    assert.equal(tree.tabIndex, 0, "Empty property trees must be reachable by keyboard");
+    flushSync(() => tree.focus());
+    assert.equal(document.activeElement, tree);
     assert.equal(element.querySelector('[role="tree"]').getAttribute("aria-label"), "Properties of the selected item");
     show({ name: "SELECT\r\naccount", properties: [] });
     assert.equal(element.querySelector("#properties-title").textContent, "SELECT");
@@ -89,6 +93,8 @@ test("PropertiesPanel reads context, renders placeholders and safely sorts/displ
     assert.equal(rows()[0].getAttribute("aria-setsize"), "3");
     assert.equal(rows()[2].getAttribute("aria-posinset"), "3");
     assert.equal(rows().filter(row => row.tabIndex === 0).length, 1);
+    assert.equal(tree.tabIndex, -1, "Populated trees use their selected row as the single tab stop");
+    assert.equal(tree.querySelectorAll('[tabindex="0"]').length, 1);
 });
 
 test("PropertiesPanel supports nested keyboard navigation, toggling and roving focus", () => {

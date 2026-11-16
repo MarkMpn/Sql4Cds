@@ -446,7 +446,7 @@ export class App implements QueryTabHost {
             label: "Close Query",
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW],
             run: () => {
-                if (this.activeTab) this.closeTab(this.activeTab);
+                if (this.activeTab) return this.closeTab(this.activeTab);
             },
         });
         this.editor.addAction({

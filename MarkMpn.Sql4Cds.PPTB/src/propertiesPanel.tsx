@@ -57,6 +57,7 @@ export const PropertiesPanel = observer(function PropertiesPanel() {
     return <>
         <div id="properties-title" className="properties-title" title={name}>{name}</div>
         <div ref={grid} id="properties-grid" className="properties-grid" role="tree" aria-label="Properties of the selected item"
+            tabIndex={rows.length === 0 ? 0 : -1}
             onFocusCapture={() => { focused.current = true; }}
             onBlurCapture={event => {
                 if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) focused.current = false;
