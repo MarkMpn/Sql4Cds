@@ -13,7 +13,7 @@ export function ObjectExplorer() {
         const controller = new ExplorerController(app.client, tree.current!,
             message => { void app.reportError("Object Explorer", message); },
             text => app.insertObjectName(text),
-            (connection, query) => app.addTab(query, connection.slot), app.connections, false);
+            (connection, query) => app.addTab(query, connection.slot), app.connections);
         app.setObjectExplorer(controller);
         setExplorer(controller);
         return () => {

@@ -1,7 +1,6 @@
 import { action, computed, makeObservable, observable, reaction, runInAction, type IReactionDisposer } from "mobx";
 import type { ConnectionRegistry } from "./connections";
 import type { QueryTab } from "./query/queryTab";
-import { mountStatusBar } from "./statusBarView";
 
 type StatusKind = QueryTab["statusKind"];
 
@@ -33,10 +32,9 @@ export class StatusBar {
     private timer: ReturnType<typeof setInterval> | null = null;
     private tick = 0;
     private readonly stopTimer: IReactionDisposer;
-    private readonly unmount: () => void;
     private disposed = false;
 
-    constructor(element: HTMLElement, readonly state: StatusBarState, private readonly connections: ConnectionRegistry, mount = true) {
+    constructor(readonly state: StatusBarState, private readonly connections: ConnectionRegistry) {
         makeObservable<this, "tick">(this, {
             tick: observable,
             display: computed,
@@ -52,7 +50,6 @@ export class StatusBar {
             },
             { fireImmediately: true },
         );
-        this.unmount = mount ? mountStatusBar(element, this) : () => {};
     }
 
     get display() {
@@ -96,6 +93,5 @@ export class StatusBar {
         this.disposed = true;
         this.stopTimer();
         this.clearTimer();
-        this.unmount();
     }
 }

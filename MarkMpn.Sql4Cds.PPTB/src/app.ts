@@ -21,9 +21,8 @@ export class App implements QueryTabHost {
     readonly connections: ConnectionRegistry;
     objectExplorer: ObjectExplorer | null = null;
     readonly tabs: QueryTab[] = [];
-    viewReady = false;
     editorReady = false;
-    private readonly statusState = new StatusBarState();
+    readonly statusState = new StatusBarState();
     get activeTab(): QueryTab | null { return this.statusState.activeTab; }
     set activeTab(tab: QueryTab | null) { runInAction(() => { this.statusState.activeTab = tab; }); }
     private editor!: monaco.editor.IStandaloneCodeEditor;
@@ -66,7 +65,6 @@ export class App implements QueryTabHost {
     constructor() {
         makeObservable<this, "transforming">(this, {
             tabs: observable.shallow,
-            viewReady: observable,
             editorReady: observable,
             settings: observable.ref,
             settingsReady: observable,
@@ -104,10 +102,9 @@ export class App implements QueryTabHost {
             }),
         });
         this.connections = new ConnectionRegistry(this.client);
+        this.statusBar = new StatusBar(this.statusState, this.connections);
         const unmount = mountApp(byId("app"), this);
         this.el = getElements();
-        this.statusBar = new StatusBar(this.el.statusBar, this.statusState, this.connections, false);
-        runInAction(() => { this.viewReady = true; });
         const stopPersistence = reaction(
             () => [this.settings, ...this.tabs.map(tab => [tab.title, tab.filePath, tab.isDirty, tab.content, tab.connectionSlot]), this.activeTab],
             () => { this.syncClosePrevention(); this.scheduleSessionSave(); },
@@ -842,7 +839,6 @@ function getElements() {
         results: byId("results-host"),
         splitter: byId("splitter"),
         workspace: byId("workspace"),
-        statusBar: byId("status-bar"),
     };
 }
 

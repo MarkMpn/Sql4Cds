@@ -173,7 +173,6 @@ function setup(pinned = true) {
         "./dialogs": load("dialogs.ts", { "./lsp/protocol": protocol }, globals),
         "./statusBar": load("statusBar.ts", {
             "mobx": require("mobx"),
-            "./statusBarView": load("statusBarView.tsx", {}, globals),
         }, globals),
         "./appView": {
             mountApp: (element, app) => {
@@ -188,7 +187,7 @@ function setup(pinned = true) {
                         "./objectExplorerView": { ExplorerTree: () => null },
                         "./propertiesPanel": propertiesController,
                     }, globals),
-                    "./statusBarView": load("statusBarView.tsx", {}, globals),
+                    "./statusBarView": load("statusBarView.tsx", { "./appContext": appContext }, globals),
                 }, globals).mountApp(element, app);
                 let mounted = true;
                 const unmount = () => { if (mounted) { mounted = false; unmountRoot(); } };
@@ -289,6 +288,22 @@ function setup(pinned = true) {
     }
     return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, setNow: (value) => { now = value; } };
 }
+
+test("the status bar is rendered in the global root and observes the context's shared StatusBarState", () => {
+    const { app, elements, document } = setup();
+    assert.equal(app.statusBar.state, app.statusState);
+    assert.equal(document.querySelectorAll("#app #status-bar").length, 1);
+    const statusElement = elements.get("status-bar");
+    runInAction(() => {
+        app.statusState.ready = false;
+        app.statusState.setStatus("Starting through context", "busy");
+    });
+    assert.equal(elements.get("status-text").textContent, "Starting through context");
+    runInAction(() => { app.statusState.setStatus("Engine failed", "error"); });
+    assert.equal(elements.get("status-icon").classList.contains("error"), true);
+    assert.equal(elements.get("status-bar"), statusElement);
+    assert.equal(app.statusBar.state, app.statusState);
+});
 
 test("the React shell follows the active query's connection and execution state without refresh calls", () => {
     const { app, registry, createTab, elements } = setup();

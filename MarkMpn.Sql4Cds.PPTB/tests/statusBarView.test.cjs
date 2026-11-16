@@ -12,6 +12,8 @@ global.window = dom.window;
 global.document = dom.window.document;
 global.Node = dom.window.Node;
 const { flushSync } = require("react-dom");
+const { createRoot } = require("react-dom/client");
+const React = require("react");
 const disposables = [];
 
 afterEach(() => {
@@ -32,8 +34,7 @@ function load(relativePath, dependencies = {}, globals = {}) {
         require: (name) => {
             if (name in dependencies) return dependencies[name];
             if (!name.startsWith(".")) return require(name);
-            assert.equal(name, "./statusBarView", `Unexpected dependency: ${name}`);
-            return load("statusBarView.tsx");
+            assert.fail(`Unexpected dependency: ${name}`);
         },
         ...globals,
     }, { filename });
@@ -112,9 +113,15 @@ function fixture() {
     const element = document.createElement("div");
     element.className = "status-bar";
     document.body.appendChild(element);
-    let statusBar;
-    flushSync(() => { statusBar = new StatusBar(element, state, connections); });
-    disposables.push(statusBar);
+    const statusBar = new StatusBar(state, connections);
+    const context = load("appContext.tsx");
+    const { StatusBarView } = load("statusBarView.tsx", { "./appContext": context });
+    const app = { statusState: state, statusBar, connections };
+    const root = createRoot(element);
+    flushSync(() => root.render(React.createElement(context.AppContext.Provider, { value: app },
+        React.createElement(StatusBarView))));
+    const dispose = () => { statusBar.dispose(); root.unmount(); };
+    disposables.push({ dispose });
     const change = (callback) => flushSync(() => runInAction(callback));
     const text = (id) => element.querySelector(`#status-${id}`).textContent;
     const send = (tab, name, params) => flushSync(() => listeners.get(tab.uri)[name](params));
@@ -132,7 +139,7 @@ function fixture() {
         assert.equal(timers.size, 1);
         flushSync(() => timers.values().next().value());
     }
-    return { state, statusBar, slots, client, element, timers, change, text, send, createTab, connect, execute, tick };
+    return { state, statusBar, dispose, slots, client, element, timers, change, text, send, createTab, connect, execute, tick };
 }
 
 const summary = (batchId, id, rowCount) => ({ batchId, id, rowCount, columnInfo: [] });
@@ -245,13 +252,13 @@ test("grid errors take precedence over progress and connection changes update to
 });
 
 test("disposal stops the timer and reactions, unmounts React and ignores later state changes", async () => {
-    const { state, statusBar, change, element, createTab, connect, execute, timers } = fixture();
+    const { state, dispose, change, element, createTab, connect, execute, timers } = fixture();
     const tab = createTab();
     change(() => { state.ready = true; state.activeTab = tab; });
     await connect(tab);
     await execute(tab);
     assert.equal(timers.size, 1);
-    flushSync(() => statusBar.dispose());
+    flushSync(dispose);
     assert.equal(timers.size, 0);
     assert.equal(element.childElementCount, 0);
     change(() => { tab.running = false; });

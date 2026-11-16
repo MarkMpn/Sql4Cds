@@ -1,5 +1,4 @@
 import { useCallback, useLayoutEffect } from "react";
-import { createRoot } from "react-dom/client";
 import { observer } from "mobx-react-lite";
 import type { ObjectExplorer, TreeNode } from "./objectExplorer";
 
@@ -82,9 +81,3 @@ export const ExplorerTree = observer(function ExplorerTree({ explorer, tree }: {
         </div>}
     </>;
 });
-
-export function mountObjectExplorer(tree: HTMLElement, explorer: ObjectExplorer): () => void {
-    const root = createRoot(tree);
-    root.render(<ExplorerTree explorer={explorer} tree={tree} />);
-    return () => root.unmount();
-}

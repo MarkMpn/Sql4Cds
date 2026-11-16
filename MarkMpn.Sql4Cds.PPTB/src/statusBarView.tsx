@@ -1,9 +1,8 @@
-import { createRoot } from "react-dom/client";
 import { observer } from "mobx-react-lite";
-import type { StatusBar } from "./statusBar";
+import { useApp } from "./appContext";
 
-export const StatusBarView = observer(function StatusBarView({ statusBar }: { statusBar: StatusBar }) {
-    const display = statusBar.display;
+export const StatusBarView = observer(function StatusBarView() {
+    const display = useApp().statusBar.display;
     return <>
         <span id="status-message" role="status" title={display.text}>
             <span id="status-icon" aria-hidden="true" className={`status-icon ${display.kind}`}>{display.icon}</span>
@@ -20,9 +19,3 @@ export const StatusBarView = observer(function StatusBarView({ statusBar }: { st
         <span id="status-rows" title="Total rows across all result sets">{display.rows}</span>
     </>;
 });
-
-export function mountStatusBar(element: HTMLElement, statusBar: StatusBar): () => void {
-    const root = createRoot(element);
-    root.render(<StatusBarView statusBar={statusBar} />);
-    return () => root.unmount();
-}

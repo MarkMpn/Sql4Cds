@@ -37,7 +37,6 @@ const Workspace = observer(function Workspace() {
 });
 
 const AppView = observer(function AppView() {
-    const app = useApp();
     return <>
         <Toolbar />
         <div className="tool-content">
@@ -50,7 +49,7 @@ const AppView = observer(function AppView() {
             </PinnablePane>
         </div>
         <div id="status-bar" className="status-bar">
-            {app.viewReady && <StatusBarView statusBar={app.statusBar} />}
+            <StatusBarView />
         </div>
     </>;
 });

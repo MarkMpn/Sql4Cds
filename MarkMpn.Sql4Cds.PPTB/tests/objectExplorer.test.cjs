@@ -11,6 +11,8 @@ global.window = dom.window;
 global.document = dom.window.document;
 global.Node = dom.window.Node;
 const { flushSync } = require("react-dom");
+const { createRoot } = require("react-dom/client");
+const React = require("react");
 const explorers = [];
 afterEach(async () => {
     for (const explorer of explorers.splice(0)) {
@@ -92,10 +94,13 @@ function setup() {
     host.appendChild(tree);
     const { ObjectExplorer } = load("objectExplorer.ts", {});
     const registry = observable({ all: [] }, { all: observable.shallow });
+    const root = createRoot(tree);
+    const { ExplorerTree } = load("objectExplorerView.tsx", {});
     let explorer;
     flushSync(() => {
         explorer = new ObjectExplorer(client, tree, (message) => errors.push(message), (text) => inserted.push(text),
             (connection, query) => newQueries.push({ connection, query }), registry);
+        root.render(React.createElement(ExplorerTree, { explorer, tree }));
     });
     // RPC notifications are external events; flush React commits before inspecting their DOM.
     const methods = new Set(["setConnections", "sessionCreated", "expandComplete", "sessionDisconnected",
@@ -105,7 +110,10 @@ function setup() {
         if (!methods.has(name)) return value;
         return (...args) => {
             let result;
-            flushSync(() => { result = value.apply(target, args); });
+            flushSync(() => {
+                if (name === "dispose") root.unmount();
+                result = value.apply(target, args);
+            });
             return result;
         };
     } });
