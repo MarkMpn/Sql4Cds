@@ -18,6 +18,10 @@ Checked 2026-09-06. Scope: the VS Code extension, its packaging workflow, and th
 
 The npm audit (including development dependencies) reports zero known vulnerabilities. Newer package versions above are available updates, not a claim that the installed versions are unsupported.
 
+## Shared webview code
+
+The results webview reuses framework-neutral grids, execution-plan rendering, property-row preparation, and protocol types from the PPTB source. Host-specific UI stays separate: VS Code uses its own DOM-based Properties panel, while PPTB uses React/MobX and app context. Do not import PPTB app-bound components into the webview or enable JSX merely to consume them.
+
 Existing NuGet restore warnings include vulnerable MessagePack 2.5.187 and System.Security.Cryptography.Pkcs 6.0.1 dependencies. The runtime upgrade does not remediate these package advisories. Shared dependency upgrades require a separate review by their owners.
 
 Sources: [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy), [Node release schedule](https://github.com/nodejs/Release), and the npm registry via `npm outdated` / `npm audit`. Version availability is a snapshot, not a pinning recommendation.

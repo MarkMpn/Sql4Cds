@@ -182,7 +182,10 @@ function setup(pinned = true) {
                     "./objectExplorerView": { ExplorerTree: () => require("react").createElement("div", {
                         id: "explorer-tree", className: "explorer-tree", role: "tree", "aria-label": "Object Explorer",
                     }) },
-                    "./propertiesPanel": load("propertiesPanel.tsx", { "./appContext": appContext }, globals),
+                    "./propertiesPanel": load("propertiesPanel.tsx", {
+                        "./appContext": appContext,
+                        "./executionPlan/propertyRows": load("executionPlan/propertyRows.ts"),
+                    }, globals),
                     "./statusBarView": load("statusBarView.tsx", { "./appContext": appContext }, globals),
                 }, globals).mountApp(element, app);
                 let mounted = true;

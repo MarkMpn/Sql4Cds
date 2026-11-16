@@ -34,7 +34,10 @@ function load(file, dependencies = {}) {
 
 function fixture() {
     const context = load("appContext.tsx");
-    const { PropertiesPanel } = load("propertiesPanel.tsx", { "./appContext": context });
+    const { PropertiesPanel } = load("propertiesPanel.tsx", {
+        "./appContext": context,
+        "./executionPlan/propertyRows": load("executionPlan/propertyRows.ts"),
+    });
     const app = observable({ activeTab: null, settings: { propertiesPinned: true } }, {
         activeTab: observable.ref, settings: observable.ref,
     });

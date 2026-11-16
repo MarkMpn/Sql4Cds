@@ -1,7 +1,7 @@
 import { ResultsGrid } from "../../../MarkMpn.Sql4Cds.PPTB/src/query/resultsGrid";
 import { ExecutionPlanView } from "../../../MarkMpn.Sql4Cds.PPTB/src/executionPlan/executionPlanView";
 import { getNodeImageName } from "../../../MarkMpn.Sql4Cds.PPTB/src/executionPlan/nodeImageName";
-import { PropertiesPanel } from "../../../MarkMpn.Sql4Cds.PPTB/src/propertiesPanel";
+import { PropertiesPanel } from "./propertiesPanel";
 import type { DbCellValue, ExportFormat } from "../../../MarkMpn.Sql4Cds.PPTB/src/resultsProtocol";
 import type { ResultsState, ResultResponse } from "./protocol";
 
