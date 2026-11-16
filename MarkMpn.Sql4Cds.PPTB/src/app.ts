@@ -4,7 +4,7 @@ import { ConnectionRegistry } from "./connections";
 import { Sql4CdsClient } from "./lsp/client";
 import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue, type Range } from "./lsp/protocol";
 import { QueryTab, type QueryTabHost } from "./query/queryTab";
-import type { ObjectExplorer } from "./objectExplorer";
+import { ObjectExplorer } from "./objectExplorer";
 import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
 import { defaultSettings, loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
 import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
@@ -19,7 +19,7 @@ const DEFAULT_QUERY = "";
 export class App implements QueryTabHost {
     readonly client: Sql4CdsClient;
     readonly connections: ConnectionRegistry;
-    objectExplorer: ObjectExplorer | null = null;
+    readonly objectExplorer: ObjectExplorer;
     readonly tabs: QueryTab[] = [];
     editorReady = false;
     readonly statusState = new StatusBarState();
@@ -68,8 +68,6 @@ export class App implements QueryTabHost {
             editorReady: observable,
             settings: observable.ref,
             settingsReady: observable,
-            objectExplorer: observable.ref,
-            setObjectExplorer: action,
             convertTarget: observable,
             transforming: observable,
             toolbarState: computed,
@@ -81,9 +79,9 @@ export class App implements QueryTabHost {
             setResultsMode: action,
         });
         this.client = new Sql4CdsClient({
-            objectExplorerSessionCreated: (params) => this.objectExplorer?.sessionCreated(params),
-            objectExplorerExpandComplete: (params) => this.objectExplorer?.expandComplete(params),
-            objectExplorerSessionDisconnected: (params) => this.objectExplorer?.sessionDisconnected(params),
+            objectExplorerSessionCreated: (params) => this.objectExplorer.sessionCreated(params),
+            objectExplorerExpandComplete: (params) => this.objectExplorer.expandComplete(params),
+            objectExplorerSessionDisconnected: (params) => this.objectExplorer.sessionDisconnected(params),
             progress: (message) => { this.progressMessage = message; },
             log: (params) => {
                 if (params.type === 1) console.error(params.message);
@@ -95,13 +93,17 @@ export class App implements QueryTabHost {
             failed: action((message) => {
                 this.ready = false;
                 this.progressMessage = "";
-                this.objectExplorer?.engineStopped();
+                this.objectExplorer.engineStopped();
                 for (const tab of this.tabs) tab.engineStopped(message);
                 this.setStatus(message, "error");
                 void notify("SQL 4 CDS engine failed", message, "error");
             }),
         });
         this.connections = new ConnectionRegistry(this.client);
+        this.objectExplorer = new ObjectExplorer(this.client,
+            message => { void this.reportError("Object Explorer", message); },
+            text => this.insertObjectName(text),
+            (connection, query) => this.addTab(query, connection.slot), this.connections);
         this.statusBar = new StatusBar(this.statusState, this.connections);
         const unmount = mountApp(byId("app"), this);
         this.el = getElements();
@@ -112,6 +114,7 @@ export class App implements QueryTabHost {
         window.addEventListener("pagehide", () => {
             stopPersistence();
             this.statusBar.dispose();
+            void this.objectExplorer.dispose().catch(error => this.reportError("Object Explorer", error));
             for (const dispose of this.disposables) dispose();
             this.editor?.dispose();
             unmount();
@@ -119,8 +122,6 @@ export class App implements QueryTabHost {
     }
 
     focusEditor(): void { this.editor.focus(); }
-
-    setObjectExplorer(explorer: ObjectExplorer | null): void { this.objectExplorer = explorer; }
 
     reportError(title: string, error: unknown): Promise<void> {
         return notify(title, errorMessage(error), "error");
@@ -212,7 +213,7 @@ export class App implements QueryTabHost {
         try {
             await this.client.start({ ...this.settings });
         } catch (err) {
-            this.objectExplorer?.engineStopped();
+            this.objectExplorer.engineStopped();
             this.setStatus(`Unable to start the SQL 4 CDS engine: ${errorMessage(err)}`, "error");
             await notify("Unable to start SQL 4 CDS", errorMessage(err), "error");
             return;

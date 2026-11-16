@@ -48,16 +48,16 @@ export class ObjectExplorer {
     private readonly stopConnections: IReactionDisposer;
     private disposed = false;
     private closeContextMenu: (() => void) | null = null;
+    private tree: HTMLElement | null = null;
 
     constructor(
         private readonly client: Sql4CdsClient,
-        private readonly tree: HTMLElement,
         private readonly reportError: (message: string) => void,
         private readonly insertName: (text: string) => void,
         private readonly newQuery: (connection: ConnectionSlot, query: string) => void,
         registry: ConnectionRegistry,
     ) {
-        makeObservable<this, "connections" | "selection" | "onKeyDown">(this, {
+        makeObservable<this, "connections" | "selection">(this, {
             connections: observable.shallow,
             selection: observable.ref,
             available: observable,
@@ -75,9 +75,6 @@ export class ObjectExplorer {
             toggle: action,
             onKeyDown: action,
         });
-        tree.setAttribute("role", "tree");
-        tree.setAttribute("aria-label", "Object Explorer");
-        tree.addEventListener("keydown", this.handleKeyDown);
         this.stopConnections = reaction(
             () => registry.all,
             (connections) => { void this.setConnections(connections).catch((error) => this.reportError(errorMessage(error))); },
@@ -92,7 +89,11 @@ export class ObjectExplorer {
         return this.selection && nodes.includes(this.selection) ? this.selection : nodes[0] ?? null;
     }
 
-    private readonly handleKeyDown = (event: KeyboardEvent) => this.onKeyDown(event);
+    bindTree(tree: HTMLElement | null): void {
+        if (this.tree === tree) return;
+        this.closeContextMenu?.();
+        this.tree = tree;
+    }
 
     async setConnections(connections: ConnectionSlot[]): Promise<void> {
         if (this.disposed || !this.available) return;
@@ -126,7 +127,7 @@ export class ObjectExplorer {
     async removeConnection(slot: number): Promise<void> {
         const entry = this.connections.get(slot);
         if (!entry) return;
-        if (this.selected?.connection.slot === slot && this.tree.contains(document.activeElement)) this.focusRequest++;
+        if (this.selected?.connection.slot === slot && this.tree?.contains(document.activeElement)) this.focusRequest++;
         this.connections.delete(slot);
         if (this.selection?.connection.slot === slot) this.selection = null;
         this.closeContextMenu?.();
@@ -148,7 +149,7 @@ export class ObjectExplorer {
         if (this.disposed) return;
         this.disposed = true;
         this.stopConnections();
-        this.tree.removeEventListener("keydown", this.handleKeyDown);
+        this.bindTree(null);
         this.closeContextMenu?.();
         await Promise.all(Array.from(this.connections.keys(), (slot) => this.removeConnection(slot)));
         this.earlySessions.clear();
@@ -195,7 +196,7 @@ export class ObjectExplorer {
         } else {
             if (this.selected && this.selected !== node && this.allNodes(node).includes(this.selected)) {
                 this.selection = node;
-                if (this.tree.contains(document.activeElement)) this.focusRequest++;
+                if (this.tree?.contains(document.activeElement)) this.focusRequest++;
             }
             node.children = (params.nodes ?? []).map((info) => new TreeNode(info, entry.connection, node));
         }
@@ -439,14 +440,15 @@ export class ObjectExplorer {
             document.removeEventListener("focusin", outside);
             window.removeEventListener("resize", dismiss);
             window.removeEventListener("blur", dismiss);
-            this.tree.removeEventListener("scroll", dismiss);
+            tree?.removeEventListener("scroll", dismiss);
             menu.remove();
         };
         document.addEventListener("pointerdown", outside, true);
         document.addEventListener("focusin", outside);
         window.addEventListener("resize", dismiss);
         window.addEventListener("blur", dismiss);
-        this.tree.addEventListener("scroll", dismiss);
+        const tree = this.tree;
+        tree?.addEventListener("scroll", dismiss);
         menu.addEventListener("keydown", (event) => {
             if (event.key === "Escape" || event.key === "Tab") {
                 dismiss();
@@ -490,7 +492,7 @@ export class ObjectExplorer {
         if (firstBtn) firstBtn.focus();
     }
 
-    private onKeyDown(event: KeyboardEvent): void {
+    onKeyDown(event: KeyboardEvent): void {
         const nodes = this.visibleNodes();
         const node = this.selected ?? nodes[0];
         if (!node) return;

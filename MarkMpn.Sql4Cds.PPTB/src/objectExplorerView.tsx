@@ -1,6 +1,7 @@
-import { useCallback, useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { observer } from "mobx-react-lite";
-import type { ObjectExplorer, TreeNode } from "./objectExplorer";
+import type { TreeNode } from "./objectExplorer";
+import { useApp } from "./appContext";
 
 const NODE_ICONS: Readonly<Record<string, string>> = {
     Server: "\u25A4",
@@ -11,11 +12,11 @@ const NODE_ICONS: Readonly<Record<string, string>> = {
     StoredProcedure: "\u2699",
 };
 
-const ExplorerNode = observer(function ExplorerNodeView({ explorer, node, level }: {
-    explorer: ObjectExplorer;
+const ExplorerNode = observer(function ExplorerNodeView({ node, level }: {
     node: TreeNode;
     level: number;
 }) {
+    const explorer = useApp().objectExplorer;
     const connecting = node.connection.status === "connecting";
     const selected = explorer.selected === node;
     const bindItem = useCallback((item: HTMLDivElement | null) => explorer.bindItem(node, item), [explorer, node]);
@@ -64,20 +65,27 @@ const ExplorerNode = observer(function ExplorerNodeView({ explorer, node, level 
                 style={{ paddingLeft: level * 16 + 24 }} role={node.error ? "alert" : "status"}>
                 {node.error ? `${node.error} (Refresh to retry)` : node.loading ? "Loading\u2026" : "No objects"}
             </div>}
-            {node.children.map((child) => <ExplorerNode key={child.info.nodePath} explorer={explorer} node={child} level={level + 1} />)}
+            {node.children.map((child) => <ExplorerNode key={child.info.nodePath} node={child} level={level + 1} />)}
         </div>}
     </div>;
 });
 
-export const ExplorerTree = observer(function ExplorerTree({ explorer, tree }: { explorer: ObjectExplorer; tree: HTMLElement }) {
+export const ExplorerTree = observer(function ExplorerTree() {
+    const explorer = useApp().objectExplorer;
+    const tree = useRef<HTMLDivElement | null>(null);
+    const bindTree = useCallback((element: HTMLDivElement | null) => {
+        tree.current = element;
+        explorer.bindTree(element);
+    }, [explorer]);
     const focusRequest = explorer.focusRequest;
     useLayoutEffect(() => {
-        if (focusRequest > 0) tree.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
-    }, [tree, focusRequest]);
-    return <>
-        {explorer.roots.map((node) => <ExplorerNode key={node.connection.slot} explorer={explorer} node={node} level={1} />)}
+        if (focusRequest > 0) tree.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
+    }, [explorer, focusRequest]);
+    return <div ref={bindTree} id="explorer-tree" className="explorer-tree" role="tree" aria-label="Object Explorer"
+        onKeyDown={event => explorer.onKeyDown(event.nativeEvent)}>
+        {explorer.roots.map((node) => <ExplorerNode key={node.connection.slot} node={node} level={1} />)}
         {explorer.roots.length === 0 && <div className="explorer-message">
             {explorer.available ? "No connections available" : "SQL 4 CDS engine stopped"}
         </div>}
-    </>;
+    </div>;
 });

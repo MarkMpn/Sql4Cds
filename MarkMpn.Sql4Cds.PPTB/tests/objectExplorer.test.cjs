@@ -33,11 +33,13 @@ function load(relativePath, globals) {
     vm.runInNewContext(code, {
         module, exports: module.exports, console, Error, window, document, Node, ...globals,
         require: (name) => name.startsWith(".")
-            ? load(`${path.join(path.dirname(relativePath), name)}${name === "./objectExplorerView" ? ".tsx" : ".ts"}`, globals)
+            ? name === "./appContext" ? appContext : load(`${path.join(path.dirname(relativePath), name)}${name === "./objectExplorerView" ? ".tsx" : ".ts"}`, globals)
             : require(name),
     }, { filename });
     return module.exports;
 }
+
+const appContext = load("appContext.tsx", {});
 
 function walk(element) {
     return [element, ...Array.from(element.children).flatMap(walk)];
@@ -88,20 +90,23 @@ function setup() {
         },
         closeObjectExplorerSession: async (sessionId) => { calls.push(["close", sessionId]); return { sessionId, success: true }; },
     };
-    const tree = document.createElement("div");
+    const container = document.createElement("div");
     const host = document.createElement("main");
     document.documentElement.appendChild(host);
-    host.appendChild(tree);
+    host.appendChild(container);
     const { ObjectExplorer } = load("objectExplorer.ts", {});
     const registry = observable({ all: [] }, { all: observable.shallow });
-    const root = createRoot(tree);
+    let root = createRoot(container);
     const { ExplorerTree } = load("objectExplorerView.tsx", {});
     let explorer;
+    const renderView = () => root.render(React.createElement(appContext.AppContext.Provider, { value: { objectExplorer: explorer } },
+        React.createElement(ExplorerTree)));
     flushSync(() => {
-        explorer = new ObjectExplorer(client, tree, (message) => errors.push(message), (text) => inserted.push(text),
+        explorer = new ObjectExplorer(client, (message) => errors.push(message), (text) => inserted.push(text),
             (connection, query) => newQueries.push({ connection, query }), registry);
-        root.render(React.createElement(ExplorerTree, { explorer, tree }));
+        renderView();
     });
+    const tree = container.firstElementChild;
     // RPC notifications are external events; flush React commits before inspecting their DOM.
     const methods = new Set(["setConnections", "sessionCreated", "expandComplete", "sessionDisconnected",
         "toggle", "refresh", "removeConnection", "engineStopped", "dispose"]);
@@ -130,7 +135,13 @@ function setup() {
         tree.events.keydown({ key, shiftKey, preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
         return { prevented, stopped };
     }
-    return { explorer, registry, client, tree, calls, errors, inserted, newQueries, session, complete, key, document, window };
+    const unmountView = () => flushSync(() => root.unmount());
+    const mountView = () => {
+        root = createRoot(container);
+        flushSync(renderView);
+        return container.firstElementChild;
+    };
+    return { explorer, registry, client, tree, calls, errors, inserted, newQueries, session, complete, key, document, window, unmountView, mountView };
 }
 
 function connection(slot = 0) {
@@ -354,15 +365,44 @@ test("disposal unmounts React and stops connection reconciliation and stale noti
     await settle();
     session();
     await explorer.dispose();
-    assert.equal(tree.childElementCount, 0);
+    assert.equal(tree.isConnected, false);
     const before = calls.length;
     flushSync(() => runInAction(() => { registry.all = [connection(1)]; }));
     explorer.expandComplete({ sessionId: "s1", nodePath: "objectexplorer://s1", nodes: [node("stale", "stale")] });
     key("ArrowRight");
     await settle();
-    assert.equal(tree.childElementCount, 0);
+    assert.equal(tree.isConnected, false);
     assert.equal(explorer.roots.length, 0);
     assert.equal(calls.length, before);
+});
+
+test("the context-bound tree can remount without recreating or disposing its app-owned controller", async () => {
+    const { explorer, tree, session, complete, key, calls, unmountView, mountView } = setup();
+    await explorer.setConnections([connection()]);
+    key("ArrowRight");
+    await settle();
+    session();
+    complete("objectexplorer://s1", [node("objectexplorer://s1/tables", "Tables")]);
+    const selected = explorer.selected;
+    key("ContextMenu");
+    assert.ok(document.querySelector(".explorer-context-menu"));
+    unmountView();
+    assert.equal(tree.isConnected, false);
+    assert.equal(document.querySelector(".explorer-context-menu"), null, "Detaching the view removes its menu/listeners");
+    assert.equal(calls.filter(call => call[0] === "close").length, 0, "The view does not own the session lifecycle");
+    assert.equal(explorer.selected, selected);
+    const replacement = mountView();
+    assert.equal(replacement.getAttribute("role"), "tree");
+    assert.equal(replacement.getAttribute("aria-label"), "Object Explorer");
+    assert.match(replacement.textContent, /Tables/);
+    assert.equal(explorer.selected, selected);
+    assert.equal(calls.filter(call => call[0] === "create").length, 1);
+    replacement.events.keydown({ key: "ArrowDown" });
+    assert.equal(explorer.selected.info.label, "Tables");
+    replacement.events.keydown({ key: "ContextMenu" });
+    assert.ok(document.querySelector(".explorer-context-menu"));
+    replacement.events.scroll();
+    assert.equal(document.querySelector(".explorer-context-menu"), null);
 });
 
 test("columns, table-valued functions and stored procedures have distinct icons while existing icons are preserved", async () => {

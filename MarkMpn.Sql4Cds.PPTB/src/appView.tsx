@@ -9,7 +9,8 @@ import { TabStripView } from "./tabStripView";
 import { StatusBarView } from "./statusBarView";
 import { AppContext, useApp } from "./appContext";
 import { PinnablePane } from "./pinnablePaneView";
-import { ObjectExplorer, Properties } from "./paneViews";
+import { ExplorerTree } from "./objectExplorerView";
+import { PropertiesPanel } from "./propertiesPanel";
 
 const QueryResults = observer(function QueryResults({ tab, active }: { tab: QueryTab; active: boolean }) {
     const host = useRef<HTMLDivElement>(null);
@@ -41,11 +42,11 @@ const AppView = observer(function AppView() {
         <Toolbar />
         <div className="tool-content">
             <PinnablePane name="Object Explorer" settingName="objectExplorerPinned">
-                <ObjectExplorer />
+                <ExplorerTree />
             </PinnablePane>
             <Workspace />
             <PinnablePane name="Properties" settingName="propertiesPinned">
-                <Properties />
+                <PropertiesPanel />
             </PinnablePane>
         </div>
         <div id="status-bar" className="status-bar">

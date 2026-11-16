@@ -119,7 +119,6 @@ function setup(pinned = true) {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
     const invocation = load("mcpInvocation.ts", {}, { TextEncoder });
-    const propertiesPanels = [];
     const globals = {
         document, window, Node: dom.window.Node, Element: dom.window.Element,
         ResizeObserver: class { observe() {} disconnect() {} },
@@ -136,16 +135,11 @@ function setup(pinned = true) {
     const appContext = load("appContext.tsx", {}, globals);
     const explorerController = { ObjectExplorer: class {
         snapshots = [];
-        constructor(_client, _tree, _error, _insert, _newQuery, registry) {
+        constructor(_client, _error, _insert, _newQuery, registry) {
             this.stop = autorun(() => this.snapshots.push(registry.all.map(entry => ({ slot: entry.slot, status: entry.status }))));
         }
         engineStopped() { this.stopped = true; }
-        async dispose() { this.stop(); }
-    } };
-    const propertiesController = { PropertiesPanel: class {
-        constructor() { this.shown = []; propertiesPanels.push(this); }
-        show(name, properties) { this.shown.push({ name, properties }); }
-        dispose() { this.disposed = true; }
+        async dispose() { this.stop(); this.disposed = true; }
     } };
     const { App } = load("app.ts", {
         "mobx": require("mobx"),
@@ -181,12 +175,10 @@ function setup(pinned = true) {
                     "./toolbar": load("toolbar.tsx", { "./appContext": appContext }, globals),
                     "./tabStripView": load("tabStripView.tsx", { "./appContext": appContext }, globals),
                     "./pinnablePaneView": load("pinnablePaneView.tsx", { "./appContext": appContext }, globals),
-                    "./paneViews": load("paneViews.tsx", {
-                        "./appContext": appContext,
-                        "./objectExplorer": explorerController,
-                        "./objectExplorerView": { ExplorerTree: () => null },
-                        "./propertiesPanel": propertiesController,
-                    }, globals),
+                    "./objectExplorerView": { ExplorerTree: () => require("react").createElement("div", {
+                        id: "explorer-tree", className: "explorer-tree", role: "tree", "aria-label": "Object Explorer",
+                    }) },
+                    "./propertiesPanel": load("propertiesPanel.tsx", { "./appContext": appContext }, globals),
                     "./statusBarView": load("statusBarView.tsx", { "./appContext": appContext }, globals),
                 }, globals).mountApp(element, app);
                 let mounted = true;
@@ -196,6 +188,7 @@ function setup(pinned = true) {
             },
         },
         "./query/queryTab": {},
+        "./objectExplorer": explorerController,
         "./executionPlan/executionPlanView": { getFetchXmlQuery: (node) =>
             node.nodeType === "FetchXmlScan" ? node.properties?.find(property => property.name === "FetchXML")?.value ?? null : null },
         "./settings": settingsApi,
@@ -286,7 +279,7 @@ function setup(pinned = true) {
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, setNow: (value) => { now = value; } };
+    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, setNow: (value) => { now = value; } };
 }
 
 test("the status bar is rendered in the global root and observes the context's shared StatusBarState", () => {
@@ -1128,9 +1121,9 @@ for (const mode of ["grid", "text"]) {
 }
 
 test("the selected plan node is shown in the Properties panel only while the active tab shows its plan", async () => {
-    const { app, createTab, planViews, propertiesPanels } = setup();
-    const panel = propertiesPanels[0];
-    assert.deepEqual(panel.shown.at(-1), { name: null, properties: null });
+    const { app, createTab, planViews, elements } = setup();
+    const panel = elements.get("properties-grid");
+    assert.match(panel.textContent, /Select an execution plan node/);
 
     const { tab, events } = createTab();
     await tab.connect(0);
@@ -1140,18 +1133,19 @@ test("the selected plan node is shown in the Properties panel only while the act
     events.queryComplete({ batchSummaries: [] });
 
     planViews[0].select({ ...samplePlan.root, name: "SELECT\r\naccount" });
-    assert.equal(panel.shown.at(-1).name, "SELECT");
-    assert.equal(panel.shown.at(-1).properties, samplePlan.root.properties);
+    assert.equal(elements.get("properties-title").textContent, "SELECT");
+    assert.equal(panel.querySelector(".property-name").textContent, samplePlan.root.properties[0].name);
+    assert.equal(panel.querySelector(".property-value").textContent, samplePlan.root.properties[0].value);
 
     tab.resultsTabButtons.get("messages").events.click();
-    assert.deepEqual(panel.shown.at(-1), { name: null, properties: null });
+    assert.match(panel.textContent, /Select an execution plan node/);
     tab.resultsTabButtons.get("plan").events.click();
-    assert.equal(panel.shown.at(-1).name, "SELECT");
+    assert.equal(elements.get("properties-title").textContent, "SELECT");
 
     const other = createTab();
     app.activeTab = tab;
     planViews[1].select(samplePlan.root);
-    assert.equal(panel.shown.at(-1).name, "SELECT", "Background tabs don't update the panel");
+    assert.equal(elements.get("properties-title").textContent, "SELECT", "Background tabs don't update the panel");
 });
 
 test("Properties pane pins like Object Explorer and saves its own setting", async () => {
@@ -1172,9 +1166,9 @@ test("Properties pane pins like Object Explorer and saves its own setting", asyn
 });
 
 test("context settings update declarative panes without recreating their contents or losing widths", () => {
-    const { app, elements, propertiesPanels, savedSettings } = setup(false);
+    const { app, elements, savedSettings } = setup(false);
     const explorer = app.objectExplorer;
-    const panel = propertiesPanels[0];
+    const panel = elements.get("properties-grid");
     const pane = elements.get("object-explorer");
     const tree = elements.get("explorer-tree");
     pane.style.width = "320px";
@@ -1196,15 +1190,14 @@ test("context settings update declarative panes without recreating their content
     assert.equal(elements.get("explorer-tree"), tree);
     assert.equal(tree.firstChild, item);
     assert.equal(app.objectExplorer, explorer);
-    assert.equal(propertiesPanels.length, 1);
-    assert.equal(propertiesPanels[0], panel);
+    assert.equal(elements.get("properties-grid"), panel);
     assert.equal(savedSettings.length, 0, "Rendering and applying settings must not persist them again");
     assert.equal("explorerPane" in app, false);
     assert.equal("propertiesPanel" in app, false);
 });
 
 test("declarative pane resize directions, limits and unmount cleanup preserve their controllers", () => {
-    const { app, elements, window, document, propertiesPanels } = setup();
+    const { app, elements, window, document } = setup();
     const explorer = app.objectExplorer;
     const pane = elements.get("object-explorer");
     const properties = elements.get("properties");
@@ -1230,8 +1223,8 @@ test("declarative pane resize directions, limits and unmount cleanup preserve th
     assert.equal(document.body.classList.contains("resizing-pane"), false);
     move(300);
     assert.equal(properties.style.width, "270px", "Unmount removes the pending mousemove handler");
-    assert.equal(app.objectExplorer, null);
-    assert.equal(propertiesPanels[0].disposed, true);
+    assert.equal(app.objectExplorer, explorer, "The app retains ownership of its controller");
+    assert.equal(explorer.disposed, true);
     const snapshots = explorer.snapshots.length;
     runInAction(() => { app.connections.all = []; });
     assert.equal(explorer.snapshots.length, snapshots, "Unmount disposes explorer connection observation");
