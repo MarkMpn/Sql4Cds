@@ -14,11 +14,36 @@ export const PinnablePane = observer(function PinnablePane({ name, settingName, 
     const paneId = explorer ? "object-explorer" : "properties";
     const [flyout, setFlyout] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [resizeValue, setResizeValue] = useState({ width: 160, max: 160 });
     const pane = useRef<HTMLElement>(null);
     const tab = useRef<HTMLButtonElement>(null);
     const stopResize = useRef<(() => void) | null>(null);
     const focusTab = useRef(false);
     const open = pinned || flyout;
+    const resizeLimit = () => {
+        let max = Math.max(160, document.body.clientWidth - 300);
+        const element = pane.current;
+        if (element) {
+            const cssMax = window.getComputedStyle(element).maxWidth;
+            const parentWidth = element.parentElement?.clientWidth ?? 0;
+            const limit = cssMax.endsWith("%") && parentWidth > 0
+                ? parentWidth * parseFloat(cssMax) / 100
+                : cssMax.endsWith("px") ? parseFloat(cssMax) : NaN;
+            if (Number.isFinite(limit)) max = Math.max(160, Math.min(max, Math.floor(limit)));
+        }
+        return max;
+    };
+    const measureResize = () => {
+        const max = resizeLimit();
+        const width = Math.min(max, Math.max(160, Math.round(pane.current?.getBoundingClientRect().width ?? 160)));
+        setResizeValue({ width, max });
+    };
+    const resize = (width: number) => {
+        const max = resizeLimit();
+        const next = Math.min(max, Math.max(160, width));
+        pane.current!.style.width = `${next}px`;
+        setResizeValue({ width: Math.min(max, Math.max(160, Math.round(pane.current!.getBoundingClientRect().width || next))), max });
+    };
     useLayoutEffect(() => {
         setFlyout(false);
         if (focusTab.current && !pinned) tab.current?.focus();
@@ -50,20 +75,41 @@ export const PinnablePane = observer(function PinnablePane({ name, settingName, 
         };
     }, [pinned, flyout, explorer]);
     useEffect(() => () => stopResize.current?.(), []);
+    useLayoutEffect(() => {
+        if (!pinned) return;
+        measureResize();
+        window.addEventListener("resize", measureResize);
+        return () => window.removeEventListener("resize", measureResize);
+    }, [pinned]);
     const sideTab = <button ref={tab} id={`${id}-tab`} className="pane-tab" aria-label={`Show ${name}`}
         aria-controls={paneId} aria-expanded={!pinned && open} hidden={pinned} disabled={!app.settingsReady}
         onClick={() => setFlyout(!flyout)}>{name}</button>;
     const splitter = <div id={`${id}-splitter`} className="pane-splitter" role="separator"
-        aria-label={`Resize ${name}`} aria-orientation="vertical" hidden={!pinned}
+        aria-label={`Resize ${name}`} aria-orientation="vertical" aria-controls={paneId}
+        aria-valuemin={160} aria-valuemax={resizeValue.max} aria-valuenow={resizeValue.width}
+        tabIndex={0} hidden={!pinned}
+        onFocus={measureResize}
+        onKeyDown={(event) => {
+            const width = pane.current!.getBoundingClientRect().width;
+            let next: number;
+            switch (event.key) {
+                case "ArrowLeft": next = width + (explorer ? -10 : 10); break;
+                case "ArrowRight": next = width + (explorer ? 10 : -10); break;
+                case "Home": next = 160; break;
+                case "End": next = resizeLimit(); break;
+                default: return;
+            }
+            event.preventDefault();
+            resize(next);
+        }}
         onMouseDown={(event) => {
             event.preventDefault();
             stopResize.current?.();
             const startX = event.clientX;
             const width = pane.current!.getBoundingClientRect().width;
             const move = (moveEvent: MouseEvent) => {
-                const max = Math.max(160, document.body.clientWidth - 300);
                 const next = width + (moveEvent.clientX - startX) * (explorer ? 1 : -1);
-                pane.current!.style.width = `${Math.min(max, Math.max(160, next))}px`;
+                resize(next);
             };
             const up = () => {
                 document.body.classList.remove("resizing-pane");

@@ -38,6 +38,7 @@ export class PropertiesPanel {
       element.setAttribute("aria-level", String(row.level));
       element.setAttribute("aria-setsize", String(row.size));
       element.setAttribute("aria-posinset", String(row.position));
+      element.setAttribute("aria-selected", String(row.key === this.selectedKey));
       if (row.expandable) element.setAttribute("aria-expanded", String(row.expanded));
       element.tabIndex = row.key === this.selectedKey ? 0 : -1;
       element.addEventListener("focus", () => this.select(row.key, false));
@@ -79,6 +80,7 @@ export class PropertiesPanel {
     this.selectedKey = key;
     for (const element of this.grid.querySelectorAll<HTMLElement>(".property-row")) {
       element.tabIndex = element.dataset.key === key ? 0 : -1;
+      element.setAttribute("aria-selected", String(element.tabIndex === 0));
       if (focus && element.tabIndex === 0) element.focus();
     }
   }

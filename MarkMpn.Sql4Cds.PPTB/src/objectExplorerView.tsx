@@ -25,6 +25,9 @@ const ExplorerNode = observer(function ExplorerNodeView({ node, level }: {
         aria-busy={node.loading || connecting} aria-disabled={connecting}
         tabIndex={selected ? 0 : -1} data-path={node.info.nodePath}
         onFocus={(event) => { if (event.target === event.currentTarget) explorer.select(node, false); }}
+        onKeyDown={(event) => {
+            if (event.target === event.currentTarget) explorer.onKeyDown(event.nativeEvent);
+        }}
         onClick={(event) => {
             event.stopPropagation();
             explorer.select(node);
@@ -84,7 +87,7 @@ export const ExplorerTree = observer(function ExplorerTree() {
     }, [explorer, focusRequest]);
     return <div ref={bindTree} id="explorer-tree" className="explorer-tree" role="tree" aria-label="Object Explorer"
         tabIndex={explorer.roots.length === 0 ? 0 : -1}
-        onKeyDown={event => explorer.onKeyDown(event.nativeEvent)}>
+        onKeyDown={event => { if (event.target === event.currentTarget) explorer.onKeyDown(event.nativeEvent); }}>
         {explorer.roots.map((node) => <ExplorerNode key={node.connection.slot} node={node} level={1} />)}
         {explorer.roots.length === 0 && <div className="explorer-message">
             {explorer.available ? "No connections available" : "SQL 4 CDS engine stopped"}

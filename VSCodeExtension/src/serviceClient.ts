@@ -184,7 +184,7 @@ export class Sql4CdsService implements vscode.Disposable {
   }
 
   public async generateObjectExplorerScript(sessionId: string, nodePath: string, action: string): Promise<string> {
-    return this.languageClient.sendRequest<string>(Methods.generateObjectExplorerScript, { sessionId, nodePath, action });
+    return await this.languageClient.sendRequest<string>(Methods.generateObjectExplorerScript, { sessionId, nodePath, action });
   }
 
   public async closeObjectExplorerSession(sessionId: string): Promise<void> {

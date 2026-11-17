@@ -93,6 +93,7 @@ test("PropertiesPanel reads context, renders placeholders and safely sorts/displ
     assert.equal(rows()[1].getAttribute("aria-expanded"), "false");
     assert.equal(rows()[0].hasAttribute("aria-expanded"), false);
     assert.equal(rows()[0].getAttribute("aria-level"), "1");
+    assert.deepEqual(rows().map(row => row.getAttribute("aria-selected")), ["true", "false", "false"]);
     assert.equal(rows()[0].getAttribute("aria-setsize"), "3");
     assert.equal(rows()[2].getAttribute("aria-posinset"), "3");
     assert.equal(rows().filter(row => row.tabIndex === 0).length, 1);
@@ -113,6 +114,8 @@ test("PropertiesPanel supports nested keyboard navigation, toggling and roving f
     key("ArrowRight");
     assert.equal(document.activeElement, rows()[2]);
     assert.equal(rows()[2].getAttribute("aria-level"), "2");
+    assert.equal(rows()[2].getAttribute("aria-selected"), "true");
+    assert.equal(rows()[1].getAttribute("aria-selected"), "false");
     key("Enter");
     assert.equal(rows().length, 6);
     key("ArrowRight");
@@ -146,6 +149,8 @@ test("PropertiesPanel preserves row identity and expansion for the same data and
     click(parent);
     assert.equal(document.activeElement, parent);
     assert.equal(parent.tabIndex, 0);
+    assert.equal(parent.getAttribute("aria-selected"), "true");
+    assert.equal(first.getAttribute("aria-selected"), "false");
     assert.equal(first.tabIndex, -1, "Mouse selection updates the roving tab stop");
     assert.equal(rows().length, 5);
     show({ name: "Renamed", properties: list });

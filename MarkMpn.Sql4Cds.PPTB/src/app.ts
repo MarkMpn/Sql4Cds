@@ -348,7 +348,7 @@ export class App implements QueryTabHost {
         if (filename !== null && fileText !== null) {
             tab.setFile(filename);
             // The editor normalises line endings to LF, so match that when comparing against the file content
-            tab.markSaved(saved.query === null ? undefined : fileText.split(/\r\n|\r|\n/).join("\n"));
+            tab.markSaved(saved.query === null ? undefined : fileText.replaceAll(/\r\n|\r|\n/g, "\n"));
         } else if (saved.dirty) {
             tab.markSaved("");
         }

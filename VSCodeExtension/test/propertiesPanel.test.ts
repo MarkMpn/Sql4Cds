@@ -48,6 +48,7 @@ test("the VS Code properties view safely renders shared sorted rows with a singl
     assert.equal(rows()[1].getAttribute("aria-expanded"), "false");
     assert.equal(rows()[0].hasAttribute("aria-expanded"), false);
     assert.equal(rows()[0].getAttribute("aria-setsize"), "3");
+    assert.deepEqual(rows().map(row => row.getAttribute("aria-selected")), ["true", "false", "false"]);
     assert.equal(rows()[2].getAttribute("aria-posinset"), "3");
     assert.equal(grid.tabIndex, -1);
     assert.equal(rows().filter(row => row.tabIndex === 0).length, 1);
@@ -62,6 +63,8 @@ test("the VS Code properties view supports nested keyboard navigation and mouse 
     rows()[0].focus();
     assert.equal(key("ArrowDown").defaultPrevented, true);
     assert.equal(document.activeElement, rows()[1]);
+    assert.equal(rows()[1].getAttribute("aria-selected"), "true");
+    assert.equal(rows()[0].getAttribute("aria-selected"), "false");
     key("ArrowRight");
     assert.equal(rows()[1].getAttribute("aria-expanded"), "true");
     assert.equal(document.activeElement, rows()[1]);
@@ -89,6 +92,7 @@ test("the VS Code properties view supports nested keyboard navigation and mouse 
     assert.equal(document.activeElement, rows()[1]);
     assert.equal(rows()[1].getAttribute("aria-expanded"), "false");
     assert.equal(rows().filter(row => row.tabIndex === 0).length, 1);
+    assert.equal(rows().filter(row => row.getAttribute("aria-selected") === "true").length, 1);
   } finally { ui.dom.window.close(); }
 });
 

@@ -1251,6 +1251,70 @@ test("declarative pane resize directions, limits and unmount cleanup preserve th
     assert.equal(explorer.snapshots.length, snapshots, "Unmount disposes explorer connection observation");
 });
 
+test("pane separators resize with the keyboard in physical directions and expose their values", () => {
+    const { elements, document } = setup();
+    Object.defineProperty(document.body, "clientWidth", { value: 1000, configurable: true });
+    for (const [paneId, splitterId, direction] of [
+        ["object-explorer", "explorer-splitter", 1],
+        ["properties", "properties-splitter", -1],
+    ]) {
+        const pane = elements.get(paneId);
+        const splitter = elements.get(splitterId);
+        pane.style.width = "320px";
+        pane.getBoundingClientRect = () => ({ width: parseFloat(pane.style.width) });
+        flushSync(() => splitter.focus());
+        assert.equal(document.activeElement, splitter);
+        assert.equal(splitter.getAttribute("role"), "separator");
+        assert.equal(splitter.getAttribute("aria-controls"), paneId);
+        assert.equal(splitter.getAttribute("aria-valuenow"), "320");
+        assert.equal(splitter.getAttribute("aria-valuemax"), "700");
+        const key = value => {
+            const event = new window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true });
+            flushSync(() => splitter.dispatchEvent(event));
+            return event;
+        };
+        assert.equal(key("ArrowRight").defaultPrevented, true);
+        assert.equal(pane.style.width, `${320 + direction * 10}px`);
+        assert.equal(splitter.getAttribute("aria-valuenow"), String(320 + direction * 10));
+        key("ArrowLeft");
+        assert.equal(pane.style.width, "320px");
+        key("End");
+        assert.equal(pane.style.width, "700px");
+        assert.equal(splitter.getAttribute("aria-valuenow"), "700");
+        key("Home");
+        assert.equal(pane.style.width, "160px");
+        assert.equal(splitter.getAttribute("aria-valuenow"), "160");
+        assert.equal(key("Tab").defaultPrevented, false);
+    }
+});
+
+test("pane separator maximum includes the pane's CSS width constraint", () => {
+    const { elements, document } = setup();
+    Object.defineProperty(document.body, "clientWidth", { value: 1000, configurable: true });
+    const pane = elements.get("object-explorer");
+    const splitter = elements.get("explorer-splitter");
+    Object.defineProperty(pane.parentElement, "clientWidth", { value: 800, configurable: true });
+    pane.style.width = "320px";
+    pane.style.maxWidth = "60%";
+    pane.getBoundingClientRect = () => ({ width: parseFloat(pane.style.width) });
+    flushSync(() => splitter.focus());
+    assert.equal(splitter.getAttribute("aria-valuemax"), "480");
+    splitter.events.keydown({ key: "End" });
+    assert.equal(pane.style.width, "480px");
+    assert.equal(splitter.getAttribute("aria-valuenow"), "480");
+});
+
+test("restoring edited files normalizes all line ending forms for the saved baseline", async () => {
+    const { app, window } = setup();
+    window.toolboxAPI = { fileSystem: { readText: async () => "one\r\ntwo\rthree\nfour" } };
+    const saved = [];
+    const tab = { setFile: filename => saved.push(filename), markSaved: value => saved.push(value) };
+    app.addTab = (query, slot) => { saved.push(query, slot); return tab; };
+    const result = await app.restoreTab({ filename: "query.sql", query: "changed", connectionId: null, dirty: true });
+    assert.equal(result, tab);
+    assert.deepEqual(saved, ["changed", undefined, "query.sql", "one\ntwo\nthree\nfour"]);
+});
+
 test("pane controls wait for settings to load and observe the loaded pin preferences", () => {
     const { app, elements, savedSettings } = setup();
     runInAction(() => { app.settingsReady = false; });

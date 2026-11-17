@@ -177,6 +177,12 @@ test("nested explorer row actions select only their own treeitem and expander do
     assert.equal(explorer.selected.info.label, "Tables");
     assert.equal(child.getAttribute("aria-selected"), "true");
     assert.equal(tree.children[0].getAttribute("aria-selected"), "false");
+    child.events.keydown({ key: " " });
+    await settle();
+    assert.equal(explorer.selected.expanded, true, "Keyboard activation on the selected row expands it once");
+    child.events.keydown({ key: " " });
+    await settle();
+    assert.equal(explorer.selected.expanded, false);
     const expander = child.querySelector(".explorer-expander");
     expander.events.click();
     await settle();
@@ -643,6 +649,9 @@ test("object scripts expose type-gated actions and editor, file and clipboard de
     const table = walk(tree).find((element) => element.dataset.path === objects[0].nodePath);
     const play = table.querySelector(".explorer-select-top");
     assert.ok(play);
+    play.focus();
+    play.events.keydown({ key: " " });
+    assert.equal(document.activeElement, play, "Tree keyboard handling does not consume button activation");
     play.events.click({ stopPropagation() {} });
     await settle();
     assert.equal(newQueries.at(-1).query, "SELECT TOP 1000 [accountid], [name]\nFROM dbo.account");
