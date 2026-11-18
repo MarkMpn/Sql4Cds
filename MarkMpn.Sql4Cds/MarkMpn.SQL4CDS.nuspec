@@ -24,15 +24,15 @@ Queries can also run using the preview TDS Endpoint. A wide range of SQL functio
 in to allow running queries that aren't directly supported by either FetchXML or the TDS Endpoint.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
     <releaseNotes>New features:
-* Support `sp_executesql` for dynamic SQL execution
+* Added an optional line number to the messages panel
 
 Improvements:
-* Allow executing messages with more complex response types
-* Avoid loading values for global parameters such as `@@VERSION` until required
-* Avoid unsupported properties in metadata queries
+* Enforce encryption and certificate checks for TDS Endpoint connections
+* Stripped unnecessary information from telemetry data
+* Perform quick initial TDS Endpoint compatibility check without requiring a full connection for improved performance
 
 Fixes:
-* Auto-size columns improved to ensure first data rows are available before resizing
+* Perform standard type conversions when extracting data from a cursor
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

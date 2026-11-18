@@ -12,12 +12,16 @@
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
     <releaseNotes>New features:
-* Support `sp_executesql` for dynamic SQL execution
+* Exposed autocomplete, formatting and script generation features previously only available in the XTB plugin
 
 Improvements:
-* Allow executing messages with more complex response types
-* Avoid loading values for global parameters such as `@@VERSION` until required
-* Avoid unsupported properties in metadata queries
+* Enforce encryption and certificate checks for TDS Endpoint connections
+* Stripped unnecessary information from telemetry data
+* Perform quick initial TDS Endpoint compatibility check without requiring a full connection for improved performance
+
+Fixes:
+* Perform standard type conversions when extracting data from a cursor
+* Fixed compilation of IN clauses on .NET Core
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
