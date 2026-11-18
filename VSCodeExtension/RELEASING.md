@@ -1,7 +1,7 @@
 # Releasing SQL 4 CDS for Visual Studio Code
 
 The release candidate retains the existing version, **0.3.0**, and publisher identity,
-**markcarrington.vscode-sql4cds**. Confirm that the releasing maintainer has access to
+**MarkMpn.vscode-sql4cds**. Confirm that the releasing maintainer has access to
 that Marketplace publisher before publishing. Do not change the publisher or extension
 name after release; those fields form the extension's identity.
 
@@ -42,6 +42,12 @@ then invokes `vsce package`. Its prepublish hook performs a fresh Release
 `dotnet publish` with no platform-specific apphost, and bundles the TypeScript client.
 The final check reads the VSIX archive and checks required assets and excluded
 source, test, build, cache, and diagnostic files. The result is `sql4cds.vsix`.
+The VSIX contains both the bundled client and the language-server binaries. The
+server is framework-dependent and requires the .NET 10 runtime on the user's machine.
+
+The release pipeline also packs `MarkMpn.Sql4Cds.LanguageServer` as a .NET tool
+into the `NuGetPackages` artifact alongside the other NuGet packages. The PPTB
+client npm tarball is published separately in the `PPTBPackages` artifact.
 
 The GitHub Actions workflow tests Windows, macOS, and Linux with VS Code 1.96.0,
 plus current stable VS Code on Linux. All matrix jobs must pass before merging.

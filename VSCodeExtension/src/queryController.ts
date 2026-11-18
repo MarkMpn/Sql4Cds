@@ -85,7 +85,7 @@ export class QueryController implements vscode.Disposable, vscode.WebviewViewPro
   }
 
   public resolveWebviewView(view: vscode.WebviewView): void {
-    const extensionUri = this.extensionUri ?? vscode.extensions.getExtension("markcarrington.vscode-sql4cds")?.extensionUri;
+    const extensionUri = this.extensionUri ?? vscode.extensions.getExtension("MarkMpn.vscode-sql4cds")?.extensionUri;
     if (!extensionUri) { throw new Error("The SQL 4 CDS extension location could not be found."); }
     this.resultsView = view;
     view.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, "dist")] };

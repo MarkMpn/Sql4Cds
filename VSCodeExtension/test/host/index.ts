@@ -36,7 +36,7 @@ export async function run(): Promise<void> {
 }
 
 async function runSuite(): Promise<void> {
-  const extension = vscode.extensions.getExtension("markcarrington.vscode-sql4cds");
+  const extension = vscode.extensions.getExtension("MarkMpn.vscode-sql4cds");
   assert.ok(extension, "The development extension must be installed");
   await extension.activate();
   assert.equal(extension.isActive, true);

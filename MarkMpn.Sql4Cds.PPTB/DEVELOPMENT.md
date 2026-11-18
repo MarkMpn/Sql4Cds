@@ -148,7 +148,9 @@ build time. The language server uses the client name as each connection's
 
 The root Azure release pipeline stamps the client version from
 `GitVersion.SemVer` before building, and stamps the worker manifest and .NET
-tool package with `GitVersion.NuGetVersion`. It produces a `PPTBPackages`
-artifact containing the npm tarball and worker NuGet package; it does not publish
-them to a registry. For manual npm releases, `npm run publish-package` increments
-the version before building so the embedded identity matches the published package.
+tool package with `GitVersion.NuGetVersion`. It produces separate `PPTBPackages`
+and `NuGetPackages` artifacts: the former contains the npm tarball and the latter
+contains the worker .NET tool package. Neither is published to a registry by the
+pipeline. Publish the npm package and .NET tool to their respective registries.
+For manual npm releases, `npm run publish-package` increments the version before
+building so the embedded identity matches the published package.
