@@ -3,6 +3,7 @@ import type {
     BatchSummary,
     CompletionItem,
     CompletionList,
+    EntityReferenceValue,
     Hover,
     FormattingOptions,
     TextEdit,
@@ -535,8 +536,13 @@ export class Sql4CdsClient {
         return this.notify("workspace/didChangeConfiguration", { settings: { SQL4CDS: settings } });
     }
 
-    transformQuery(ownerUri: string, query: string, target: "fetchxml" | "m"): Promise<string[]> {
+    transformQuery(ownerUri: string, query: string, target: "fetchxml" | "m" | "sql"): Promise<string[]> {
         return this.request("sql4cds/transform", { ownerUri, query, target });
+    }
+
+    recordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
+        const { dataSource, logicalName, id } = reference;
+        return this.request("sql4cds/recordSelect", { ownerUri, dataSource, logicalName, id });
     }
 
     formatDocument(uri: string, options: FormattingOptions): Promise<TextEdit[] | null> {
@@ -609,6 +615,10 @@ export class Sql4CdsClient {
         return this.request("objectexplorer/refresh", { sessionId, nodePath });
     }
 
+    generateObjectExplorerScript(sessionId: string, nodePath: string, action: string): Promise<string> {
+        return this.request("objectexplorer/generateScript", { sessionId, nodePath, action });
+    }
+
     closeObjectExplorerSession(sessionId: string): Promise<ObjectExplorerSessionDisconnected> {
         return this.request("objectexplorer/closesession", { sessionId });
     }
@@ -619,6 +629,8 @@ export class Sql4CdsClient {
         ownerUri: string,
         querySelection?: SelectionData,
         executionPlanOptions: ExecutionPlanOptions = { includeActualExecutionPlanXml: false, includeEstimatedExecutionPlanXml: false },
+        resultsToText = false,
+        confirmDataModification = false,
     ): Promise<unknown> {
         const executionId = this.compactQueryEvents ? String(++this.executionSequence) : undefined;
         this.initialRows.delete(ownerUri);
@@ -629,6 +641,8 @@ export class Sql4CdsClient {
             ...(executionId ? { executionId } : {}),
             ...(querySelection === undefined ? {} : { querySelection }),
             executionPlanOptions,
+            ...(resultsToText ? { resultsToText } : {}),
+            ...(confirmDataModification ? { confirmDataModification } : {}),
         });
     }
 

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
+using MarkMpn.Sql4Cds.LanguageServer.Configuration;
 using MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts;
 using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -31,6 +32,46 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             lsp.AddHandler(ExpandRequest.Type, HandleExpand);
             lsp.AddHandler(RefreshRequest.Type, HandleRefresh);
             lsp.AddHandler(CloseSessionRequest.Type, HandleCloseSession);
+            lsp.AddAsyncHandler(GenerateScriptRequest.Type, request => Task.Run(() => HandleGenerateScript(request)));
+        }
+
+        private string HandleGenerateScript(GenerateScriptParams request)
+        {
+            var session = _connectionManager.GetConnection(request.SessionId);
+            if (session == null)
+                throw new InvalidOperationException("The Object Explorer session is no longer available.");
+
+            var path = new Uri(request.NodePath).AbsolutePath
+                .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.UnescapeDataString)
+                .ToArray();
+            if (path.Length < 2)
+                throw new ArgumentException("The Object Explorer node path is invalid.");
+
+            string nodeType;
+            string schema;
+            string name;
+            if (path.Length == 2 && (path[0] == "Tables" || path[0] == "Archive" || path[0] == "Bin" || path[0] == "Metadata"))
+            {
+                nodeType = "Table";
+                schema = path[0] == "Tables" ? "dbo" : path[0] == "Archive" ? "archive" : path[0] == "Bin" ? "bin" : "metadata";
+                name = path[1];
+            }
+            else if (path.Length == 3 && path[0] == "Programmability" && (path[1] == "TVF" || path[1] == "SProcs"))
+            {
+                nodeType = path[1] == "TVF" ? "TableValuedFunction" : "StoredProcedure";
+                schema = "dbo";
+                name = path[2];
+            }
+            else
+            {
+                throw new ArgumentException("The selected Object Explorer node cannot be scripted.");
+            }
+
+            var ordering = Sql4CdsSettings.Instance?.UseSchemaColumnOrdering == true
+                ? ColumnOrdering.Strict
+                : ColumnOrdering.Alphabetical;
+            return ObjectExplorerScriptGenerator.Generate(session.DataSource, ordering, nodeType, schema, name, request.Action);
         }
 
         public CreateSessionResponse HandleCreateSession(ConnectionDetails request)

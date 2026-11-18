@@ -219,21 +219,6 @@ input[type="number"] {
     max-width: 300px;
 }
 
-.results-text {
-    flex: 1;
-    min-height: 0;
-    margin: 0;
-    padding: 8px;
-    overflow: auto;
-    user-select: text;
-    tab-size: 20;
-    font: 13px Consolas, "Courier New", monospace;
-}
-
-.results-text[hidden] {
-    display: none;
-}
-
 /* Side panes (Object Explorer & Properties) */
 
 .tool-content {
@@ -346,7 +331,30 @@ input[type="number"] {
     box-shadow: 0 2px 8px #0004;
 }
 
+.explorer-context-menu-item {
+    position: relative;
+}
+
+.explorer-context-menu-item > button[aria-haspopup="menu"]::after {
+    content: "\203A";
+    float: right;
+    margin-left: 16px;
+}
+
+.explorer-context-submenu {
+    position: absolute;
+    z-index: 1001;
+    top: -5px;
+    left: 100%;
+    min-width: 190px;
+    padding: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px #0004;
+}
+
 .explorer-context-menu button,
+.explorer-context-submenu button,
 .grid-context-menu button {
     display: block;
     width: 100%;
@@ -357,6 +365,8 @@ input[type="number"] {
 
 .explorer-context-menu button:hover,
 .explorer-context-menu button:focus,
+.explorer-context-submenu button:hover,
+.explorer-context-submenu button:focus,
 .grid-context-menu button:hover:not(:disabled),
 .grid-context-menu button:focus {
     background: var(--selection);
@@ -389,6 +399,26 @@ input[type="number"] {
 
 .explorer-row:hover {
     background: var(--bg-hover);
+}
+
+.explorer-select-top {
+    flex: 0 0 20px;
+    margin-left: auto;
+    padding: 0;
+    color: var(--fg-muted);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.explorer-row:hover .explorer-select-top,
+.explorer-row:focus-within .explorer-select-top {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.explorer-select-top:hover,
+.explorer-select-top:focus {
+    color: var(--accent);
 }
 
 .explorer-node[aria-selected="true"] > .explorer-row {
@@ -428,12 +458,30 @@ input[type="number"] {
     overflow-wrap: anywhere;
 }
 
+.explorer-connection-status,
+.explorer-node[aria-disabled="true"] > .explorer-row {
+    color: var(--fg-muted);
+}
+
+.explorer-node[aria-disabled="true"] > .explorer-row .explorer-expander {
+    cursor: default;
+}
+
+.explorer-connection-status.error {
+    color: var(--error);
+}
+
 .pane-splitter {
     flex: 0 0 5px;
     cursor: col-resize;
     background: var(--bg-alt);
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
+}
+
+.pane-splitter:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
 body.resizing-pane {
@@ -514,15 +562,87 @@ body.resizing-pane {
 
 /* Tabs */
 
-.tab-strip {
+.tab-bar {
     display: flex;
-    overflow-x: auto;
+    flex: 0 0 auto;
+    height: 32px;
     background: var(--bg-alt);
     border-bottom: 1px solid var(--border);
-    min-height: 32px;
+}
+
+.tab-strip {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.tab-list-button {
+    flex: 0 0 auto;
+    width: 32px;
+    border: none;
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--fg-muted);
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+}
+
+.tab-list-button:hover,
+.tab-list-button[aria-expanded="true"] {
+    background: var(--bg-hover);
+    color: var(--fg);
+}
+
+.tab-list-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 180px;
+    max-width: 400px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px #0004;
+}
+
+.tab-list-menu button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    white-space: nowrap;
+}
+
+.tab-list-menu button .tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tab-list-menu button.active {
+    font-weight: 600;
+}
+
+.tab-list-menu button:hover,
+.tab-list-menu button:focus {
+    background: var(--selection);
+    outline: 1px solid var(--accent);
+}
+
+.tab-list-menu button.modified .tab-label::before {
+    content: "• ";
+    color: var(--accent);
 }
 
 .tab {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -612,6 +732,14 @@ body.resizing-pane {
 
 .splitter[hidden],
 .results-host[hidden] {
+    display: none;
+}
+
+.query-result-host {
+    display: contents;
+}
+
+.query-result-host[hidden] {
     display: none;
 }
 
@@ -777,7 +905,12 @@ button.toggle[aria-pressed="true"] {
     overflow: auto;
     padding: 6px 10px;
     font-family: Consolas, "Courier New", monospace;
-    white-space: pre-wrap;
+    white-space: pre;
+}
+
+/* Keep blank lines at full height */
+.messages-pane .message:empty::after {
+    content: "\200b";
 }
 
 .messages-pane.show-line-numbers {

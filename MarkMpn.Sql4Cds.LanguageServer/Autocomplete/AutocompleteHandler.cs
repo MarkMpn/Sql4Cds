@@ -15,6 +15,7 @@ using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Microsoft.Xrm.Sdk;
 using StreamJsonRpc;
 using Range = Microsoft.VisualStudio.LanguageServer.Protocol.Range;
+using SqlAutocomplete = MarkMpn.Sql4Cds.Engine.Autocomplete;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 {
@@ -55,7 +56,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 clone.Metadata = new MetaMetadataCache(c.Value.Metadata);
                 acds.Add(c.Key, clone);
             }
-            var ac = new Autocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
+            var ac = new SqlAutocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
             var suggestions = ac.GetSuggestions(doc, pos);
             return suggestions
                 .Select(s => new CompletionItem
@@ -64,7 +65,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                     InsertText = s.GetTextForReplace(false),
                     Documentation = s.ToolTipText,
                     Detail = s.ToolTipTitle,
-                    Kind = s.ImageIndex
+                    Kind = GetCompletionItemKind(s.Kind)
                 })
                 .ToArray();
         }
@@ -92,7 +93,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 clone.Metadata = new MetaMetadataCache(c.Value.Metadata);
                 acds.Add(c.Key, clone);
             }
-            var ac = new Autocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
+            var ac = new SqlAutocomplete(acds, con.DataSource.Name, con.Connection.ColumnOrdering);
             var suggestions = ac.GetSuggestions(doc, pos);
             var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && doc.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -116,6 +117,40 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                 },
                 Contents = new MarkupContent { Kind = MarkupKind.Markdown, Value = "**" + exactSuggestions[0].ToolTipTitle + "**\r\n\r\n" + exactSuggestions[0].ToolTipText }
             };
+        }
+
+        internal static CompletionItemKind GetCompletionItemKind(AutocompleteItemKind kind)
+        {
+            switch (kind)
+            {
+                case AutocompleteItemKind.Instance:
+                    return CompletionItemKind.Reference;
+
+                case AutocompleteItemKind.Schema:
+                    return CompletionItemKind.Module;
+
+                case AutocompleteItemKind.TableValuedFunction:
+                case AutocompleteItemKind.Function:
+                case AutocompleteItemKind.AggregateFunction:
+                    return CompletionItemKind.Function;
+
+                case AutocompleteItemKind.StoredProcedure:
+                    return CompletionItemKind.Method;
+
+                case AutocompleteItemKind.StoredProcedureParameter:
+                case AutocompleteItemKind.Variable:
+                    return CompletionItemKind.Variable;
+
+                case AutocompleteItemKind.OneToManyJoin:
+                case AutocompleteItemKind.ManyToOneJoin:
+                    return CompletionItemKind.Snippet;
+
+                case AutocompleteItemKind.EntityName:
+                    return CompletionItemKind.Text;
+
+                default:
+                    return CompletionItemKind.Field;
+            }
         }
 
         private SignatureHelp HandleSignatureHelp(SignatureHelpParams request)

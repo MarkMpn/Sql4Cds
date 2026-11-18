@@ -8,7 +8,6 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Configuration;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
-using MarkMpn.Sql4Cds.XTB;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using StreamJsonRpc;
@@ -30,8 +29,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
         {
             lsp.AddAsyncHandler(new LspRequest<QueryTransformParams, string[]>("sql4cds/transform"),
                 request => Task.Run(() => Transform(request)));
+            lsp.AddAsyncHandler(new LspRequest<RecordSelectParams, string>("sql4cds/recordSelect"),
+                request => Task.Run(() => GenerateRecordSelect(request)));
             lsp.AddAsyncHandler(Methods.TextDocumentFormatting,
                 request => Task.Run(() => FormatDocument(request)));
+        }
+
+        internal string GenerateRecordSelect(RecordSelectParams request)
+        {
+            if (!Guid.TryParse(request.Id, out var id))
+                throw new ArgumentException("Invalid record ID");
+
+            var dataSource = _connections.GetAllConnections()
+                .Values
+                .FirstOrDefault(ds => String.Equals(ds.Name, request.DataSource, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"Connection {request.DataSource} is no longer available");
+
+            var current = _connections.GetConnection(request.OwnerUri)?.DataSource?.Name;
+            return ScriptGenerator.GenerateRecordSelectQuery(current, dataSource.Name, dataSource.Metadata[request.LogicalName], id);
         }
 
         internal TextEdit[] FormatDocument(DocumentFormattingParams request)
@@ -58,7 +73,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
                 };
                 connection.ChangeDatabase(session.DataSource.Name);
                 connection.UseTDSEndpoint = false;
-                formatted = Format(query, new FormatterOptions
+                formatted = Format(query, new QueryFormatterOptions
                 {
                     AddDisplayNames = true,
                     ThrowOnError = true,
@@ -89,6 +104,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
                 throw new ArgumentException("Select or enter a query first");
             var session = _connections.GetConnection(request.OwnerUri)
                 ?? throw new InvalidOperationException("Select a connection first");
+            if (request.Target == "sql")
+                return new[] { ConvertFromFetchXml(request.Query, session.DataSource) };
+
             var dataSources = _connections.GetAllConnections();
             using var connection = new Sql4CdsConnection(dataSources)
             {
@@ -130,14 +148,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
             return results.ToArray();
         }
 
-        internal static string Format(string query, FormatterOptions options)
+        internal static string ConvertFromFetchXml(string fetchXml, DataSource dataSource)
         {
-            var fragment = new TSql160Parser(true).Parse(new StringReader(query), out var errors);
-            
-            if (errors.Count != 0)
-                throw new ArgumentException(String.Join("\n", errors.Select(error => $"Line {error.Line}: {error.Message}")));
-            
-            return Formatter.Format(query, options);
+            return FetchXml2Sql.Convert(dataSource.Connection, dataSource.Metadata, fetchXml, new FetchXml2SqlOptions(), out _);
+        }
+
+        internal static string Format(string query, QueryFormatterOptions options)
+        {
+            options ??= new QueryFormatterOptions();
+            options.ThrowOnError = true;
+            return QueryFormatter.Format(query, options);
         }
 
         internal static string ConvertToM(string query, string server)
@@ -172,5 +192,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Scripting
         public string OwnerUri { get; set; }
         public string Query { get; set; }
         public string Target { get; set; }
+    }
+
+    class RecordSelectParams
+    {
+        public string OwnerUri { get; set; }
+        public string DataSource { get; set; }
+        public string LogicalName { get; set; }
+        public string Id { get; set; }
     }
 }

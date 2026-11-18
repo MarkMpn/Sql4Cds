@@ -26,6 +26,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\SqlDataReaderWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Autocomplete.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AutocompleteItemKind.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FunctionMetadata.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanSerializer.cs" />
@@ -48,6 +51,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)NodeContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)QueryFormatter.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ScriptGenerator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataTypeHelpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanBuilder.cs" />

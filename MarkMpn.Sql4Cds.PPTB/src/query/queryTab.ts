@@ -6,6 +6,9 @@ import { exportFormats, type ExportFormat } from "../lsp/protocol";
 import { ExecutionPlanView } from "../executionPlan/executionPlanView";
 import { getNodeImageUrl } from "../executionPlan/nodeImages";
 import { ResultsGrid } from "./resultsGrid";
+import { collectInvocationResults, type InvocationResult } from "../mcpInvocation";
+import type { ResultMessage } from "../lsp/protocol";
+import { action, computed, makeObservable, observable, runInAction } from "mobx";
 
 export interface QueryTabHost {
     readonly client: Sql4CdsClient;
@@ -13,19 +16,18 @@ export interface QueryTabHost {
     readonly includeActualPlan: boolean;
     /** Indicates if sequential line numbers should be shown in the Messages tab */
     readonly showMessageLineNumbers: boolean;
+    /** Indicates if new tabs should show results as text rather than in a grid */
+    readonly resultsToText: boolean;
     /** Gets the connection options to use for a PPTB connection slot */
     getConnectionOptions(slot: number): PptbConnectionOptions | null;
     confirm(params: ConfirmationParams): void;
-    onStateChanged(tab: QueryTab): void;
-    onStatusChanged(tab: QueryTab): void;
     /** Called when the execution plan node to show in the Properties panel changes */
-    onSelectedPlanNodeChanged(tab: QueryTab): void;
     /** Opens a read-only tab with the FetchXML from a plan node */
     openFetchXml(fetchXml: string): void;
     copyToClipboard(text: string): void;
     openRecord(reference: EntityReferenceValue): void;
     copyRecordUrl(reference: EntityReferenceValue): void;
-    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string>;
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string>;
     /** Activates the tab (if necessary) and selects/reveals the given range in the shared editor */
     revealRange(tab: QueryTab, range: Range): void;
 }
@@ -44,7 +46,7 @@ export class QueryTab {
     readonly model: monaco.editor.ITextModel;
     readonly resultsElement: HTMLElement;
 
-    title: string;
+    title = "";
     readonly readOnly: boolean;
     readonly isFetchXmlPreview: boolean;
     filePath: string | null = null;
@@ -56,7 +58,7 @@ export class QueryTab {
     /** Results stay hidden until a query has been started or the engine reports a failure */
     hasResults = false;
     startTime = 0;
-    connectionSummary: ConnectionCompleteParams["connectionSummary"];
+    connectionSummary: ConnectionCompleteParams["connectionSummary"] = undefined;
     statusMessage = "Not connected";
     statusKind: "success" | "error" | "warning" | "busy" = "warning";
     gridStatus = "";
@@ -64,19 +66,23 @@ export class QueryTab {
     resultsMode: "grid" | "text" = "grid";
 
     private readonly resultsPane: HTMLElement;
-    private readonly textPane: HTMLElement;
     private readonly messagesPane: HTMLElement;
     private readonly planPane: HTMLElement;
     private readonly planView: ExecutionPlanView;
     private readonly resultsTabButtons = new Map<ResultsView, HTMLButtonElement>();
     private readonly grids = new Map<string, ResultsGrid>();
     private readonly rowCounts = new Map<string, number>();
+    private readonly resultSummaries = new Map<string, ResultSetSummary>();
+    private readonly resultMessages: ResultMessage[] = [];
+    private invocationActive = false;
+    private invocationComplete: (() => void) | null = null;
+    private textRowCount = 0;
     private readonly planResultSets = new Set<string>();
-    private readonly textResultSets = new Map<string, { summary: ResultSetSummary; element: HTMLElement }>();
-    private executionResultsMode: "grid" | "text" = "grid";
     private resultsGeneration = 0;
     private readonly changeListener: monaco.IDisposable;
-    private savedText: string;
+    private savedText = "";
+    private text = "";
+    private planSelection: ExecutionPlanNode | null = null;
     private pendingConnect: ((params: ConnectionCompleteParams) => void) | null = null;
     private hasErrors = false;
     private cancelled = false;
@@ -90,12 +96,12 @@ export class QueryTab {
     }
 
     get totalRowCount(): number {
-        return Array.from(this.rowCounts.values()).reduce((total, count) => total + count, 0);
+        return Array.from(this.rowCounts.values()).reduce((total, count) => total + count, this.textRowCount);
     }
 
     /** The execution plan node to show in the Properties panel, if the execution plan is currently visible */
     get selectedPlanNode(): ExecutionPlanNode | null {
-        return this.view === "plan" ? this.planView.selectedNode : null;
+        return this.view === "plan" ? this.planSelection : null;
     }
 
     /** Indicates if the execution plan is currently being shown */
@@ -108,16 +114,55 @@ export class QueryTab {
         initialText = "",
         options: { language?: string; readOnly?: boolean; isFetchXmlPreview?: boolean } = {},
     ) {
+        makeObservable<this, "rowCounts" | "textRowCount" | "endTime" | "onQueryComplete" | "updateResultSet" | "addMessage" | "clearResults" | "text" | "savedText" | "view" | "planSelection" | "showResultsView">(this, {
+            title: observable,
+            filePath: observable,
+            text: observable,
+            savedText: observable,
+            hasResults: observable,
+            resultsMode: observable,
+            view: observable,
+            planSelection: observable.ref,
+            isDirty: computed,
+            selectedPlanNode: computed,
+            showingPlan: computed,
+            setFile: action,
+            markSaved: action,
+            showResultsView: action,
+            connectionSlot: observable,
+            connected: observable,
+            connecting: observable,
+            running: observable,
+            startTime: observable,
+            endTime: observable,
+            connectionSummary: observable.ref,
+            statusMessage: observable,
+            statusKind: observable,
+            gridStatus: observable,
+            gridStatusIsError: observable,
+            rowCounts: observable.shallow,
+            textRowCount: observable,
+            totalRowCount: computed,
+            disconnect: action,
+            cancel: action,
+            engineStopped: action,
+            onQueryComplete: action,
+            updateResultSet: action,
+            addMessage: action,
+            clearResults: action,
+        });
         this.id = nextTabId++;
         this.uri = `pptb://query/${this.id}`;
         this.title = `Query ${this.id}`;
         this.readOnly = options.readOnly ?? false;
         this.isFetchXmlPreview = options.isFetchXmlPreview ?? false;
+        this.resultsMode = host.resultsToText ? "text" : "grid";
 
         this.model = monaco.editor.createModel(initialText, options.language ?? "sql", monaco.Uri.parse(this.uri));
         // The language server splits documents on \n, so keep the model line endings consistent
         this.model.setEOL(monaco.editor.EndOfLineSequence.LF);
         this.savedText = this.model.getValue();
+        this.text = this.savedText;
 
         this.resultsElement = document.createElement("div");
         this.resultsElement.className = "query-results";
@@ -136,18 +181,13 @@ export class QueryTab {
         this.resultsPane = document.createElement("div");
         this.resultsPane.className = "results-pane";
 
-        this.textPane = document.createElement("div");
-        this.textPane.className = "results-text";
-        this.textPane.tabIndex = 0;
-        this.textPane.setAttribute("aria-label", "Query results as text");
-
         this.messagesPane = document.createElement("div");
         this.messagesPane.className = "messages-pane";
         this.messagesPane.classList.toggle("show-line-numbers", host.showMessageLineNumbers);
 
         this.planView = new ExecutionPlanView(
             getNodeImageUrl,
-            () => host.onSelectedPlanNodeChanged(this),
+            action(() => { this.planSelection = this.planView.selectedNode; }),
             undefined,
             (fetchXml) => host.openFetchXml(fetchXml),
         );
@@ -155,14 +195,19 @@ export class QueryTab {
         this.planPane.className = "plan-pane";
         this.planPane.appendChild(this.planView.element);
 
-        this.resultsElement.append(resultsTabs, this.resultsPane, this.textPane, this.messagesPane, this.planPane);
+        this.resultsElement.append(resultsTabs, this.resultsPane, this.messagesPane, this.planPane);
         this.showResultsView("messages");
 
         if (!this.readOnly) {
             host.client.addListener(this.uri, {
                 connectionComplete: (p) => this.onConnectionComplete(p),
                 batchStart: () => {},
-                message: (p) => this.addMessage(p.message.message, p.message.isError, p.message.range),
+                message: action((p) => {
+                    if (typeof p.message.rowCount === "number") {
+                        this.textRowCount += p.message.rowCount;
+                    }
+                    this.addMessage(p.message.message, p.message.isError, p.message.range);
+                }),
                 resultSetAvailable: (p) => this.onResultSetAvailable(p),
                 resultSetUpdated: (p) => this.onResultSetUpdated(p),
                 resultSetComplete: (p) => this.updateResultSet({ ...p.resultSetSummary, complete: true }),
@@ -181,28 +226,28 @@ export class QueryTab {
             });
 
             void host.client.openDocument(this.uri, this.model.getValue());
-            this.changeListener = this.model.onDidChangeContent(() => {
+            this.changeListener = this.model.onDidChangeContent(action(() => {
+                this.text = this.model.getValue();
                 void host.client.changeDocument(this.uri, this.model.getValue()).catch(() => {});
-                host.onStateChanged(this);
-            });
+            }));
         } else {
             this.changeListener = { dispose() {} };
         }
     }
 
     get isDirty(): boolean {
-        return this.model.getValue() !== this.savedText;
+        return this.text !== this.savedText;
     }
+
+    get content(): string { return this.text; }
 
     setFile(path: string): void {
         this.filePath = path;
         this.title = path.split(/[\\/]/).pop() || path;
-        this.host.onStateChanged(this);
     }
 
     markSaved(savedText = this.model.getValue()): void {
         this.savedText = savedText;
-        this.host.onStateChanged(this);
     }
 
     /** Connects this tab to one of the PPTB connection slots */
@@ -213,12 +258,13 @@ export class QueryTab {
 
         if (this.connected) await this.disconnect();
 
-        this.connectionSlot = slot;
-        this.connectionSummary = undefined;
-        this.connecting = true;
-        this.statusMessage = "Connecting…";
-        this.statusKind = "busy";
-        this.host.onStateChanged(this);
+        runInAction(() => {
+            this.connectionSlot = slot;
+            this.connectionSummary = undefined;
+            this.connecting = true;
+            this.statusMessage = "Connecting…";
+            this.statusKind = "busy";
+        });
 
         try {
             const complete = new Promise<ConnectionCompleteParams>((resolve) => (this.pendingConnect = resolve));
@@ -229,18 +275,21 @@ export class QueryTab {
             if (this.engineError) throw new Error(this.engineError);
             if (result.errorMessage) throw new Error(result.errorMessage);
 
-            this.connected = true;
-            this.connectionSummary = result.connectionSummary;
-            this.statusMessage = "Connected";
-            this.statusKind = "success";
+            runInAction(() => {
+                this.connected = true;
+                this.connectionSummary = result.connectionSummary;
+                this.statusMessage = "Connected";
+                this.statusKind = "success";
+            });
         } catch (err) {
-            this.statusMessage = this.engineError ?? `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
-            this.statusKind = "error";
+            runInAction(() => {
+                this.statusMessage = this.engineError ?? `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
+                this.statusKind = "error";
+            });
             throw err;
         } finally {
             this.pendingConnect = null;
-            this.connecting = false;
-            this.host.onStateChanged(this);
+            runInAction(() => { this.connecting = false; });
         }
     }
 
@@ -250,7 +299,6 @@ export class QueryTab {
         this.connectionSummary = undefined;
         this.statusMessage = "Not connected";
         this.statusKind = "warning";
-        this.host.onStateChanged(this);
         try {
             await this.host.client.disconnect(this.uri);
         } catch {
@@ -266,7 +314,8 @@ export class QueryTab {
      * Executes the selected text, or the entire document if nothing is selected. If `estimatedPlan` is set the query
      * is not run and the estimated execution plan is shown instead.
      */
-    async execute(selection: monaco.Selection | null, estimatedPlan = false): Promise<void> {
+    async execute(selection: monaco.Selection | null, estimatedPlan = false, invocation = false): Promise<void> {
+        if (this.invocationActive && !invocation) throw new Error("Wait for the MCP invocation to finish before executing another query.");
         if (this.engineError) throw new Error(this.engineError);
         if (this.running) return;
         if (!this.connected) throw new Error("Select a connection before running a query");
@@ -274,18 +323,19 @@ export class QueryTab {
         await this.clearResults();
         if (this.engineError) throw new Error(this.engineError);
 
-        this.executionResultsMode = this.resultsMode;
+        const resultsToText = !invocation && this.resultsMode === "text" && !estimatedPlan;
         this.showResultsView("messages");
-        this.hasResults = true;
-        this.running = true;
+        runInAction(() => {
+            this.hasResults = true;
+            this.running = true;
+            this.startTime = Date.now();
+            this.endTime = 0;
+            this.statusMessage = estimatedPlan ? "Generating estimated execution plan…" : "Executing query…";
+            this.statusKind = "busy";
+        });
         this.hasErrors = false;
         this.cancelled = false;
         this.estimatedPlan = estimatedPlan;
-        this.startTime = Date.now();
-        this.endTime = 0;
-        this.statusMessage = estimatedPlan ? "Generating estimated execution plan…" : "Executing query…";
-        this.statusKind = "busy";
-        this.host.onStateChanged(this);
 
         let querySelection: SelectionData | undefined;
         if (selection && !selection.isEmpty()) {
@@ -301,7 +351,7 @@ export class QueryTab {
             await this.host.client.executeDocumentSelection(this.uri, querySelection, {
                 includeEstimatedExecutionPlanXml: estimatedPlan,
                 includeActualExecutionPlanXml: !estimatedPlan && this.host.includeActualPlan,
-            });
+            }, resultsToText, invocation);
         } catch (err) {
             if (this.engineError) return;
             this.addMessage(err instanceof Error ? err.message : String(err), true);
@@ -309,11 +359,28 @@ export class QueryTab {
         }
     }
 
+    async executeForInvocation(responseLimitBytes: number): Promise<InvocationResult> {
+        if (this.running || this.invocationActive) throw new Error("The query tab is already executing.");
+        this.invocationActive = true;
+        const complete = new Promise<void>(resolve => { this.invocationComplete = resolve; });
+        try {
+            await this.execute(null, false, true);
+            await complete;
+            if (this.engineError) throw new Error(this.engineError);
+            const result = await collectInvocationResults(this.host.client, this.uri, [...this.resultSummaries.values()],
+                this.resultMessages, this.cancelled ? "cancelled" : this.hasErrors ? "error" : "success", responseLimitBytes);
+            if (this.engineError) throw new Error(this.engineError);
+            return result;
+        } finally {
+            this.invocationActive = false;
+            this.invocationComplete = null;
+        }
+    }
+
     async cancel(): Promise<void> {
         if (!this.running) return;
         this.cancelled = true;
         this.statusMessage = "Cancelling query…";
-        this.host.onStatusChanged(this);
         try {
             const result = await this.host.client.cancelQuery(this.uri);
             if (result?.messages) {
@@ -341,10 +408,9 @@ export class QueryTab {
 
         if (this.hasErrors) this.showResultsView("messages");
         else if (this.estimatedPlan && this.planView.count > 0) this.showResultsView("plan");
-        else if (this.grids.size > 0 || this.textResultSets.size > 0) this.showResultsView("results");
+        else if (this.grids.size > 0) this.showResultsView("results");
         else this.showResultsView("messages");
-        if (this.executionResultsMode === "text") void this.renderTextResults(this.resultsGeneration);
-        this.host.onStateChanged(this);
+        this.invocationComplete?.();
     }
 
     engineStopped(message: string): void {
@@ -365,7 +431,7 @@ export class QueryTab {
         this.pendingConnect = null;
         this.addMessage(message, true);
         this.showResultsView("messages");
-        this.host.onStateChanged(this);
+        this.invocationComplete?.();
     }
 
     private isPlanResultSet(summary: ResultSetSummary): boolean {
@@ -382,16 +448,6 @@ export class QueryTab {
             return;
         }
 
-        if (this.executionResultsMode === "text") {
-            const element = document.createElement("pre");
-            element.textContent = `${summary.columnInfo.map((column) => column.columnName).join("\t")}\n`;
-            this.textResultSets.set(this.resultSetKey(summary), { summary, element });
-            this.textPane.appendChild(element);
-            this.updateResultSet(summary);
-            this.showResultsView("results");
-            return;
-        }
-
         const generation = this.resultsGeneration;
         const grid = new ResultsGrid(
             summary.columnInfo,
@@ -401,11 +457,10 @@ export class QueryTab {
             },
             (text) => this.host.copyToClipboard(text),
             (reference) => this.host.openRecord(reference),
-            (text, isError) => {
+            action((text, isError) => {
                 this.gridStatus = text;
                 this.gridStatusIsError = isError;
-                this.host.onStatusChanged(this);
-            },
+            }),
             (format) => this.exportResults(summary, generation, format),
             {
                 copyUrl: (reference) => this.host.copyRecordUrl(reference),
@@ -422,8 +477,7 @@ export class QueryTab {
 
     private async appendRecordSelectStatement(reference: EntityReferenceValue): Promise<void> {
         try {
-            const source = this.connectionSlot === null ? undefined : this.host.getConnectionOptions(this.connectionSlot)?.connectionName;
-            const sql = await this.host.getRecordSelectStatement(reference, source);
+            const sql = await this.host.getRecordSelectStatement(this.uri, reference);
             if (this.model.isDisposed()) return;
             if (this.readOnly) throw new Error("The query editor is read-only");
             const line = this.model.getLineCount();
@@ -437,30 +491,35 @@ export class QueryTab {
             }], () => null);
             this.model.pushStackElement();
         } catch (err) {
-            this.gridStatus = `Unable to create SELECT statement: ${err instanceof Error ? err.message : String(err)}`;
-            this.gridStatusIsError = true;
-            this.host.onStatusChanged(this);
+            runInAction(() => {
+                this.gridStatus = `Unable to create SELECT statement: ${err instanceof Error ? err.message : String(err)}`;
+                this.gridStatusIsError = true;
+            });
             await window.toolboxAPI.utils.showNotification({ title: "Unable to create SELECT statement", body: this.gridStatus, type: "error" });
         }
     }
 
     private addMessage(text: string, isError: boolean, range?: Range): void {
+        this.resultMessages.push({ message: text, isError, range });
         if (isError) {
             this.hasErrors = true;
             this.statusMessage = text;
             this.statusKind = "error";
-            this.host.onStatusChanged(this);
         }
 
-        const line = document.createElement("div");
-        line.className = isError ? "message error" : "message";
-        line.textContent = text;
-        if (range) {
-            line.classList.add("navigable");
-            line.title = "Double-click to go to the query";
-            line.addEventListener("dblclick", () => this.host.revealRange(this, range));
-        }
-        this.messagesPane.appendChild(line);
+        // Show each line separately so line numbers are shown correctly for multi-line messages such as text results
+        const lines = text.split(/\r?\n/).map((lineText) => {
+            const line = document.createElement("div");
+            line.className = isError ? "message error" : "message";
+            line.textContent = lineText;
+            if (range) {
+                line.classList.add("navigable");
+                line.title = "Double-click to go to the query";
+                line.addEventListener("dblclick", () => this.host.revealRange(this, range));
+            }
+            return line;
+        });
+        this.messagesPane.append(...lines);
         this.messagesPane.scrollTop = this.messagesPane.scrollHeight;
     }
 
@@ -477,19 +536,20 @@ export class QueryTab {
             );
             if (!path) return;
             if (generation !== this.resultsGeneration || this.running) throw new Error("The query results changed while choosing the export filename. Please export again.");
-            this.gridStatus = `Exporting ${exportFormat.label} results...`;
-            this.gridStatusIsError = false;
-            this.host.onStatusChanged(this);
+            runInAction(() => {
+                this.gridStatus = `Exporting ${exportFormat.label} results...`;
+                this.gridStatusIsError = false;
+            });
             await this.host.client.saveResults(this.uri, summary.batchId, summary.id, path, format);
             if (generation !== this.resultsGeneration) return;
-            this.gridStatus = `Results exported to ${path}`;
-            this.host.onStatusChanged(this);
+            runInAction(() => { this.gridStatus = `Results exported to ${path}`; });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             if (generation === this.resultsGeneration) {
-                this.gridStatus = `Unable to export results: ${message}`;
-                this.gridStatusIsError = true;
-                this.host.onStatusChanged(this);
+                runInAction(() => {
+                    this.gridStatus = `Unable to export results: ${message}`;
+                    this.gridStatusIsError = true;
+                });
             }
             await window.toolboxAPI.utils.showNotification({ title: "Unable to export results", body: message, type: "error" });
         }
@@ -520,56 +580,34 @@ export class QueryTab {
         if (this.isPlanResultSet(summary)) return;
 
         const key = this.resultSetKey(summary);
+        this.resultSummaries.set(key, summary);
         this.rowCounts.set(key, summary.rowCount);
         this.grids.get(key)?.setRowCount(summary.rowCount, summary.complete);
-        const textResult = this.textResultSets.get(key);
-        if (textResult) textResult.summary = summary;
-        this.host.onStatusChanged(this);
-    }
-
-    private async renderTextResults(generation: number): Promise<void> {
-        try {
-            for (const { summary, element } of this.textResultSets.values()) {
-                for (let start = 0; start < summary.rowCount;) {
-                    const result = await this.host.client.subset(this.uri, summary.batchId, summary.id, start, Math.min(200, summary.rowCount - start));
-                    if (generation !== this.resultsGeneration) return;
-                    const rows = result.resultSubset.rows;
-                    if (rows.length === 0) throw new Error("The server returned no rows before the end of the result set");
-                    element.appendChild(document.createTextNode(rows.map((row) => row.map((cell) => cell.isNull ? "NULL" : cell.displayValue).join("\t")).join("\n") + "\n"));
-                    start += rows.length;
-                }
-            }
-        } catch (err) {
-            if (generation !== this.resultsGeneration) return;
-            this.addMessage(`Unable to load text results: ${err instanceof Error ? err.message : String(err)}`, true);
-            this.showResultsView("messages");
-        }
     }
 
     private showResultsView(view: ResultsView): void {
-        const changed = this.view !== view;
         this.view = view;
-        this.resultsPane.hidden = view !== "results" || this.executionResultsMode !== "grid";
-        this.textPane.hidden = view !== "results" || this.executionResultsMode !== "text";
+        this.resultsPane.hidden = view !== "results";
         this.messagesPane.hidden = view !== "messages";
         this.planPane.hidden = view !== "plan";
-        this.resultsTabButtons.get("results")!.hidden = this.grids.size === 0 && this.textResultSets.size === 0;
+        this.resultsTabButtons.get("results")!.hidden = this.grids.size === 0;
         for (const [key, button] of this.resultsTabButtons) {
             button.classList.toggle("active", key === view);
             button.setAttribute("aria-pressed", String(key === view));
         }
-        if (changed) this.host.onSelectedPlanNodeChanged(this);
     }
 
     private async clearResults(): Promise<void> {
         this.resultsGeneration++;
-        this.textResultSets.clear();
-        this.textPane.replaceChildren();
         for (const grid of this.grids.values()) grid.dispose();
         this.grids.clear();
         this.rowCounts.clear();
+        this.resultSummaries.clear();
+        this.resultMessages.length = 0;
+        this.textRowCount = 0;
         this.planResultSets.clear();
         this.planView.clear();
+        this.planSelection = null;
         this.resultsTabButtons.get("plan")!.hidden = true;
         this.showResultsView("messages");
         this.gridStatus = "";
@@ -586,6 +624,10 @@ export class QueryTab {
     }
 
     async dispose(): Promise<void> {
+        if (this.invocationActive) {
+            this.engineError = "The query tab was closed during MCP execution.";
+            this.invocationComplete?.();
+        }
         this.resultsGeneration++;
         this.changeListener.dispose();
         for (const grid of this.grids.values()) grid.dispose();

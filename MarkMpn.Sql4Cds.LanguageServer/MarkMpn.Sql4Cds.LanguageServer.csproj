@@ -30,7 +30,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\MarkMpn.Sql4Cds.XTB\Formatter.cs" Link="Scripting\Formatter.cs" />
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj" />
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Export\MarkMpn.Sql4Cds.Export.csproj" />
   </ItemGroup>

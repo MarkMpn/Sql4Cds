@@ -107,6 +107,8 @@ export interface ResultMessage {
   time?: string;
   message: string;
   range?: Range;
+  /** Number of result rows contained in the message when results are sent as text */
+  rowCount?: number | null;
 }
 
 export interface MessageParams { ownerUri: string; message: ResultMessage; }
@@ -183,6 +185,7 @@ export const Methods = {
   objectExplorerSessionCreated: "objectexplorer/sessioncreated",
   expandObjectExplorer: "objectexplorer/expand",
   objectExplorerExpanded: "objectexplorer/expandCompleted",
+  generateObjectExplorerScript: "objectexplorer/generateScript",
   closeObjectExplorerSession: "objectexplorer/closesession",
   executeString: "query/executeString",
   executeDocumentSelection: "query/executeDocumentSelection",
@@ -201,5 +204,7 @@ export const Methods = {
   saveXml: "query/saveXml",
   progress: "sql4cds/progress",
   confirmation: "sql4cds/confirmation",
-  confirm: "sql4cds/confirm"
+  confirm: "sql4cds/confirm",
+  recordSelect: "sql4cds/recordSelect",
+  transformQuery: "sql4cds/transform"
 } as const;

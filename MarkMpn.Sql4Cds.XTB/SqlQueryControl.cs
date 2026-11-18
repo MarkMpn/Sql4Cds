@@ -368,13 +368,13 @@ namespace MarkMpn.Sql4Cds.XTB
             _connection.BlockDeleteWithoutWhere = false;
             _connection.BlockUpdateWithoutWhere = false;
 
-            var options = new FormatterOptions
+            var options = new QueryFormatterOptions
             {
                 AddDisplayNames = addDisplayNames,
                 Connection = _connection,
                 DataSources = DataSources,
             };
-            _editor.Text = Formatter.Format(_editor.Text, options);
+            _editor.Text = QueryFormatter.Format(_editor.Text, options);
         }
 
         private Scintilla CreateEditor()
@@ -691,7 +691,7 @@ namespace MarkMpn.Sql4Cds.XTB
                 var suggestions = new Autocomplete(autocompleteDataSources, _control.Connection.ConnectionName, Settings.Instance.ColumnOrdering).GetSuggestions(text, pos).ToList();
 
                 foreach (var suggestion in suggestions)
-                    yield return suggestion;
+                    yield return new SqlAutocompleteMenuItem(suggestion);
             }
         }
 
@@ -1545,127 +1545,27 @@ namespace MarkMpn.Sql4Cds.XTB
         class DataTextResultOutput : IResultOutput
         {
             private readonly SqlQueryControl _query;
-            private readonly DataTable _schema;
-            private readonly int[] _colWidths;
+            private readonly TextResultFormatter _formatter;
 
             public DataTextResultOutput(SqlQueryControl query, DataTable schemaTable)
             {
                 _query = query;
-                _schema = schemaTable;
+                _formatter = new TextResultFormatter(schemaTable, Settings.Instance.LocalFormatDates);
 
-                // Determine the number of characters that each column requires based on the data type
-                // Limit text columns to 256 characters to follow SSMS defaults
-                _colWidths = new int[schemaTable.Rows.Count];
-
-                for (var i = 0; i < schemaTable.Rows.Count; i++)
-                {
-                    var schema = schemaTable.Rows[i];
-                    var type = (string)schema["DataTypeName"];
-                    var scale = (short)schema["NumericScale"];
-                    var maxLength = schema["ColumnSize"] as int?;
-                    var precision = schema["NumericPrecision"] as short?;
-                    var name = schema["ColumnName"] as string;
-                    int width;
-
-                    switch (type)
-                    {
-                        case "nvarchar":
-                        case "varchar":
-                        case "nchar":
-                        case "char":
-                            width = Math.Min(256, maxLength.Value);
-                            break;
-
-                        case "xml":
-                            width = 256;
-                            break;
-
-                        case "bit":
-                            width = 1;
-                            break;
-
-                        case "date":
-                            width = 10;
-                            break;
-
-                        case "smalldatetime":
-                        case "datetime":
-                            width = 23;
-                            break;
-
-                        case "datetime2":
-                            width = 19 + (scale > 0 ? 1 + scale : 0);
-                            break;
-
-                        case "datetimeoffset":
-                            width = 19 + (scale > 0 ? 1 + scale : 0) + 4;
-                            break;
-
-                        case "time":
-                            width = 8 + (scale > 0 ? 1 + scale : 0);
-                            break;
-
-                        case "numeric":
-                        case "decimal":
-                            width = precision.Value + (scale > 0 ? 1 : 0);
-                            break;
-
-                        case "uniqueidentifier":
-                            width = 36;
-                            break;
-
-                        case "int":
-                            width = 11;
-                            break;
-
-                        case "bigint":
-                            width = 20;
-                            break;
-
-                        case "float":
-                            width = 22;
-                            break;
-
-                        case "money":
-                        case "smallmoney":
-                            width = 21;
-                            break;
-
-                        case "rowversion":
-                            width = 18;
-                            break;
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    if (name != null)
-                        width = Math.Max(width, name.Length);
-
-                    _colWidths[i] = width;
-                }
-
-                WriteLine(schemaTable.Rows.Cast<DataRow>().Select(c => c["ColumnName"] as string));
-                WriteLine(_colWidths.Select(w => new string('-', w)));
+                foreach (var line in _formatter.GetHeaderLines())
+                    WriteLine(line);
             }
 
             public void AddRow(object[] values, object[] providerSpecificValues)
             {
-                WriteLine(values.Zip(_schema.Rows.Cast<DataRow>(), (v, s) =>
-                {
-                    var dataType = (string)s["DataTypeName"];
-                    var scale = (short)s["NumericScale"];
-                    var cell = ValueFormatter.Format(v, dataType, scale, Settings.Instance.LocalFormatDates);
-                    var str = cell.DisplayValue ?? "";
-                    return str;
-                }));
+                WriteLine(_formatter.FormatRow(values));
             }
 
-            private void WriteLine(IEnumerable<string> values)
+            private void WriteLine(string line)
             {
                 _query.Execute(() =>
                 {
-                    _query.AddMessage(-1, 0, String.Join(" ", values.Zip(_colWidths, (v, w) => (v ?? string.Empty).PadRight(w).Substring(0, w))), MessageType.Info);
+                    _query.AddMessage(-1, 0, line, MessageType.Info);
                 });
             }
 
@@ -1980,18 +1880,10 @@ namespace MarkMpn.Sql4Cds.XTB
 
             if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull && DataSources.TryGetValue(er.DataSource, out var dataSource))
             {
-                var select = "\r\n\r\nSELECT * FROM ";
-
-                if (er.DataSource != _con.ConnectionName)
-                    select += $"{Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.DataSource)}.dbo.";
-
-                select += Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.LogicalName);
-
                 var metadata = dataSource.Metadata[er.LogicalName];
+                var select = ScriptGenerator.GenerateRecordSelectQuery(_con.ConnectionName, er.DataSource, metadata, er.Id);
 
-                select += $" WHERE {Autocomplete.SqlAutocompleteItem.EscapeIdentifier(metadata.PrimaryIdAttribute)} = '{er.Id}'";
-
-                _editor.AppendText(select);
+                _editor.AppendText("\r\n\r\n" + select);
             }
         }
 

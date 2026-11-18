@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
+import { addDisplayNames } from "./displayNames";
 import { DocumentConnectionManager, errorMessage } from "./documentConnections";
-import { ObjectExplorerProvider, selectTopQuery, sqlIdentifier, Sql4CdsTreeItem } from "./objectExplorer";
+import { ObjectExplorerProvider, ScriptAction, sqlIdentifier, Sql4CdsTreeItem } from "./objectExplorer";
 import { ConnectionProfile } from "./protocol";
 import { ProfileStore } from "./profileStore";
 import { QueryController } from "./queryController";
+import { convertToFetchXml, convertToPowerBi } from "./queryConversion";
 import { Sql4CdsService } from "./serviceClient";
 import { ServicePrerequisiteError } from "./serviceRuntime";
 
@@ -32,7 +34,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const documentConnections = new DocumentConnectionManager(service, profiles);
   const objectExplorer = new ObjectExplorerProvider(service, profiles);
-  const queries = new QueryController(service, documentConnections, context.extensionUri);
+  const queries = new QueryController(service, documentConnections, context.extensionUri, context.globalState);
   context.subscriptions.push(documentConnections, objectExplorer, queries);
   context.subscriptions.push(vscode.window.registerTreeDataProvider("sql4cds.objectExplorer", objectExplorer));
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("sql4cdsQueryResults", queries, {
@@ -58,14 +60,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("sql4cds.testConnection", async (item?: Sql4CdsTreeItem) => { await documentConnections.testConnection(item?.profile); }),
     vscode.commands.registerCommand("sql4cds.runQuery", async () => { await queries.execute(); }),
+    vscode.commands.registerCommand("sql4cds.addDisplayNames", async () => {
+      try { await addDisplayNames(service!.languageClient); }
+      catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to add display names: ${errorMessage(error)}`); }
+    }),
+    vscode.commands.registerCommand("sql4cds.convertToFetchXml", async () => {
+      try { await convertToFetchXml(service!.languageClient, documentConnections); }
+      catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to convert query: ${errorMessage(error)}`); }
+    }),
+    vscode.commands.registerCommand("sql4cds.convertToPowerBi", async () => {
+      try { await convertToPowerBi(documentConnections, profiles); }
+      catch (error) { void vscode.window.showErrorMessage(`SQL 4 CDS: Unable to convert query: ${errorMessage(error)}`); }
+    }),
     vscode.commands.registerCommand("sql4cds.estimatedPlan", async () => { await queries.execute(true); }),
     vscode.commands.registerCommand("sql4cds.actualPlan", () => queries.toggleActualPlan()),
+    vscode.commands.registerCommand("sql4cds.resultsToText", () => queries.setResultsToText(true)),
+    vscode.commands.registerCommand("sql4cds.resultsToGrid", () => queries.setResultsToText(false)),
     vscode.commands.registerCommand("sql4cds.cancelQuery", async () => { await queries.cancel(); }),
     vscode.commands.registerCommand("sql4cds.refreshObjectExplorer", (item?: Sql4CdsTreeItem) => objectExplorer.refresh(item)),
     vscode.commands.registerCommand("sql4cds.searchTables", async (item?: Sql4CdsTreeItem) => {
       const result = await objectExplorer.searchTables(item?.profile);
-      const query = selectTopQuery(result?.node.metadata);
-      if (result && query) { await documentConnections.newQuery(result.profile, query); }
+      if (result) {
+        await scriptObjectTo(
+          new Sql4CdsTreeItem(result.profile, result.node, result.sessionId),
+          "SELECT_TOP_1000",
+          "editor",
+          documentConnections
+        );
+      }
     }),
     vscode.commands.registerCommand("sql4cds.copyName", async (item?: Sql4CdsTreeItem) => {
       const name = item?.node?.metadata?.name ?? item?.node?.label;
@@ -85,10 +107,51 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (profile) { await profiles.remove(profile.id); }
     }),
     vscode.commands.registerCommand("sql4cds.selectTop", async (item?: Sql4CdsTreeItem) => {
-      const query = selectTopQuery(item?.node?.metadata);
-      if (query && item) { await documentConnections.newQuery(item.profile, query); }
+      await scriptObjectTo(item, "SELECT_TOP_1000", "editor", documentConnections);
     })
   );
+
+  const scriptActions: ScriptAction[] = ["SELECT", "INSERT", "UPDATE", "DELETE", "EXECUTE"];
+  const destinations = [
+    { command: "Editor", destination: "editor" },
+    { command: "File", destination: "file" },
+    { command: "Clipboard", destination: "clipboard" }
+  ] as const;
+  for (const action of scriptActions) {
+    for (const { command: commandDestination, destination } of destinations) {
+      context.subscriptions.push(vscode.commands.registerCommand(
+        `sql4cds.script${action}To${commandDestination}`,
+        async (item?: Sql4CdsTreeItem) => { await scriptObjectTo(item, action, destination, documentConnections); }
+      ));
+    }
+  }
+}
+
+async function scriptObjectTo(
+  item: Sql4CdsTreeItem | undefined,
+  action: ScriptAction,
+  destination: "editor" | "file" | "clipboard",
+  connections: DocumentConnectionManager
+): Promise<void> {
+  if (!item?.node) { return; }
+
+  try {
+    if (!service || !item.sessionId) { throw new Error("The Object Explorer session is no longer available."); }
+    const query = await service.generateObjectExplorerScript(item.sessionId, item.node.nodePath, action);
+    if (destination === "editor") {
+      await connections.newQuery(item.profile, query);
+    } else if (destination === "file") {
+      const target = await vscode.window.showSaveDialog({
+        filters: { "SQL files": ["sql"], "All files": ["*"] },
+        saveLabel: "Save SQL script"
+      });
+      if (target) { await vscode.workspace.fs.writeFile(target, Buffer.from(query, "utf8")); }
+    } else {
+      await vscode.env.clipboard.writeText(query);
+    }
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Could not script ${item.node.label}: ${errorMessage(error)}`);
+  }
 }
 
 async function manageConnections(profiles: ProfileStore, explorer: ObjectExplorerProvider, connections: DocumentConnectionManager): Promise<void> {

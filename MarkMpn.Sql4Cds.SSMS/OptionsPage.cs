@@ -36,6 +36,12 @@ namespace MarkMpn.Sql4Cds.SSMS
         public int MaxDegreeOfParallelism { get; set; } = 10;
 
         [Category("Behavior")]
+        [DisplayName("Use Bulk Delete")]
+        [Description("Submits eligible DELETE queries as asynchronous Dataverse bulk delete jobs. Queries finish when the job is submitted, not when the records have been deleted.")]
+        [DefaultValue(false)]
+        public bool UseBulkDelete { get; set; }
+
+        [Category("Behavior")]
         [DisplayName("Bypass Custom Plugins")]
         [Description("Skips executing custom plugins in response to INSERT/UPDATE/DELETE operations")]
         [DefaultValue(false)]

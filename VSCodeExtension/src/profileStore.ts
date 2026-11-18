@@ -120,6 +120,16 @@ export class ProfileStore implements vscode.Disposable {
     return selection?.profile;
   }
 
+  public async getUrl(profile: ConnectionProfile): Promise<string> {
+    const url = profile.authenticationType === "ConnectionString"
+      ? connectionStringUrl(await this.requiredSecret(profile, "connectionString"))
+      : profile.url;
+    if (!url) { throw new Error("The connection does not specify a Dataverse URL."); }
+    const error = validateDataverseUrl(url);
+    if (error) { throw new Error(error); }
+    return normalizeDataverseUrl(url);
+  }
+
   public async toConnectionDetails(profile: ConnectionProfile): Promise<ConnectionDetails> {
     const current = this.get(profile.id);
     if (!current) { throw new Error(`The saved connection '${profile.name}' no longer exists.`); }
@@ -337,9 +347,13 @@ export function validateProfile(profile: ConnectionProfile): string | undefined 
 
 function validateConnectionString(value: string): string | undefined {
   if (!value.trim()) { return "Enter the Dataverse connection string."; }
-  const url = /(?:^|;)\s*(?:Service\s*Uri|ServiceUri|Url|Server)\s*=\s*([^;]+)/i.exec(value)?.[1]?.trim().replaceAll(/^["']|["']$/g, "");
+  const url = connectionStringUrl(value);
   if (!url) { return "The connection string must include Url, ServiceUri, or Server."; }
   return validateDataverseUrl(url);
+}
+
+function connectionStringUrl(value: string): string | undefined {
+  return /(?:^|;)\s*(?:Service\s*Uri|ServiceUri|Url|Server)\s*=\s*([^;]+)/i.exec(value)?.[1]?.trim().replaceAll(/^["']|["']$/g, "");
 }
 
 function validateClientId(value: string): string | undefined {

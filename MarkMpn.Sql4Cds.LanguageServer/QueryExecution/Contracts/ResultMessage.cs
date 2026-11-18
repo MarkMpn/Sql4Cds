@@ -38,6 +38,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
         public Microsoft.VisualStudio.LanguageServer.Protocol.Range Range { get; set; }
 
         /// <summary>
+        /// The number of result rows contained in this message when results are being sent as text,
+        /// so clients can report the total number of rows returned.
+        /// </summary>
+        public int? RowCount { get; set; }
+
+        /// <summary>
         /// Constructor with default "Now" time
         /// </summary>
         public ResultMessage(string message, bool isError, int? batchId)

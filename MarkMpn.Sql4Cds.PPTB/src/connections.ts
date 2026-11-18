@@ -1,10 +1,12 @@
 import type { Sql4CdsClient } from "./lsp/client";
 import type { ConnectionCompleteParams, EntityReferenceValue, PptbConnectionOptions } from "./lsp/protocol";
+import { action, computed, makeObservable, observable, runInAction } from "mobx";
 
 export interface ConnectionSlot {
     slot: number;
     connection: ToolBoxAPI.Connection;
     options: PptbConnectionOptions;
+    status: "connecting" | "connected" | "error";
     /** Set once the slot has been registered with the language server */
     error?: string;
     registration?: Promise<void>;
@@ -18,7 +20,13 @@ export interface ConnectionSlot {
 export class ConnectionRegistry {
     private slots: Array<ConnectionSlot | null> = [];
 
-    constructor(private readonly client: Sql4CdsClient) {}
+    constructor(private readonly client: Sql4CdsClient) {
+        makeObservable<this, "slots">(this, {
+            slots: observable.shallow,
+            all: computed,
+            register: action,
+        });
+    }
 
     get all(): ConnectionSlot[] {
         return this.slots.filter((s): s is ConnectionSlot => s !== null);
@@ -53,16 +61,9 @@ export class ConnectionRegistry {
         await window.toolboxAPI.utils.openInConnectionBrowser(this.getRecordUrl(reference), entry.slot);
     }
 
-    async getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string> {
-        const entry = this.getRecordConnection(reference);
-        const metadata = await window.dataverseAPI.getEntityMetadata(reference.logicalName, true, ["PrimaryIdAttribute"], entry.slot);
-        const primaryKey = metadata.PrimaryIdAttribute;
-        if (typeof primaryKey !== "string" || !primaryKey) throw new Error(`The primary key for "${reference.logicalName}" is unavailable`);
-        const quote = (name: string) => `[${name.replace(/]/g, "]]")}]`;
-        const table = currentDataSource?.toLowerCase() === reference.dataSource.toLowerCase()
-            ? quote(reference.logicalName)
-            : `${quote(reference.dataSource)}.dbo.${quote(reference.logicalName)}`;
-        return `SELECT * FROM ${table} WHERE ${quote(primaryKey)} = '${reference.id.replace(/'/g, "''")}';`;
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
+        this.getRecordConnection(reference);
+        return this.client.recordSelectStatement(ownerUri, reference);
     }
 
     static ownerUri(slot: number): string {
@@ -79,9 +80,12 @@ export class ConnectionRegistry {
         const updated: Array<ConnectionSlot | null> = connections.map((connection, slot) => {
             if (!connection) return null;
 
-            return {
+            return observable.object<ConnectionSlot>({
                 slot,
                 connection,
+                status: "connecting",
+                error: undefined,
+                registration: undefined,
                 options: {
                     authenticationType: "PPTB",
                     url: connection.url,
@@ -89,7 +93,11 @@ export class ConnectionRegistry {
                     connectionId: connection.id,
                     connectionTarget: slot,
                 },
-            };
+            }, {
+                connection: observable.ref,
+                options: observable.ref,
+                registration: false,
+            }, { deep: false });
         });
 
         const changed: number[] = [];
@@ -99,7 +107,7 @@ export class ConnectionRegistry {
             const after = updated[slot] ?? null;
             if (sameOptions(before?.options, after?.options)) {
                 if (before && after) {
-                    before.connection = after.connection;
+                    runInAction(() => { before.connection = after.connection; });
                     updated[slot] = before;
                 }
                 continue;
@@ -109,7 +117,7 @@ export class ConnectionRegistry {
             if (before) await this.client.disconnect(ConnectionRegistry.ownerUri(slot)).catch(() => false);
         }
 
-        this.slots = updated;
+        runInAction(() => { this.slots = updated; });
         return changed;
     }
 
@@ -120,7 +128,7 @@ export class ConnectionRegistry {
 
         if (!entry.registration) {
             entry.registration = this.registerEntry(entry).catch((error) => {
-                entry.registration = undefined;
+                runInAction(() => { entry.registration = undefined; });
                 throw error;
             });
         }
@@ -129,6 +137,10 @@ export class ConnectionRegistry {
     }
 
     private async registerEntry(entry: ConnectionSlot): Promise<void> {
+        runInAction(() => {
+            entry.status = "connecting";
+            entry.error = undefined;
+        });
         const ownerUri = ConnectionRegistry.ownerUri(entry.slot);
         const complete = new Promise<ConnectionCompleteParams>((resolve) => {
             this.client.addListener(ownerUri, { connectionComplete: resolve });
@@ -138,11 +150,12 @@ export class ConnectionRegistry {
             const accepted = await this.client.connect(ownerUri, entry.options);
             if (!accepted) throw new Error("The connection request was rejected");
             const result = await complete;
-            entry.error = result.errorMessage || undefined;
+            runInAction(() => { entry.error = result.errorMessage || undefined; });
         } catch (err) {
-            entry.error = err instanceof Error ? err.message : String(err);
+            runInAction(() => { entry.error = err instanceof Error ? err.message : String(err); });
         } finally {
             this.client.removeListener(ownerUri);
+            runInAction(() => { entry.status = entry.error ? "error" : "connected"; });
         }
 
         if (entry.error) throw new Error(entry.error);

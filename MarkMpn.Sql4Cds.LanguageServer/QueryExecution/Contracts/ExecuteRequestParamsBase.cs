@@ -18,5 +18,15 @@
         /// Flag to get full column schema via additional queries.
         /// </summary>
         public bool GetFullColumnSchema { get; set; }
+
+        /// <summary>
+        /// Return any result sets as fixed-width text messages instead of result sets that can be shown in a grid
+        /// </summary>
+        public bool ResultsToText { get; set; }
+
+        /// <summary>
+        /// Require confirmation of data modifications regardless of the configured warning thresholds.
+        /// </summary>
+        public bool ConfirmDataModification { get; set; }
     }
 }

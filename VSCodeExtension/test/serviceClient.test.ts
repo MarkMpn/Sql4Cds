@@ -66,7 +66,9 @@ function fixture(failure?: Error) {
     } : nodeRequire(name)
   });
   const client = new module.exports.Sql4CdsLanguageClient("1.2.3", { command: "unused" }, { documentSelector: [] });
-  return { client, calls, requests, notifications, visible, logged };
+  const service: import("../src/serviceClient").Sql4CdsService = Object.create(module.exports.Sql4CdsService.prototype);
+  Object.defineProperty(service, "client", { value: client, configurable: true });
+  return { client, service, calls, requests, notifications, visible, logged };
 }
 
 test("VS Code logs every server message and visibly notifies only warnings and errors", async () => {
@@ -103,4 +105,15 @@ test("VS Code requests capabilities after initialization on startup and restart"
 test("VS Code capabilities request failures propagate from startup", async () => {
   const failure = new Error("Capabilities unavailable");
   await assert.rejects(fixture(failure).client.start(), error => error === failure);
+});
+
+test("Object Explorer script generation forwards its request and propagates errors", async () => {
+  const { service, requests } = fixture();
+  await service.generateObjectExplorerScript("session", "path", "SELECT");
+  assert.equal(requests.at(-1)?.method, "objectexplorer/generateScript");
+  assert.equal(JSON.stringify(requests.at(-1)?.params), JSON.stringify({ sessionId: "session", nodePath: "path", action: "SELECT" }));
+  const failure = new Error("Script generation failed");
+  await assert.rejects(fixture(failure).service.generateObjectExplorerScript("session", "path", "SELECT"), error => error === failure);
+  Object.defineProperty(service, "client", { value: undefined });
+  await assert.rejects(service.generateObjectExplorerScript("session", "path", "SELECT"), /service has not started/);
 });

@@ -2,46 +2,56 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { test } = require("node:test");
+const { test, afterEach } = require("node:test");
 const ts = require("typescript");
+const { observable, autorun, runInAction } = require("mobx");
+const { JSDOM } = require("jsdom");
+const dom = new JSDOM("<!doctype html><html><body></body></html>");
+global.window = dom.window;
+global.document = dom.window.document;
+global.Node = dom.window.Node;
+global.Element = dom.window.Element;
+const { flushSync } = require("react-dom");
+require("mobx-react-lite").observerBatching(callback => flushSync(callback));
+const cleanups = [];
+afterEach(() => {
+    flushSync(() => { for (const cleanup of cleanups.splice(0)) cleanup(); });
+    document.body.replaceChildren();
+    delete window.toolboxAPI;
+});
+
+Object.defineProperty(dom.window.Element.prototype, "classes", { get() { return new Set(this.classList); } });
+Object.defineProperty(dom.window.Element.prototype, "events", { get() {
+    return new Proxy({}, { get: (_, name) => (options = {}) => {
+        const event = new dom.window.Event(name, { bubbles: true, cancelable: true });
+        for (const [key, value] of Object.entries(options)) Object.defineProperty(event, key, { value });
+        flushSync(() => this.dispatchEvent(event));
+        return new Promise(resolve => setImmediate(resolve));
+    } });
+} });
+dom.window.HTMLElement.prototype.scrollIntoView = function() {};
+dom.window.HTMLDialogElement.prototype.showModal = function() { this.open = true; };
+dom.window.HTMLCollection.prototype.find = Array.prototype.find;
+dom.window.HTMLCollection.prototype.map = Array.prototype.map;
+dom.window.HTMLCollection.prototype.filter = Array.prototype.filter;
 
 class Element {
     constructor() {
-        this.children = [];
-        this.dataset = {};
-        this.textContent = "";
-        this.attributes = {};
-        this.events = {};
-        this.classes = new Set();
-        this.classList = {
-            toggle: (name, value) => value ? this.classes.add(name) : this.classes.delete(name),
-            add: (name) => this.classes.add(name),
-            remove: (name) => this.classes.delete(name),
-        };
+        return document.createElement("div");
     }
-    append(...children) { this.children.push(...children); }
-    appendChild(child) { this.children.push(child); }
-    setAttribute(name, value) { this.attributes[name] = value; }
-    contains() { return false; }
-    replaceChildren(...children) { this.children = children; }
-    addEventListener(name, handler) { this.events[name] = handler; }
-    focus() { this.focused = true; }
-    querySelector() { return this.children[0]; }
-    querySelectorAll() { return this.children.filter(child => !child.disabled); }
-    closest() { return null; }
-    remove() {}
 }
 
 function load(relativePath, dependencies, globals = {}, extra = "") {
     const filename = path.resolve(__dirname, "..", "src", relativePath);
     const module = { exports: {} };
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
     vm.runInNewContext(code + extra, {
         module, exports: module.exports, require: (name) => {
-            assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
-            return dependencies[name];
+            if (name in dependencies) return dependencies[name];
+            if (!name.startsWith(".")) return require(name);
+            assert.fail(`Unexpected dependency: ${name}`);
         },
         URL, Error, console, ...globals,
     }, { filename });
@@ -49,19 +59,36 @@ function load(relativePath, dependencies, globals = {}, extra = "") {
 }
 
 function setup(pinned = true) {
+    flushSync(() => { for (const cleanup of cleanups.splice(0)) cleanup(); });
     const logs = [];
     let now = 1000;
-    const elements = new Map();
-    const document = {
-        events: {},
-        addEventListener(name, handler) { this.events[name] = handler; },
-        createElement: () => new Element(),
-        createTextNode: (text) => ({ textContent: text }),
-        getElementById: (id) => {
-            if (!elements.has(id)) elements.set(id, new Element());
-            return elements.get(id);
-        },
-    };
+    const document = dom.window.document;
+    const window = dom.window;
+    document.body.replaceChildren();
+    delete window.toolboxAPI;
+    for (const target of [window, document]) {
+        const add = target.addEventListener;
+        target.addEventListener = function(name, callback, options) {
+            add.call(this, name, callback, options);
+            cleanups.push(() => {
+                if (name === "pagehide" && options?.once) {
+                    if (app.editor) app.editor.dispose ??= () => {};
+                    callback(new window.Event("pagehide"));
+                }
+                this.removeEventListener(name, callback, options);
+            });
+        };
+        cleanups.push(() => { target.addEventListener = add; });
+    }
+    document.events = new Proxy({}, { get: (_, name) => (options = {}) => {
+        const event = new window.Event(name, { bubbles: true, cancelable: true });
+        for (const [key, value] of Object.entries(options)) Object.defineProperty(event, key, { value });
+        flushSync(() => document.dispatchEvent(event));
+    } });
+    const element = document.createElement("div");
+    element.id = "app";
+    document.body.appendChild(element);
+    const elements = { get: (id) => document.getElementById(id) };
     const listeners = new Map();
     const executions = [];
     let clientEvents;
@@ -80,28 +107,58 @@ function setup(pinned = true) {
             return true;
         },
     };
-    const registry = {
+    const registry = observable({
+        all: [],
         get: () => ({ options: { url: "https://contoso.crm.dynamics.com", connectionName: "contoso_2" } }),
-    };
+    }, { all: observable.shallow, get: false }, { deep: false });
     const timers = new Map();
     let nextTimer = 0;
     const modelLanguages = [];
     const savedSettings = [];
+    const editorActions = new Map();
     const settingsApi = {
         saveSettings: async (settings) => { savedSettings.push({ ...settings }); },
     };
-    const window = { addEventListener() {} };
-    const pinnablePane = load("pinnablePane.ts", {}, { document, window, Node: Element, Element });
-    const propertiesPanels = [];
+    const invocation = load("mcpInvocation.ts", {}, { TextEncoder });
+    const globals = {
+        document, window, Node: dom.window.Node, Element: dom.window.Element,
+        ResizeObserver: class { observe() {} disconnect() {} },
+        setTimeout, clearTimeout,
+        console: {
+            error: (message) => logs.push({ type: "error", message }),
+            warn: (message) => logs.push({ type: "warning", message }),
+            log: (message) => logs.push({ type: "info", message }),
+        },
+        setInterval: (callback) => { timers.set(++nextTimer, callback); return nextTimer; },
+        clearInterval: (id) => timers.delete(id),
+    };
+    const protocol = load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) });
+    const appContext = load("appContext.tsx", {}, globals);
+    const explorerController = { ObjectExplorer: class {
+        snapshots = [];
+        constructor(_client, _error, _insert, _newQuery, registry) {
+            this.stop = autorun(() => this.snapshots.push(registry.all.map(entry => ({ slot: entry.slot, status: entry.status }))));
+        }
+        engineStopped() { this.stopped = true; }
+        async dispose() { this.stop(); this.disposed = true; }
+    } };
     const { App } = load("app.ts", {
+        "mobx": require("mobx"),
         "./styles.css": {},
-        "./connections": { ConnectionRegistry: class { constructor() { return registry; } } },
+        "./connections": { ConnectionRegistry: class {
+            constructor() { return registry; }
+            static ownerUri(slot) { return `pptb://connection/${slot}`; }
+        } },
         "./editor/monacoSetup": {
+            configureMonaco() {},
             toMonacoRange: (range) => ({
                 startLineNumber: range.start.line + 1, startColumn: range.start.character + 1,
                 endLineNumber: range.end.line + 1, endColumn: range.end.character + 1,
             }),
             monaco: {
+                editor: { create: () => ({ addAction: action => editorActions.set(action.id, action), dispose() {} }) },
+                KeyCode: {},
+                KeyMod: { CtrlCmd: 1 },
                 Range: class {
                     constructor(startLineNumber, startColumn, endLineNumber, endColumn) {
                         Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
@@ -110,35 +167,56 @@ function setup(pinned = true) {
             }
         },
         "./lsp/client": { Sql4CdsClient: class { constructor(events) { clientEvents = events; return client; } } },
-        "./lsp/protocol": {},
+        "./lsp/protocol": protocol,
+        "./dialogs": load("dialogs.ts", { "./lsp/protocol": protocol }, globals),
+        "./statusBar": load("statusBar.ts", {
+            "mobx": require("mobx"),
+        }, globals),
+        "./appView": {
+            mountApp: (element, app) => {
+                const unmountRoot = load("appView.tsx", {
+                    "./appContext": appContext,
+                    "./toolbar": load("toolbar.tsx", { "./appContext": appContext }, globals),
+                    "./tabStripView": load("tabStripView.tsx", { "./appContext": appContext }, globals),
+                    "./pinnablePaneView": load("pinnablePaneView.tsx", { "./appContext": appContext }, globals),
+                    "./objectExplorerView": { ExplorerTree: () => require("react").createElement("div", {
+                        id: "explorer-tree", className: "explorer-tree", role: "tree", "aria-label": "Object Explorer",
+                    }) },
+                    "./propertiesPanel": load("propertiesPanel.tsx", {
+                        "./appContext": appContext,
+                        "./executionPlan/propertyRows": load("executionPlan/propertyRows.ts"),
+                    }, globals),
+                    "./statusBarView": load("statusBarView.tsx", { "./appContext": appContext }, globals),
+                }, globals).mountApp(element, app);
+                let mounted = true;
+                const unmount = () => { if (mounted) { mounted = false; unmountRoot(); } };
+                cleanups.push(unmount);
+                return unmount;
+            },
+        },
         "./query/queryTab": {},
-        "./objectExplorer": { ObjectExplorer: class { engineStopped() { this.stopped = true; } } },
-        "./pinnablePane": pinnablePane,
-        "./propertiesPanel": { PropertiesPanel: class {
-            constructor() { this.shown = []; propertiesPanels.push(this); }
-            show(name, properties) { this.shown.push({ name, properties }); }
-        } },
+        "./objectExplorer": explorerController,
         "./executionPlan/executionPlanView": { getFetchXmlQuery: (node) =>
             node.nodeType === "FetchXmlScan" ? node.properties?.find(property => property.name === "FetchXML")?.value ?? null : null },
         "./settings": settingsApi,
-    }, {
-        document, window, Node: Element, Element,
-        console: {
-            error: (message) => logs.push({ type: "error", message }),
-            warn: (message) => logs.push({ type: "warning", message }),
-            log: (message) => logs.push({ type: "info", message }),
-        },
-        setInterval: (callback) => { timers.set(++nextTimer, callback); return nextTimer; },
-        clearInterval: (id) => timers.delete(id),
-    }, "\nexports.App = App;");
-    const app = new App();
-    app.settings = { objectExplorerPinned: pinned, batchSize: 100, includeActualPlan: false };
-    app.ready = true;
-    app.renderTabs = () => {};
-    app.renderConnectionList = () => {};
+        "./mcpInvocation": invocation,
+        "./session": { loadSession: async () => null, saveSession: async () => {} },
+    }, globals, "\nexports.App = App;");
+    let app;
+    flushSync(() => {
+        app = new App();
+        runInAction(() => {
+            app.settings = { objectExplorerPinned: pinned, batchSize: 100, includeActualPlan: false };
+            app.ready = true;
+            app.editorReady = true;
+            app.settingsReady = true;
+        });
+    });
     const grids = [];
     const planViews = [];
     const { QueryTab } = load("query/queryTab.ts", {
+        "mobx": require("mobx"),
+        "../mcpInvocation": invocation,
         "../lsp/protocol": load("lsp/protocol.ts", { "../resultsProtocol": load("resultsProtocol.ts", {}) }),
         "../editor/monacoSetup": {
             monaco: {
@@ -208,8 +286,201 @@ function setup(pinned = true) {
         app.activeTab = tab;
         return { tab, events: listeners.get(tab.uri) };
     }
-    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, propertiesPanels, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, setNow: (value) => { now = value; } };
+    return { app, client, clientEvents, registry, createTab, elements, timers, grids, planViews, executions, document, savedSettings, settingsApi, window, modelLanguages, listeners, logs, editorActions, setNow: (value) => { now = value; } };
 }
+
+test("the Monaco close-query action returns its promise including rejections to the editor", async () => {
+    const { app, editorActions, createTab } = setup();
+    app.createEditor();
+    const { tab } = createTab();
+    let rejectClose;
+    const closing = new Promise((_resolve, reject) => { rejectClose = reject; });
+    app.closeTab = target => { assert.equal(target, tab); return closing; };
+    const result = editorActions.get("sql4cds.closeTab").run();
+    assert.equal(result, closing);
+    const rejected = assert.rejects(result, /Close failed/);
+    rejectClose(new Error("Close failed"));
+    await rejected;
+});
+
+test("the status bar is rendered in the global root and observes the context's shared StatusBarState", () => {
+    const { app, elements, document } = setup();
+    assert.equal(app.statusBar.state, app.statusState);
+    assert.equal(document.querySelectorAll("#app #status-bar").length, 1);
+    const statusElement = elements.get("status-bar");
+    runInAction(() => {
+        app.statusState.ready = false;
+        app.statusState.setStatus("Starting through context", "busy");
+    });
+    assert.equal(elements.get("status-text").textContent, "Starting through context");
+    runInAction(() => { app.statusState.setStatus("Engine failed", "error"); });
+    assert.equal(elements.get("status-icon").classList.contains("error"), true);
+    assert.equal(elements.get("status-bar"), statusElement);
+    assert.equal(app.statusBar.state, app.statusState);
+});
+
+test("the React shell follows the active query's connection and execution state without refresh calls", () => {
+    const { app, registry, createTab, elements } = setup();
+    const first = createTab().tab;
+    const second = createTab().tab;
+    runInAction(() => {
+        registry.all = [
+            { slot: 0, connection: { url: "https://dev.example" }, options: { connectionName: "Dev" }, status: "connected" },
+            { slot: 1, connection: { url: "https://test.example" }, options: { connectionName: "Test" }, status: "connected" },
+        ];
+        first.connectionSlot = 0;
+        first.connected = true;
+        second.connectionSlot = 1;
+        second.connected = true;
+        second.resultsMode = "text";
+        app.tabs.push(first, second);
+        app.activeTab = first;
+    });
+    const firstTabElement = elements.get("tab-strip").children[0];
+    assert.equal(elements.get("connection-select").value, "0");
+    assert.equal(elements.get("btn-run").disabled, false);
+    assert.equal(elements.get("btn-results-grid").getAttribute("aria-pressed"), "true");
+    runInAction(() => { first.running = true; });
+    assert.equal(elements.get("btn-run").disabled, true);
+    assert.equal(elements.get("btn-cancel").disabled, false);
+    assert.equal(elements.get("connection-select").disabled, true);
+    assert.equal(firstTabElement.classList.contains("running"), true);
+    runInAction(() => { app.activeTab = second; });
+    assert.equal(elements.get("connection-select").value, "1");
+    assert.equal(elements.get("btn-run").disabled, false);
+    assert.equal(elements.get("btn-cancel").disabled, true);
+    assert.equal(elements.get("btn-results-text").getAttribute("aria-pressed"), "true");
+    runInAction(() => { first.running = false; });
+    assert.equal(elements.get("connection-select").value, "1");
+    assert.equal(elements.get("tab-strip").children[0], firstTabElement);
+    assert.equal("onStateChanged" in app, false);
+    assert.equal("updateToolbar" in app, false);
+    assert.equal("renderConnectionList" in app, false);
+});
+
+test("dirty tabs, Save enablement and close protection react to edits, undo and asynchronous saves", async () => {
+    const { app, createTab, elements, window } = setup();
+    const protection = [];
+    window.toolboxAPI = {
+        preventClose: async () => protection.push("prevent"),
+        releasePreventClose: async () => protection.push("release"),
+        utils: { showNotification: async () => {} },
+    };
+    const { tab } = createTab();
+    tab.setFile("C:\\queries\\saved.sql");
+    runInAction(() => { app.settings = { ...app.settings, rememberSession: false }; app.tabs.push(tab); });
+    const tabElement = elements.get("tab-strip").children[0];
+    assert.equal(elements.get("btn-save").disabled, true);
+    tab.model.setValue("SELECT 1");
+    await app.closePreventionQueue;
+    assert.equal(tabElement.classList.contains("modified"), true);
+    assert.equal(elements.get("btn-save").disabled, false);
+    assert.deepEqual(protection, ["prevent"]);
+    tab.model.setValue("");
+    await app.closePreventionQueue;
+    assert.equal(tabElement.classList.contains("modified"), false);
+    assert.equal(elements.get("btn-save").disabled, true);
+    assert.deepEqual(protection, ["prevent", "release"]);
+    tab.model.setValue("SELECT 1");
+    let finishWrite;
+    const writes = [];
+    window.toolboxAPI.fileSystem = {
+        writeText: async (path, text) => {
+            writes.push([path, text]);
+            await new Promise(resolve => { finishWrite = resolve; });
+        },
+    };
+    const saving = app.saveTab(tab);
+    tab.model.setValue("SELECT 2");
+    finishWrite();
+    assert.equal(await saving, true);
+    assert.deepEqual(writes, [["C:\\queries\\saved.sql", "SELECT 1"]]);
+    assert.equal(tab.isDirty, true, "Saving an older snapshot must not mark newer edits saved");
+    assert.equal(elements.get("btn-save").disabled, false);
+    tab.model.setValue("SELECT 1");
+    assert.equal(tab.isDirty, false);
+    assert.equal(tabElement.classList.contains("modified"), false);
+    assert.equal(elements.get("btn-save").disabled, true);
+    tab.setFile("C:\\queries\\renamed.sql");
+    assert.equal(tabElement.querySelector(".tab-label").textContent, "renamed.sql");
+});
+
+test("React host wrappers preserve editor and per-tab result widgets across updates and tab switches", () => {
+    const { app, createTab, elements, document } = setup();
+    const first = createTab().tab;
+    const second = createTab().tab;
+    const editorElement = elements.get("editor");
+    const editorWidget = document.createElement("textarea");
+    const gridWidget = document.createElement("table");
+    editorElement.appendChild(editorWidget);
+    first.resultsElement.appendChild(gridWidget);
+    runInAction(() => {
+        app.tabs.push(first, second);
+        app.activeTab = first;
+        first.hasResults = true;
+    });
+    const firstHost = first.resultsElement.parentElement;
+    const secondHost = second.resultsElement.parentElement;
+    assert.equal(firstHost.hidden, false);
+    assert.equal(secondHost.hidden, true);
+    assert.equal(elements.get("results-host").hidden, false);
+    runInAction(() => { first.title = "Renamed"; first.running = true; app.activeTab = second; });
+    assert.equal(first.resultsElement.parentElement, firstHost);
+    assert.equal(firstHost.hidden, true);
+    assert.equal(secondHost.hidden, false);
+    assert.equal(elements.get("results-host").hidden, true);
+    assert.equal(gridWidget.parentElement, first.resultsElement);
+    assert.equal(editorElement, elements.get("editor"));
+    assert.equal(editorElement.firstChild, editorWidget);
+    runInAction(() => { app.activeTab = first; app.tabs.splice(1, 1); });
+    assert.equal(first.resultsElement.parentElement, firstHost);
+    assert.equal(firstHost.hidden, false);
+    assert.equal(second.resultsElement.parentElement, null);
+});
+
+test("split menus react to disabled state, retain keyboard navigation and do not reopen after execution", () => {
+    const { createTab, elements, document } = setup();
+    const { tab } = createTab();
+    runInAction(() => { tab.connected = true; });
+    const toggle = elements.get("btn-convert-menu");
+    const menu = elements.get("convert-menu");
+    toggle.events.keydown({ key: "ArrowDown" });
+    assert.equal(menu.hidden, false);
+    assert.equal(document.activeElement, elements.get("btn-convert-fetchxml"));
+    menu.events.keydown({ key: "End" });
+    assert.equal(document.activeElement, elements.get("btn-convert-m"));
+    menu.events.keydown({ key: "ArrowDown" });
+    assert.equal(document.activeElement, elements.get("btn-convert-fetchxml"));
+    runInAction(() => { tab.running = true; });
+    assert.equal(menu.hidden, true);
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    runInAction(() => { tab.running = false; });
+    assert.equal(menu.hidden, true);
+    toggle.events.click();
+    assert.equal(menu.hidden, false);
+    menu.events.keydown({ key: "Escape" });
+    assert.equal(menu.hidden, true);
+    assert.equal(document.activeElement, toggle);
+});
+
+test("unloading the React shell removes menus, stops the clock and disposes the editor and reactions", () => {
+    const { app, createTab, elements, timers, window, document } = setup();
+    const { tab } = createTab();
+    let disposed = 0;
+    app.editor = { dispose: () => disposed++ };
+    runInAction(() => { app.tabs.push(tab); tab.running = true; });
+    elements.get("btn-tab-list").events.click();
+    assert.ok(document.querySelector(".tab-list-menu"));
+    assert.equal(timers.size, 1);
+    flushSync(() => window.dispatchEvent(new window.Event("pagehide")));
+    assert.equal(disposed, 1);
+    assert.equal(document.querySelector(".tab-list-menu"), null);
+    assert.equal(elements.get("app").childElementCount, 0);
+    assert.equal(timers.size, 0);
+    runInAction(() => { tab.running = false; tab.title = "Closed"; tab.running = true; });
+    assert.equal(timers.size, 0);
+    assert.equal(elements.get("app").childElementCount, 0);
+});
 
 test("server warnings and errors are logged and shown as PPTB notifications", async () => {
     const { clientEvents, window, logs } = setup();
@@ -237,7 +508,7 @@ test("Messages tab line numbers follow the showMessageLineNumbers preference and
 
     app.settings.showMessageLineNumbers = true;
     const { tab: tabOn } = createTab();
-    const paneOn = tabOn.resultsElement.children.find(child => child.className === "messages-pane");
+    const paneOn = tabOn.resultsElement.querySelector(".messages-pane");
     assert.equal(paneOn.classes.has("show-line-numbers"), true);
 });
 
@@ -291,7 +562,7 @@ test("results area stays hidden for new tabs until the active tab runs a query",
     app.activateTab(first.tab);
     assert.equal(elements.get("results-host").hidden, true);
     assert.equal(elements.get("splitter").hidden, true);
-    first.tab.connected = true;
+    runInAction(() => { first.tab.connected = true; });
     await first.tab.execute(null);
     assert.equal(elements.get("results-host").hidden, false);
     assert.equal(elements.get("splitter").hidden, false);
@@ -314,13 +585,12 @@ test("fatal worker failure stops all tabs, preserves editors and shows a restart
     const idle = createTab();
     app.tabs.push(first.tab, second.tab, idle.tab);
     for (const { tab, events } of [first, second]) {
-        tab.connected = true;
+        runInAction(() => { tab.connected = true; });
         tab.model.setValue("SELECT 1; -- unsaved");
         await tab.execute(null);
         events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
     }
     app.activeTab = first.tab;
-    app.updateStatusBar();
     assert.equal(timers.size, 1);
     app.progressMessage = "Retrieving...";
     setNow(2500);
@@ -374,12 +644,12 @@ test("record menu wiring copies the shared URL and appends SELECT SQL at the lat
     window.toolboxAPI = { utils: { copyToClipboard: async text => copied.push(text) } };
     registry.getRecordUrl = ref => { assert.equal(ref, reference); return "https://org/main.aspx?id=123"; };
     let resolveSql;
-    registry.getRecordSelectStatement = (ref, source) => {
+    registry.getRecordSelectStatement = (source, ref) => {
         requests.push([ref, source]);
         return new Promise(resolve => { resolveSql = resolve; });
     };
     const { tab, events } = createTab();
-    tab.connectionSlot = 0;
+    runInAction(() => { tab.connectionSlot = 0; });
     events.resultSetAvailable({ resultSetSummary: summary(0, 0, 1) });
     grids[0].recordActions.copyUrl(reference);
     await new Promise(resolve => setImmediate(resolve));
@@ -397,7 +667,7 @@ test("record menu wiring copies the shared URL and appends SELECT SQL at the lat
     resolveSql(sql);
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(requests[0][0], reference);
-    assert.equal(requests[0][1], "contoso_2");
+    assert.equal(requests[0][1], tab.uri);
     assert.equal(undoStops, 2);
     assert.equal(edits.length, 1);
     assert.equal(edits[0].range.startLineNumber, 2);
@@ -463,16 +733,81 @@ test("connection dropdown shows only the registered Object Explorer name", () =>
         { slot: 0, connection: { name: "Old alternate", url: "https://org.crm.dynamics.com" }, options: { connectionName: "Contoso Dev" } },
         { slot: 1, connection: { name: "Old alternate", url: "https://org2.crm.dynamics.com" }, options: { connectionName: "Contoso Dev_2" }, error: "Connection failed" },
     ];
-    Object.getPrototypeOf(app).renderConnectionList.call(app);
     const options = elements.get("connection-select").children;
     assert.equal(options[1].textContent, "Contoso Dev");
     assert.equal(options[2].textContent, "Contoso Dev_2 ⚠");
     assert.equal(options[2].title, "Connection failed");
 });
 
+test("connection dropdown disables connecting names and enables them on registry completion", () => {
+    const { app, registry, elements } = setup(true, true);
+    runInAction(() => { registry.all = [
+        { slot: 0, connection: { url: "https://org.crm.dynamics.com" }, options: { connectionName: "Dev" }, status: "connecting" },
+    ].map(entry => observable(entry)); });
+    let option = elements.get("connection-select").children[1];
+    assert.equal(option.textContent, "Dev (Connecting\u2026)");
+    assert.equal(option.disabled, true);
+    runInAction(() => { registry.all[0].status = "connected"; });
+    option = elements.get("connection-select").children[1];
+    assert.equal(option.textContent, "Dev");
+    assert.equal(option.disabled, false);
+});
+
+test("startup publishes connecting names before engine startup and registration finish", async () => {
+    const { app, client, registry, settingsApi, window } = setup();
+    app.ready = false;
+    window.toolboxAPI = { events: { on() {} } };
+    settingsApi.loadSettings = async () => app.settings;
+    app.applyTheme = async () => {};
+    for (const method of ["createEditor", "bindToolbar", "bindSplitter"])
+        app[method] = () => {};
+    app.restoreSession = async () => false;
+    app.openLaunchQuery = async () => false;
+    app.addTab = () => {};
+    registry.all = [];
+    registry.refresh = async () => {
+        if (!registry.all.length) runInAction(() => { registry.all.push({
+            slot: 0, status: "connecting", connection: { url: "https://dev.example" }, options: { connectionName: "Dev" },
+        }); });
+        return [];
+    };
+    let finishStart;
+    client.start = () => new Promise(resolve => { finishStart = resolve; });
+    let finishRegistration;
+    registry.register = () => new Promise(resolve => { finishRegistration = resolve; });
+    const starting = app.start();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.objectExplorer.snapshots.at(-1)[0].status, "connecting");
+    assert.equal(finishRegistration, undefined, "Names appear even before the engine is ready");
+    finishStart();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof finishRegistration, "function");
+    assert.equal(app.objectExplorer.snapshots.at(-1)[0].status, "connecting");
+    finishRegistration();
+    await starting;
+});
+
+test("adding a connection publishes its name before waiting for registration", async () => {
+    const { app, registry } = setup();
+    registry.all = [];
+    registry.refresh = async () => {
+        runInAction(() => { registry.all = [{
+            slot: 0, status: "connecting", connection: { url: "https://dev.example" }, options: { connectionName: "Dev" },
+        }]; });
+        return [0];
+    };
+    let finishRegistration;
+    registry.register = () => new Promise(resolve => { finishRegistration = resolve; });
+    const updating = app.onConnectionsChanged();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.objectExplorer.snapshots.at(-1)[0].status, "connecting");
+    assert.equal(typeof finishRegistration, "function");
+    finishRegistration();
+    await updating;
+});
+
 test("Object Explorer pin collapses to a side tab, opens as a flyout and pins back without losing width or tree", async () => {
     const { app, elements, document } = setup();
-    app.bindObjectExplorer();
     const pane = elements.get("object-explorer");
     const pin = elements.get("explorer-pin");
     const tab = elements.get("explorer-tab");
@@ -480,19 +815,20 @@ test("Object Explorer pin collapses to a side tab, opens as a flyout and pins ba
     const tree = elements.get("explorer-tree");
     const item = new Element();
     tree.appendChild(item);
-    pane.style = { width: "320px" };
+    pane.style.width = "320px";
+    item.tabIndex = 0;
     await pin.events.click();
     assert.equal(pane.hidden, true);
     assert.equal(splitter.hidden, true);
     assert.equal(tab.hidden, false);
-    assert.equal(tab.focused, true);
-    assert.equal(pin.attributes["aria-label"], "Pin Object Explorer");
+    assert.equal(document.activeElement, tab);
+    assert.equal(pin.getAttribute("aria-label"), "Pin Object Explorer");
     tab.events.click();
     assert.equal(pane.hidden, false);
     assert.equal(pane.classes.has("auto-hide"), true);
     assert.equal(tab.hidden, false, "The side tab keeps its layout space while the flyout covers it");
-    assert.equal(tab.attributes["aria-expanded"], "true");
-    assert.equal(item.focused, true);
+    assert.equal(tab.getAttribute("aria-expanded"), "true");
+    assert.equal(document.activeElement, item);
     const menuItem = new Element();
     menuItem.closest = () => new Element();
     document.events.focusin({ target: menuItem });
@@ -513,7 +849,7 @@ test("Object Explorer pin collapses to a side tab, opens as a flyout and pins ba
     assert.equal(pane.classes.has("auto-hide"), false);
     assert.equal(splitter.hidden, false);
     assert.equal(tab.hidden, true);
-    assert.equal(pin.attributes["aria-label"], "Unpin Object Explorer");
+    assert.equal(pin.getAttribute("aria-label"), "Unpin Object Explorer");
     document.events.pointerdown({ target: new Element() });
     assert.equal(pane.hidden, false, "Pinned pane remains docked");
     assert.equal(pane.style.width, "320px");
@@ -522,7 +858,6 @@ test("Object Explorer pin collapses to a side tab, opens as a flyout and pins ba
 
 test("pin state is saved with other user settings and an unpinned launch stays collapsed until opened", async () => {
     const { app, elements, savedSettings } = setup(false);
-    app.bindObjectExplorer();
     const pane = elements.get("object-explorer");
     const tab = elements.get("explorer-tab");
     const pin = elements.get("explorer-pin");
@@ -543,7 +878,6 @@ test("pin setting save errors are notified and the pin is re-enabled", async () 
     const notifications = [];
     window.toolboxAPI = { utils: { showNotification: async (message) => notifications.push(message) } };
     settingsApi.saveSettings = async () => { throw new Error("Settings storage unavailable"); };
-    app.bindObjectExplorer();
     await elements.get("explorer-pin").events.click();
     assert.equal(notifications[0].title, "Unable to save settings");
     assert.equal(notifications[0].body, "Settings storage unavailable");
@@ -624,7 +958,6 @@ test("one global status bar shows connection details and accurately ticks elapse
     assert.equal(tab.messagesPane.children.length, 0, "Completion status is shown in the status bar rather than as a message");
     assert.equal(timers.size, 0);
     setNow(90000);
-    app.updateStatusBar();
     assert.equal(elements.get("status-elapsed").textContent, "00:01:04", "Elapsed time freezes on completion");
 
     await tab.execute(null);
@@ -655,7 +988,7 @@ test("query errors, execution failures, cancellation and connection failures hav
     assert.equal(elements.get("status-text").textContent, "Query cancelled");
     assert.equal(elements.get("status-icon").className, "status-icon warning");
 
-    tab.connected = false;
+    runInAction(() => { tab.connected = false; });
     client.associateConnection = async () => { throw new Error("Connection rejected"); };
     await assert.rejects(tab.connect(0), /Connection rejected/);
     assert.match(elements.get("status-text").textContent, /Connection failed/);
@@ -677,7 +1010,6 @@ test("background tabs do not overwrite the active tab and switching restores its
     assert.equal(timers.size, 0);
 
     app.activeTab = first.tab;
-    app.updateToolbar();
     setNow(4000);
     timers.values().next().value();
     assert.equal(elements.get("status-rows").textContent, "42 rows");
@@ -709,8 +1041,8 @@ test("insecure connections are not shown as secure and disconnect clears connect
 test("grid elements no longer contain their own status bars", () => {
     const source = fs.readFileSync(path.resolve(__dirname, "..", "src", "query", "resultsGrid.ts"), "utf8");
     assert.doesNotMatch(source, /grid-status|statusBar/);
-    const html = fs.readFileSync(path.resolve(__dirname, "..", "src", "index.html"), "utf8");
-    assert.equal((html.match(/class="status-bar"/g) ?? []).length, 1);
+    setup();
+    assert.equal(document.querySelectorAll(".status-bar").length, 1);
 });
 
 function planSummary(id, rowCount = 0) {
@@ -739,7 +1071,7 @@ test("estimated plans are requested without running the query and are shown in t
     assert.deepEqual(planViews[0].plans, [samplePlan]);
     assert.equal(planButton.hidden, false);
     assert.equal(tab.showingPlan, true);
-    assert.equal(planButton.attributes["aria-pressed"], "true");
+    assert.equal(planButton.getAttribute("aria-pressed"), "true");
     assert.equal(elements.get("status-text").textContent, "Estimated execution plan generated");
 
     await tab.execute(null, true);
@@ -810,10 +1142,9 @@ for (const mode of ["grid", "text"]) {
 }
 
 test("the selected plan node is shown in the Properties panel only while the active tab shows its plan", async () => {
-    const { app, createTab, planViews, propertiesPanels } = setup();
-    app.bindProperties();
-    const panel = propertiesPanels[0];
-    assert.deepEqual(panel.shown.at(-1), { name: null, properties: null });
+    const { app, createTab, planViews, elements } = setup();
+    const panel = elements.get("properties-grid");
+    assert.match(panel.textContent, /Select an execution plan node/);
 
     const { tab, events } = createTab();
     await tab.connect(0);
@@ -823,24 +1154,24 @@ test("the selected plan node is shown in the Properties panel only while the act
     events.queryComplete({ batchSummaries: [] });
 
     planViews[0].select({ ...samplePlan.root, name: "SELECT\r\naccount" });
-    assert.equal(panel.shown.at(-1).name, "SELECT");
-    assert.equal(panel.shown.at(-1).properties, samplePlan.root.properties);
+    assert.equal(elements.get("properties-title").textContent, "SELECT");
+    assert.equal(panel.querySelector(".property-name").textContent, samplePlan.root.properties[0].name);
+    assert.equal(panel.querySelector(".property-value").textContent, samplePlan.root.properties[0].value);
 
     tab.resultsTabButtons.get("messages").events.click();
-    assert.deepEqual(panel.shown.at(-1), { name: null, properties: null });
+    assert.match(panel.textContent, /Select an execution plan node/);
     tab.resultsTabButtons.get("plan").events.click();
-    assert.equal(panel.shown.at(-1).name, "SELECT");
+    assert.equal(elements.get("properties-title").textContent, "SELECT");
 
     const other = createTab();
     app.activeTab = tab;
     planViews[1].select(samplePlan.root);
-    assert.equal(panel.shown.at(-1).name, "SELECT", "Background tabs don't update the panel");
+    assert.equal(elements.get("properties-title").textContent, "SELECT", "Background tabs don't update the panel");
 });
 
 test("Properties pane pins like Object Explorer and saves its own setting", async () => {
     const { app, elements, savedSettings } = setup();
     app.settings = { ...app.settings, propertiesPinned: false };
-    app.bindProperties();
     const pane = elements.get("properties");
     const tab = elements.get("properties-tab");
     const pin = elements.get("properties-pin");
@@ -852,7 +1183,152 @@ test("Properties pane pins like Object Explorer and saves its own setting", asyn
     await pin.events.click();
     assert.equal(pane.classes.has("auto-hide"), false);
     assert.deepEqual(savedSettings[0], { objectExplorerPinned: true, batchSize: 100, includeActualPlan: false, propertiesPinned: true });
-    assert.equal(pin.attributes["aria-label"], "Unpin Properties");
+    assert.equal(pin.getAttribute("aria-label"), "Unpin Properties");
+});
+
+test("context settings update declarative panes without recreating their contents or losing widths", () => {
+    const { app, elements, savedSettings } = setup(false);
+    const explorer = app.objectExplorer;
+    const panel = elements.get("properties-grid");
+    const pane = elements.get("object-explorer");
+    const tree = elements.get("explorer-tree");
+    pane.style.width = "320px";
+    const item = document.createElement("div");
+    item.tabIndex = 0;
+    tree.appendChild(item);
+    elements.get("explorer-tab").events.click();
+    assert.equal(pane.hidden, false);
+    assert.equal(document.activeElement, item);
+    runInAction(() => { app.settings = { ...app.settings, includeActualPlan: true }; });
+    assert.equal(pane.hidden, false, "Unrelated settings must not collapse a flyout");
+    runInAction(() => { app.settings = { ...app.settings, objectExplorerPinned: true, propertiesPinned: true }; });
+    assert.equal(pane.classList.contains("auto-hide"), false);
+    assert.equal(elements.get("explorer-tab").hidden, true);
+    assert.equal(elements.get("properties").hidden, false);
+    runInAction(() => { app.settings = { ...app.settings, objectExplorerPinned: false }; });
+    assert.equal(pane.hidden, true);
+    assert.equal(pane.style.width, "320px");
+    assert.equal(elements.get("explorer-tree"), tree);
+    assert.equal(tree.firstChild, item);
+    assert.equal(app.objectExplorer, explorer);
+    assert.equal(elements.get("properties-grid"), panel);
+    assert.equal(savedSettings.length, 0, "Rendering and applying settings must not persist them again");
+    assert.equal("explorerPane" in app, false);
+    assert.equal("propertiesPanel" in app, false);
+});
+
+test("declarative pane resize directions, limits and unmount cleanup preserve their controllers", () => {
+    const { app, elements, window, document } = setup();
+    const explorer = app.objectExplorer;
+    const pane = elements.get("object-explorer");
+    const properties = elements.get("properties");
+    pane.getBoundingClientRect = properties.getBoundingClientRect = () => ({ width: 320 });
+    Object.defineProperty(document.body, "clientWidth", { value: 1000, configurable: true });
+    const move = x => flushSync(() => window.dispatchEvent(new window.MouseEvent("mousemove", { clientX: x })));
+    const up = () => flushSync(() => window.dispatchEvent(new window.MouseEvent("mouseup")));
+    elements.get("explorer-splitter").events.mousedown({ clientX: 100 });
+    move(150);
+    assert.equal(pane.style.width, "370px");
+    move(-500);
+    assert.equal(pane.style.width, "160px");
+    move(1500);
+    assert.equal(pane.style.width, "700px");
+    up();
+    move(0);
+    assert.equal(pane.style.width, "700px");
+    elements.get("properties-splitter").events.mousedown({ clientX: 100 });
+    move(150);
+    assert.equal(properties.style.width, "270px", "Right pane resizes in the opposite direction");
+    assert.equal(document.body.classList.contains("resizing-pane"), true);
+    flushSync(() => window.dispatchEvent(new window.Event("pagehide")));
+    assert.equal(document.body.classList.contains("resizing-pane"), false);
+    move(300);
+    assert.equal(properties.style.width, "270px", "Unmount removes the pending mousemove handler");
+    assert.equal(app.objectExplorer, explorer, "The app retains ownership of its controller");
+    assert.equal(explorer.disposed, true);
+    const snapshots = explorer.snapshots.length;
+    runInAction(() => { app.connections.all = []; });
+    assert.equal(explorer.snapshots.length, snapshots, "Unmount disposes explorer connection observation");
+});
+
+test("pane separators resize with the keyboard in physical directions and expose their values", () => {
+    const { elements, document } = setup();
+    Object.defineProperty(document.body, "clientWidth", { value: 1000, configurable: true });
+    for (const [paneId, splitterId, direction] of [
+        ["object-explorer", "explorer-splitter", 1],
+        ["properties", "properties-splitter", -1],
+    ]) {
+        const pane = elements.get(paneId);
+        const splitter = elements.get(splitterId);
+        pane.style.width = "320px";
+        pane.getBoundingClientRect = () => ({ width: parseFloat(pane.style.width) });
+        flushSync(() => splitter.focus());
+        assert.equal(document.activeElement, splitter);
+        assert.equal(splitter.getAttribute("role"), "separator");
+        assert.equal(splitter.getAttribute("aria-controls"), paneId);
+        assert.equal(splitter.getAttribute("aria-valuenow"), "320");
+        assert.equal(splitter.getAttribute("aria-valuemax"), "700");
+        const key = value => {
+            const event = new window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true });
+            flushSync(() => splitter.dispatchEvent(event));
+            return event;
+        };
+        assert.equal(key("ArrowRight").defaultPrevented, true);
+        assert.equal(pane.style.width, `${320 + direction * 10}px`);
+        assert.equal(splitter.getAttribute("aria-valuenow"), String(320 + direction * 10));
+        key("ArrowLeft");
+        assert.equal(pane.style.width, "320px");
+        key("End");
+        assert.equal(pane.style.width, "700px");
+        assert.equal(splitter.getAttribute("aria-valuenow"), "700");
+        key("Home");
+        assert.equal(pane.style.width, "160px");
+        assert.equal(splitter.getAttribute("aria-valuenow"), "160");
+        assert.equal(key("Tab").defaultPrevented, false);
+    }
+});
+
+test("pane separator maximum includes the pane's CSS width constraint", () => {
+    const { elements, document } = setup();
+    Object.defineProperty(document.body, "clientWidth", { value: 1000, configurable: true });
+    const pane = elements.get("object-explorer");
+    const splitter = elements.get("explorer-splitter");
+    Object.defineProperty(pane.parentElement, "clientWidth", { value: 800, configurable: true });
+    pane.style.width = "320px";
+    pane.style.maxWidth = "60%";
+    pane.getBoundingClientRect = () => ({ width: parseFloat(pane.style.width) });
+    flushSync(() => splitter.focus());
+    assert.equal(splitter.getAttribute("aria-valuemax"), "480");
+    splitter.events.keydown({ key: "End" });
+    assert.equal(pane.style.width, "480px");
+    assert.equal(splitter.getAttribute("aria-valuenow"), "480");
+});
+
+test("restoring edited files normalizes all line ending forms for the saved baseline", async () => {
+    const { app, window } = setup();
+    window.toolboxAPI = { fileSystem: { readText: async () => "one\r\ntwo\rthree\nfour" } };
+    const saved = [];
+    const tab = { setFile: filename => saved.push(filename), markSaved: value => saved.push(value) };
+    app.addTab = (query, slot) => { saved.push(query, slot); return tab; };
+    const result = await app.restoreTab({ filename: "query.sql", query: "changed", connectionId: null, dirty: true });
+    assert.equal(result, tab);
+    assert.deepEqual(saved, ["changed", undefined, "query.sql", "one\ntwo\nthree\nfour"]);
+});
+
+test("pane controls wait for settings to load and observe the loaded pin preferences", () => {
+    const { app, elements, savedSettings } = setup();
+    runInAction(() => { app.settingsReady = false; });
+    assert.equal(elements.get("explorer-pin").disabled, true);
+    assert.equal(elements.get("properties-tab").disabled, true);
+    runInAction(() => {
+        app.settings = { ...app.settings, objectExplorerPinned: false, propertiesPinned: true };
+        app.settingsReady = true;
+    });
+    assert.equal(elements.get("explorer-pin").disabled, false);
+    assert.equal(elements.get("object-explorer").hidden, true);
+    assert.equal(elements.get("explorer-tab").hidden, false);
+    assert.equal(elements.get("properties").hidden, false);
+    assert.equal(savedSettings.length, 0);
 });
 
 test("the Properties pin preference defaults to unpinned", async () => {
@@ -871,11 +1347,10 @@ test("Include Actual Plan is saved in user settings and applies to every query t
     const { app, createTab, elements, executions, savedSettings } = setup();
     app.bindToolbar();
     const button = elements.get("btn-actual-plan");
-    app.updateToolbar();
-    assert.equal(button.attributes["aria-pressed"], "false");
+    assert.equal(button.getAttribute("aria-pressed"), "false");
 
     await button.events.click();
-    assert.equal(button.attributes["aria-pressed"], "true");
+    assert.equal(button.getAttribute("aria-pressed"), "true");
     assert.deepEqual(savedSettings.at(-1), { objectExplorerPinned: true, batchSize: 100, includeActualPlan: true });
 
     const { tab } = createTab();
@@ -884,13 +1359,12 @@ test("Include Actual Plan is saved in user settings and applies to every query t
     assert.equal(executions.at(-1).includeActualExecutionPlanXml, true);
 
     await button.events.click();
-    assert.equal(button.attributes["aria-pressed"], "false");
+    assert.equal(button.getAttribute("aria-pressed"), "false");
     assert.equal(savedSettings.at(-1).includeActualPlan, false);
 });
 
 test("query tabs track dirty state, saved content, undo-to-saved text, and file names", () => {
     const { app, createTab } = setup();
-    app.onStateChanged = () => {};
     const { tab } = createTab();
 
     assert.equal(tab.isDirty, false);
@@ -932,44 +1406,41 @@ test("the Include Actual Plan preference defaults to off", async () => {
 });
 
 test("toolbar commands have the requested order, accessible icon buttons, split menus and credit link", () => {
-    const html = fs.readFileSync(path.resolve(__dirname, "..", "src", "index.html"), "utf8");
-    const toolbar = html.slice(html.indexOf('<div class="toolbar"'), html.indexOf('<div class="tool-content"'));
+    setup();
+    const toolbar = document.querySelector(".toolbar");
     const commands = ["connection-select", "btn-new", "btn-open", "btn-save", "btn-run", "btn-cancel",
         "btn-estimated-plan", "btn-edit-fetchxml", "btn-convert", "btn-actual-plan", "btn-results-text",
         "btn-results-grid", "btn-format", "btn-settings"];
-    const actual = [...toolbar.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]).filter(id => commands.includes(id));
+    const actual = Array.from(toolbar.querySelectorAll("[id]"), element => element.id).filter(id => commands.includes(id));
     assert.deepEqual(actual, commands);
     for (const id of ["btn-open", "btn-save", "btn-cancel", "btn-estimated-plan", "btn-edit-fetchxml",
         "btn-actual-plan", "btn-results-text", "btn-results-grid"]) {
-        const button = new RegExp(`<button id="${id}"([^>]*)>([\\s\\S]*?)<\\/button>`).exec(toolbar);
-        assert.match(button[1], /aria-label="/);
-        assert.match(button[1], /icon-only/);
-        assert.equal(button[2].replace(/<svg[\s\S]*?<\/svg>/, "").trim(), "");
+        const button = toolbar.querySelector(`#${id}`);
+        assert.ok(button.getAttribute("aria-label"));
+        assert.ok(button.classList.contains("icon-only"));
+        assert.equal(button.textContent.trim(), "");
     }
     for (const id of ["save-menu", "convert-menu", "format-menu"])
-        assert.match(toolbar, new RegExp(`id="${id}"[^>]*role="menu"[^>]*hidden`));
-    assert.match(toolbar, /href="https:\/\/markcarrington.dev\/sql-4-cds\/"[^>]*>SQL 4 CDS by Mark Carrington<\/a>/);
+        assert.equal(toolbar.querySelector(`#${id}[role="menu"]`).hidden, true);
+    assert.equal(toolbar.querySelector("a").href, "https://markcarrington.dev/sql-4-cds/");
+    assert.equal(toolbar.querySelector("a").textContent, "SQL 4 CDS by Mark Carrington");
 });
 
 test("toolbar enables transformations only for suitable tabs and keeps FetchXML Studio in place", () => {
     const { app, createTab, elements } = setup();
     const { tab } = createTab();
-    app.updateToolbar();
     assert.equal(elements.get("btn-format").disabled, false);
     assert.equal(elements.get("btn-convert").disabled, true);
     assert.equal(elements.get("btn-display-names").disabled, true);
     assert.equal(elements.get("btn-edit-fetchxml").disabled, true);
     assert.notEqual(elements.get("btn-edit-fetchxml").hidden, true);
-    tab.connected = true;
-    app.updateToolbar();
+    runInAction(() => { tab.connected = true; });
     assert.equal(elements.get("btn-convert").disabled, false);
     assert.equal(elements.get("btn-display-names").disabled, false);
-    tab.running = true;
-    app.updateToolbar();
+    runInAction(() => { tab.running = true; });
     assert.equal(elements.get("btn-convert").disabled, true);
     assert.equal(elements.get("btn-format").disabled, true);
     createTab({ language: "xml", readOnly: true, isFetchXmlPreview: true });
-    app.updateToolbar();
     assert.equal(elements.get("btn-edit-fetchxml").disabled, false);
     assert.equal(elements.get("btn-results-text").disabled, true);
     assert.equal(elements.get("btn-format").disabled, true);
@@ -980,35 +1451,217 @@ test("FetchXML Studio can edit the selected FetchXML plan node", () => {
     const { app, createTab, elements, planViews } = setup();
     createTab();
     const fetchXml = '<fetch><entity name="account" /></fetch>';
-    planViews[0].selectedNode = { name: "FetchXML Scan", nodeType: "FetchXmlScan", properties: [{ name: "FetchXML", value: fetchXml }] };
-    app.activeTab.view = "plan";
-    app.updateProperties();
+    planViews[0].select({ name: "FetchXML Scan", nodeType: "FetchXmlScan", properties: [{ name: "FetchXML", value: fetchXml }] });
+    runInAction(() => { app.activeTab.view = "plan"; });
     assert.equal(app.fetchXmlForEditing, fetchXml);
     assert.equal(elements.get("btn-edit-fetchxml").disabled, false);
-    planViews[0].selectedNode = { name: "Sort", nodeType: "Sort" };
-    app.updateProperties();
+    planViews[0].select({ name: "Sort", nodeType: "Sort" });
     assert.equal(elements.get("btn-edit-fetchxml").disabled, true);
 });
 
 test("split menus support keyboard navigation, Escape and outside dismissal", () => {
-    const { app, elements, document } = setup();
+    const { createTab, elements, document } = setup();
+    createTab();
     const toggle = elements.get("btn-save-menu");
     const menu = document.getElementById("save-menu");
+    assert.equal(menu.tabIndex, -1, "Menus must be programmatically focusable without adding a tab stop");
     const saveAs = elements.get("btn-save-as");
-    menu.appendChild(saveAs);
-    menu.hidden = true;
-    app.bindToolbarMenu(toggle, menu);
     toggle.events.keydown({ key: "ArrowDown", preventDefault() {} });
     assert.equal(menu.hidden, false);
-    assert.equal(toggle.attributes["aria-expanded"], "true");
-    assert.equal(saveAs.focused, true);
+    assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(document.activeElement, saveAs);
+    flushSync(() => menu.focus());
+    assert.equal(document.activeElement, menu);
     menu.events.keydown({ key: "Escape", preventDefault() {} });
     assert.equal(menu.hidden, true);
-    assert.equal(toggle.focused, true);
+    assert.equal(document.activeElement, toggle);
     toggle.events.click();
     document.events.pointerdown({ target: new Element() });
     assert.equal(menu.hidden, true);
-    assert.equal(toggle.attributes["aria-expanded"], "false");
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
+});
+
+test("received FetchXML uses the inherited connection and opens editable SQL without executing it", async () => {
+    const { app, client, registry, window, executions, createTab } = setup();
+    const { tab } = createTab();
+    const fetchXml = '<fetch><entity name="account"><attribute name="name" /></entity></fetch>';
+    window.toolboxAPI = { invocation: { getLaunchContext: async () => ({ fetchXml }) } };
+    registry.all = [{ slot: 0 }, { slot: 1 }];
+    const calls = [];
+    registry.register = async (slot) => { calls.push(["register", slot]); };
+    client.transformQuery = async (...args) => {
+        calls.push(["transform", ...args]);
+        return ["SELECT name FROM account"];
+    };
+    app.addTab = (...args) => { calls.push(["addTab", ...args]); };
+    assert.equal(await app.openLaunchQuery(), true);
+    assert.deepEqual(calls, [
+        ["register", 0],
+        ["transform", "pptb://connection/0", fetchXml, "sql"],
+        ["addTab", "SELECT name FROM account", 0],
+    ]);
+    assert.equal(app.activeTab, tab, "Existing tabs are not modified by conversion");
+    assert.equal(executions.length, 0);
+});
+
+test("standalone launches do not convert queries or require a connection", async () => {
+    for (const context of [null, {}, { unrelated: "data" }]) {
+        const { app, window } = setup();
+        window.toolboxAPI = { invocation: { getLaunchContext: async () => context } };
+        assert.equal(await app.openLaunchQuery(), false);
+    }
+});
+
+test("MCP execution connects, requires approval, and returns results only after completion", async () => {
+    for (const approved of [false, true]) {
+        const { app, client, registry, window, createTab } = setup();
+        const { tab, events } = createTab();
+        const calls = [];
+        const returned = [];
+        window.toolboxAPI = { invocation: {
+            getLaunchContext: async () => ({ sql: "SELECT name FROM account", execute: true, __pptb: { expectsResponse: true } }),
+            returnData: async result => { returned.push(result); },
+        } };
+        registry.all = [{ slot: 0 }];
+        registry.register = async () => {};
+        app.addTab = (sql, slot, connect) => {
+            assert.equal(sql, "SELECT name FROM account");
+            assert.equal(slot, 0);
+            assert.equal(connect, false);
+            return tab;
+        };
+        app.confirmInvocation = async target => { assert.equal(target, tab); return approved; };
+        app.saveSessionNow = async () => {};
+        client.executeDocumentSelection = async (...args) => {
+            calls.push(args);
+            events.message({ message: { isError: false, message: "(1 row affected)" } });
+            events.queryComplete({ batchSummaries: [] });
+        };
+        await app.openLaunchQuery();
+        assert.equal(calls.length, approved ? 1 : 0);
+        assert.equal(returned.length, 1);
+        assert.equal(returned[0].status, approved ? "success" : "cancelled");
+        if (approved) {
+            assert.equal(calls[0][3], false, "MCP captures grid rows even if text mode is selected");
+            assert.equal(calls[0][4], true, "MCP forces data modification confirmations");
+            assert.equal(returned[0].messages[0].message, "(1 row affected)");
+        }
+    }
+});
+
+test("MCP query completion collects results, propagates confirmation and blocks concurrent reruns", async () => {
+    const { client, createTab, app } = setup();
+    const { tab, events } = createTab();
+    tab.resultsMode = "text";
+    await tab.connect(0);
+    let requested;
+    client.executeDocumentSelection = async (...args) => { requested = args; };
+    client.subset = async () => ({ resultSubset: { rowCount: 1, rows: [[{ displayValue: "Contoso", isNull: false }]] } });
+    let confirmation;
+    app.confirm = params => { confirmation = params; };
+    const execution = tab.executeForInvocation(4096);
+    while (!requested) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requested[3], false);
+    assert.equal(requested[4], true);
+    await assert.rejects(tab.execute(null), /MCP invocation/);
+    events.confirmation({ ownerUri: tab.uri, msg: "Delete?" });
+    assert.equal(confirmation.msg, "Delete?");
+    events.queryComplete({ batchSummaries: [{
+        resultSetSummaries: [{ batchId: 0, id: 0, rowCount: 1, complete: true, columnInfo: [{ columnName: "name" }] }],
+    }] });
+    const result = await execution;
+    assert.equal(result.resultSets[0].rows[0][0], "Contoso");
+    assert.equal(result.status, "success");
+});
+
+test("MCP two-way conversion returns SQL without executing, while one-way execution does not return data", async () => {
+    for (const execute of [false, true]) {
+        const { app, registry, client, window } = setup();
+        registry.all = [{ slot: 0 }];
+        registry.register = async () => {};
+        const returned = [];
+        window.toolboxAPI = { invocation: {
+            getLaunchContext: async () => ({
+                fetchXml: "<fetch />", execute, __pptb: { expectsResponse: !execute },
+            }),
+            returnData: async result => returned.push(result),
+        } };
+        client.transformQuery = async () => ["SELECT name FROM account"];
+        let executed = false;
+        app.addTab = () => ({
+            connect: async () => {},
+            executeForInvocation: async () => { executed = true; return { status: "success" }; },
+        });
+        app.saveSessionNow = async () => {};
+        app.confirmInvocation = async () => true;
+        assert.equal(await app.openLaunchQuery(), true);
+        assert.equal(executed, execute);
+        assert.equal(returned.length, execute ? 0 : 1);
+        if (!execute) assert.equal(returned[0].sql[0], "SELECT name FROM account");
+    }
+});
+
+test("MCP connection failures return explicit errors without attempting execution", async () => {
+    const { app, registry, window } = setup();
+    const returned = [];
+    const notifications = [];
+    window.toolboxAPI = {
+        invocation: {
+            getLaunchContext: async () => ({ sql: "DELETE FROM account", execute: true, __pptb: { expectsResponse: true } }),
+            returnData: async result => returned.push(result),
+        },
+        utils: { showNotification: async notification => notifications.push(notification) },
+    };
+    registry.all = [{ slot: 0 }];
+    registry.register = async () => { throw new Error("Connection failed"); };
+    app.addTab = () => assert.fail("Must not open or execute on connection failure");
+    assert.equal(await app.openLaunchQuery(), false);
+    assert.equal(returned[0].status, "error");
+    assert.match(returned[0].error, /Connection failed/);
+    assert.equal(notifications.length, 1);
+});
+
+test("MCP execution resolves cancellation and rejects engine failure without hanging", async () => {
+    for (const stop of [false, true]) {
+        const { client, createTab } = setup();
+        const { tab, events } = createTab();
+        await tab.connect(0);
+        let requested = false;
+        client.executeDocumentSelection = async () => { requested = true; };
+        const execution = tab.executeForInvocation(4096);
+        while (!requested) await new Promise(resolve => setImmediate(resolve));
+        if (stop) {
+            tab.engineStopped("Worker stopped");
+            await assert.rejects(execution, /Worker stopped/);
+        } else {
+            await tab.cancel();
+            events.queryComplete({ batchSummaries: [] });
+            assert.equal((await execution).status, "cancelled");
+        }
+    }
+});
+
+test("invalid incoming FetchXML and conversion failures are surfaced without opening SQL", async () => {
+    for (const failure of ["invalid-type", "empty", "no-connection", "registration", "conversion", "launch"]) {
+        const { app, client, registry, window } = setup();
+        const notifications = [];
+        window.toolboxAPI = {
+            invocation: { getLaunchContext: async () => {
+                if (failure === "launch") throw new Error("Cannot read launch context");
+                return { fetchXml: failure === "invalid-type" ? 42 : failure === "empty" ? " " : "<fetch />" };
+            } },
+            utils: { showNotification: async (notification) => notifications.push(notification) },
+        };
+        registry.all = failure === "no-connection" ? [] : [{ slot: 0 }];
+        registry.register = async () => {
+            if (failure === "registration") throw new Error("Connection failed");
+        };
+        client.transformQuery = async () => { throw new Error("Invalid FetchXML"); };
+        app.addTab = () => assert.fail("Conversion must not open a tab on failure");
+        assert.equal(await app.openLaunchQuery(), false);
+        assert.equal(notifications.length, 1, failure);
+        assert.equal(notifications[0].title, "Unable to process incoming query");
+    }
 });
 
 test("Save and Save As retain their distinct handlers", () => {
@@ -1049,7 +1702,7 @@ test("format requests document formatting options, applies LSP edits with undo s
     assert.equal(edits[0][0].range.startColumn, 1);
     assert.equal(edits[0][0].range.endColumn, 9);
     assert.equal(edits[0][0].text, "SELECT 1;");
-    tab.connected = true;
+    runInAction(() => { tab.connected = true; });
     await app.transformQuery("format", true);
     assert.equal(calls[1][1].addDisplayNames, true);
 
@@ -1071,18 +1724,17 @@ test("format requests document formatting options, applies LSP edits with undo s
 test("conversion remembers the selected target and opens read-only preview content", async () => {
     const { app, client, createTab, elements } = setup();
     const { tab } = createTab();
-    tab.connected = true;
+    runInAction(() => { tab.connected = true; });
     app.editor = { getSelection: () => null };
     const previews = [];
     app.openPreview = (...args) => previews.push(args);
     const calls = [];
     client.transformQuery = async (...args) => { calls.push(args); return ["let Source = 1 in Source"]; };
     app.convertTarget = "m";
-    app.updateToolbar();
     await app.transformQuery("convert");
     assert.equal(calls[0][2], "m");
     assert.deepEqual(previews[0], ["let Source = 1 in Source", "powerquery", "Power BI (M)"]);
-    assert.equal(elements.get("btn-convert-m").attributes["aria-checked"], "true");
+    assert.equal(elements.get("btn-convert-m").getAttribute("aria-checked"), "true");
     assert.equal(elements.get("btn-convert").title, "Convert to Power BI (M)");
 });
 
@@ -1094,54 +1746,50 @@ test("Power BI previews do not register SQL documents", () => {
     assert.equal(listeners.size, 0);
 });
 
-test("Results to Text is per-tab and snapshots the mode at execution with paged rows and NULLs", async () => {
-    const { app, client, createTab, grids, elements } = setup();
+test("Results to Text is per-tab, remembered for new tabs and asks the language server for text results when the query is executed", async () => {
+    const { app, client, createTab, grids, elements, savedSettings } = setup();
+    const requests = [];
+    client.executeDocumentSelection = async (_uri, _selection, _planOptions, resultsToText) => { requests.push(resultsToText); };
     const { tab, events } = createTab();
     app.setResultsMode("text");
-    assert.equal(elements.get("btn-results-text").attributes["aria-pressed"], "true");
+    assert.equal(elements.get("btn-results-text").getAttribute("aria-pressed"), "true");
     await tab.connect(0);
     await tab.execute(null);
-    app.setResultsMode("grid");
-    const result = { ...summary(0, 0, 201), complete: true, columnInfo: [{ columnName: "Name" }, { columnName: "Value" }] };
-    const pages = [];
-    client.subset = async (_uri, _batch, _result, start, count) => {
-        pages.push({ start, count });
-        return { resultSubset: { rows: Array.from({ length: count }, () => [
-            { displayValue: "Contoso", isNull: false }, { displayValue: "", isNull: true },
-        ]) } };
-    };
-    events.resultSetAvailable({ resultSetSummary: result });
-    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [result] }] });
-    await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(pages, [{ start: 0, count: 200 }, { start: 200, count: 1 }]);
+    events.message({ message: { message: "Name    Value\n------- -----\nContoso NULL ", isError: false, rowCount: 1 } });
+    events.message({ message: { message: "Fabrikam 1   \nNorthwind 2  ", isError: false, rowCount: 2 } });
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [] }] });
     assert.equal(grids.length, 0);
-    assert.equal(tab.textPane.hidden, false);
-    assert.equal(tab.resultsPane.hidden, true);
-    assert.equal(tab.textPane.children[0].textContent, "Name\tValue\n");
-    assert.match(tab.textPane.children[0].children[0].textContent, /^Contoso\tNULL\n/);
+    assert.equal(tab.messagesPane.hidden, false);
+    assert.equal(JSON.stringify(tab.messagesPane.children.map((line) => line.textContent)),
+        JSON.stringify(["Name    Value", "------- -----", "Contoso NULL ", "Fabrikam 1   ", "Northwind 2  "]),
+        "Each line is shown separately so line numbers are correct");
+    assert.equal(tab.totalRowCount, 3, "Rows sent as text count towards the row count");
+    await tab.execute(null, true);
+    assert.equal(tab.totalRowCount, 0);
+    events.queryComplete({ batchSummaries: [{ hasError: false, resultSetSummaries: [] }] });
+    assert.equal(savedSettings.at(-1).resultsToText, true, "The selected mode is saved in user settings");
+    const textTab = createTab().tab;
+    assert.equal(textTab.resultsMode, "text", "New tabs use the most recently selected mode");
+    app.activeTab = tab;
+    app.setResultsMode("grid");
+    assert.equal(savedSettings.at(-1).resultsToText, false);
+    assert.equal(textTab.resultsMode, "text", "Changing the mode only affects the active tab");
+    await tab.execute(null);
+    assert.deepEqual(requests, [true, false, false], "Estimated plans and grid mode never request text results");
     const second = createTab().tab;
     assert.equal(second.resultsMode, "grid");
 });
 
-test("text result loading errors are visible and stale responses do not append to a new execution", async () => {
-    const { client, createTab } = setup();
-    const { tab, events } = createTab();
-    tab.resultsMode = "text";
-    await tab.connect(0);
-    await tab.execute(null);
-    const result = { ...summary(0, 0, 1), complete: true, columnInfo: [{ columnName: "Name" }] };
-    events.resultSetAvailable({ resultSetSummary: result });
-    client.subset = async () => ({ resultSubset: { rows: [] } });
-    await tab.renderTextResults(tab.resultsGeneration);
-    assert.equal(tab.messagesPane.hidden, false);
-    assert.match(tab.messagesPane.children.at(-1).textContent, /Unable to load text results/);
-    let respond;
-    client.subset = () => new Promise(resolve => { respond = resolve; });
-    const pending = tab.renderTextResults(tab.resultsGeneration);
-    await tab.clearResults();
-    respond({ resultSubset: { rows: [[{ displayValue: "stale", isNull: false }]] } });
-    await pending;
-    assert.equal(tab.textPane.children.length, 0);
+test("the Results to Text preference defaults to off", async () => {
+    let stored;
+    const { loadSettings } = load("settings.ts", {}, {
+        window: { toolboxAPI: { settings: { get: async () => stored, set: async () => {} } } },
+    });
+    assert.equal((await loadSettings()).resultsToText, false);
+    stored = { resultsToText: true };
+    assert.equal((await loadSettings()).resultsToText, true);
+    stored = { resultsToText: "yes" };
+    assert.equal((await loadSettings()).resultsToText, false);
 });
 
 test("each completed grid exports its own entire result set through the native Save As dialog", async () => {

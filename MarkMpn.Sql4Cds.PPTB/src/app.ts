@@ -5,94 +5,84 @@ import { Sql4CdsClient } from "./lsp/client";
 import { ConfirmationResult, type ConfirmationParams, type EntityReferenceValue, type Range } from "./lsp/protocol";
 import { QueryTab, type QueryTabHost } from "./query/queryTab";
 import { ObjectExplorer } from "./objectExplorer";
-import { PinnablePane } from "./pinnablePane";
-import { PropertiesPanel } from "./propertiesPanel";
 import { getFetchXmlQuery } from "./executionPlan/executionPlanView";
-import { loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
+import { defaultSettings, loadSettings, saveSettings, showSettingsDialog, type Sql4CdsSettings } from "./settings";
+import { defaultResponseLimitBytes, invocationError, parseInvocation, responseSize } from "./mcpInvocation";
+import { loadSession, saveSession, type SessionState, type SessionTab } from "./session";
+import { showConfirmation, showUnsavedChangesDialog } from "./dialogs";
+import { StatusBar, StatusBarState } from "./statusBar";
+import { mountApp } from "./appView";
+import { action, computed, makeObservable, observable, reaction, runInAction } from "mobx";
 
 const DEFAULT_QUERY = "";
 
-class App implements QueryTabHost {
+export class App implements QueryTabHost {
     readonly client: Sql4CdsClient;
-    private readonly connections: ConnectionRegistry;
-    private readonly objectExplorer: ObjectExplorer;
-    private readonly tabs: QueryTab[] = [];
-    private activeTab: QueryTab | null = null;
+    readonly connections: ConnectionRegistry;
+    readonly objectExplorer: ObjectExplorer;
+    readonly tabs: QueryTab[] = [];
+    editorReady = false;
+    readonly statusState = new StatusBarState();
+    get activeTab(): QueryTab | null { return this.statusState.activeTab; }
+    set activeTab(tab: QueryTab | null) { runInAction(() => { this.statusState.activeTab = tab; }); }
     private editor!: monaco.editor.IStandaloneCodeEditor;
-    private settings!: Sql4CdsSettings;
-    private ready = false;
+    settings: Sql4CdsSettings = { ...defaultSettings };
+    settingsReady = false;
+    private get ready(): boolean { return this.statusState.ready; }
+    private set ready(ready: boolean) { runInAction(() => { this.statusState.ready = ready; }); }
     private confirmationQueue: Promise<void> = Promise.resolve();
-    private statusTimer: ReturnType<typeof setInterval> | null = null;
-    private progressMessage = "";
+    private get progressMessage(): string { return this.statusState.progressMessage; }
+    private set progressMessage(message: string) { runInAction(() => { this.statusState.progressMessage = message; }); }
     private closePreventionApplied = false;
     private closePreventionQueue: Promise<void> = Promise.resolve();
     private connectionChangeQueue: Promise<void> = Promise.resolve();
-    private explorerPane: PinnablePane | null = null;
-    private propertiesPane: PinnablePane | null = null;
-    private propertiesPanel: PropertiesPanel | null = null;
-    private convertTarget: "fetchxml" | "m" = "fetchxml";
+    private sessionRestored = false;
+    private sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    convertTarget: "fetchxml" | "m" = "fetchxml";
     private transforming = false;
+    private readonly disposables: Array<() => void> = [];
 
-    private readonly el = {
-        tabStrip: byId("tab-strip"),
-        editor: byId("editor"),
-        results: byId("results-host"),
-        splitter: byId("splitter"),
-        workspace: byId("workspace"),
-        explorer: byId("object-explorer"),
-        explorerTree: byId("explorer-tree"),
-        explorerSplitter: byId("explorer-splitter"),
-        explorerPin: byId<HTMLButtonElement>("explorer-pin"),
-        explorerTab: byId<HTMLButtonElement>("explorer-tab"),
-        properties: byId("properties"),
-        propertiesTitle: byId("properties-title"),
-        propertiesGrid: byId("properties-grid"),
-        propertiesSplitter: byId("properties-splitter"),
-        propertiesPin: byId<HTMLButtonElement>("properties-pin"),
-        propertiesTab: byId<HTMLButtonElement>("properties-tab"),
-        newTab: byId<HTMLButtonElement>("btn-new"),
-        open: byId<HTMLButtonElement>("btn-open"),
-        save: byId<HTMLButtonElement>("btn-save"),
-        saveAs: byId<HTMLButtonElement>("btn-save-as"),
-        run: byId<HTMLButtonElement>("btn-run"),
-        cancel: byId<HTMLButtonElement>("btn-cancel"),
-        estimatedPlan: byId<HTMLButtonElement>("btn-estimated-plan"),
-        actualPlan: byId<HTMLButtonElement>("btn-actual-plan"),
-        editFetchXml: byId<HTMLButtonElement>("btn-edit-fetchxml"),
-        saveMenu: byId<HTMLButtonElement>("btn-save-menu"),
-        convert: byId<HTMLButtonElement>("btn-convert"),
-        convertMenu: byId<HTMLButtonElement>("btn-convert-menu"),
-        convertFetchXml: byId<HTMLButtonElement>("btn-convert-fetchxml"),
-        convertM: byId<HTMLButtonElement>("btn-convert-m"),
-        resultsText: byId<HTMLButtonElement>("btn-results-text"),
-        resultsGrid: byId<HTMLButtonElement>("btn-results-grid"),
-        format: byId<HTMLButtonElement>("btn-format"),
-        formatMenu: byId<HTMLButtonElement>("btn-format-menu"),
-        displayNames: byId<HTMLButtonElement>("btn-display-names"),
-        settings: byId<HTMLButtonElement>("btn-settings"),
-        connection: byId<HTMLSelectElement>("connection-select"),
-        status: byId("status-text"),
-        statusMessage: byId("status-message"),
-        statusIcon: byId("status-icon"),
-        progress: byId("status-progress"),
-        server: byId("status-server"),
-        lock: byId("status-lock"),
-        domain: byId("status-domain"),
-        user: byId("status-user"),
-        database: byId("status-database"),
-        elapsed: byId("status-elapsed"),
-        rows: byId("status-rows"),
-    };
+    private readonly el: ReturnType<typeof getElements>;
+
+    readonly statusBar: StatusBar;
+
+    get toolbarState() {
+        const tab = this.activeTab;
+        const resultsDisabled = !tab || tab.readOnly;
+        const formatDisabled = !this.ready || resultsDisabled || !!tab?.running || this.transforming;
+        return {
+            runDisabled: !this.ready || !tab?.connected || tab.readOnly || tab.running,
+            cancelDisabled: !this.ready || !tab?.running,
+            connectionDisabled: !this.ready || resultsDisabled || !!tab?.running || !!tab?.connecting,
+            saveDisabled: resultsDisabled || (!tab?.isDirty && !!tab?.filePath),
+            saveAsDisabled: resultsDisabled,
+            formatDisabled,
+            convertDisabled: formatDisabled || !tab?.connected,
+            resultsDisabled,
+        };
+    }
 
     constructor() {
+        makeObservable<this, "transforming">(this, {
+            tabs: observable.shallow,
+            editorReady: observable,
+            settings: observable.ref,
+            settingsReady: observable,
+            convertTarget: observable,
+            transforming: observable,
+            toolbarState: computed,
+            fetchXmlForEditing: computed,
+            addTab: action,
+            openPreview: action,
+            activateTab: action,
+            selectConversion: action,
+            setResultsMode: action,
+        });
         this.client = new Sql4CdsClient({
             objectExplorerSessionCreated: (params) => this.objectExplorer.sessionCreated(params),
             objectExplorerExpandComplete: (params) => this.objectExplorer.expandComplete(params),
             objectExplorerSessionDisconnected: (params) => this.objectExplorer.sessionDisconnected(params),
-            progress: (message) => {
-                this.progressMessage = message;
-                this.updateStatusBar();
-            },
+            progress: (message) => { this.progressMessage = message; },
             log: (params) => {
                 if (params.type === 1) console.error(params.message);
                 else if (params.type === 2) console.warn(params.message);
@@ -100,24 +90,44 @@ class App implements QueryTabHost {
                 if (params.type === 1 || params.type === 2)
                     void notify("SQL 4 CDS", params.message, params.type === 1 ? "error" : "warning");
             },
-            failed: (message) => {
+            failed: action((message) => {
                 this.ready = false;
                 this.progressMessage = "";
                 this.objectExplorer.engineStopped();
                 for (const tab of this.tabs) tab.engineStopped(message);
-                this.updateToolbar();
-                this.updateStatusBar();
                 this.setStatus(message, "error");
                 void notify("SQL 4 CDS engine failed", message, "error");
-            },
+            }),
         });
         this.connections = new ConnectionRegistry(this.client);
-        this.objectExplorer = new ObjectExplorer(this.client, this.el.explorerTree,
-            (message) => { void notify("Object Explorer", message, "error"); },
-            (text) => this.insertObjectName(text));
+        this.objectExplorer = new ObjectExplorer(this.client,
+            message => { void this.reportError("Object Explorer", message); },
+            text => this.insertObjectName(text),
+            (connection, query) => this.addTab(query, connection.slot), this.connections);
+        this.statusBar = new StatusBar(this.statusState, this.connections);
+        const unmount = mountApp(byId("app"), this);
+        this.el = getElements();
+        const stopPersistence = reaction(
+            () => [this.settings, ...this.tabs.map(tab => [tab.title, tab.filePath, tab.isDirty, tab.content, tab.connectionSlot]), this.activeTab],
+            () => { this.syncClosePrevention(); this.scheduleSessionSave(); },
+        );
+        window.addEventListener("pagehide", () => {
+            stopPersistence();
+            this.statusBar.dispose();
+            void this.objectExplorer.dispose().catch(error => this.reportError("Object Explorer", error));
+            for (const dispose of this.disposables) dispose();
+            this.editor?.dispose();
+            unmount();
+        }, { once: true });
     }
 
-    private async openQuery(): Promise<void> {
+    focusEditor(): void { this.editor.focus(); }
+
+    reportError(title: string, error: unknown): Promise<void> {
+        return notify(title, errorMessage(error), "error");
+    }
+
+    async openQuery(): Promise<void> {
         try {
             const path = await window.toolboxAPI.fileSystem.selectPath({
                 type: "file",
@@ -136,7 +146,7 @@ class App implements QueryTabHost {
         }
     }
 
-    private async saveTab(tab: QueryTab, saveAs = false): Promise<boolean> {
+    async saveTab(tab: QueryTab, saveAs = false): Promise<boolean> {
         try {
             const content = tab.model.getValue();
             if (tab.filePath && !saveAs) {
@@ -162,7 +172,9 @@ class App implements QueryTabHost {
 
     private syncClosePrevention(): void {
         this.closePreventionQueue = this.closePreventionQueue.then(async () => {
-            const shouldPreventClose = this.tabs.some((tab) => tab.isDirty);
+            // When the session is remembered any unsaved changes are restored on the next start,
+            // so there is no need to prevent the tool from closing
+            const shouldPreventClose = !this.settings.rememberSession && this.tabs.some((tab) => tab.isDirty);
             if (shouldPreventClose === this.closePreventionApplied) return;
 
             try {
@@ -178,13 +190,12 @@ class App implements QueryTabHost {
     }
 
     async start(): Promise<void> {
-        this.settings = await loadSettings();
+        const settings = await loadSettings();
+        runInAction(() => { this.settings = settings; this.settingsReady = true; });
         await this.applyTheme();
         this.createEditor();
         this.bindToolbar();
         this.bindSplitter();
-        this.bindObjectExplorer();
-        this.bindProperties();
 
         configureMonaco(this.client, (uri) => this.tabs.some((t) => t.uri === uri && t.connected));
 
@@ -198,9 +209,11 @@ class App implements QueryTabHost {
         });
 
         this.setStatus("Starting SQL 4 CDS engine…");
+        await this.connections.refresh();
         try {
             await this.client.start({ ...this.settings });
         } catch (err) {
+            this.objectExplorer.engineStopped();
             this.setStatus(`Unable to start the SQL 4 CDS engine: ${errorMessage(err)}`, "error");
             await notify("Unable to start SQL 4 CDS", errorMessage(err), "error");
             return;
@@ -210,7 +223,6 @@ class App implements QueryTabHost {
         this.setStatus("Ready", "success");
 
         await this.connections.refresh();
-        this.renderConnectionList();
 
         // Register every connection so they can all be used in cross-instance queries
         await Promise.all(
@@ -218,9 +230,166 @@ class App implements QueryTabHost {
                 this.connections.register(c.slot).catch((err) => notify(`Unable to connect to ${c.options.connectionName}`, errorMessage(err), "error")),
             ),
         );
-        this.renderConnectionList();
-        this.addTab(DEFAULT_QUERY);
-        await this.objectExplorer.setConnections(this.connections.all);
+
+        const restored = await this.restoreSession();
+        this.sessionRestored = true;
+        const receivedQuery = await this.openLaunchQuery();
+        if (!restored && !receivedQuery) this.addTab(DEFAULT_QUERY);
+        window.addEventListener("pagehide", () => { void this.saveSessionNow(); });
+    }
+
+    private async openLaunchQuery(): Promise<boolean> {
+        let expectsResponse = false;
+        let responseLimitBytes = defaultResponseLimitBytes;
+        try {
+            const context = await window.toolboxAPI.invocation.getLaunchContext();
+            const metadata = context?.__pptb;
+            expectsResponse = typeof metadata === "object" && metadata !== null &&
+                "expectsResponse" in metadata && metadata.expectsResponse === true;
+            const input = parseInvocation(context);
+            if (!input) {
+                if (expectsResponse) throw new Error("Provide sql or fetchXml for this invocation.");
+                return false;
+            }
+            responseLimitBytes = input.responseLimitBytes;
+            const connection = this.connections.all[0];
+            if (!connection) throw new Error("Select a connection to open the received query.");
+            await this.connections.register(connection.slot);
+            const queries = input.fetchXml
+                ? await this.client.transformQuery(ConnectionRegistry.ownerUri(connection.slot), input.query, "sql")
+                : [input.query];
+            if (input.execute) {
+                const tab = this.addTab(queries.join("\n\n"), connection.slot, false);
+                await tab.connect(connection.slot);
+                const approved = await this.confirmInvocation(tab);
+                const result = approved
+                    ? await tab.executeForInvocation(input.responseLimitBytes)
+                    : { status: "cancelled", resultSets: [], messages: [], truncated: false, responseLimitBytes: input.responseLimitBytes };
+                if (expectsResponse) {
+                    await this.saveSessionNow();
+                    await window.toolboxAPI.invocation.returnData({ ...result });
+                }
+            } else {
+                for (const query of queries) this.addTab(query, connection.slot);
+                if (expectsResponse) {
+                    const result = { status: "success", sql: queries };
+                    if (responseSize(result) > input.responseLimitBytes) throw new Error("Converted SQL exceeds maxResponseBytes.");
+                    await this.saveSessionNow();
+                    await window.toolboxAPI.invocation.returnData(result);
+                }
+            }
+            return true;
+        } catch (err) {
+            await notify("Unable to process incoming query", errorMessage(err), "error");
+            if (expectsResponse) {
+                try {
+                    await window.toolboxAPI.invocation.returnData(invocationError(errorMessage(err), responseLimitBytes));
+                } catch (returnError) {
+                    await notify("Unable to return invocation results", errorMessage(returnError), "error");
+                }
+            }
+            return false;
+        }
+    }
+
+    private async confirmInvocation(tab: QueryTab): Promise<boolean> {
+        const message = `An external caller requested execution in ${tab.connectionSummary?.databaseName ?? "the selected environment"}. ` +
+            "This query may modify data or execute Dataverse messages. Review the SQL below before proceeding. " +
+            "SQL 4 CDS cannot undo data modifications. Data modification confirmations will also be shown during execution.\n\n" +
+            tab.model.getValue();
+        return await showConfirmation(message) !== ConfirmationResult.No;
+    }
+
+    // Session persistence
+
+    /** Reopens the query tabs from the previous session. Returns false if there was no session to restore. */
+    private async restoreSession(): Promise<boolean> {
+        if (!this.settings.rememberSession) return false;
+
+        const session = await loadSession();
+        if (!session) return false;
+
+        const restored: Array<QueryTab | null> = [];
+        for (const saved of session.tabs) {
+            try {
+                restored.push(await this.restoreTab(saved));
+            } catch (err) {
+                restored.push(null);
+                await notify("Unable to restore query", errorMessage(err), "warning");
+            }
+        }
+
+        const tabs = restored.filter((tab): tab is QueryTab => tab !== null);
+        if (tabs.length === 0) return false;
+
+        this.activateTab(restored[session.activeTab] ?? tabs[tabs.length - 1]);
+        return true;
+    }
+
+    private async restoreTab(saved: SessionTab): Promise<QueryTab> {
+        let filename = saved.filename;
+        let fileText: string | null = null;
+
+        if (filename !== null) {
+            try {
+                fileText = await window.toolboxAPI.fileSystem.readText(filename);
+            } catch (err) {
+                // The file is no longer accessible - restore any unsaved content as a new unsaved tab
+                if (saved.query === null) throw new Error(`Unable to open ${filename}: ${errorMessage(err)}`);
+                filename = null;
+            }
+        }
+
+        const slot = saved.connectionId !== null
+            ? this.connections.all.find((entry) => entry.connection.id === saved.connectionId)?.slot
+            : undefined;
+        const tab = this.addTab(saved.query ?? fileText ?? "", slot);
+
+        if (filename !== null && fileText !== null) {
+            tab.setFile(filename);
+            // The editor normalises line endings to LF, so match that when comparing against the file content
+            tab.markSaved(saved.query === null ? undefined : fileText.replaceAll(/\r\n|\r|\n/g, "\n"));
+        } else if (saved.dirty) {
+            tab.markSaved("");
+        }
+
+        return tab;
+    }
+
+    private captureSession(): SessionState {
+        const tabs = this.tabs.filter((tab) => !tab.readOnly);
+        return {
+            tabs: tabs.map((tab) => ({
+                filename: tab.filePath,
+                // Only persist the query text where it isn't already saved in the file
+                query: tab.isDirty || !tab.filePath ? tab.model.getValue() : null,
+                dirty: tab.isDirty,
+                connectionId: this.settings.rememberSessionConnections && tab.connectionSlot !== null
+                    ? this.connections.get(tab.connectionSlot)?.connection.id ?? null
+                    : null,
+            })),
+            activeTab: this.activeTab ? tabs.indexOf(this.activeTab) : -1,
+        };
+    }
+
+    private scheduleSessionSave(): void {
+        if (!this.sessionRestored || !this.settings.rememberSession) return;
+        if (this.sessionSaveTimer !== null) clearTimeout(this.sessionSaveTimer);
+        this.sessionSaveTimer = setTimeout(() => void this.saveSessionNow(), 500);
+    }
+
+    private async saveSessionNow(): Promise<void> {
+        if (this.sessionSaveTimer !== null) {
+            clearTimeout(this.sessionSaveTimer);
+            this.sessionSaveTimer = null;
+        }
+        if (!this.sessionRestored || !this.settings.rememberSession) return;
+
+        try {
+            await saveSession(this.captureSession());
+        } catch {
+            // Session persistence is best-effort
+        }
     }
 
     // Editor & tabs
@@ -267,9 +436,17 @@ class App implements QueryTabHost {
         this.editor.addAction({
             id: "sql4cds.newTab",
             label: "New Query",
-            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyN],
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyN],
             run: () => {
                 this.addTab();
+            },
+        });
+        this.editor.addAction({
+            id: "sql4cds.closeTab",
+            label: "Close Query",
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW],
+            run: () => {
+                if (this.activeTab) return this.closeTab(this.activeTab);
             },
         });
         this.editor.addAction({
@@ -284,18 +461,18 @@ class App implements QueryTabHost {
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD],
             run: () => this.setResultsMode("grid"),
         });
+        runInAction(() => { this.editorReady = true; });
     }
 
-    private addTab(text = ""): QueryTab {
+    addTab(text = "", connectionSlot?: number, connect = true): QueryTab {
         // Connect new tabs to the same connection as the current tab, or the first available connection
-        const slot = this.activeTab?.connectionSlot ?? this.connections.all[0]?.slot;
+        const slot = connectionSlot ?? this.activeTab?.connectionSlot ?? this.connections.all[0]?.slot;
 
         const tab = new QueryTab(this, text);
         this.tabs.push(tab);
-        this.el.results.appendChild(tab.resultsElement);
         this.activateTab(tab);
 
-        if (slot !== undefined && slot !== null) void this.connectTab(tab, slot);
+        if (connect && slot !== undefined && slot !== null) void this.connectTab(tab, slot);
 
         return tab;
     }
@@ -312,7 +489,7 @@ class App implements QueryTabHost {
         this.editor.focus();
     }
 
-    private openPreview(text: string, language: string, title: string): void {
+    openPreview(text: string, language: string, title: string): void {
         const tab = new QueryTab(this, text, {
             language,
             readOnly: true,
@@ -320,11 +497,10 @@ class App implements QueryTabHost {
         });
         tab.title = title;
         this.tabs.push(tab);
-        this.el.results.appendChild(tab.resultsElement);
         this.activateTab(tab);
     }
 
-    private activateTab(tab: QueryTab): void {
+    activateTab(tab: QueryTab): void {
         if (this.activeTab === tab) return;
 
         if (this.activeTab) this.activeTab.viewState = this.editor.saveViewState();
@@ -335,15 +511,9 @@ class App implements QueryTabHost {
         if (tab.viewState) this.editor.restoreViewState(tab.viewState);
         this.editor.focus();
 
-        for (const t of this.tabs) t.resultsElement.hidden = t !== tab;
-        this.updateResultsVisibility();
-        this.renderTabs();
-        this.renderConnectionList();
-        this.updateToolbar();
-        this.updateProperties();
     }
 
-    private async closeTab(tab: QueryTab): Promise<void> {
+    async closeTab(tab: QueryTab): Promise<void> {
         const index = this.tabs.indexOf(tab);
         if (index < 0) return;
 
@@ -353,96 +523,33 @@ class App implements QueryTabHost {
             if (choice === "save" && (!(await this.saveTab(tab)) || tab.isDirty)) return;
         }
 
-        this.tabs.splice(index, 1);
-        this.syncClosePrevention();
+        const currentIndex = this.tabs.indexOf(tab);
+        if (currentIndex < 0) return;
+        runInAction(() => { this.tabs.splice(currentIndex, 1); });
         if (this.activeTab === tab) {
             this.activeTab = null;
             if (this.tabs.length === 0) {
                 this.addTab();
             } else {
-                this.activateTab(this.tabs[Math.min(index, this.tabs.length - 1)]);
+                this.activateTab(this.tabs[Math.min(currentIndex, this.tabs.length - 1)]);
             }
         }
 
-        this.renderTabs();
         await tab.dispose();
-    }
-
-    private renderTabs(): void {
-        const fragment = document.createDocumentFragment();
-
-        for (const tab of this.tabs) {
-            const el = document.createElement("div");
-            el.className = "tab";
-            el.classList.toggle("active", tab === this.activeTab);
-            el.classList.toggle("running", tab.running);
-            el.classList.toggle("modified", tab.isDirty);
-            el.title = tab.connectionSlot !== null ? `${tab.title} - ${this.connections.get(tab.connectionSlot)?.options.connectionName ?? ""}` : tab.title;
-            if (tab.isDirty) el.title += " (unsaved changes)";
-            el.addEventListener("click", () => this.activateTab(tab));
-            el.addEventListener("auxclick", (e) => {
-                if (e.button === 1) void this.closeTab(tab);
-            });
-
-            const indicator = document.createElement("span");
-            indicator.className = "tab-indicator";
-            indicator.classList.toggle("connected", tab.connected);
-            indicator.classList.toggle("connecting", tab.connecting);
-
-            const label = document.createElement("span");
-            label.className = "tab-label";
-            label.textContent = tab.title;
-            label.title = tab.isDirty ? "Unsaved changes" : tab.title;
-
-            const close = document.createElement("button");
-            close.className = "tab-close";
-            close.title = "Close";
-            close.textContent = "×";
-            close.addEventListener("click", (e) => {
-                e.stopPropagation();
-                void this.closeTab(tab);
-            });
-
-            el.append(indicator, label, close);
-            fragment.appendChild(el);
-        }
-
-        this.el.tabStrip.replaceChildren(fragment);
     }
 
     // Connections
 
-    private renderConnectionList(): void {
-        const select = this.el.connection;
-        select.replaceChildren();
-
-        const placeholder = document.createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = this.connections.all.length ? "Select a connection…" : "No connections available";
-        placeholder.disabled = true;
-        select.appendChild(placeholder);
-
-        for (const entry of this.connections.all) {
-            const option = document.createElement("option");
-            option.value = String(entry.slot);
-            option.textContent = `${entry.options.connectionName}${entry.error ? " ⚠" : ""}`;
-            option.title = entry.error ?? entry.connection.url;
-            select.appendChild(option);
-        }
-
-        const slot = this.activeTab?.connectionSlot;
-        select.value = slot !== null && slot !== undefined && this.connections.get(slot) ? String(slot) : "";
-    }
-
-    private async connectTab(tab: QueryTab, slot: number): Promise<void> {
+    async connectTab(tab: QueryTab, slot: number): Promise<void> {
         try {
             await this.connections.register(slot);
             await tab.connect(slot);
         } catch (err) {
             if (!this.ready) return;
-            tab.statusMessage = `Connection failed: ${errorMessage(err)}`;
-            tab.statusKind = "error";
-            this.onStateChanged(tab);
+            runInAction(() => {
+                tab.statusMessage = `Connection failed: ${errorMessage(err)}`;
+                tab.statusKind = "error";
+            });
             await notify("Connection failed", errorMessage(err), "error");
         }
     }
@@ -452,11 +559,9 @@ class App implements QueryTabHost {
 
         const changed = await this.connections.refresh();
         if (changed.length === 0) {
-            await this.objectExplorer.setConnections(this.connections.all);
             return;
         }
 
-        await Promise.all(changed.map((slot) => this.objectExplorer.removeConnection(slot)));
         for (const slot of changed) {
             const tabs = this.tabs.filter((t) => t.connectionSlot === slot);
             await Promise.all(tabs.map((t) => t.disconnect()));
@@ -465,19 +570,14 @@ class App implements QueryTabHost {
                 await this.connections.register(slot).catch((err) => notify("Connection failed", errorMessage(err), "error"));
                 await Promise.all(tabs.map((t) => this.connectTab(t, slot)));
             } else {
-                for (const t of tabs) t.connectionSlot = null;
+                runInAction(() => { for (const t of tabs) t.connectionSlot = null; });
             }
         }
-
-        this.renderConnectionList();
-        this.renderTabs();
-        this.updateToolbar();
-        await this.objectExplorer.setConnections(this.connections.all);
     }
 
     // Query execution
 
-    private insertObjectName(text: string): void {
+    insertObjectName(text: string): void {
         const selection = this.editor.getSelection();
         if (!this.activeTab || !selection) return;
         this.editor.pushUndoStop();
@@ -486,7 +586,7 @@ class App implements QueryTabHost {
         this.editor.focus();
     }
 
-    private async runQuery(estimatedPlan = false): Promise<void> {
+    async runQuery(estimatedPlan = false): Promise<void> {
         const tab = this.activeTab;
         if (!tab || tab.readOnly || tab.running || !this.ready) return;
 
@@ -506,9 +606,12 @@ class App implements QueryTabHost {
         return this.settings.showMessageLineNumbers;
     }
 
-    private async toggleActualPlan(): Promise<void> {
+    get resultsToText(): boolean {
+        return this.settings.resultsToText;
+    }
+
+    async toggleActualPlan(): Promise<void> {
         const save = this.saveSetting("includeActualPlan", !this.settings.includeActualPlan);
-        this.updateToolbar();
         await save;
     }
 
@@ -535,41 +638,11 @@ class App implements QueryTabHost {
         })().catch((err) => notify("Unable to copy record URL", errorMessage(err), "error"));
     }
 
-    getRecordSelectStatement(reference: EntityReferenceValue, currentDataSource?: string): Promise<string> {
-        return this.connections.getRecordSelectStatement(reference, currentDataSource);
+    getRecordSelectStatement(ownerUri: string, reference: EntityReferenceValue): Promise<string> {
+        return this.connections.getRecordSelectStatement(ownerUri, reference);
     }
 
-    onStateChanged(tab: QueryTab): void {
-        this.renderTabs();
-        this.syncClosePrevention();
-        if (tab === this.activeTab) {
-            this.updateResultsVisibility();
-            this.renderConnectionList();
-            this.updateToolbar();
-        }
-    }
-
-    private updateResultsVisibility(): void {
-        const visible = this.activeTab?.hasResults === true;
-        this.el.splitter.hidden = !visible;
-        this.el.results.hidden = !visible;
-    }
-
-    onStatusChanged(tab: QueryTab): void {
-        if (tab === this.activeTab) this.updateStatusBar();
-    }
-
-    onSelectedPlanNodeChanged(tab: QueryTab): void {
-        if (tab === this.activeTab) this.updateProperties();
-    }
-
-    private updateProperties(): void {
-        const node = this.activeTab?.selectedPlanNode ?? null;
-        this.propertiesPanel?.show(node ? node.name.split(/\r?\n/)[0] : null, node ? node.properties ?? [] : null);
-        this.el.editFetchXml.disabled = this.fetchXmlForEditing === null;
-    }
-
-    private get fetchXmlForEditing(): string | null {
+    get fetchXmlForEditing(): string | null {
         const tab = this.activeTab;
         if (tab?.isFetchXmlPreview) return tab.model.getValue();
         const node = tab?.selectedPlanNode;
@@ -583,36 +656,7 @@ class App implements QueryTabHost {
     // Toolbar & layout
 
     private bindToolbar(): void {
-        this.bindToolbarMenu(this.el.saveMenu, byId("save-menu"));
-        this.bindToolbarMenu(this.el.convertMenu, byId("convert-menu"));
-        this.bindToolbarMenu(this.el.formatMenu, byId("format-menu"));
-        this.el.newTab.addEventListener("click", () => this.addTab());
-        this.el.open.addEventListener("click", () => void this.openQuery());
-        this.el.save.addEventListener("click", () => { if (this.activeTab) void this.saveTab(this.activeTab); });
-        this.el.saveAs.addEventListener("click", () => { if (this.activeTab) void this.saveTab(this.activeTab, true); });
-        this.el.run.addEventListener("click", () => void this.runQuery());
-        this.el.cancel.addEventListener("click", () => void this.activeTab?.cancel());
-        this.el.estimatedPlan.addEventListener("click", () => void this.runQuery(true));
-        this.el.actualPlan.addEventListener("click", () => void this.toggleActualPlan());
-        this.el.editFetchXml.addEventListener("click", () => {
-            const fetchXml = this.fetchXmlForEditing;
-            if (fetchXml !== null) void this.launchFetchXmlStudio(fetchXml);
-        });
-        this.el.convert.addEventListener("click", () => void this.transformQuery("convert"));
-        this.el.convertFetchXml.addEventListener("click", () => this.selectConversion("fetchxml"));
-        this.el.convertM.addEventListener("click", () => this.selectConversion("m"));
-        this.el.format.addEventListener("click", () => void this.transformQuery("format"));
-        this.el.displayNames.addEventListener("click", () => void this.transformQuery("format", true));
-        this.el.resultsText.addEventListener("click", () => this.setResultsMode("text"));
-        this.el.resultsGrid.addEventListener("click", () => this.setResultsMode("grid"));
-        this.el.settings.addEventListener("click", () => void this.editSettings());
-        this.el.connection.addEventListener("change", () => {
-            const tab = this.activeTab;
-            const slot = Number.parseInt(this.el.connection.value, 10);
-            if (tab && Number.isFinite(slot)) void this.connectTab(tab, slot);
-        });
-
-        window.addEventListener("keydown", (e) => {
+        const keydown = (e: KeyboardEvent) => {
             if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e")) {
                 e.preventDefault();
                 void this.runQuery();
@@ -648,66 +692,24 @@ class App implements QueryTabHost {
                 e.preventDefault();
                 void this.toggleActualPlan();
             }
-        });
+        };
+        window.addEventListener("keydown", keydown);
+        this.disposables.push(() => window.removeEventListener("keydown", keydown));
     }
 
-    private bindToolbarMenu(toggle: HTMLButtonElement, menu: HTMLElement): void {
-        const items = () => Array.from(menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
-        const close = (restoreFocus = false) => {
-            menu.hidden = true;
-            toggle.setAttribute("aria-expanded", "false");
-            if (restoreFocus) toggle.focus();
-        };
-        const open = () => {
-            if (toggle.disabled) return;
-            menu.hidden = false;
-            toggle.setAttribute("aria-expanded", "true");
-            items()[0]?.focus();
-        };
-        toggle.addEventListener("click", () => menu.hidden ? open() : close());
-        toggle.addEventListener("keydown", (event) => {
-            if (event.key === "ArrowDown") {
-                event.preventDefault();
-                open();
-            }
-        });
-        menu.addEventListener("click", (event) => {
-            if (event.target instanceof Element && event.target.closest("button")) close(true);
-        });
-        menu.addEventListener("keydown", (event) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                close(true);
-            } else if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
-                event.preventDefault();
-                const buttons = items();
-                const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-                const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-                    : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
-                buttons[next]?.focus();
-            }
-        });
-        document.addEventListener("pointerdown", (event) => {
-            if (event.target instanceof Node && !menu.parentElement?.contains(event.target)) close();
-        });
-        document.addEventListener("focusin", (event) => {
-            if (event.target instanceof Node && !menu.parentElement?.contains(event.target)) close();
-        });
-    }
-
-    private selectConversion(target: "fetchxml" | "m"): void {
+    selectConversion(target: "fetchxml" | "m"): void {
         this.convertTarget = target;
-        this.updateToolbar();
         void this.transformQuery("convert");
     }
 
-    private setResultsMode(mode: "text" | "grid"): void {
+    setResultsMode(mode: "text" | "grid"): void {
         if (!this.activeTab || this.activeTab.readOnly) return;
         this.activeTab.resultsMode = mode;
-        this.updateToolbar();
+        // Remember the most recent choice for new tabs and future sessions
+        if (this.settings.resultsToText !== (mode === "text")) void this.saveSetting("resultsToText", mode === "text");
     }
 
-    private async transformQuery(operation: "format" | "convert", addDisplayNames = false): Promise<void> {
+    async transformQuery(operation: "format" | "convert", addDisplayNames = false): Promise<void> {
         const tab = this.activeTab;
         if (!this.ready || !tab || tab.readOnly || tab.running || this.transforming) return;
         if ((operation === "convert" || addDisplayNames) && !tab.connected) return;
@@ -716,8 +718,7 @@ class App implements QueryTabHost {
         const version = tab.model.getVersionId();
         const query = tab.model.getValueInRange(range);
         const target = this.convertTarget;
-        this.transforming = true;
-        this.updateToolbar();
+        runInAction(() => { this.transforming = true; });
         try {
             if (operation === "format") {
                 const options = tab.model.getOptions();
@@ -743,47 +744,11 @@ class App implements QueryTabHost {
         } catch (err) {
             await notify(operation === "format" ? "Unable to format query" : "Unable to convert query", errorMessage(err), "error");
         } finally {
-            this.transforming = false;
-            this.updateToolbar();
+            runInAction(() => { this.transforming = false; });
         }
     }
 
-    private updateToolbar(): void {
-        const tab = this.activeTab;
-        this.el.run.disabled = !this.ready || !tab?.connected || tab.readOnly || tab.running;
-        this.el.estimatedPlan.disabled = this.el.run.disabled;
-        this.el.cancel.disabled = !this.ready || !tab?.running;
-        this.el.actualPlan.setAttribute("aria-pressed", String(this.settings.includeActualPlan));
-        this.el.connection.disabled = !this.ready || !tab || tab.readOnly || tab.running || tab.connecting;
-        this.el.editFetchXml.disabled = this.fetchXmlForEditing === null;
-        this.el.save.disabled = !tab || tab.readOnly || (!tab.isDirty && !!tab.filePath);
-        this.el.saveAs.disabled = !tab || tab.readOnly;
-        this.el.saveMenu.disabled = this.el.saveAs.disabled;
-        this.el.format.disabled = !this.ready || !tab || tab.readOnly || tab.running || this.transforming;
-        this.el.formatMenu.disabled = this.el.format.disabled || !tab?.connected;
-        this.el.displayNames.disabled = this.el.formatMenu.disabled;
-        this.el.convert.disabled = this.el.format.disabled || !tab?.connected;
-        this.el.convertMenu.disabled = this.el.convert.disabled;
-        this.el.convertFetchXml.disabled = this.el.convert.disabled;
-        this.el.convertM.disabled = this.el.convert.disabled;
-        this.el.convert.title = `Convert to ${this.convertTarget === "fetchxml" ? "FetchXML" : "Power BI (M)"}`;
-        this.el.convertFetchXml.setAttribute("aria-checked", String(this.convertTarget === "fetchxml"));
-        this.el.convertM.setAttribute("aria-checked", String(this.convertTarget === "m"));
-        this.el.resultsText.disabled = !tab || tab.readOnly;
-        this.el.resultsGrid.disabled = this.el.resultsText.disabled;
-        this.el.resultsText.setAttribute("aria-pressed", String(tab?.resultsMode === "text"));
-        this.el.resultsGrid.setAttribute("aria-pressed", String(!!tab && tab.resultsMode !== "text"));
-        for (const [toggle, menuId] of [[this.el.saveMenu, "save-menu"], [this.el.convertMenu, "convert-menu"], [this.el.formatMenu, "format-menu"]] as const) {
-            if (toggle.disabled) {
-                byId(menuId).hidden = true;
-                toggle.setAttribute("aria-expanded", "false");
-            }
-        }
-
-        this.updateStatusBar();
-    }
-
-    private async launchFetchXmlStudio(fetchXml: string): Promise<void> {
+    async launchFetchXmlStudio(fetchXml: string): Promise<void> {
         try {
             await window.toolboxAPI.invocation.launchTool(
                 "@mohsinonxrm/pptb-fetchxml-studio",
@@ -795,79 +760,13 @@ class App implements QueryTabHost {
         }
     }
 
-    private async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan", value: boolean): Promise<void> {
-        this.settings = { ...this.settings, [setting]: value };
+    async saveSetting(setting: "objectExplorerPinned" | "propertiesPinned" | "includeActualPlan" | "resultsToText", value: boolean): Promise<void> {
+        runInAction(() => { this.settings = { ...this.settings, [setting]: value }; });
         try {
             await saveSettings(this.settings);
         } catch (err) {
             await notify("Unable to save settings", errorMessage(err), "error");
         }
-    }
-
-    private bindObjectExplorer(): void {
-        this.explorerPane = new PinnablePane({
-            name: "Object Explorer",
-            pane: this.el.explorer,
-            pin: this.el.explorerPin,
-            tab: this.el.explorerTab,
-            splitter: this.el.explorerSplitter,
-            content: this.el.explorerTree,
-            side: "left",
-            pinned: this.settings.objectExplorerPinned,
-            savePinned: (pinned) => this.saveSetting("objectExplorerPinned", pinned),
-            isPartOfPane: (target) => target.closest(".explorer-context-menu") !== null,
-        });
-        window.addEventListener("pagehide", () => { void this.objectExplorer.dispose(); });
-    }
-
-    private bindProperties(): void {
-        this.propertiesPanel = new PropertiesPanel(this.el.propertiesGrid, this.el.propertiesTitle);
-        this.propertiesPane = new PinnablePane({
-            name: "Properties",
-            pane: this.el.properties,
-            pin: this.el.propertiesPin,
-            tab: this.el.propertiesTab,
-            splitter: this.el.propertiesSplitter,
-            content: this.el.propertiesGrid,
-            side: "right",
-            pinned: this.settings.propertiesPinned,
-            savePinned: (pinned) => this.saveSetting("propertiesPinned", pinned),
-        });
-        this.updateProperties();
-    }
-
-    private updateStatusBar(): void {
-        const tab = this.activeTab;
-        if (this.statusTimer !== null && (!this.ready || !tab?.running)) {
-            clearInterval(this.statusTimer);
-            this.statusTimer = null;
-        } else if (this.ready && tab?.running && this.statusTimer === null) {
-            this.statusTimer = setInterval(() => this.updateStatusBar(), 100);
-        }
-
-        if (this.ready) {
-            this.setStatus(tab?.gridStatusIsError ? tab.gridStatus : tab?.statusMessage ?? "Ready",
-                tab?.gridStatusIsError ? "error" : tab?.statusKind ?? "success");
-        }
-        this.el.progress.textContent = [tab?.gridStatusIsError ? "" : tab?.gridStatus, tab?.running ? this.progressMessage : ""]
-            .filter(Boolean).join(" | ");
-
-        const entry = tab?.connected && tab.connectionSlot !== null ? this.connections.get(tab.connectionSlot) : null;
-        const summary = tab?.connectionSummary;
-        this.el.domain.textContent = entry ? summary?.serverName ?? new URL(entry.options.url.includes("://") ? entry.options.url : `https://${entry.options.url}`).hostname : "";
-        const secure = entry !== null && (!entry.options.url.includes("://") || new URL(entry.options.url).protocol === "https:");
-        this.el.lock.textContent = entry ? secure ? "\uD83D\uDD12" : "\uD83D\uDD13" : "";
-        this.el.server.title = entry ? `${secure ? "Secure connection" : "Unencrypted connection"}: ${entry.options.url}` : "Not connected";
-        this.el.user.textContent = entry ? summary?.userName ?? "" : "";
-        this.el.user.title = `Connected user: ${this.el.user.textContent}`;
-        this.el.database.textContent = entry ? summary?.databaseName ?? entry.options.connectionName : "";
-        this.el.database.title = `Current database: ${this.el.database.textContent}`;
-
-        const seconds = Math.floor((tab?.elapsedMilliseconds ?? 0) / 1000);
-        this.el.elapsed.textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
-            .map((part) => String(part).padStart(2, "0")).join(":");
-        const rows = tab?.totalRowCount ?? 0;
-        this.el.rows.textContent = `${rows.toLocaleString()} row${rows === 1 ? "" : "s"}`;
     }
 
     private bindSplitter(): void {
@@ -884,6 +783,7 @@ class App implements QueryTabHost {
             window.removeEventListener("mousemove", move);
             window.removeEventListener("mouseup", up);
         };
+        this.disposables.push(up);
 
         this.el.splitter.addEventListener("mousedown", (e) => {
             e.preventDefault();
@@ -907,112 +807,40 @@ class App implements QueryTabHost {
         monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
     }
 
-    private async editSettings(): Promise<void> {
+    async editSettings(): Promise<void> {
         const updated = await showSettingsDialog(this.settings);
         if (!updated) return;
 
-        updated.objectExplorerPinned = this.explorerPane?.pinned ?? this.settings.objectExplorerPinned;
-        updated.propertiesPinned = this.propertiesPane?.pinned ?? this.settings.propertiesPinned;
-        this.settings = updated;
+        updated.objectExplorerPinned = this.settings.objectExplorerPinned;
+        updated.propertiesPinned = this.settings.propertiesPinned;
+        runInAction(() => { this.settings = updated; });
         try {
             await saveSettings(updated);
             if (this.ready) await this.client.changeConfiguration({ ...updated });
         } catch (err) {
             await notify("Unable to save settings", errorMessage(err), "error");
         }
+
+        if (updated.rememberSession) {
+            await this.saveSessionNow();
+        } else {
+            // Discard any previously persisted session, matching the XrmToolBox behaviour
+            await saveSession(null).catch(() => {});
+        }
     }
 
     private setStatus(text: string, kind: QueryTab["statusKind"] = "busy"): void {
-        this.el.status.textContent = text;
-        this.el.statusMessage.title = text;
-        this.el.statusIcon.textContent = { success: "\u2713", error: "\u2757", warning: "\u26A0", busy: "\u25F7" }[kind];
-        this.el.statusIcon.className = `status-icon ${kind}`;
+        this.statusState.setStatus(text, kind);
     }
 }
 
-function showConfirmation(message: string): Promise<ConfirmationResult> {
-    return new Promise((resolve) => {
-        const dialog = document.createElement("dialog");
-        dialog.className = "confirm-dialog";
-
-        const form = document.createElement("form");
-        form.method = "dialog";
-
-        const title = document.createElement("h2");
-        title.textContent = "Confirm";
-
-        const text = document.createElement("p");
-        text.textContent = message;
-
-        const buttons = document.createElement("div");
-        buttons.className = "dialog-buttons";
-
-        for (const [label, value, primary] of [
-            ["Yes", ConfirmationResult.Yes, true],
-            ["Yes to all", ConfirmationResult.All, false],
-            ["No", ConfirmationResult.No, false],
-        ] as const) {
-            const button = document.createElement("button");
-            button.value = String(value);
-            button.textContent = label;
-            if (primary) button.className = "primary";
-            buttons.appendChild(button);
-        }
-
-        form.append(title, text, buttons);
-        dialog.appendChild(form);
-        document.body.appendChild(dialog);
-
-        dialog.addEventListener("close", () => {
-            dialog.remove();
-            const value = Number.parseInt(dialog.returnValue, 10);
-            resolve(value === ConfirmationResult.Yes || value === ConfirmationResult.All ? value : ConfirmationResult.No);
-        });
-
-        dialog.showModal();
-    });
-}
-
-function showUnsavedChangesDialog(title: string): Promise<"save" | "discard" | "cancel"> {
-    return new Promise((resolve) => {
-        const dialog = document.createElement("dialog");
-        dialog.className = "unsaved-dialog";
-
-        const form = document.createElement("form");
-        form.method = "dialog";
-
-        const heading = document.createElement("h2");
-        heading.textContent = "Unsaved changes";
-
-        const message = document.createElement("p");
-        message.textContent = `Save changes to ${title} before closing?`;
-
-        const buttons = document.createElement("div");
-        buttons.className = "dialog-buttons";
-        for (const [value, label, primary] of [
-            ["save", "Save", true],
-            ["discard", "Discard", false],
-            ["cancel", "Cancel", false],
-        ] as const) {
-            const button = document.createElement("button");
-            button.value = value;
-            button.textContent = label;
-            if (primary) button.className = "primary";
-            buttons.appendChild(button);
-        }
-
-        form.append(heading, message, buttons);
-        dialog.appendChild(form);
-        document.body.appendChild(dialog);
-
-        dialog.addEventListener("close", () => {
-            dialog.remove();
-            const value = dialog.returnValue;
-            resolve(value === "save" || value === "discard" ? value : "cancel");
-        });
-
-        dialog.showModal();
-    });
+function getElements() {
+    return {
+        editor: byId("editor"),
+        results: byId("results-host"),
+        splitter: byId("splitter"),
+        workspace: byId("workspace"),
+    };
 }
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -1039,5 +867,5 @@ if (window.toolboxAPI) {
         void notify("SQL 4 CDS", errorMessage(err), "error");
     });
 } else {
-    document.getElementById("status-text")!.textContent = "SQL 4 CDS must be run inside Power Platform ToolBox";
+    document.getElementById("app")!.textContent = "SQL 4 CDS must be run inside Power Platform ToolBox";
 }
